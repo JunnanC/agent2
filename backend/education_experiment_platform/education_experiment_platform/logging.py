@@ -1,0 +1,40 @@
+import contextvars
+import json
+import logging
+from datetime import UTC, datetime
+
+from apps.core.redaction import redact
+
+trace_id_var: contextvars.ContextVar[str] = contextvars.ContextVar("trace_id", default="")
+portal_var: contextvars.ContextVar[str] = contextvars.ContextVar("portal", default="")
+
+
+class JsonFormatter(logging.Formatter):
+    def format(self, record: logging.LogRecord) -> str:
+        payload = {
+            "timestamp": datetime.now(UTC).isoformat(),
+            "level": record.levelname,
+            "service": "django",
+            "logger": record.name,
+            "message": redact(record.getMessage()),
+            "trace_id": trace_id_var.get(),
+            "portal": portal_var.get(),
+        }
+        for field in (
+            "actor_ref",
+            "course_ref",
+            "task_ref",
+            "resource_type",
+            "resource_ref",
+            "action",
+            "result",
+            "error_code",
+            "duration_ms",
+            "delivered",
+            "processed",
+        ):
+            if hasattr(record, field):
+                payload[field] = redact(getattr(record, field))
+        if record.exc_info:
+            payload["exception"] = redact(self.formatException(record.exc_info))
+        return json.dumps(payload, ensure_ascii=True, separators=(",", ":"))

@@ -1,0 +1,5 @@
+ACCOUNT_CREATED = "account.created"
+ACCOUNT_STATUS_CHANGED = "account.status.changed"
+IDENTITY_VERIFICATION_CHANGED = "identity.verification.changed"
+TEACHER_QUALIFICATION_CHANGED = "teacher.qualification.changed"
+PLATFORM_ADMIN_ASSIGNMENT_CHANGED = "platform.admin.assignment.changed"

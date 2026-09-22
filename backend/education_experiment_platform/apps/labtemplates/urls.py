@@ -1,0 +1,72 @@
+from django.urls import path
+
+from .views import (
+    AutoCheckRuleView,
+    CloneVersionView,
+    PlatformPrecheckSummaryView,
+    PrecheckRunListView,
+    PrecheckView,
+    PublishVersionView,
+    TemplateAssetCollectionView,
+    TemplateAssetCompleteView,
+    TemplateAssetDetailView,
+    TemplateDetailView,
+    TemplateListView,
+    TemplateOptionsView,
+    TemplateVersionDetailView,
+    TemplateVersionListView,
+    WithdrawVersionView,
+)
+
+urlpatterns = [
+    path("teaching/courses/<str:course_id>/template-options", TemplateOptionsView.as_view()),
+    path("teaching/courses/<str:course_id>/templates", TemplateListView.as_view()),
+    path(
+        "teaching/courses/<str:course_id>/templates/<str:template_id>", TemplateDetailView.as_view()
+    ),
+    path(
+        "teaching/courses/<str:course_id>/templates/<str:template_id>/assets",
+        TemplateAssetCollectionView.as_view(),
+    ),
+    path(
+        "teaching/courses/<str:course_id>/templates/<str:template_id>/assets/<str:asset_id>",
+        TemplateAssetDetailView.as_view(),
+    ),
+    path(
+        "teaching/courses/<str:course_id>/templates/<str:template_id>/assets/<str:asset_id>/complete",
+        TemplateAssetCompleteView.as_view(),
+    ),
+    path(
+        "teaching/courses/<str:course_id>/templates/<str:template_id>/versions",
+        TemplateVersionListView.as_view(),
+    ),
+    path(
+        "teaching/courses/<str:course_id>/template-versions/<str:version_id>",
+        TemplateVersionDetailView.as_view(),
+    ),
+    path(
+        "teaching/courses/<str:course_id>/template-versions/<str:version_id>/auto-check-rules",
+        AutoCheckRuleView.as_view(),
+    ),
+    path(
+        "teaching/courses/<str:course_id>/template-versions/<str:version_id>/precheck",
+        PrecheckView.as_view(),
+    ),
+    path(
+        "teaching/courses/<str:course_id>/template-versions/<str:version_id>/precheck-runs",
+        PrecheckRunListView.as_view(),
+    ),
+    path(
+        "teaching/courses/<str:course_id>/template-versions/<str:version_id>/publish",
+        PublishVersionView.as_view(),
+    ),
+    path(
+        "teaching/courses/<str:course_id>/template-versions/<str:version_id>/withdraw",
+        WithdrawVersionView.as_view(),
+    ),
+    path(
+        "teaching/courses/<str:course_id>/template-versions/<str:version_id>/clone",
+        CloneVersionView.as_view(),
+    ),
+    path("platform/template-prechecks/summary", PlatformPrecheckSummaryView.as_view()),
+]
