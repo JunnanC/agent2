@@ -30,7 +30,9 @@ from .selectors import (
 from .serializers import (
     CheckpointWriteSerializer,
     OperationEventSerializer,
+    WorkspaceCheckpointListSerializer,
     WorkspaceCheckpointSerializer,
+    WorkspaceEnterSerializer,
     WorkspaceSessionSerializer,
     WorkspaceSnapshotSerializer,
     checkpoint_data,
@@ -103,11 +105,12 @@ def _workspace_token(request: HttpRequest) -> str:
 
 class UserTaskEnterView(APIView):
     permission_classes = [IsUserPortal]
+    serializer_class = WorkspaceSessionSerializer
 
     @extend_schema(
         parameters=[IF_MATCH, IDEMPOTENCY_KEY],
         tags=["workspaces"],
-        responses=WorkspaceSessionSerializer,
+        responses={200: WorkspaceEnterSerializer},
         extensions={"x-portals": ["USER"]},
     )
     def post(self, request: HttpRequest, task_id: str) -> Response:
@@ -135,17 +138,18 @@ class UserTaskEnterView(APIView):
 
 class UserWorkspaceSessionCreateView(APIView):
     permission_classes = [IsUserPortal]
+    serializer_class = WorkspaceSessionSerializer
 
     @extend_schema(
         parameters=[IDEMPOTENCY_KEY],
         tags=["workspaces"],
-        responses=WorkspaceSessionSerializer,
+        responses={201: WorkspaceSessionSerializer},
         extensions={"x-portals": ["USER"]},
     )
     def post(self, request: HttpRequest, task_id: str) -> Response:
         def operation() -> StoredResponse:
             task = task_for_user(actor=request.user, task_id=task_id)
-            if task.status != "IN_PROGRESS":
+            if task.status not in {"IN_PROGRESS", "REPORT_DRAFT"}:
                 from apps.core.errors import StateConflict
 
                 raise StateConflict(detail={"status": task.status})
@@ -163,11 +167,12 @@ class UserWorkspaceSessionCreateView(APIView):
 
 class WorkspaceSessionRenewView(APIView):
     permission_classes = [IsUserPortal]
+    serializer_class = WorkspaceSessionSerializer
 
     @extend_schema(
-        parameters=[WORKSPACE_TOKEN],
+        parameters=[WORKSPACE_TOKEN, IDEMPOTENCY_KEY],
         tags=["workspaces"],
-        responses=WorkspaceSessionSerializer,
+        responses={200: WorkspaceSessionSerializer},
         extensions={"x-portals": ["USER"]},
     )
     def post(self, request: HttpRequest, session_id: str) -> Response:
@@ -180,17 +185,26 @@ class WorkspaceSessionRenewView(APIView):
             from apps.core.errors import ResourceNotFound
 
             raise ResourceNotFound()
-        changed, token = renew_session(
-            session=session,
-            token=_workspace_token(request),
-            actor=request.user,
-            context=_context(request),
-        )
-        return _response(request, session_data(changed, token=token), etag=changed.row_version)
+
+        def operation() -> StoredResponse:
+            changed, token = renew_session(
+                session=session,
+                token=_workspace_token(request),
+                actor=request.user,
+                context=_context(request),
+            )
+            return StoredResponse(
+                200,
+                _body(request, session_data(changed, token=token)),
+                {"ETag": etag_for_version(changed.row_version)},
+            )
+
+        return _idempotent(request, payload={}, operation=operation)
 
 
 class WorkspaceSessionRevokeView(APIView):
     permission_classes = [IsUserPortal]
+    serializer_class = WorkspaceSessionSerializer
 
     @extend_schema(
         parameters=[IF_MATCH, IDEMPOTENCY_KEY, WORKSPACE_TOKEN],
@@ -230,11 +244,12 @@ class WorkspaceSessionRevokeView(APIView):
 class UserWorkspaceSnapshotView(APIView):
     permission_classes = [IsUserPortal]
     parser_classes = [MultiPartParser]
+    serializer_class = WorkspaceSnapshotSerializer
 
     @extend_schema(
         parameters=[WORKSPACE_TOKEN],
         tags=["workspaces"],
-        responses=WorkspaceSnapshotSerializer,
+        responses={200: WorkspaceSnapshotSerializer},
         extensions={"x-portals": ["USER"]},
     )
     def put(self, request: HttpRequest, task_id: str) -> Response:
@@ -270,16 +285,32 @@ class UserCheckpointListCreateView(APIView):
 
     @extend_schema(
         tags=["workspaces"],
-        responses=WorkspaceCheckpointSerializer(many=True),
+        responses=WorkspaceCheckpointListSerializer,
         extensions={"x-portals": ["USER"]},
     )
     def get(self, request: HttpRequest, task_id: str) -> Response:
         task_for_user(actor=request.user, task_id=task_id)
+        session = (
+            WorkspaceSession.objects.filter(
+                task__public_id=task_id,
+                student=request.user,
+                status=WorkspaceSession.Status.ACTIVE,
+            )
+            .order_by("-created_at")
+            .first()
+        )
         rows = [
             checkpoint_data(item)
             for item in checkpoints_for_user(actor=request.user, task_id=task_id)
         ]
-        return _response(request, rows)
+        return _response(
+            request,
+            {
+                "items": rows,
+                "current_version": session.current_version if session else 0,
+                "row_version": session.row_version if session else 0,
+            },
+        )
 
     @extend_schema(
         parameters=[IDEMPOTENCY_KEY, WORKSPACE_TOKEN],
@@ -312,11 +343,12 @@ class UserCheckpointListCreateView(APIView):
 
 class UserCheckpointRestoreView(APIView):
     permission_classes = [IsUserPortal]
+    serializer_class = WorkspaceSnapshotSerializer
 
     @extend_schema(
         parameters=[IF_MATCH, IDEMPOTENCY_KEY, WORKSPACE_TOKEN],
         tags=["workspaces"],
-        responses=WorkspaceSnapshotSerializer,
+        responses={200: WorkspaceSnapshotSerializer},
         extensions={"x-portals": ["USER"]},
     )
     def post(self, request: HttpRequest, task_id: str, checkpoint_id: str) -> Response:

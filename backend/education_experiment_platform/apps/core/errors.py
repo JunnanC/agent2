@@ -71,3 +71,15 @@ class ResourceNotFound(CoreError):
     code = "RESOURCE_NOT_FOUND"
     message = "资源不存在"
     status_code = 404
+
+
+class DownloadGrantInvalid(CoreError):
+    code = "DOWNLOAD_GRANT_INVALID"
+    message = "下载授权无效或已过期"
+    status_code = 404
+
+
+class DownloadScopeDenied(CoreError):
+    code = "DOWNLOAD_SCOPE_DENIED"
+    message = "当前账号不能下载该文件"
+    status_code = 404

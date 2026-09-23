@@ -1,0 +1,613 @@
+import hashlib
+from datetime import timedelta
+from io import BytesIO
+from types import SimpleNamespace
+from unittest.mock import patch
+
+from django.test import Client, TestCase
+from django.utils import timezone
+
+from apps.core.downloads import (
+    consume_download_grant,
+    create_download_grant,
+    get_download_target,
+    revoke_download_grant,
+)
+from apps.core.errors import (
+    DownloadGrantInvalid,
+    ImmutableRecordError,
+    ResourceNotFound,
+    RowVersionConflict,
+)
+from apps.core.models import FileDownloadGrant, ObjectAsset, OutboxEvent
+from apps.courses.services import ActorContext
+from apps.experiments.models import ExperimentTask, TaskPublication
+from apps.experiments.services import publish_publication
+from apps.experiments.tests.helpers import (
+    create_domain,
+    create_draft_publication,
+    create_enrollment,
+)
+from apps.governance.models import Quota, RuntimeAdapter
+from apps.provisioning.adapters import reset_fake_runtime
+from apps.provisioning.services import execute_provisioning_job, start_provisioning
+from apps.workspaces.models import WorkspaceSnapshot
+from apps.workspaces.permissions import require_workspace_session
+from apps.workspaces.services import enter_task, issue_session
+
+from ..errors import ReportSnapshotConflict
+from ..models import (
+    ReportAttachment,
+    ReportDraft,
+    ReportVersion,
+    SystemArtifact,
+)
+from ..services import (
+    complete_non_report_task,
+    create_attachment_upload,
+    report_draft_for_user,
+    scan_report_attachment,
+    submit_report,
+    update_report_draft,
+)
+
+
+class ReportServiceTests(TestCase):
+    password = "ValidPassword!234"
+
+    def setUp(self) -> None:
+        reset_fake_runtime()
+        self.teacher, self.course, template_version, rubric_version = create_domain(suffix="p09")
+        RuntimeAdapter.objects.filter(pk=template_version.runtime_adapter_id).update(
+            driver=RuntimeAdapter.Driver.FAKE,
+            status=RuntimeAdapter.Status.ENABLED,
+            health_status=RuntimeAdapter.HealthStatus.HEALTHY,
+        )
+        self.enrollment = create_enrollment(self.course, suffix="p09-student")
+        self.publication = create_draft_publication(
+            owner=self.teacher,
+            course=self.course,
+            template_version=template_version,
+            rubric_version=rubric_version,
+            suffix="p09",
+        )
+        values = {
+            "max_concurrent_instances": 10,
+            "max_concurrent_starts": 10,
+            "max_cpu_millicores": 20_000,
+            "max_memory_mb": 40_000,
+            "max_disk_gb": 200,
+        }
+        Quota.objects.create(scope_type=Quota.ScopeType.PLATFORM, scope_key="PLATFORM", **values)
+        Quota.objects.create(
+            scope_type=Quota.ScopeType.COURSE,
+            scope_key=f"COURSE:{self.course.public_id}",
+            course=self.course,
+            **values,
+        )
+        Quota.objects.create(
+            scope_type=Quota.ScopeType.USER,
+            scope_key=f"USER:{self.enrollment.student.public_id}",
+            user=self.enrollment.student,
+            **values,
+        )
+        publication, _ = publish_publication(
+            course_id=self.course.public_id,
+            publication_id=self.publication.public_id,
+            actor=self.teacher,
+            expected_version=self.publication.row_version,
+            selected_ids=[],
+            context=ActorContext(self.teacher.public_id, "TEACHING", "p09" * 8),
+        )
+        self.task = publication.tasks.get(student=self.enrollment.student)
+        _, job = start_provisioning(
+            task_id=self.task.public_id,
+            actor=self.task.student,
+            expected_version=self.task.row_version,
+            context=ActorContext(self.task.student.public_id, "USER", "s" * 32),
+        )
+        execute_provisioning_job(job_id=job.public_id)
+        self.task.refresh_from_db()
+        self.context = ActorContext(self.task.student.public_id, "USER", "w" * 32)
+        self.task, self.session, self.token = enter_task(
+            task_id=self.task.public_id,
+            actor=self.task.student,
+            expected_version=self.task.row_version,
+            context=self.context,
+        )
+
+    def tearDown(self) -> None:
+        reset_fake_runtime()
+
+    def _snapshot(self, *, payload: bytes = b"snapshot-v1") -> WorkspaceSnapshot:
+        digest = hashlib.sha256(payload).hexdigest()
+        asset = ObjectAsset.objects.create(
+            bucket="edu-platform",
+            object_key=f"workspaces/{self.task.public_id}/{digest}",
+            object_version="object-v1",
+            digest_sha256=digest,
+            size_bytes=len(payload),
+            media_type="text/plain",
+            owner_type="WORKSPACE_TASK",
+            owner_ref=self.task.public_id,
+            purpose="WORKSPACE_SNAPSHOT",
+            scan_status=ObjectAsset.ScanStatus.CLEAN,
+        )
+        return WorkspaceSnapshot.objects.create(
+            task=self.task,
+            session=self.session,
+            asset=asset,
+            version_no=WorkspaceSnapshot.objects.filter(task=self.task).count() + 1,
+            client_seq=WorkspaceSnapshot.objects.filter(task=self.task).count() + 1,
+            digest_sha256=digest,
+            size_bytes=len(payload),
+            media_type="text/plain",
+            saved_at=timezone.now(),
+            trace_id="x" * 32,
+        )
+
+    def _student_client(self) -> tuple[Client, str]:
+        client = Client(enforce_csrf_checks=True)
+        proxy_headers = {"HTTP_X_PROXY_CONTEXT": "ingress-v1", "REMOTE_ADDR": "127.0.0.1"}
+        client.get("/api/v2/auth/csrf", HTTP_X_PORTAL="USER", **proxy_headers)
+        csrf = str(client.cookies["csrftoken"].value)
+        with (
+            patch("apps.accounts.views.check_login_rate_limit", return_value="rate-key"),
+            patch("apps.accounts.views.clear_login_rate_limit"),
+        ):
+            response = client.post(
+                "/api/v2/auth/login",
+                {"identifier": self.task.student.email, "password": self.password},
+                content_type="application/json",
+                HTTP_X_CSRFTOKEN=csrf,
+                HTTP_X_PORTAL="USER",
+                **proxy_headers,
+            )
+        self.assertEqual(response.status_code, 200, response.content)
+        return client, csrf
+
+    def test_entering_report_task_initializes_draft_and_get_is_read_only(self) -> None:
+        draft = ReportDraft.objects.get(task=self.task, student=self.task.student)
+        row_version = draft.row_version
+        read = report_draft_for_user(task_id=self.task.public_id, actor=self.task.student)
+        self.assertEqual(read.pk, draft.pk)
+        self.assertEqual(read.row_version, row_version)
+        self.assertEqual(read.body_markdown, "")
+
+    def test_direct_session_issue_initializes_missing_report_draft(self) -> None:
+        with patch("apps.reports.services.initialize_report_draft") as initialize:
+            issue_session(task=self.task, actor=self.task.student, context=self.context)
+        initialize.assert_called_once()
+
+    def test_workspace_session_remains_usable_after_report_draft_transition(self) -> None:
+        draft = ReportDraft.objects.get(task=self.task)
+        update_report_draft(
+            task_id=self.task.public_id,
+            actor=self.task.student,
+            body_markdown="# Draft",
+            expected_version=draft.row_version,
+            context=self.context,
+        )
+        self.session.refresh_from_db()
+        self.session.task.refresh_from_db()
+        self.assertEqual(self.session.task.status, ExperimentTask.Status.REPORT_DRAFT)
+        self.assertEqual(
+            require_workspace_session(
+                session=self.session,
+                token=self.token,
+                task_id=self.task.public_id,
+                capability="snapshot",
+            ).pk,
+            self.session.pk,
+        )
+
+    def test_draft_cas_rejects_stale_etag_without_overwriting(self) -> None:
+        draft = ReportDraft.objects.get(task=self.task)
+        updated = update_report_draft(
+            task_id=self.task.public_id,
+            actor=self.task.student,
+            body_markdown="# Draft 1",
+            expected_version=draft.row_version,
+            context=self.context,
+        )
+        self.assertEqual(updated.row_version, draft.row_version + 1)
+        with self.assertRaises(RowVersionConflict):
+            update_report_draft(
+                task_id=self.task.public_id,
+                actor=self.task.student,
+                body_markdown="# Lost update",
+                expected_version=draft.row_version,
+                context=self.context,
+            )
+        updated.refresh_from_db()
+        self.assertEqual(updated.body_markdown, "# Draft 1")
+
+    def test_draft_api_returns_412_for_stale_if_match(self) -> None:
+        client, csrf = self._student_client()
+        draft = ReportDraft.objects.get(task=self.task)
+        url = f"/api/v2/tasks/{self.task.public_id}/report-draft"
+        headers = {
+            "HTTP_X_CSRFTOKEN": csrf,
+            "HTTP_X_PORTAL": "USER",
+            "HTTP_IDEMPOTENCY_KEY": "report-draft-write-1",
+            "HTTP_IF_MATCH": f'"{draft.row_version}"',
+            "HTTP_X_PROXY_CONTEXT": "ingress-v1",
+            "REMOTE_ADDR": "127.0.0.1",
+        }
+        saved = client.put(
+            url,
+            data='{"body_markdown":"# Saved"}',
+            content_type="application/json",
+            **headers,
+        )
+        self.assertEqual(saved.status_code, 200, saved.content)
+        stale = client.put(
+            url,
+            data='{"body_markdown":"# Must not replace saved"}',
+            content_type="application/json",
+            **{**headers, "HTTP_IDEMPOTENCY_KEY": "report-draft-write-2"},
+        )
+        self.assertEqual(stale.status_code, 412, stale.content)
+        self.assertEqual(ReportDraft.objects.get(task=self.task).body_markdown, "# Saved")
+
+    def test_submit_api_replays_exactly_without_duplicate_report_version(self) -> None:
+        self._snapshot()
+        draft = ReportDraft.objects.get(task=self.task)
+        update_report_draft(
+            task_id=self.task.public_id,
+            actor=self.task.student,
+            body_markdown="# Final report",
+            expected_version=draft.row_version,
+            context=self.context,
+        )
+        self.task.refresh_from_db()
+        client, csrf = self._student_client()
+        url = f"/api/v2/tasks/{self.task.public_id}/submit-report"
+        headers = {
+            "HTTP_X_CSRFTOKEN": csrf,
+            "HTTP_X_PORTAL": "USER",
+            "HTTP_IDEMPOTENCY_KEY": "report-submit-once",
+            "HTTP_IF_MATCH": f'"{self.task.row_version}"',
+            "HTTP_X_PROXY_CONTEXT": "ingress-v1",
+            "REMOTE_ADDR": "127.0.0.1",
+        }
+        first = client.post(url, data="{}", content_type="application/json", **headers)
+        replay = client.post(url, data="{}", content_type="application/json", **headers)
+        self.assertEqual(first.status_code, 201, first.content)
+        self.assertEqual(replay.status_code, 201, replay.content)
+        self.assertEqual(replay["X-Idempotent-Replayed"], "true")
+        self.assertEqual(replay.json(), first.json())
+        self.assertEqual(ReportVersion.objects.filter(task=self.task).count(), 1)
+
+    def test_submit_freezes_version_and_transitions_task_atomically(self) -> None:
+        snapshot = self._snapshot()
+        draft = ReportDraft.objects.get(task=self.task)
+        update_report_draft(
+            task_id=self.task.public_id,
+            actor=self.task.student,
+            body_markdown="# Final report",
+            expected_version=draft.row_version,
+            context=self.context,
+        )
+        self.task.refresh_from_db()
+        before = OutboxEvent.objects.count()
+        version, changed_task = submit_report(
+            task_id=self.task.public_id,
+            actor=self.task.student,
+            expected_task_version=self.task.row_version,
+            context=self.context,
+        )
+        self.assertEqual(version.workspace_snapshot_id, snapshot.pk)
+        self.assertEqual(version.snapshot_digest, snapshot.digest_sha256)
+        self.assertEqual(version.body_markdown, "# Final report")
+        self.assertEqual(changed_task.status, ExperimentTask.Status.UNDER_REVIEW)
+        self.assertEqual(ReportVersion.objects.filter(task=self.task).count(), 1)
+        self.assertGreater(OutboxEvent.objects.count(), before)
+        with self.assertRaises(ImmutableRecordError):
+            version.save()
+        with self.assertRaises(ImmutableRecordError):
+            ReportVersion.objects.filter(pk=version.pk).update(body_markdown="mutated")
+
+    def test_submit_rejects_when_workspace_snapshot_changes_after_draft_save(self) -> None:
+        first = self._snapshot(payload=b"saved workspace")
+        draft = ReportDraft.objects.get(task=self.task)
+        update_report_draft(
+            task_id=self.task.public_id,
+            actor=self.task.student,
+            body_markdown="# Draft",
+            expected_version=draft.row_version,
+            context=self.context,
+        )
+        self._snapshot(payload=b"new workspace")
+        self.task.refresh_from_db()
+        with self.assertRaises(ReportSnapshotConflict):
+            submit_report(
+                task_id=self.task.public_id,
+                actor=self.task.student,
+                expected_task_version=self.task.row_version,
+                context=self.context,
+            )
+        self.assertEqual(ReportVersion.objects.filter(task=self.task).count(), 0)
+        latest = WorkspaceSnapshot.objects.filter(task=self.task).latest("version_no")
+        self.assertNotEqual(first.digest_sha256, latest.digest_sha256)
+
+    def test_submit_rejects_inactive_workspace_snapshot_asset(self) -> None:
+        snapshot = self._snapshot()
+        draft = ReportDraft.objects.get(task=self.task)
+        update_report_draft(
+            task_id=self.task.public_id,
+            actor=self.task.student,
+            body_markdown="# Draft",
+            expected_version=draft.row_version,
+            context=self.context,
+        )
+        ObjectAsset.objects.filter(pk=snapshot.asset_id).update(status=ObjectAsset.Status.PURGED)
+        self.task.refresh_from_db()
+        with self.assertRaises(ReportSnapshotConflict):
+            submit_report(
+                task_id=self.task.public_id,
+                actor=self.task.student,
+                expected_task_version=self.task.row_version,
+                context=self.context,
+            )
+        self.assertEqual(ReportVersion.objects.filter(task=self.task).count(), 0)
+
+    def test_submit_rolls_back_report_facts_if_task_transition_fails(self) -> None:
+        self._snapshot()
+        draft = ReportDraft.objects.get(task=self.task)
+        update_report_draft(
+            task_id=self.task.public_id,
+            actor=self.task.student,
+            body_markdown="# Draft",
+            expected_version=draft.row_version,
+            context=self.context,
+        )
+        self.task.refresh_from_db()
+        before_events = OutboxEvent.objects.count()
+        with (
+            patch("apps.reports.services.transition_task", side_effect=RuntimeError("transition")),
+            self.assertRaisesRegex(RuntimeError, "transition"),
+        ):
+            submit_report(
+                task_id=self.task.public_id,
+                actor=self.task.student,
+                expected_task_version=self.task.row_version,
+                context=self.context,
+            )
+        self.assertEqual(ReportVersion.objects.filter(task=self.task).count(), 0)
+        self.assertEqual(ReportDraft.objects.get(task=self.task).status, ReportDraft.Status.DRAFT)
+        self.assertEqual(OutboxEvent.objects.count(), before_events)
+
+    def test_non_report_completion_records_only_server_selected_snapshot(self) -> None:
+        TaskPublication.objects.filter(pk=self.publication.pk).update(report_required=False)
+        self.task.refresh_from_db()
+        snapshot = self._snapshot()
+        artifact, changed_task = complete_non_report_task(
+            task_id=self.task.public_id,
+            actor=self.task.student,
+            expected_task_version=self.task.row_version,
+            context=self.context,
+        )
+        self.assertEqual(artifact.asset_id, snapshot.asset_id)
+        self.assertEqual(artifact.digest_sha256, snapshot.digest_sha256)
+        self.assertEqual(changed_task.status, ExperimentTask.Status.UNDER_REVIEW)
+        self.assertEqual(SystemArtifact.objects.filter(task=self.task).count(), 1)
+
+    def test_download_grant_is_hashed_one_time_and_teacher_scope_requires_submission(self) -> None:
+        snapshot = self._snapshot()
+        draft = ReportDraft.objects.get(task=self.task)
+        asset = ObjectAsset.objects.create(
+            bucket="edu-platform",
+            object_key=f"reports/{self.task.public_id}/opaque-asset/opaque",
+            object_version="object-v1",
+            digest_sha256="a" * 64,
+            size_bytes=4,
+            media_type="text/plain",
+            original_name="report.txt",
+            owner_type="REPORT_ATTACHMENT",
+            owner_ref=self.task.public_id,
+            purpose="REPORT_ATTACHMENT",
+            scan_status=ObjectAsset.ScanStatus.CLEAN,
+        )
+        attachment = ReportAttachment.objects.create(
+            draft=draft,
+            asset=asset,
+            uploaded_by=self.task.student,
+            trace_id="x" * 32,
+        )
+        with self.assertRaises(ResourceNotFound):
+            create_download_grant(
+                asset_id=asset.public_id,
+                actor=self.teacher,
+                portal="TEACHING",
+                trace_id="t" * 32,
+                token="teacher-before-submit",
+            )
+        student_grant, token = create_download_grant(
+            asset_id=asset.public_id,
+            actor=self.task.student,
+            portal="USER",
+            trace_id="u" * 32,
+            token="user-download-once",
+        )
+        self.assertNotEqual(student_grant.token_hash, token)
+        grant, target = get_download_target(token=token, actor=self.task.student, portal="USER")
+        self.assertEqual(target.pk, asset.pk)
+        consume_download_grant(
+            grant_id=grant.pk,
+            actor=self.task.student,
+            portal="USER",
+            trace_id="u" * 32,
+        )
+        with self.assertRaises(DownloadGrantInvalid):
+            get_download_target(token=token, actor=self.task.student, portal="USER")
+        self.assertIsNotNone(attachment.pk)
+        self.assertIsNotNone(snapshot.pk)
+
+    def test_download_grants_reject_revoked_and_expired_tokens(self) -> None:
+        asset = ObjectAsset.objects.create(
+            bucket="edu-platform",
+            object_key=f"reports/{self.task.public_id}/opaque-grant-key",
+            object_version="grant-version",
+            digest_sha256="c" * 64,
+            size_bytes=4,
+            media_type="text/plain",
+            original_name="grant.txt",
+            owner_type="REPORT_ATTACHMENT",
+            owner_ref=self.task.public_id,
+            purpose="REPORT_ATTACHMENT",
+            scan_status=ObjectAsset.ScanStatus.CLEAN,
+        )
+        ReportAttachment.objects.create(
+            draft=ReportDraft.objects.get(task=self.task),
+            asset=asset,
+            uploaded_by=self.task.student,
+            trace_id="g" * 32,
+        )
+        revoked, revoked_token = create_download_grant(
+            asset_id=asset.public_id,
+            actor=self.task.student,
+            portal="USER",
+            trace_id="g" * 32,
+            token="revoked-download-token",
+        )
+        revoke_download_grant(
+            grant_id=revoked.public_id,
+            actor=self.task.student,
+            portal="USER",
+            expected_version=revoked.row_version,
+            trace_id="g" * 32,
+        )
+        with self.assertRaises(DownloadGrantInvalid):
+            get_download_target(token=revoked_token, actor=self.task.student, portal="USER")
+
+        expiring, expiring_token = create_download_grant(
+            asset_id=asset.public_id,
+            actor=self.task.student,
+            portal="USER",
+            trace_id="g" * 32,
+            token="expired-download-token",
+        )
+        FileDownloadGrant.objects.filter(pk=expiring.pk).update(
+            expires_at=timezone.now() - timedelta(seconds=1)
+        )
+        with self.assertRaises(DownloadGrantInvalid):
+            get_download_target(token=expiring_token, actor=self.task.student, portal="USER")
+
+    def test_file_download_route_uses_portal_from_authenticated_session(self) -> None:
+        asset = ObjectAsset.objects.create(
+            bucket="edu-platform",
+            object_key=f"reports/{self.task.public_id}/opaque-route-key",
+            object_version="route-version",
+            digest_sha256="b" * 64,
+            size_bytes=7,
+            media_type="text/plain",
+            original_name="route.txt",
+            owner_type="REPORT_ATTACHMENT",
+            owner_ref=self.task.public_id,
+            purpose="REPORT_ATTACHMENT",
+            scan_status=ObjectAsset.ScanStatus.CLEAN,
+        )
+        ReportAttachment.objects.create(
+            draft=ReportDraft.objects.get(task=self.task),
+            asset=asset,
+            uploaded_by=self.task.student,
+            trace_id="r" * 32,
+        )
+        _grant, token = create_download_grant(
+            asset_id=asset.public_id,
+            actor=self.task.student,
+            portal="USER",
+            trace_id="r" * 32,
+            token="root-route-download-token",
+        )
+        storage = SimpleNamespace(
+            open_object=lambda **_kwargs: SimpleNamespace(
+                body=BytesIO(b"content"),
+                content_length=7,
+                content_type="text/plain",
+                version_id="route-version",
+            )
+        )
+        client, _csrf = self._student_client()
+        with patch("apps.core.files.object_storage", return_value=storage):
+            response = client.get(f"/files/{token}")
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(b"".join(response.streaming_content), b"content")
+            replay = client.get(f"/files/{token}")
+        self.assertEqual(replay.status_code, 404)
+
+    def test_attachment_upload_uses_opaque_key_and_clean_scan_pins_version(self) -> None:
+        content = b"report body"
+        digest = hashlib.sha256(content).hexdigest()
+        storage = SimpleNamespace(
+            create_upload_post=lambda **_kwargs: {"url": "https://upload.invalid"},
+            open_object=lambda **_kwargs: SimpleNamespace(
+                body=BytesIO(content),
+                content_length=len(content),
+                content_type="text/plain",
+                version_id="minio-version-1",
+            ),
+            delete_object=lambda **_kwargs: None,
+        )
+        with patch("apps.reports.services.object_storage", return_value=storage):
+            asset, _upload = create_attachment_upload(
+                task_id=self.task.public_id,
+                actor=self.task.student,
+                file_name="private-report.txt",
+                media_type="text/plain",
+                size_bytes=len(content),
+                digest_sha256=digest,
+                context=self.context,
+            )
+        self.assertNotIn("private-report.txt", asset.object_key)
+        with (
+            patch("apps.reports.services.object_storage", return_value=storage),
+            patch(
+                "apps.reports.services.ClamAVScanner",
+                return_value=SimpleNamespace(
+                    scan=lambda _chunks: SimpleNamespace(clean=True, signature="")
+                ),
+            ),
+        ):
+            scanned = scan_report_attachment(asset_id=asset.public_id, trace_id="s" * 32)
+        self.assertEqual(scanned.scan_status, ObjectAsset.ScanStatus.CLEAN)
+        self.assertEqual(scanned.object_version, "minio-version-1")
+        self.assertTrue(ReportAttachment.objects.filter(asset=scanned).exists())
+
+    def test_malware_scan_marks_infected_and_never_registers_attachment(self) -> None:
+        content = b"infected report"
+        digest = hashlib.sha256(content).hexdigest()
+        storage = SimpleNamespace(
+            create_upload_post=lambda **_kwargs: {"url": "https://upload.invalid"},
+            open_object=lambda **_kwargs: SimpleNamespace(
+                body=BytesIO(content),
+                content_length=len(content),
+                content_type="text/plain",
+                version_id="infected-version",
+            ),
+            delete_object=lambda **_kwargs: None,
+        )
+        with patch("apps.reports.services.object_storage", return_value=storage):
+            asset, _upload = create_attachment_upload(
+                task_id=self.task.public_id,
+                actor=self.task.student,
+                file_name="evidence.txt",
+                media_type="text/plain",
+                size_bytes=len(content),
+                digest_sha256=digest,
+                context=self.context,
+            )
+        with (
+            patch("apps.reports.services.object_storage", return_value=storage),
+            patch(
+                "apps.reports.services.ClamAVScanner",
+                return_value=SimpleNamespace(
+                    scan=lambda _chunks: SimpleNamespace(clean=False, signature="Eicar")
+                ),
+            ),
+        ):
+            scanned = scan_report_attachment(asset_id=asset.public_id, trace_id="i" * 32)
+        self.assertEqual(scanned.scan_status, ObjectAsset.ScanStatus.INFECTED)
+        self.assertEqual(scanned.object_version, "infected-version")
+        self.assertFalse(ReportAttachment.objects.filter(asset=scanned).exists())

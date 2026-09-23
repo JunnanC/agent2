@@ -135,17 +135,6 @@ services:
             config:
               remove: { headers: [X-Portal, X-Auth-Context, X-Client-Id, X-Scopes, X-Proxy-Context] }
               add: { headers: ["X-Portal:USER", "X-Proxy-Context:ingress-v1"] }
-      - name: teacher-workspace
-        hosts: [teacher.localhost, teacher.example.edu]
-        paths: [/workspace]
-        strip_path: false
-        preserve_host: true
-        plugins:
-          - name: request-transformer
-            config:
-              remove: { headers: [X-Portal, X-Auth-Context, X-Client-Id, X-Scopes, X-Proxy-Context] }
-              add: { headers: ["X-Portal:TEACHING", "X-Proxy-Context:ingress-v1"] }
-
   - name: django-files
     url: http://django:8000
     connect_timeout: 5000

@@ -47,8 +47,8 @@ class HealthTests(TestCase):
             HTTP_X_PROXY_CONTEXT="ingress-v1",
         )
 
-        assert response.status_code == 200
-        assert response["X-Accel-Buffering"] == "no"
+        assert response.status_code == 401
+        assert response.json()["error"]["code"] == "AUTH_REQUIRED"
 
     def test_machine_context_cannot_access_browser_namespace(self) -> None:
         response = self.client.get(

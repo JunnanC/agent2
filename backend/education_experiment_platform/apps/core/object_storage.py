@@ -50,8 +50,13 @@ class S3ObjectStorage:
         value["expires_at"] = (datetime.now(UTC) + timedelta(seconds=expires_seconds)).isoformat()
         return value
 
-    def open_object(self, *, bucket: str, object_key: str) -> StoredObject:
-        response = self.client.get_object(Bucket=bucket, Key=object_key)
+    def open_object(
+        self, *, bucket: str, object_key: str, version_id: str = ""
+    ) -> StoredObject:
+        kwargs: dict[str, str] = {"Bucket": bucket, "Key": object_key}
+        if version_id:
+            kwargs["VersionId"] = version_id
+        response = self.client.get_object(**kwargs)
         return StoredObject(
             body=response["Body"],
             content_length=int(response.get("ContentLength", 0)),

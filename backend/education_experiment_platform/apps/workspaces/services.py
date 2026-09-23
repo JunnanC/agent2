@@ -31,6 +31,7 @@ from .errors import (
     CheckpointStateConflict,
     WorkspaceCapabilityDenied,
     WorkspaceOperationDenied,
+    WorkspaceScanUnavailable,
     WorkspaceSessionInvalid,
 )
 from .metrics import WORKSPACE_AUTOSAVES_TOTAL, WORKSPACE_SESSIONS_TOTAL
@@ -136,10 +137,16 @@ def _task_for_actor(*, task_id: str, actor: User) -> ExperimentTask:
 def _assert_enterable(task: ExperimentTask) -> None:
     if task.enrollment.status != Enrollment.Status.ACTIVE:
         raise StateConflict(detail={"enrollment_status": task.enrollment.status})
+    if task.publication.status != task.publication.Status.PUBLISHED:
+        raise StateConflict(detail={"publication_status": task.publication.status})
     instance = getattr(task, "provisioning_instance", None)
     if instance is None or instance.status != "READY":
         raise StateConflict(detail={"instance_status": instance.status if instance else None})
-    if task.status not in {ExperimentTask.Status.READY, ExperimentTask.Status.IN_PROGRESS}:
+    if task.status not in {
+        ExperimentTask.Status.READY,
+        ExperimentTask.Status.IN_PROGRESS,
+        ExperimentTask.Status.REPORT_DRAFT,
+    }:
         raise StateConflict(detail={"status": task.status})
     now = timezone.now()
     deadline = task.effective_deadline or task.publication.window_end
@@ -179,10 +186,16 @@ def issue_session(
 ) -> tuple[ExperimentTask, WorkspaceSession, str]:
     task = (
         ExperimentTask.objects.select_for_update()
-        .select_related("course", "student", "enrollment")
+        .select_related("course", "student", "enrollment", "publication")
         .get(pk=task.pk)
     )
     _assert_enterable(task)
+    if task.student_id != actor.pk:
+        raise ResourceNotFound()
+    if task.publication.report_required:
+        from apps.reports.services import initialize_report_draft
+
+        initialize_report_draft(task=task, actor=actor, context=_context(actor, context))
     instance = getattr(task, "provisioning_instance", None)
     if instance is None:
         raise WorkspaceSessionInvalid()
@@ -272,7 +285,7 @@ def renew_session(
 ) -> tuple[WorkspaceSession, str]:
     session = (
         WorkspaceSession.objects.select_for_update()
-        .select_related("task", "course", "student", "instance")
+        .select_related("task__enrollment", "task__publication", "course", "student", "instance")
         .get(pk=session.pk)
     )
     require_workspace_session(session=session, token=token, task_id=session.task.public_id)
@@ -313,7 +326,7 @@ def revoke_session(
 ) -> WorkspaceSession:
     session = (
         WorkspaceSession.objects.select_for_update()
-        .select_related("task", "course", "student", "instance")
+        .select_related("task__enrollment", "task__publication", "course", "student", "instance")
         .get(pk=session.pk)
     )
     require_workspace_session(session=session, token=token, task_id=session.task.public_id)
@@ -359,6 +372,23 @@ def _read_upload(upload: Any) -> tuple[io.BytesIO, int, str, str]:
     stream.seek(0)
     digest = hashlib.sha256(stream.getvalue()).hexdigest()
     media_type = str(getattr(upload, "content_type", "application/octet-stream"))[:255]
+    allowed = getattr(
+        settings,
+        "WORKSPACE_SNAPSHOT_ALLOWED_MIME_TYPES",
+        {"text/plain", "application/json", "application/octet-stream", "application/zip"},
+    )
+    if media_type not in allowed:
+        raise AutosaveConflict(detail={"reason": "MIME_UNSUPPORTED", "media_type": media_type})
+    prefix = stream.getvalue()[:4]
+    if media_type == "application/zip" and not prefix.startswith(b"PK"):
+        raise AutosaveConflict(detail={"reason": "MAGIC_MISMATCH", "media_type": media_type})
+    if media_type in {"text/plain", "application/json"}:
+        try:
+            stream.getvalue().decode("utf-8")
+        except UnicodeDecodeError as exc:
+            raise AutosaveConflict(
+                detail={"reason": "MAGIC_MISMATCH", "media_type": media_type}
+            ) from exc
     return stream, size, digest, media_type or "application/octet-stream"
 
 
@@ -376,7 +406,13 @@ def save_snapshot(
     task = _task_for_actor(task_id=task_id, actor=actor)
     session = (
         WorkspaceSession.objects.select_for_update()
-        .select_related("task", "student", "course", "instance", "latest_snapshot")
+        .select_related(
+            "task__enrollment",
+            "task__publication",
+            "student",
+            "course",
+            "instance",
+        )
         .filter(task=task, student=actor, status=WorkspaceSession.Status.ACTIVE)
         .first()
     )
@@ -385,9 +421,7 @@ def save_snapshot(
     require_workspace_session(session=session, token=token, task_id=task_id, capability="snapshot")
     stream, size, digest, media_type = _read_upload(upload)
     previous_log = (
-        WorkspaceAutosaveLog.objects.select_for_update()
-        .filter(task=task, client_seq=client_seq)
-        .first()
+        WorkspaceAutosaveLog.objects.filter(task=task, client_seq=client_seq).first()
     )
     if previous_log is not None:
         if previous_log.request_digest != digest:
@@ -410,7 +444,7 @@ def save_snapshot(
         scanner = ClamAVScanner()
         result = scanner.scan(iter_chunks(stream))
     except AntivirusUnavailable as exc:
-        raise AutosaveConflict(detail={"reason": "ANTIVIRUS_UNAVAILABLE"}) from exc
+        raise WorkspaceScanUnavailable(detail={"reason": "ANTIVIRUS_UNAVAILABLE"}) from exc
     if not result.clean:
         raise AutosaveConflict(detail={"reason": "INFECTED", "signature": result.signature})
     stream.seek(0)
@@ -421,17 +455,23 @@ def save_snapshot(
     stored = object_storage().put_stream(
         bucket=settings.MINIO_BUCKET, object_key=key, stream=stream, media_type=media_type
     )
-    asset = register_asset(
-        bucket=settings.MINIO_BUCKET,
-        object_key=key,
-        object_version=stored.version_id,
-        digest_sha256=digest,
-        size_bytes=size,
-        owner_type="WORKSPACE_TASK",
-        owner_ref=task.public_id,
-        purpose="WORKSPACE_SNAPSHOT",
-        media_type=media_type,
-    )
+    try:
+        asset = register_asset(
+            bucket=settings.MINIO_BUCKET,
+            object_key=key,
+            object_version=stored.version_id,
+            digest_sha256=digest,
+            size_bytes=size,
+            owner_type="WORKSPACE_TASK",
+            owner_ref=task.public_id,
+            purpose="WORKSPACE_SNAPSHOT",
+            media_type=media_type,
+        )
+    except Exception:
+        object_storage().delete_object(
+            bucket=settings.MINIO_BUCKET, object_key=key, version_id=stored.version_id
+        )
+        raise
     set_scan_result(
         asset_id=asset.pk,
         expected_version=asset.row_version,
@@ -501,12 +541,23 @@ def create_checkpoint(
     task = _task_for_actor(task_id=task_id, actor=actor)
     session = (
         WorkspaceSession.objects.select_for_update()
-        .select_related("task", "course", "student", "instance", "latest_snapshot")
+        .select_related(
+            "task__enrollment",
+            "task__publication",
+            "course",
+            "student",
+            "instance",
+        )
         .filter(task=task, student=actor, status=WorkspaceSession.Status.ACTIVE)
         .first()
     )
     if session is None:
         raise WorkspaceSessionInvalid()
+    session.latest_snapshot = (
+        WorkspaceSnapshot.objects.select_related("asset")
+        .filter(pk=session.latest_snapshot_id)
+        .first()
+    )
     require_workspace_session(
         session=session, token=token, task_id=task_id, capability="checkpoint"
     )
@@ -562,12 +613,23 @@ def restore_checkpoint(
     task = _task_for_actor(task_id=task_id, actor=actor)
     session = (
         WorkspaceSession.objects.select_for_update()
-        .select_related("task", "course", "student", "instance", "latest_snapshot")
+        .select_related(
+            "task__enrollment",
+            "task__publication",
+            "course",
+            "student",
+            "instance",
+        )
         .filter(task=task, student=actor, status=WorkspaceSession.Status.ACTIVE)
         .first()
     )
     if session is None:
         raise WorkspaceSessionInvalid()
+    session.latest_snapshot = (
+        WorkspaceSnapshot.objects.select_related("asset")
+        .filter(pk=session.latest_snapshot_id)
+        .first()
+    )
     require_workspace_session(
         session=session, token=token, task_id=task_id, capability="checkpoint"
     )
@@ -673,7 +735,7 @@ def record_operation(
 ) -> OperationEvent:
     session = (
         WorkspaceSession.objects.select_for_update()
-        .select_related("task", "course", "student", "instance")
+        .select_related("task__enrollment", "task__publication", "course", "student", "instance")
         .get(pk=session.pk)
     )
     require_workspace_session(session=session, token=token, task_id=session.task.public_id)

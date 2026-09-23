@@ -1,0 +1,7 @@
+REPORT_DRAFT_CREATED = "report.draft.created"
+REPORT_DRAFT_UPDATED = "report.draft.updated"
+REPORT_SUBMITTED = "report.submitted"
+SYSTEM_ARTIFACT_SUBMITTED = "report.system_artifact.submitted"
+ATTACHMENT_UPLOAD_CREATED = "report.attachment.upload_created"
+ATTACHMENT_SCAN_REQUESTED = "report.attachment.scan_requested"
+ATTACHMENT_SCAN_COMPLETED = "report.attachment.scan_completed"

@@ -28,7 +28,7 @@ class SettingsTests(SimpleTestCase):
         assert "teams" not in installed
 
     def test_contract_revision_and_api_prefix_are_fixed(self) -> None:
-        assert settings.OPENAPI_REVISION == "v2-p07"
+        assert settings.OPENAPI_REVISION == "v2-p09"
 
     def test_celery_preserves_structured_application_logging(self) -> None:
         assert settings.CELERY_WORKER_HIJACK_ROOT_LOGGER is False
@@ -43,6 +43,7 @@ class SettingsTests(SimpleTestCase):
             "core_audit_log",
             "core_failure_record",
             "core_compensation_task",
+            "core_file_download_grant",
         }
         assert {model._meta.db_table for model in apps.get_app_config("accounts").get_models()} == {
             "accounts_user",
@@ -118,6 +119,22 @@ class SettingsTests(SimpleTestCase):
             "provisioning_job",
             "provisioning_stage_event",
         }
+        assert {
+            model._meta.db_table for model in apps.get_app_config("workspaces").get_models()
+        } == {
+            "workspaces_workspace_session",
+            "workspaces_workspace_snapshot",
+            "workspaces_workspace_autosave_log",
+            "workspaces_workspace_checkpoint",
+            "workspaces_operation_event",
+        }
+        assert {model._meta.db_table for model in apps.get_app_config("reports").get_models()} == {
+            "reports_report_draft",
+            "reports_report_attachment",
+            "reports_report_version",
+            "reports_report_version_attachment",
+            "reports_system_artifact",
+        }
         implemented = {
             "core",
             "accounts",
@@ -127,6 +144,8 @@ class SettingsTests(SimpleTestCase):
             "reviews",
             "experiments",
             "provisioning",
+            "workspaces",
+            "reports",
         }
         for app_label in EXPECTED_DOMAIN_APPS - implemented:
             assert list(apps.get_app_config(app_label).get_models()) == []

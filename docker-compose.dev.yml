@@ -1,9 +1,9 @@
-name: edu-platform-p07
+name: edu-platform-p09
 
 x-app-environment: &app-environment
   APP_ENV: local
-  APP_VERSION: ${APP_VERSION:-0.8.0-p07}
-  OPENAPI_REVISION: ${OPENAPI_REVISION:-v2-p07}
+  APP_VERSION: ${APP_VERSION:-0.9.0-p09}
+  OPENAPI_REVISION: ${OPENAPI_REVISION:-v2-p09}
   GIT_REVISION: ${GIT_REVISION:-development}
   BUILD_TIME: ${BUILD_TIME:-development}
   DJANGO_SETTINGS_MODULE: education_experiment_platform.settings.integration
@@ -160,7 +160,7 @@ services:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-edu-platform}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-local-minio-password}
     volumes: [minio-data:/data]
-    networks: [data]
+    networks: [data, minio-host-access]
     ports:
       - "127.0.0.1:${MINIO_API_PORT:-9000}:9000"
       - "127.0.0.1:${MINIO_CONSOLE_PORT:-9001}:9001"
@@ -377,8 +377,8 @@ services:
       args:
         NODE_BASE_IMAGE: ${NODE_BASE_IMAGE:-public.ecr.aws/docker/library/node:24-alpine}
         NGINX_BASE_IMAGE: ${NGINX_BASE_IMAGE:-m.daocloud.io/docker.io/library/nginx:1.29-alpine}
-        APP_VERSION: ${APP_VERSION:-0.8.0-p07}
-        OPENAPI_REVISION: ${OPENAPI_REVISION:-v2-p07}
+        APP_VERSION: ${APP_VERSION:-0.9.0-p09}
+        OPENAPI_REVISION: ${OPENAPI_REVISION:-v2-p09}
         GIT_REVISION: ${GIT_REVISION:-development}
         BUILD_TIME: ${BUILD_TIME:-development}
     read_only: true
@@ -403,6 +403,7 @@ services:
 
 networks:
   edge: {}
+  minio-host-access: {}
   app:
     internal: true
     ipam:

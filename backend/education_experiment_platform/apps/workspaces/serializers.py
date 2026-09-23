@@ -14,7 +14,16 @@ class WorkspaceSessionSerializer(serializers.Serializer):
     expires_at = serializers.DateTimeField()
     revoked_at = serializers.DateTimeField(allow_null=True)
     current_version = serializers.IntegerField()
+    latest_client_seq = serializers.IntegerField()
     row_version = serializers.IntegerField()
+    # The raw ticket is returned only by issue/renew responses and is never
+    # persisted in the session projection or included in read-only selectors.
+    workspace_token = serializers.CharField(required=False, read_only=True)
+
+
+class WorkspaceEnterSerializer(serializers.Serializer):
+    task = serializers.DictField()
+    session = WorkspaceSessionSerializer()
 
 
 class WorkspaceSnapshotSerializer(serializers.Serializer):
@@ -41,6 +50,12 @@ class WorkspaceCheckpointSerializer(serializers.Serializer):
     version_no = serializers.IntegerField()
     created_at = serializers.DateTimeField()
     retention_until = serializers.DateTimeField(allow_null=True)
+
+
+class WorkspaceCheckpointListSerializer(serializers.Serializer):
+    items = WorkspaceCheckpointSerializer(many=True)
+    current_version = serializers.IntegerField()
+    row_version = serializers.IntegerField()
 
 
 class OperationEventSerializer(serializers.Serializer):
@@ -76,6 +91,7 @@ def session_data(item: WorkspaceSession, *, token: str | None = None) -> dict[st
         "expires_at": item.expires_at,
         "revoked_at": item.revoked_at,
         "current_version": item.current_version,
+        "latest_client_seq": item.latest_snapshot.client_seq if item.latest_snapshot_id else 0,
         "row_version": item.row_version,
     }
     if token is not None:

@@ -103,14 +103,35 @@ class PortalContextMiddleware:
             portal_var.reset(portal_token)
 
 
+class FilePortalContextMiddleware:
+    def __init__(self, get_response: Callable[[HttpRequest], HttpResponse]) -> None:
+        self.get_response = get_response
+
+    def __call__(self, request: HttpRequest) -> HttpResponse:
+        if request.path.startswith("/files/"):
+            portal = request.session.get("account_portal")
+            if portal in {"USER", "TEACHING", "PLATFORM"}:
+                request.portal = portal
+                portal_token = portal_var.set(portal)
+                try:
+                    return self.get_response(request)
+                finally:
+                    portal_var.reset(portal_token)
+        return self.get_response(request)
+
+
 class IdempotencyKeyMiddleware:
     def __init__(self, get_response: Callable[[HttpRequest], HttpResponse]) -> None:
         self.get_response = get_response
 
     def __call__(self, request: HttpRequest) -> HttpResponse:
         normalized_path = request.path.rstrip("/") or "/"
+        report_draft_put = (
+            request.method == "PUT"
+            and re.fullmatch(r"/api/v2/tasks/[^/]+/report-draft", normalized_path) is not None
+        )
         if (
-            request.method == "POST"
+            (request.method == "POST" or report_draft_put)
             and request.path.startswith("/api/v2/")
             and normalized_path not in IDEMPOTENCY_EXEMPT_POST_PATHS
         ):

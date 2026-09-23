@@ -27,8 +27,8 @@ DEBUG = False
 ALLOWED_HOSTS = csv_env("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1,django")
 CSRF_TRUSTED_ORIGINS = csv_env("DJANGO_TRUSTED_ORIGINS")
 
-APP_VERSION = env("APP_VERSION", "0.8.0-p08")
-OPENAPI_REVISION = env("OPENAPI_REVISION", "v2-p08")
+APP_VERSION = env("APP_VERSION", "0.9.0-p09")
+OPENAPI_REVISION = env("OPENAPI_REVISION", "v2-p09")
 GIT_REVISION = env("GIT_REVISION", "development")
 BUILD_TIME = env("BUILD_TIME", "development")
 TRUSTED_PROXY_CIDRS = csv_env(
@@ -63,6 +63,7 @@ MIDDLEWARE = [
     "education_experiment_platform.middleware.TraceContextMiddleware",
     "education_experiment_platform.middleware.PortalContextMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
+    "education_experiment_platform.middleware.FilePortalContextMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "education_experiment_platform.middleware.IdempotencyKeyMiddleware",
@@ -103,7 +104,7 @@ REST_FRAMEWORK: dict[str, object] = {
 SPECTACULAR_SETTINGS: dict[str, object] = {
     "TITLE": "Education Agent Platform API",
     "DESCRIPTION": (
-        "P07 asynchronous provisioning jobs, FakeRuntime orchestration, and P06 experiments."
+        "P09 reports, scanned attachments, immutable submissions, and system artifacts."
     ),
     "VERSION": OPENAPI_REVISION,
     "SERVE_INCLUDE_SCHEMA": False,
@@ -148,10 +149,17 @@ CELERY_TASK_ROUTES = {
     "apps.notifications.*": {"queue": "q_default"},
     "apps.experiments.*": {"queue": "q_default"},
     "apps.workspaces.*": {"queue": "q_default"},
+    "apps.reports.*": {"queue": "q_provision"},
 }
 WORKSPACE_TOKEN_HMAC_KEY = env("WORKSPACE_TOKEN_HMAC_KEY", SECRET_KEY)
 WORKSPACE_SESSION_TTL_SECONDS = int(env("WORKSPACE_SESSION_TTL_SECONDS", "900"))
 WORKSPACE_SNAPSHOT_MAX_BYTES = int(env("WORKSPACE_SNAPSHOT_MAX_BYTES", str(20 * 1024 * 1024)))
+WORKSPACE_SNAPSHOT_ALLOWED_MIME_TYPES = set(
+    csv_env(
+        "WORKSPACE_SNAPSHOT_ALLOWED_MIME_TYPES",
+        "text/plain,application/json,application/octet-stream,application/zip",
+    )
+)
 SSE_HEARTBEAT_SECONDS = int(env("SSE_HEARTBEAT_SECONDS", "20"))
 P06_PUBLICATION_SYNC_LIMIT = int(env("P06_PUBLICATION_SYNC_LIMIT", "100"))
 P06_PUBLICATION_CHUNK_SIZE = int(env("P06_PUBLICATION_CHUNK_SIZE", "50"))
@@ -171,6 +179,9 @@ CLAMAV_TIMEOUT_SECONDS = int(env("CLAMAV_TIMEOUT_SECONDS", "30"))
 TEMPLATE_ASSET_MAX_BYTES = int(env("TEMPLATE_ASSET_MAX_BYTES", str(20 * 1024 * 1024)))
 TEMPLATE_UPLOAD_EXPIRES_SECONDS = int(env("TEMPLATE_UPLOAD_EXPIRES_SECONDS", "900"))
 TEMPLATE_CHECK_TIMEOUT_MAX_SECONDS = int(env("TEMPLATE_CHECK_TIMEOUT_MAX_SECONDS", "300"))
+REPORT_ATTACHMENT_MAX_BYTES = int(env("REPORT_ATTACHMENT_MAX_BYTES", str(20 * 1024 * 1024)))
+REPORT_UPLOAD_EXPIRES_SECONDS = int(env("REPORT_UPLOAD_EXPIRES_SECONDS", "900"))
+FILE_DOWNLOAD_GRANT_TTL_SECONDS = int(env("FILE_DOWNLOAD_GRANT_TTL_SECONDS", "300"))
 
 LOGGING = {
     "version": 1,

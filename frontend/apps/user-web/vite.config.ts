@@ -7,7 +7,7 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': { target: 'http://127.0.0.1:8080', changeOrigin: false },
-      '/workspace': { target: 'ws://127.0.0.1:8080', ws: true, changeOrigin: false },
+      '/workspace': { target: 'http://127.0.0.1:8080', changeOrigin: false },
       '/files': { target: 'http://127.0.0.1:8080', changeOrigin: false },
     },
   },

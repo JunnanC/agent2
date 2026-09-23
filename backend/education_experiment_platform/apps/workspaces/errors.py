@@ -49,6 +49,13 @@ class AutosaveConflict(CoreError):
     status_code = 412
 
 
+class WorkspaceScanUnavailable(CoreError):
+    code = "WORKSPACE_SCAN_UNAVAILABLE"
+    message = "文件安全扫描暂时不可用"
+    status_code = 503
+    retryable = True
+
+
 class CheckpointStateConflict(CoreError):
     code = "CHECKPOINT_STATE_CONFLICT"
     message = "检查点当前状态不允许该操作"

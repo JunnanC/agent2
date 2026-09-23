@@ -150,6 +150,50 @@ class ObjectPurgeLog(AppendOnlyModel):
         indexes = [models.Index(fields=("asset", "created_at"), name="core_purge_asset_idx")]
 
 
+class FileDownloadGrant(VersionedModel):
+    class Portal(models.TextChoices):
+        USER = "USER"
+        TEACHING = "TEACHING"
+        PLATFORM = "PLATFORM"
+
+    public_id = models.CharField(
+        max_length=26,
+        default=new_ulid,
+        unique=True,
+        editable=False,
+        db_collation="ascii_bin",
+    )
+    asset = models.ForeignKey(ObjectAsset, on_delete=models.PROTECT, related_name="download_grants")
+    requested_by = models.ForeignKey(
+        "accounts.User", on_delete=models.PROTECT, related_name="file_download_grants"
+    )
+    portal = models.CharField(max_length=16, choices=Portal.choices)
+    course_ref = models.CharField(max_length=128, blank=True, default="")
+    token_hash = models.CharField(max_length=64, unique=True, db_collation="ascii_bin")
+    expires_at = models.DateTimeField()
+    max_downloads = models.PositiveSmallIntegerField(default=1)
+    download_count = models.PositiveSmallIntegerField(default=0)
+    revoked_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = "core_file_download_grant"
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(portal__in=("USER", "TEACHING", "PLATFORM")),
+                name="core_file_grant_portal_ck",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(max_downloads__gte=1)
+                & models.Q(download_count__lte=models.F("max_downloads")),
+                name="core_file_grant_count_ck",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=("asset", "expires_at"), name="core_file_grant_asset_idx"),
+            models.Index(fields=("requested_by", "expires_at"), name="core_file_grant_actor_idx"),
+        ]
+
+
 class OutboxEvent(AppendOnlyModel):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     event_type = models.CharField(max_length=128)

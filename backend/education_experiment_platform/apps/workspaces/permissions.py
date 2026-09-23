@@ -4,7 +4,12 @@ import hmac
 from django.conf import settings
 from django.utils import timezone
 
+from apps.accounts.models import User
+from apps.courses.models import Enrollment
+from apps.experiments.models import ExperimentTask, TaskPublication
+
 from .errors import (
+    WorkspaceCapabilityDenied,
     WorkspacePortalDenied,
     WorkspaceSessionExpired,
     WorkspaceSessionInvalid,
@@ -39,12 +44,29 @@ def require_workspace_session(
         raise WorkspaceSessionRevoked()
     if session.status == WorkspaceSession.Status.EXPIRED or session.expires_at <= now:
         raise WorkspaceSessionExpired()
-    if session.task.status in {"COMPLETED", "CANCELLED", "EXPIRED", "ARCHIVING", "DESTROYING"}:
+    if (
+        session.student.account_status != User.AccountStatus.ACTIVE
+        or not session.student.is_active
+        or session.task.student_id != session.student_id
+    ):
+        raise WorkspaceSessionRevoked(detail={"reason": "ACCOUNT_INACTIVE"})
+    if session.task.enrollment.status != Enrollment.Status.ACTIVE:
+        raise WorkspaceSessionRevoked(
+            detail={"reason": "ENROLLMENT_INACTIVE", "status": session.task.enrollment.status}
+        )
+    if session.task.publication.status != TaskPublication.Status.PUBLISHED:
+        raise WorkspaceSessionRevoked(
+            detail={"reason": "PUBLICATION_INACTIVE", "status": session.task.publication.status}
+        )
+    if session.task.status not in {
+        ExperimentTask.Status.IN_PROGRESS,
+        ExperimentTask.Status.REPORT_DRAFT,
+    }:
         raise WorkspaceSessionRevoked()
     if session.instance.status != "READY":
         raise WorkspaceSessionInvalid(detail={"instance_status": session.instance.status})
     if capability and not bool((session.capabilities or {}).get(capability)):
-        raise WorkspaceTaskMismatch(detail={"capability": capability})
+        raise WorkspaceCapabilityDenied(detail={"capability": capability})
     return session
 
 

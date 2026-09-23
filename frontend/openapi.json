@@ -2,13 +2,13 @@
     "openapi": "3.0.3",
     "info": {
         "title": "Education Agent Platform API",
-        "version": "v2-p07",
-        "description": "P07 asynchronous provisioning jobs, FakeRuntime orchestration, and P06 experiments."
+        "version": "v2-p09",
+        "description": "P09 reports, scanned attachments, immutable submissions, and system artifacts."
     },
     "paths": {
         "/api/v2/auth/csrf": {
             "get": {
-                "operationId": "auth_csrf_retrieve",
+                "operationId": "api_v2_auth_csrf_retrieve",
                 "tags": [
                     "auth"
                 ],
@@ -33,7 +33,7 @@
         },
         "/api/v2/auth/login": {
             "post": {
-                "operationId": "auth_login_create",
+                "operationId": "api_v2_auth_login_create",
                 "tags": [
                     "auth"
                 ],
@@ -78,7 +78,7 @@
         },
         "/api/v2/auth/logout": {
             "post": {
-                "operationId": "auth_logout_create",
+                "operationId": "api_v2_auth_logout_create",
                 "tags": [
                     "auth"
                 ],
@@ -96,7 +96,7 @@
         },
         "/api/v2/auth/logout-all": {
             "post": {
-                "operationId": "auth_logout_all_create",
+                "operationId": "api_v2_auth_logout_all_create",
                 "tags": [
                     "auth"
                 ],
@@ -205,7 +205,7 @@
                     }
                 ],
                 "tags": [
-                    "courses"
+                    "api"
                 ],
                 "security": [
                     {
@@ -246,7 +246,7 @@
                     }
                 ],
                 "tags": [
-                    "courses"
+                    "api"
                 ],
                 "requestBody": {
                     "content": {
@@ -289,7 +289,7 @@
         },
         "/api/v2/courses/{course_id}/enrollments": {
             "post": {
-                "operationId": "courses_enrollments_create",
+                "operationId": "api_v2_courses_enrollments_create",
                 "parameters": [
                     {
                         "in": "path",
@@ -358,7 +358,7 @@
                     }
                 ],
                 "tags": [
-                    "courses"
+                    "api"
                 ],
                 "requestBody": {
                     "content": {
@@ -401,19 +401,15 @@
         },
         "/api/v2/events/stream": {
             "get": {
-                "operationId": "events_stream_retrieve",
+                "operationId": "api_v2_events_stream_retrieve",
                 "summary": "Portal event stream",
-                "parameters": [
-                    {
-                        "in": "query",
-                        "name": "channel",
-                        "schema": {
-                            "type": "string"
-                        }
-                    }
-                ],
                 "tags": [
                     "events"
+                ],
+                "security": [
+                    {
+                        "portalSession": []
+                    }
                 ],
                 "responses": {
                     "200": {
@@ -427,9 +423,111 @@
                 ]
             }
         },
+        "/api/v2/files/{asset_id}/download-grants": {
+            "post": {
+                "operationId": "files_download_grants_create",
+                "parameters": [
+                    {
+                        "in": "header",
+                        "name": "Idempotency-Key",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "asset_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "reports"
+                ],
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/DownloadGrantResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                },
+                "x-portals": [
+                    "USER",
+                    "TEACHING"
+                ]
+            }
+        },
+        "/api/v2/files/download-grants/{grant_id}/revoke": {
+            "post": {
+                "operationId": "files_download_grants_revoke",
+                "parameters": [
+                    {
+                        "in": "header",
+                        "name": "Idempotency-Key",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "header",
+                        "name": "If-Match",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "grant_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "reports"
+                ],
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/DownloadGrantRevokeResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                },
+                "x-portals": [
+                    "USER",
+                    "TEACHING"
+                ]
+            }
+        },
         "/api/v2/health": {
             "get": {
-                "operationId": "health_retrieve",
+                "operationId": "api_v2_health_retrieve",
                 "summary": "Process liveness",
                 "tags": [
                     "system"
@@ -455,7 +553,7 @@
         },
         "/api/v2/health/ready": {
             "get": {
-                "operationId": "health_ready_retrieve",
+                "operationId": "api_v2_health_ready_retrieve",
                 "summary": "MySQL readiness",
                 "tags": [
                     "system"
@@ -491,7 +589,7 @@
         },
         "/api/v2/me": {
             "get": {
-                "operationId": "me_retrieve",
+                "operationId": "api_v2_me_retrieve",
                 "tags": [
                     "me"
                 ],
@@ -519,7 +617,7 @@
                 ]
             },
             "patch": {
-                "operationId": "me_partial_update",
+                "operationId": "api_v2_me_partial_update",
                 "tags": [
                     "me"
                 ],
@@ -608,7 +706,7 @@
             "get": {
                 "operationId": "me_dashboard",
                 "tags": [
-                    "me"
+                    "api"
                 ],
                 "security": [
                     {
@@ -700,7 +798,7 @@
         },
         "/api/v2/me/enrollments/{enrollment_id}/drop": {
             "post": {
-                "operationId": "me_enrollments_drop_create",
+                "operationId": "api_v2_me_enrollments_drop_create",
                 "parameters": [
                     {
                         "in": "path",
@@ -758,7 +856,7 @@
         },
         "/api/v2/me/enrollments/{enrollment_id}/drop-check": {
             "get": {
-                "operationId": "me_enrollments_drop_check_retrieve",
+                "operationId": "api_v2_me_enrollments_drop_check_retrieve",
                 "parameters": [
                     {
                         "in": "path",
@@ -796,7 +894,7 @@
         },
         "/api/v2/me/enrollments/{enrollment_id}/withdraw": {
             "post": {
-                "operationId": "me_enrollments_withdraw_create",
+                "operationId": "api_v2_me_enrollments_withdraw_create",
                 "parameters": [
                     {
                         "in": "path",
@@ -834,7 +932,7 @@
         },
         "/api/v2/me/password": {
             "post": {
-                "operationId": "me_password_create",
+                "operationId": "api_v2_me_password_create",
                 "tags": [
                     "me"
                 ],
@@ -884,7 +982,7 @@
         },
         "/api/v2/me/verification": {
             "get": {
-                "operationId": "me_verification_retrieve",
+                "operationId": "api_v2_me_verification_retrieve",
                 "tags": [
                     "me"
                 ],
@@ -910,7 +1008,7 @@
                 ]
             },
             "put": {
-                "operationId": "me_verification_update",
+                "operationId": "api_v2_me_verification_update",
                 "tags": [
                     "me"
                 ],
@@ -958,7 +1056,7 @@
         },
         "/api/v2/platform/admin-assignments": {
             "get": {
-                "operationId": "platform_admin_assignments_retrieve",
+                "operationId": "api_v2_platform_admin_assignments_retrieve",
                 "tags": [
                     "platform-accounts"
                 ],
@@ -986,7 +1084,7 @@
         },
         "/api/v2/platform/admin-assignments/{assignment_id}": {
             "patch": {
-                "operationId": "platform_admin_assignments_partial_update",
+                "operationId": "api_v2_platform_admin_assignments_partial_update",
                 "parameters": [
                     {
                         "in": "path",
@@ -1109,7 +1207,7 @@
         },
         "/api/v2/platform/courses/{course_id}/freeze": {
             "post": {
-                "operationId": "platform_courses_freeze_create",
+                "operationId": "api_v2_platform_courses_freeze_create",
                 "parameters": [
                     {
                         "in": "path",
@@ -1160,7 +1258,7 @@
         },
         "/api/v2/platform/courses/{course_id}/unfreeze": {
             "post": {
-                "operationId": "platform_courses_unfreeze_create",
+                "operationId": "api_v2_platform_courses_unfreeze_create",
                 "parameters": [
                     {
                         "in": "path",
@@ -1914,6 +2012,34 @@
                 ]
             }
         },
+        "/api/v2/platform/reports/scan-anomalies": {
+            "get": {
+                "operationId": "platform_report_scan_anomalies",
+                "tags": [
+                    "reports"
+                ],
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/GenericReportResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                },
+                "x-portals": [
+                    "PLATFORM"
+                ]
+            }
+        },
         "/api/v2/platform/resource-profiles": {
             "get": {
                 "operationId": "platform_resource_profiles_list",
@@ -2650,7 +2776,7 @@
             "get": {
                 "operationId": "platform_experiment_task_anomalies",
                 "tags": [
-                    "platform"
+                    "api"
                 ],
                 "security": [
                     {
@@ -2676,7 +2802,7 @@
         },
         "/api/v2/platform/teacher-qualifications": {
             "get": {
-                "operationId": "platform_teacher_qualifications_retrieve",
+                "operationId": "api_v2_platform_teacher_qualifications_retrieve",
                 "tags": [
                     "platform-accounts"
                 ],
@@ -2704,7 +2830,7 @@
         },
         "/api/v2/platform/teacher-qualifications/{qualification_id}": {
             "patch": {
-                "operationId": "platform_teacher_qualifications_partial_update",
+                "operationId": "api_v2_platform_teacher_qualifications_partial_update",
                 "parameters": [
                     {
                         "in": "path",
@@ -2763,7 +2889,7 @@
             "get": {
                 "operationId": "platform_template_prechecks_summary",
                 "tags": [
-                    "platform"
+                    "api"
                 ],
                 "security": [
                     {
@@ -2815,7 +2941,7 @@
                 ]
             },
             "post": {
-                "operationId": "platform_users_create",
+                "operationId": "api_v2_platform_users_create",
                 "tags": [
                     "platform-accounts"
                 ],
@@ -2899,7 +3025,7 @@
                 ]
             },
             "patch": {
-                "operationId": "platform_users_partial_update",
+                "operationId": "api_v2_platform_users_partial_update",
                 "parameters": [
                     {
                         "in": "path",
@@ -2956,7 +3082,7 @@
         },
         "/api/v2/platform/users/{user_id}/admin-assignment": {
             "post": {
-                "operationId": "platform_users_admin_assignment_create",
+                "operationId": "api_v2_platform_users_admin_assignment_create",
                 "parameters": [
                     {
                         "in": "path",
@@ -3014,7 +3140,7 @@
         },
         "/api/v2/platform/users/{user_id}/revoke-sessions": {
             "post": {
-                "operationId": "platform_users_revoke_sessions_create",
+                "operationId": "api_v2_platform_users_revoke_sessions_create",
                 "parameters": [
                     {
                         "in": "path",
@@ -3052,7 +3178,7 @@
         },
         "/api/v2/platform/users/{user_id}/teacher-qualification": {
             "post": {
-                "operationId": "platform_users_teacher_qualification_create",
+                "operationId": "api_v2_platform_users_teacher_qualification_create",
                 "parameters": [
                     {
                         "in": "path",
@@ -3110,7 +3236,7 @@
         },
         "/api/v2/platform/verifications": {
             "get": {
-                "operationId": "platform_verifications_retrieve",
+                "operationId": "api_v2_platform_verifications_retrieve",
                 "tags": [
                     "platform-accounts"
                 ],
@@ -3138,7 +3264,7 @@
         },
         "/api/v2/platform/verifications/{verification_id}/review": {
             "post": {
-                "operationId": "platform_verifications_review_create",
+                "operationId": "api_v2_platform_verifications_review_create",
                 "parameters": [
                     {
                         "in": "path",
@@ -3194,6 +3320,27 @@
                 ]
             }
         },
+        "/api/v2/platform/workspaces/sessions": {
+            "get": {
+                "operationId": "api_v2_platform_workspaces_sessions_retrieve",
+                "tags": [
+                    "workspaces"
+                ],
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "workspace session summaries"
+                    }
+                },
+                "x-portals": [
+                    "PLATFORM"
+                ]
+            }
+        },
         "/api/v2/questions/{question_id}/answers": {
             "post": {
                 "operationId": "user_question_answers_create",
@@ -3208,7 +3355,7 @@
                     }
                 ],
                 "tags": [
-                    "questions"
+                    "api"
                 ],
                 "requestBody": {
                     "content": {
@@ -3253,7 +3400,7 @@
             "get": {
                 "operationId": "tasks_list",
                 "tags": [
-                    "tasks"
+                    "api"
                 ],
                 "security": [
                     {
@@ -3294,7 +3441,7 @@
                     }
                 ],
                 "tags": [
-                    "tasks"
+                    "api"
                 ],
                 "security": [
                     {
@@ -3307,6 +3454,507 @@
                             "application/json": {
                                 "schema": {
                                     "$ref": "#/components/schemas/TaskData"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                },
+                "x-portals": [
+                    "USER"
+                ]
+            }
+        },
+        "/api/v2/tasks/{task_id}/attachments": {
+            "post": {
+                "operationId": "tasks_report_attachments_create",
+                "parameters": [
+                    {
+                        "in": "header",
+                        "name": "Idempotency-Key",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "task_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "reports"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ReportAttachmentCreate"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ReportAttachmentCreate"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ReportAttachmentCreate"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ReportAttachmentUploadResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                },
+                "x-portals": [
+                    "USER"
+                ]
+            }
+        },
+        "/api/v2/tasks/{task_id}/attachments/{asset_id}": {
+            "get": {
+                "operationId": "tasks_report_attachments_status",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "asset_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "task_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "reports"
+                ],
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ReportAttachmentResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                },
+                "x-portals": [
+                    "USER"
+                ]
+            }
+        },
+        "/api/v2/tasks/{task_id}/attachments/{asset_id}/complete": {
+            "post": {
+                "operationId": "tasks_report_attachments_complete",
+                "parameters": [
+                    {
+                        "in": "header",
+                        "name": "Idempotency-Key",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "header",
+                        "name": "If-Match",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "asset_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "task_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "reports"
+                ],
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ReportAttachmentResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                },
+                "x-portals": [
+                    "USER"
+                ]
+            }
+        },
+        "/api/v2/tasks/{task_id}/checkpoints": {
+            "get": {
+                "operationId": "api_v2_tasks_checkpoints_retrieve",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "task_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "workspaces"
+                ],
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/WorkspaceCheckpointList"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                },
+                "x-portals": [
+                    "USER"
+                ]
+            },
+            "post": {
+                "operationId": "api_v2_tasks_checkpoints_create",
+                "parameters": [
+                    {
+                        "in": "header",
+                        "name": "Idempotency-Key",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "header",
+                        "name": "X-Workspace-Token",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "task_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "workspaces"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CheckpointWrite"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CheckpointWrite"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CheckpointWrite"
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/WorkspaceCheckpoint"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                },
+                "x-portals": [
+                    "USER"
+                ]
+            }
+        },
+        "/api/v2/tasks/{task_id}/checkpoints/{checkpoint_id}/restore": {
+            "post": {
+                "operationId": "api_v2_tasks_checkpoints_restore_create",
+                "parameters": [
+                    {
+                        "in": "header",
+                        "name": "Idempotency-Key",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "header",
+                        "name": "If-Match",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "header",
+                        "name": "X-Workspace-Token",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "checkpoint_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "task_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "workspaces"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/WorkspaceSnapshot"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/WorkspaceSnapshot"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/WorkspaceSnapshot"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/WorkspaceSnapshot"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                },
+                "x-portals": [
+                    "USER"
+                ]
+            }
+        },
+        "/api/v2/tasks/{task_id}/complete": {
+            "post": {
+                "operationId": "tasks_complete",
+                "parameters": [
+                    {
+                        "in": "header",
+                        "name": "Idempotency-Key",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "header",
+                        "name": "If-Match",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "task_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "reports"
+                ],
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ReportCompleteResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                },
+                "x-portals": [
+                    "USER"
+                ]
+            }
+        },
+        "/api/v2/tasks/{task_id}/enter": {
+            "post": {
+                "operationId": "api_v2_tasks_enter_create",
+                "parameters": [
+                    {
+                        "in": "header",
+                        "name": "Idempotency-Key",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "header",
+                        "name": "If-Match",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "task_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "workspaces"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/WorkspaceSession"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/WorkspaceSession"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/WorkspaceSession"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/WorkspaceEnter"
                                 }
                             }
                         },
@@ -3340,7 +3988,7 @@
                     }
                 ],
                 "tags": [
-                    "tasks"
+                    "api"
                 ],
                 "requestBody": {
                     "content": {
@@ -3398,7 +4046,7 @@
                     }
                 ],
                 "tags": [
-                    "tasks"
+                    "api"
                 ],
                 "security": [
                     {
@@ -3413,6 +4061,47 @@
                                     "type": "array",
                                     "items": {
                                         "$ref": "#/components/schemas/ExtensionData"
+                                    }
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                },
+                "x-portals": [
+                    "USER"
+                ]
+            }
+        },
+        "/api/v2/tasks/{task_id}/operation-replay": {
+            "get": {
+                "operationId": "api_v2_tasks_operation_replay_list",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "task_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "workspaces"
+                ],
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/OperationEvent"
                                     }
                                 }
                             }
@@ -3506,6 +4195,154 @@
                             "application/json": {
                                 "schema": {
                                     "$ref": "#/components/schemas/ProvisioningActionResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                },
+                "x-portals": [
+                    "USER"
+                ]
+            }
+        },
+        "/api/v2/tasks/{task_id}/report-draft": {
+            "get": {
+                "operationId": "tasks_report_draft_retrieve",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "task_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "reports"
+                ],
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ReportDraftResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                },
+                "x-portals": [
+                    "USER"
+                ]
+            },
+            "put": {
+                "operationId": "tasks_report_draft_update",
+                "parameters": [
+                    {
+                        "in": "header",
+                        "name": "Idempotency-Key",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "header",
+                        "name": "If-Match",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "task_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "reports"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ReportDraftWrite"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ReportDraftWrite"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ReportDraftWrite"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ReportDraftResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                },
+                "x-portals": [
+                    "USER"
+                ]
+            }
+        },
+        "/api/v2/tasks/{task_id}/report-versions": {
+            "get": {
+                "operationId": "tasks_report_versions_list",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "task_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "reports"
+                ],
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ReportVersionListResponse"
                                 }
                             }
                         },
@@ -3625,6 +4462,60 @@
                 ]
             }
         },
+        "/api/v2/tasks/{task_id}/submit-report": {
+            "post": {
+                "operationId": "tasks_report_submit",
+                "parameters": [
+                    {
+                        "in": "header",
+                        "name": "Idempotency-Key",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "header",
+                        "name": "If-Match",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "task_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "reports"
+                ],
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ReportVersionResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                },
+                "x-portals": [
+                    "USER"
+                ]
+            }
+        },
         "/api/v2/tasks/{task_id}/transitions": {
             "get": {
                 "operationId": "tasks_transitions_list",
@@ -3639,7 +4530,7 @@
                     }
                 ],
                 "tags": [
-                    "tasks"
+                    "api"
                 ],
                 "security": [
                     {
@@ -3655,6 +4546,128 @@
                                     "items": {
                                         "$ref": "#/components/schemas/TransitionData"
                                     }
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                },
+                "x-portals": [
+                    "USER"
+                ]
+            }
+        },
+        "/api/v2/tasks/{task_id}/workspace-sessions": {
+            "post": {
+                "operationId": "api_v2_tasks_workspace_sessions_create",
+                "parameters": [
+                    {
+                        "in": "header",
+                        "name": "Idempotency-Key",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "task_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "workspaces"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/WorkspaceSession"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/WorkspaceSession"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/WorkspaceSession"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/WorkspaceSession"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                },
+                "x-portals": [
+                    "USER"
+                ]
+            }
+        },
+        "/api/v2/tasks/{task_id}/workspace-snapshot": {
+            "put": {
+                "operationId": "api_v2_tasks_workspace_snapshot_update",
+                "parameters": [
+                    {
+                        "in": "header",
+                        "name": "X-Workspace-Token",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "task_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "workspaces"
+                ],
+                "requestBody": {
+                    "content": {
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/WorkspaceSnapshot"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/WorkspaceSnapshot"
                                 }
                             }
                         },
@@ -3694,7 +4707,7 @@
                 ]
             },
             "post": {
-                "operationId": "teaching_courses_create",
+                "operationId": "api_v2_teaching_courses_create",
                 "tags": [
                     "teaching-courses"
                 ],
@@ -3778,7 +4791,7 @@
                 ]
             },
             "patch": {
-                "operationId": "teaching_courses_partial_update",
+                "operationId": "api_v2_teaching_courses_partial_update",
                 "parameters": [
                     {
                         "in": "path",
@@ -3855,7 +4868,7 @@
                     }
                 ],
                 "tags": [
-                    "teaching"
+                    "api"
                 ],
                 "security": [
                     {
@@ -3896,7 +4909,7 @@
                     }
                 ],
                 "tags": [
-                    "teaching"
+                    "api"
                 ],
                 "requestBody": {
                     "content": {
@@ -3958,7 +4971,7 @@
                     }
                 ],
                 "tags": [
-                    "teaching"
+                    "api"
                 ],
                 "security": [
                     {
@@ -3981,7 +4994,7 @@
         },
         "/api/v2/teaching/courses/{course_id}/archive": {
             "post": {
-                "operationId": "teaching_courses_archive_create",
+                "operationId": "api_v2_teaching_courses_archive_create",
                 "parameters": [
                     {
                         "in": "path",
@@ -4019,7 +5032,7 @@
         },
         "/api/v2/teaching/courses/{course_id}/archive-check": {
             "get": {
-                "operationId": "teaching_courses_archive_check_retrieve",
+                "operationId": "api_v2_teaching_courses_archive_check_retrieve",
                 "parameters": [
                     {
                         "in": "path",
@@ -4085,7 +5098,7 @@
                     }
                 ],
                 "tags": [
-                    "teaching"
+                    "api"
                 ],
                 "security": [
                     {
@@ -4128,7 +5141,7 @@
                     }
                 ],
                 "tags": [
-                    "teaching"
+                    "api"
                 ],
                 "security": [
                     {
@@ -4169,7 +5182,7 @@
                     }
                 ],
                 "tags": [
-                    "teaching"
+                    "api"
                 ],
                 "requestBody": {
                     "content": {
@@ -4212,7 +5225,7 @@
         },
         "/api/v2/teaching/courses/{course_id}/close": {
             "post": {
-                "operationId": "teaching_courses_close_create",
+                "operationId": "api_v2_teaching_courses_close_create",
                 "parameters": [
                     {
                         "in": "path",
@@ -4262,7 +5275,7 @@
                     }
                 ],
                 "tags": [
-                    "teaching"
+                    "api"
                 ],
                 "requestBody": {
                     "content": {
@@ -4324,7 +5337,7 @@
                     }
                 ],
                 "tags": [
-                    "teaching"
+                    "api"
                 ],
                 "security": [
                     {
@@ -4367,7 +5380,7 @@
                     }
                 ],
                 "tags": [
-                    "teaching"
+                    "api"
                 ],
                 "security": [
                     {
@@ -4410,7 +5423,7 @@
                     }
                 ],
                 "tags": [
-                    "teaching"
+                    "api"
                 ],
                 "security": [
                     {
@@ -4451,7 +5464,7 @@
                     }
                 ],
                 "tags": [
-                    "teaching"
+                    "api"
                 ],
                 "security": [
                     {
@@ -4486,7 +5499,7 @@
                     }
                 ],
                 "tags": [
-                    "teaching"
+                    "api"
                 ],
                 "security": [
                     {
@@ -4593,7 +5606,7 @@
         },
         "/api/v2/teaching/courses/{course_id}/enrollments/{enrollment_id}/removal-check": {
             "get": {
-                "operationId": "teaching_courses_enrollments_removal_check_retrieve",
+                "operationId": "api_v2_teaching_courses_enrollments_removal_check_retrieve",
                 "parameters": [
                     {
                         "in": "path",
@@ -4639,7 +5652,7 @@
         },
         "/api/v2/teaching/courses/{course_id}/enrollments/{enrollment_id}/remove": {
             "post": {
-                "operationId": "teaching_courses_enrollments_remove_create",
+                "operationId": "api_v2_teaching_courses_enrollments_remove_create",
                 "parameters": [
                     {
                         "in": "path",
@@ -4705,7 +5718,7 @@
         },
         "/api/v2/teaching/courses/{course_id}/enrollments/{enrollment_id}/review": {
             "post": {
-                "operationId": "teaching_courses_enrollments_review_create",
+                "operationId": "api_v2_teaching_courses_enrollments_review_create",
                 "parameters": [
                     {
                         "in": "path",
@@ -4783,7 +5796,7 @@
                     }
                 ],
                 "tags": [
-                    "teaching"
+                    "api"
                 ],
                 "security": [
                     {
@@ -4830,7 +5843,7 @@
                     }
                 ],
                 "tags": [
-                    "teaching"
+                    "api"
                 ],
                 "requestBody": {
                     "content": {
@@ -4896,7 +5909,7 @@
                     }
                 ],
                 "tags": [
-                    "teaching"
+                    "api"
                 ],
                 "security": [
                     {
@@ -4948,7 +5961,7 @@
                     }
                 ],
                 "tags": [
-                    "teaching"
+                    "api"
                 ],
                 "requestBody": {
                     "content": {
@@ -4993,7 +6006,7 @@
         },
         "/api/v2/teaching/courses/{course_id}/experiments/{publication_id}/close": {
             "post": {
-                "operationId": "teaching_courses_experiments_close_create",
+                "operationId": "api_v2_teaching_courses_experiments_close_create",
                 "parameters": [
                     {
                         "in": "header",
@@ -5029,7 +6042,7 @@
                     }
                 ],
                 "tags": [
-                    "teaching"
+                    "api"
                 ],
                 "security": [
                     {
@@ -5075,7 +6088,7 @@
         },
         "/api/v2/teaching/courses/{course_id}/experiments/{publication_id}/publish": {
             "post": {
-                "operationId": "teaching_courses_experiments_publish_create",
+                "operationId": "api_v2_teaching_courses_experiments_publish_create",
                 "parameters": [
                     {
                         "in": "header",
@@ -5111,7 +6124,7 @@
                     }
                 ],
                 "tags": [
-                    "teaching"
+                    "api"
                 ],
                 "security": [
                     {
@@ -5177,7 +6190,7 @@
                     }
                 ],
                 "tags": [
-                    "teaching"
+                    "api"
                 ],
                 "security": [
                     {
@@ -5206,7 +6219,7 @@
         },
         "/api/v2/teaching/courses/{course_id}/experiments/{publication_id}/withdraw": {
             "post": {
-                "operationId": "teaching_courses_experiments_withdraw_create",
+                "operationId": "api_v2_teaching_courses_experiments_withdraw_create",
                 "parameters": [
                     {
                         "in": "header",
@@ -5242,7 +6255,7 @@
                     }
                 ],
                 "tags": [
-                    "teaching"
+                    "api"
                 ],
                 "security": [
                     {
@@ -5300,7 +6313,7 @@
                     }
                 ],
                 "tags": [
-                    "teaching"
+                    "api"
                 ],
                 "security": [
                     {
@@ -5349,7 +6362,7 @@
                     }
                 ],
                 "tags": [
-                    "teaching"
+                    "api"
                 ],
                 "security": [
                     {
@@ -5411,7 +6424,7 @@
                     }
                 ],
                 "tags": [
-                    "teaching"
+                    "api"
                 ],
                 "requestBody": {
                     "content": {
@@ -5507,7 +6520,7 @@
                     }
                 ],
                 "tags": [
-                    "teaching"
+                    "api"
                 ],
                 "security": [
                     {
@@ -5540,7 +6553,7 @@
                     }
                 ],
                 "tags": [
-                    "teaching"
+                    "api"
                 ],
                 "requestBody": {
                     "content": {
@@ -5611,7 +6624,7 @@
                     }
                 ],
                 "tags": [
-                    "teaching"
+                    "api"
                 ],
                 "security": [
                     {
@@ -5654,7 +6667,7 @@
                     }
                 ],
                 "tags": [
-                    "teaching"
+                    "api"
                 ],
                 "security": [
                     {
@@ -5695,7 +6708,7 @@
                     }
                 ],
                 "tags": [
-                    "teaching"
+                    "api"
                 ],
                 "requestBody": {
                     "content": {
@@ -5749,7 +6762,7 @@
                     }
                 ],
                 "tags": [
-                    "teaching"
+                    "api"
                 ],
                 "security": [
                     {
@@ -5782,7 +6795,7 @@
                     }
                 ],
                 "tags": [
-                    "teaching"
+                    "api"
                 ],
                 "requestBody": {
                     "content": {
@@ -5837,7 +6850,7 @@
                     }
                 ],
                 "tags": [
-                    "teaching"
+                    "api"
                 ],
                 "security": [
                     {
@@ -5863,7 +6876,7 @@
         },
         "/api/v2/teaching/courses/{course_id}/publish": {
             "post": {
-                "operationId": "teaching_courses_publish_create",
+                "operationId": "api_v2_teaching_courses_publish_create",
                 "parameters": [
                     {
                         "in": "path",
@@ -5921,7 +6934,7 @@
                     }
                 ],
                 "tags": [
-                    "teaching"
+                    "api"
                 ],
                 "requestBody": {
                     "content": {
@@ -5984,7 +6997,7 @@
                     }
                 ],
                 "tags": [
-                    "teaching"
+                    "api"
                 ],
                 "requestBody": {
                     "content": {
@@ -6047,7 +7060,7 @@
                     }
                 ],
                 "tags": [
-                    "teaching"
+                    "api"
                 ],
                 "security": [
                     {
@@ -6099,7 +7112,7 @@
                     }
                 ],
                 "tags": [
-                    "teaching"
+                    "api"
                 ],
                 "requestBody": {
                     "content": {
@@ -6180,7 +7193,7 @@
                     }
                 ],
                 "tags": [
-                    "teaching"
+                    "api"
                 ],
                 "security": [
                     {
@@ -6218,7 +7231,7 @@
                     }
                 ],
                 "tags": [
-                    "teaching"
+                    "api"
                 ],
                 "security": [
                     {
@@ -6262,7 +7275,7 @@
                     }
                 ],
                 "tags": [
-                    "teaching"
+                    "api"
                 ],
                 "requestBody": {
                     "content": {
@@ -6328,7 +7341,7 @@
                     }
                 ],
                 "tags": [
-                    "teaching"
+                    "api"
                 ],
                 "security": [
                     {
@@ -6380,7 +7393,7 @@
                     }
                 ],
                 "tags": [
-                    "teaching"
+                    "api"
                 ],
                 "requestBody": {
                     "content": {
@@ -6425,7 +7438,7 @@
         },
         "/api/v2/teaching/courses/{course_id}/staff": {
             "get": {
-                "operationId": "teaching_courses_staff_retrieve",
+                "operationId": "api_v2_teaching_courses_staff_retrieve",
                 "parameters": [
                     {
                         "in": "path",
@@ -6461,7 +7474,7 @@
                 ]
             },
             "post": {
-                "operationId": "teaching_courses_staff_create",
+                "operationId": "api_v2_teaching_courses_staff_create",
                 "parameters": [
                     {
                         "in": "path",
@@ -6519,7 +7532,7 @@
         },
         "/api/v2/teaching/courses/{course_id}/staff/{staff_id}/grants": {
             "get": {
-                "operationId": "teaching_courses_staff_grants_retrieve",
+                "operationId": "api_v2_teaching_courses_staff_grants_retrieve",
                 "parameters": [
                     {
                         "in": "path",
@@ -6563,7 +7576,7 @@
                 ]
             },
             "post": {
-                "operationId": "teaching_courses_staff_grants_create",
+                "operationId": "api_v2_teaching_courses_staff_grants_create",
                 "parameters": [
                     {
                         "in": "path",
@@ -6629,7 +7642,7 @@
         },
         "/api/v2/teaching/courses/{course_id}/staff/{staff_id}/grants/{grant_id}/revoke": {
             "post": {
-                "operationId": "teaching_courses_staff_grants_revoke_create",
+                "operationId": "api_v2_teaching_courses_staff_grants_revoke_create",
                 "parameters": [
                     {
                         "in": "path",
@@ -6703,7 +7716,7 @@
         },
         "/api/v2/teaching/courses/{course_id}/staff/{staff_id}/revoke": {
             "post": {
-                "operationId": "teaching_courses_staff_revoke_create",
+                "operationId": "api_v2_teaching_courses_staff_revoke_create",
                 "parameters": [
                     {
                         "in": "path",
@@ -6767,6 +7780,140 @@
                 ]
             }
         },
+        "/api/v2/teaching/courses/{course_id}/tasks/{task_id}/operation-replay": {
+            "get": {
+                "operationId": "api_v2_teaching_courses_tasks_operation_replay_list",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "course_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "task_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "workspaces"
+                ],
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/OperationEvent"
+                                    }
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                },
+                "x-portals": [
+                    "TEACHING"
+                ]
+            }
+        },
+        "/api/v2/teaching/courses/{course_id}/tasks/{task_id}/submission-preview": {
+            "get": {
+                "operationId": "teaching_task_submission_preview",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "course_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "task_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "reports"
+                ],
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ReportPreviewResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                },
+                "x-portals": [
+                    "TEACHING"
+                ]
+            }
+        },
+        "/api/v2/teaching/courses/{course_id}/tasks/{task_id}/workspace": {
+            "get": {
+                "operationId": "api_v2_teaching_courses_tasks_workspace_retrieve",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "course_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "task_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "workspaces"
+                ],
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "authorized workspace projection"
+                    }
+                },
+                "x-portals": [
+                    "TEACHING"
+                ]
+            }
+        },
         "/api/v2/teaching/courses/{course_id}/template-options": {
             "get": {
                 "operationId": "teaching_template_options",
@@ -6781,7 +7928,7 @@
                     }
                 ],
                 "tags": [
-                    "teaching"
+                    "api"
                 ],
                 "security": [
                     {
@@ -6827,7 +7974,7 @@
                     }
                 ],
                 "tags": [
-                    "teaching"
+                    "api"
                 ],
                 "security": [
                     {
@@ -6879,7 +8026,7 @@
                     }
                 ],
                 "tags": [
-                    "teaching"
+                    "api"
                 ],
                 "requestBody": {
                     "content": {
@@ -6944,7 +8091,7 @@
                     }
                 ],
                 "tags": [
-                    "teaching"
+                    "api"
                 ],
                 "security": [
                     {
@@ -6996,7 +8143,7 @@
                     }
                 ],
                 "tags": [
-                    "teaching"
+                    "api"
                 ],
                 "requestBody": {
                     "content": {
@@ -7078,7 +8225,7 @@
                     }
                 ],
                 "tags": [
-                    "teaching"
+                    "api"
                 ],
                 "security": [
                     {
@@ -7150,7 +8297,7 @@
                     }
                 ],
                 "tags": [
-                    "teaching"
+                    "api"
                 ],
                 "security": [
                     {
@@ -7196,7 +8343,7 @@
                     }
                 ],
                 "tags": [
-                    "teaching"
+                    "api"
                 ],
                 "security": [
                     {
@@ -7258,7 +8405,7 @@
                     }
                 ],
                 "tags": [
-                    "teaching"
+                    "api"
                 ],
                 "security": [
                     {
@@ -7330,7 +8477,7 @@
                     }
                 ],
                 "tags": [
-                    "teaching"
+                    "api"
                 ],
                 "security": [
                     {
@@ -7378,7 +8525,7 @@
                     }
                 ],
                 "tags": [
-                    "teaching"
+                    "api"
                 ],
                 "security": [
                     {
@@ -7422,7 +8569,7 @@
                     }
                 ],
                 "tags": [
-                    "teaching"
+                    "api"
                 ],
                 "requestBody": {
                     "content": {
@@ -7488,7 +8635,7 @@
                     }
                 ],
                 "tags": [
-                    "teaching"
+                    "api"
                 ],
                 "security": [
                     {
@@ -7540,7 +8687,7 @@
                     }
                 ],
                 "tags": [
-                    "teaching"
+                    "api"
                 ],
                 "requestBody": {
                     "content": {
@@ -7621,7 +8768,7 @@
                     }
                 ],
                 "tags": [
-                    "teaching"
+                    "api"
                 ],
                 "requestBody": {
                     "content": {
@@ -7695,7 +8842,7 @@
                     }
                 ],
                 "tags": [
-                    "teaching"
+                    "api"
                 ],
                 "security": [
                     {
@@ -7765,7 +8912,7 @@
                     }
                 ],
                 "tags": [
-                    "teaching"
+                    "api"
                 ],
                 "security": [
                     {
@@ -7811,7 +8958,7 @@
                     }
                 ],
                 "tags": [
-                    "teaching"
+                    "api"
                 ],
                 "security": [
                     {
@@ -7863,7 +9010,7 @@
                     }
                 ],
                 "tags": [
-                    "teaching"
+                    "api"
                 ],
                 "requestBody": {
                     "content": {
@@ -7908,7 +9055,7 @@
         },
         "/api/v2/teaching/courses/{course_id}/transfer-owner": {
             "post": {
-                "operationId": "teaching_courses_transfer_owner_create",
+                "operationId": "api_v2_teaching_courses_transfer_owner_create",
                 "parameters": [
                     {
                         "in": "path",
@@ -7960,6 +9107,194 @@
                     }
                 },
                 "x-portals": [
+                    "TEACHING"
+                ]
+            }
+        },
+        "/api/v2/workspace-sessions/{session_id}/renew": {
+            "post": {
+                "operationId": "api_v2_workspace_sessions_renew_create",
+                "parameters": [
+                    {
+                        "in": "header",
+                        "name": "Idempotency-Key",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "header",
+                        "name": "X-Workspace-Token",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "session_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "workspaces"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/WorkspaceSession"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/WorkspaceSession"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/WorkspaceSession"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/WorkspaceSession"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                },
+                "x-portals": [
+                    "USER"
+                ]
+            }
+        },
+        "/api/v2/workspace-sessions/{session_id}/revoke": {
+            "post": {
+                "operationId": "api_v2_workspace_sessions_revoke_create",
+                "parameters": [
+                    {
+                        "in": "header",
+                        "name": "Idempotency-Key",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "header",
+                        "name": "If-Match",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "header",
+                        "name": "X-Workspace-Token",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "session_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "workspaces"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/WorkspaceSession"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/WorkspaceSession"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/WorkspaceSession"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/WorkspaceSession"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                },
+                "x-portals": [
+                    "USER"
+                ]
+            }
+        },
+        "/files/{token}": {
+            "get": {
+                "operationId": "files_download",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "token",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "reports"
+                ],
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "authorized file content"
+                    }
+                },
+                "x-portals": [
+                    "USER",
                     "TEACHING"
                 ]
             }
@@ -8522,6 +9857,15 @@
                     "meta"
                 ]
             },
+            "CheckpointWrite": {
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "maxLength": 180
+                    }
+                }
+            },
             "ContentWrite": {
                 "type": "object",
                 "properties": {
@@ -8903,6 +10247,83 @@
                 "type": "string",
                 "description": "* `APPROVE` - APPROVE\n* `REJECT` - REJECT"
             },
+            "DownloadGrantData": {
+                "type": "object",
+                "properties": {
+                    "grant_id": {
+                        "type": "string"
+                    },
+                    "download_path": {
+                        "type": "string"
+                    },
+                    "expires_at": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "max_downloads": {
+                        "type": "integer"
+                    }
+                },
+                "required": [
+                    "download_path",
+                    "expires_at",
+                    "grant_id",
+                    "max_downloads"
+                ]
+            },
+            "DownloadGrantResponse": {
+                "type": "object",
+                "properties": {
+                    "data": {
+                        "$ref": "#/components/schemas/DownloadGrantData"
+                    },
+                    "meta": {
+                        "type": "object",
+                        "additionalProperties": {}
+                    }
+                },
+                "required": [
+                    "data",
+                    "meta"
+                ]
+            },
+            "DownloadGrantRevokeData": {
+                "type": "object",
+                "properties": {
+                    "public_id": {
+                        "type": "string"
+                    },
+                    "revoked_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "nullable": true
+                    },
+                    "row_version": {
+                        "type": "integer"
+                    }
+                },
+                "required": [
+                    "public_id",
+                    "revoked_at",
+                    "row_version"
+                ]
+            },
+            "DownloadGrantRevokeResponse": {
+                "type": "object",
+                "properties": {
+                    "data": {
+                        "$ref": "#/components/schemas/DownloadGrantRevokeData"
+                    },
+                    "meta": {
+                        "type": "object",
+                        "additionalProperties": {}
+                    }
+                },
+                "required": [
+                    "data",
+                    "meta"
+                ]
+            },
             "DriverEnum": {
                 "enum": [
                     "DOCKER_SWARM",
@@ -9200,6 +10621,22 @@
                 ],
                 "type": "string",
                 "description": "* `PENDING` - Pending\n* `APPROVED` - Approved\n* `REJECTED` - Rejected\n* `CANCELLED` - Cancelled"
+            },
+            "GenericReportResponse": {
+                "type": "object",
+                "properties": {
+                    "data": {
+                        "$ref": "#/components/schemas/ReportScanAnomalySummary"
+                    },
+                    "meta": {
+                        "type": "object",
+                        "additionalProperties": {}
+                    }
+                },
+                "required": [
+                    "data",
+                    "meta"
+                ]
             },
             "GenericResponse": {
                 "type": "object",
@@ -9725,6 +11162,51 @@
                 ],
                 "type": "string",
                 "description": "* `DENY_ALL` - Deny All\n* `ALLOWLIST` - Allowlist"
+            },
+            "OperationEvent": {
+                "type": "object",
+                "properties": {
+                    "public_id": {
+                        "type": "string"
+                    },
+                    "task_id": {
+                        "type": "string"
+                    },
+                    "seq": {
+                        "type": "integer"
+                    },
+                    "event_type": {
+                        "type": "string"
+                    },
+                    "phase": {
+                        "type": "string"
+                    },
+                    "payload": {
+                        "type": "object",
+                        "additionalProperties": {}
+                    },
+                    "result_summary": {
+                        "type": "string"
+                    },
+                    "occurred_at": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "trace_id": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "event_type",
+                    "occurred_at",
+                    "payload",
+                    "phase",
+                    "public_id",
+                    "result_summary",
+                    "seq",
+                    "task_id",
+                    "trace_id"
+                ]
             },
             "OwnershipTransfer": {
                 "type": "object",
@@ -11068,6 +12550,453 @@
                     "reason"
                 ]
             },
+            "ReportAttachmentCreate": {
+                "type": "object",
+                "properties": {
+                    "file_name": {
+                        "type": "string",
+                        "maxLength": 255
+                    },
+                    "media_type": {
+                        "type": "string",
+                        "maxLength": 255
+                    },
+                    "size_bytes": {
+                        "type": "integer",
+                        "minimum": 1
+                    },
+                    "digest_sha256": {
+                        "type": "string",
+                        "pattern": "^[0-9a-fA-F]{64}$"
+                    }
+                },
+                "required": [
+                    "digest_sha256",
+                    "file_name",
+                    "media_type",
+                    "size_bytes"
+                ]
+            },
+            "ReportAttachmentData": {
+                "type": "object",
+                "properties": {
+                    "public_id": {
+                        "type": "string"
+                    },
+                    "file_name": {
+                        "type": "string"
+                    },
+                    "media_type": {
+                        "type": "string"
+                    },
+                    "size_bytes": {
+                        "type": "integer"
+                    },
+                    "digest_sha256": {
+                        "type": "string"
+                    },
+                    "scan_status": {
+                        "$ref": "#/components/schemas/ScanStatusEnum"
+                    },
+                    "status": {
+                        "$ref": "#/components/schemas/StatusFdcEnum"
+                    },
+                    "failure_code": {
+                        "type": "string"
+                    },
+                    "attached": {
+                        "type": "boolean"
+                    },
+                    "row_version": {
+                        "type": "integer"
+                    }
+                },
+                "required": [
+                    "attached",
+                    "digest_sha256",
+                    "failure_code",
+                    "file_name",
+                    "media_type",
+                    "public_id",
+                    "row_version",
+                    "scan_status",
+                    "size_bytes",
+                    "status"
+                ]
+            },
+            "ReportAttachmentResponse": {
+                "type": "object",
+                "properties": {
+                    "data": {
+                        "$ref": "#/components/schemas/ReportAttachmentData"
+                    },
+                    "meta": {
+                        "type": "object",
+                        "additionalProperties": {}
+                    }
+                },
+                "required": [
+                    "data",
+                    "meta"
+                ]
+            },
+            "ReportAttachmentUploadData": {
+                "type": "object",
+                "properties": {
+                    "asset": {
+                        "$ref": "#/components/schemas/ReportAttachmentData"
+                    },
+                    "upload": {
+                        "type": "object",
+                        "additionalProperties": {}
+                    }
+                },
+                "required": [
+                    "asset",
+                    "upload"
+                ]
+            },
+            "ReportAttachmentUploadResponse": {
+                "type": "object",
+                "properties": {
+                    "data": {
+                        "$ref": "#/components/schemas/ReportAttachmentUploadData"
+                    },
+                    "meta": {
+                        "type": "object",
+                        "additionalProperties": {}
+                    }
+                },
+                "required": [
+                    "data",
+                    "meta"
+                ]
+            },
+            "ReportCompleteData": {
+                "type": "object",
+                "properties": {
+                    "artifact": {
+                        "$ref": "#/components/schemas/SystemArtifactData"
+                    },
+                    "task_status": {
+                        "$ref": "#/components/schemas/TaskStatusEnum"
+                    },
+                    "task_row_version": {
+                        "type": "integer"
+                    }
+                },
+                "required": [
+                    "artifact",
+                    "task_row_version",
+                    "task_status"
+                ]
+            },
+            "ReportCompleteResponse": {
+                "type": "object",
+                "properties": {
+                    "data": {
+                        "$ref": "#/components/schemas/ReportCompleteData"
+                    },
+                    "meta": {
+                        "type": "object",
+                        "additionalProperties": {}
+                    }
+                },
+                "required": [
+                    "data",
+                    "meta"
+                ]
+            },
+            "ReportDraftData": {
+                "type": "object",
+                "properties": {
+                    "public_id": {
+                        "type": "string"
+                    },
+                    "task_id": {
+                        "type": "string"
+                    },
+                    "body_markdown": {
+                        "type": "string"
+                    },
+                    "snapshot_digest": {
+                        "type": "string"
+                    },
+                    "status": {
+                        "$ref": "#/components/schemas/ReportDraftDataStatusEnum"
+                    },
+                    "attachments": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/ReportAttachmentData"
+                        }
+                    },
+                    "row_version": {
+                        "type": "integer"
+                    },
+                    "updated_at": {
+                        "type": "string",
+                        "format": "date-time"
+                    }
+                },
+                "required": [
+                    "attachments",
+                    "body_markdown",
+                    "public_id",
+                    "row_version",
+                    "snapshot_digest",
+                    "status",
+                    "task_id",
+                    "updated_at"
+                ]
+            },
+            "ReportDraftDataStatusEnum": {
+                "enum": [
+                    "DRAFT",
+                    "SUBMITTED"
+                ],
+                "type": "string",
+                "description": "* `DRAFT` - Draft\n* `SUBMITTED` - Submitted"
+            },
+            "ReportDraftResponse": {
+                "type": "object",
+                "properties": {
+                    "data": {
+                        "$ref": "#/components/schemas/ReportDraftData"
+                    },
+                    "meta": {
+                        "type": "object",
+                        "additionalProperties": {}
+                    }
+                },
+                "required": [
+                    "data",
+                    "meta"
+                ]
+            },
+            "ReportDraftWrite": {
+                "type": "object",
+                "properties": {
+                    "body_markdown": {
+                        "type": "string",
+                        "maxLength": 500000
+                    }
+                },
+                "required": [
+                    "body_markdown"
+                ]
+            },
+            "ReportPreviewData": {
+                "type": "object",
+                "properties": {
+                    "kind": {
+                        "$ref": "#/components/schemas/ReportPreviewDataKindEnum"
+                    },
+                    "task_id": {
+                        "type": "string"
+                    },
+                    "version": {
+                        "$ref": "#/components/schemas/ReportVersionData"
+                    },
+                    "artifact": {
+                        "$ref": "#/components/schemas/SystemArtifactData"
+                    }
+                },
+                "required": [
+                    "kind",
+                    "task_id"
+                ]
+            },
+            "ReportPreviewDataKindEnum": {
+                "enum": [
+                    "REPORT",
+                    "SYSTEM_ARTIFACT"
+                ],
+                "type": "string",
+                "description": "* `REPORT` - REPORT\n* `SYSTEM_ARTIFACT` - SYSTEM_ARTIFACT"
+            },
+            "ReportPreviewResponse": {
+                "type": "object",
+                "properties": {
+                    "data": {
+                        "$ref": "#/components/schemas/ReportPreviewData"
+                    },
+                    "meta": {
+                        "type": "object",
+                        "additionalProperties": {}
+                    }
+                },
+                "required": [
+                    "data",
+                    "meta"
+                ]
+            },
+            "ReportScanAnomalyItem": {
+                "type": "object",
+                "properties": {
+                    "asset_id": {
+                        "type": "string"
+                    },
+                    "task_id": {
+                        "type": "string"
+                    },
+                    "scan_status": {
+                        "$ref": "#/components/schemas/ScanStatusEnum"
+                    },
+                    "failure_code": {
+                        "type": "string"
+                    },
+                    "created_at": {
+                        "type": "string",
+                        "format": "date-time"
+                    }
+                },
+                "required": [
+                    "asset_id",
+                    "created_at",
+                    "failure_code",
+                    "scan_status",
+                    "task_id"
+                ]
+            },
+            "ReportScanAnomalySummary": {
+                "type": "object",
+                "properties": {
+                    "counts": {
+                        "type": "object",
+                        "additionalProperties": {
+                            "type": "integer"
+                        }
+                    },
+                    "items": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/ReportScanAnomalyItem"
+                        }
+                    }
+                },
+                "required": [
+                    "counts",
+                    "items"
+                ]
+            },
+            "ReportVersionAttachmentData": {
+                "type": "object",
+                "properties": {
+                    "public_id": {
+                        "type": "string"
+                    },
+                    "file_name": {
+                        "type": "string"
+                    },
+                    "media_type": {
+                        "type": "string"
+                    },
+                    "size_bytes": {
+                        "type": "integer"
+                    },
+                    "digest_sha256": {
+                        "type": "string"
+                    },
+                    "asset_id": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "asset_id",
+                    "digest_sha256",
+                    "file_name",
+                    "media_type",
+                    "public_id",
+                    "size_bytes"
+                ]
+            },
+            "ReportVersionData": {
+                "type": "object",
+                "properties": {
+                    "public_id": {
+                        "type": "string"
+                    },
+                    "task_id": {
+                        "type": "string"
+                    },
+                    "version_no": {
+                        "type": "integer"
+                    },
+                    "body_markdown": {
+                        "type": "string"
+                    },
+                    "body_digest": {
+                        "type": "string"
+                    },
+                    "snapshot_digest": {
+                        "type": "string"
+                    },
+                    "submitted_at": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "submitted_by_id": {
+                        "type": "string"
+                    },
+                    "trace_id": {
+                        "type": "string"
+                    },
+                    "attachments": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/ReportVersionAttachmentData"
+                        }
+                    }
+                },
+                "required": [
+                    "attachments",
+                    "body_digest",
+                    "body_markdown",
+                    "public_id",
+                    "snapshot_digest",
+                    "submitted_at",
+                    "submitted_by_id",
+                    "task_id",
+                    "trace_id",
+                    "version_no"
+                ]
+            },
+            "ReportVersionListResponse": {
+                "type": "object",
+                "properties": {
+                    "data": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/ReportVersionData"
+                        }
+                    },
+                    "meta": {
+                        "type": "object",
+                        "additionalProperties": {}
+                    }
+                },
+                "required": [
+                    "data",
+                    "meta"
+                ]
+            },
+            "ReportVersionResponse": {
+                "type": "object",
+                "properties": {
+                    "data": {
+                        "$ref": "#/components/schemas/ReportVersionData"
+                    },
+                    "meta": {
+                        "type": "object",
+                        "additionalProperties": {}
+                    }
+                },
+                "required": [
+                    "data",
+                    "meta"
+                ]
+            },
             "ResourceProfileCreate": {
                 "type": "object",
                 "properties": {
@@ -11827,6 +13756,54 @@
                     "status"
                 ]
             },
+            "StatusFdcEnum": {
+                "enum": [
+                    "ACTIVE",
+                    "PURGE_PENDING",
+                    "PURGED"
+                ],
+                "type": "string",
+                "description": "* `ACTIVE` - Active\n* `PURGE_PENDING` - Purge Pending\n* `PURGED` - Purged"
+            },
+            "SystemArtifactData": {
+                "type": "object",
+                "properties": {
+                    "public_id": {
+                        "type": "string"
+                    },
+                    "task_id": {
+                        "type": "string"
+                    },
+                    "kind": {
+                        "$ref": "#/components/schemas/SystemArtifactDataKindEnum"
+                    },
+                    "asset_id": {
+                        "type": "string"
+                    },
+                    "digest_sha256": {
+                        "type": "string"
+                    },
+                    "created_at": {
+                        "type": "string",
+                        "format": "date-time"
+                    }
+                },
+                "required": [
+                    "asset_id",
+                    "created_at",
+                    "digest_sha256",
+                    "kind",
+                    "public_id",
+                    "task_id"
+                ]
+            },
+            "SystemArtifactDataKindEnum": {
+                "enum": [
+                    "WORKSPACE_SNAPSHOT"
+                ],
+                "type": "string",
+                "description": "* `WORKSPACE_SNAPSHOT` - Workspace Snapshot"
+            },
             "TargetTypeEnum": {
                 "enum": [
                     "HOST",
@@ -11871,6 +13848,9 @@
                     },
                     "runtime_type": {
                         "type": "string"
+                    },
+                    "report_required": {
+                        "type": "boolean"
                     },
                     "status": {
                         "$ref": "#/components/schemas/TaskDataStatusEnum"
@@ -11931,6 +13911,7 @@
                     "progress",
                     "public_id",
                     "publication_id",
+                    "report_required",
                     "row_version",
                     "runtime_type",
                     "status",
@@ -12004,6 +13985,13 @@
                     "requested_deadline"
                 ]
             },
+            "TaskStatusEnum": {
+                "enum": [
+                    "UNDER_REVIEW"
+                ],
+                "type": "string",
+                "description": "* `UNDER_REVIEW` - UNDER_REVIEW"
+            },
             "TeacherQualificationUpdateStatusEnum": {
                 "enum": [
                     "SUSPENDED",
@@ -12076,7 +14064,7 @@
                         "$ref": "#/components/schemas/ScanStatusEnum"
                     },
                     "status": {
-                        "$ref": "#/components/schemas/TemplateAssetDataStatusEnum"
+                        "$ref": "#/components/schemas/StatusFdcEnum"
                     },
                     "failure_code": {
                         "type": "string"
@@ -12102,15 +14090,6 @@
                     "status",
                     "version_id"
                 ]
-            },
-            "TemplateAssetDataStatusEnum": {
-                "enum": [
-                    "ACTIVE",
-                    "PURGE_PENDING",
-                    "PURGED"
-                ],
-                "type": "string",
-                "description": "* `ACTIVE` - Active\n* `PURGE_PENDING` - Purge Pending\n* `PURGED` - Purged"
             },
             "TemplateAssetResponse": {
                 "type": "object",
@@ -12827,6 +14806,215 @@
                 ],
                 "type": "string",
                 "description": "* `PUBLIC` - Public\n* `UNLISTED` - Unlisted"
+            },
+            "WorkspaceCheckpoint": {
+                "type": "object",
+                "properties": {
+                    "public_id": {
+                        "type": "string"
+                    },
+                    "task_id": {
+                        "type": "string"
+                    },
+                    "session_id": {
+                        "type": "string"
+                    },
+                    "checkpoint_no": {
+                        "type": "integer"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "source_seq": {
+                        "type": "integer"
+                    },
+                    "digest_sha256": {
+                        "type": "string"
+                    },
+                    "version_no": {
+                        "type": "integer"
+                    },
+                    "created_at": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "retention_until": {
+                        "type": "string",
+                        "format": "date-time",
+                        "nullable": true
+                    }
+                },
+                "required": [
+                    "checkpoint_no",
+                    "created_at",
+                    "digest_sha256",
+                    "name",
+                    "public_id",
+                    "retention_until",
+                    "session_id",
+                    "source_seq",
+                    "task_id",
+                    "version_no"
+                ]
+            },
+            "WorkspaceCheckpointList": {
+                "type": "object",
+                "properties": {
+                    "items": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/WorkspaceCheckpoint"
+                        }
+                    },
+                    "current_version": {
+                        "type": "integer"
+                    },
+                    "row_version": {
+                        "type": "integer"
+                    }
+                },
+                "required": [
+                    "current_version",
+                    "items",
+                    "row_version"
+                ]
+            },
+            "WorkspaceEnter": {
+                "type": "object",
+                "properties": {
+                    "task": {
+                        "type": "object",
+                        "additionalProperties": {}
+                    },
+                    "session": {
+                        "$ref": "#/components/schemas/WorkspaceSession"
+                    }
+                },
+                "required": [
+                    "session",
+                    "task"
+                ]
+            },
+            "WorkspaceSession": {
+                "type": "object",
+                "properties": {
+                    "public_id": {
+                        "type": "string"
+                    },
+                    "task_id": {
+                        "type": "string"
+                    },
+                    "course_id": {
+                        "type": "string"
+                    },
+                    "instance_id": {
+                        "type": "string"
+                    },
+                    "portal": {
+                        "type": "string"
+                    },
+                    "status": {
+                        "$ref": "#/components/schemas/WorkspaceSessionStatusEnum"
+                    },
+                    "capabilities": {
+                        "type": "object",
+                        "additionalProperties": {}
+                    },
+                    "expires_at": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "revoked_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "nullable": true
+                    },
+                    "current_version": {
+                        "type": "integer"
+                    },
+                    "latest_client_seq": {
+                        "type": "integer"
+                    },
+                    "row_version": {
+                        "type": "integer"
+                    },
+                    "workspace_token": {
+                        "type": "string",
+                        "readOnly": true
+                    }
+                },
+                "required": [
+                    "capabilities",
+                    "course_id",
+                    "current_version",
+                    "expires_at",
+                    "instance_id",
+                    "latest_client_seq",
+                    "portal",
+                    "public_id",
+                    "revoked_at",
+                    "row_version",
+                    "status",
+                    "task_id",
+                    "workspace_token"
+                ]
+            },
+            "WorkspaceSessionStatusEnum": {
+                "enum": [
+                    "ACTIVE",
+                    "REVOKED",
+                    "EXPIRED"
+                ],
+                "type": "string",
+                "description": "* `ACTIVE` - Active\n* `REVOKED` - Revoked\n* `EXPIRED` - Expired"
+            },
+            "WorkspaceSnapshot": {
+                "type": "object",
+                "properties": {
+                    "public_id": {
+                        "type": "string"
+                    },
+                    "task_id": {
+                        "type": "string"
+                    },
+                    "session_id": {
+                        "type": "string"
+                    },
+                    "version_no": {
+                        "type": "integer"
+                    },
+                    "client_seq": {
+                        "type": "integer"
+                    },
+                    "base_version": {
+                        "type": "integer"
+                    },
+                    "digest_sha256": {
+                        "type": "string"
+                    },
+                    "size_bytes": {
+                        "type": "integer"
+                    },
+                    "media_type": {
+                        "type": "string"
+                    },
+                    "saved_at": {
+                        "type": "string",
+                        "format": "date-time"
+                    }
+                },
+                "required": [
+                    "base_version",
+                    "client_seq",
+                    "digest_sha256",
+                    "media_type",
+                    "public_id",
+                    "saved_at",
+                    "session_id",
+                    "size_bytes",
+                    "task_id",
+                    "version_no"
+                ]
             }
         },
         "securitySchemes": {

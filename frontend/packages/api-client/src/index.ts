@@ -75,6 +75,76 @@ export type ChapterData = Record<string, unknown>
 export type MaterialData = Record<string, unknown>
 export type QuestionData = Record<string, unknown>
 
+export type WorkspaceCapabilities = Record<string, boolean>
+export type WorkspaceSessionData = {
+  public_id: string
+  task_id: string
+  course_id: string
+  instance_id: string
+  portal: 'USER'
+  status: 'ACTIVE' | 'REVOKED' | 'EXPIRED'
+  capabilities: WorkspaceCapabilities
+  expires_at: string
+  revoked_at: string | null
+  current_version: number
+  latest_client_seq: number
+  row_version: number
+  workspace_token?: string
+}
+export type WorkspaceSnapshotData = {
+  public_id: string
+  task_id: string
+  session_id: string
+  version_no: number
+  client_seq: number
+  base_version: number
+  digest_sha256: string
+  size_bytes: number
+  media_type: string
+  saved_at: string
+}
+export type WorkspaceCheckpointData = {
+  public_id: string
+  task_id: string
+  session_id: string
+  checkpoint_no: number
+  name: string
+  source_seq: number
+  digest_sha256: string
+  version_no: number
+  created_at: string
+  retention_until: string | null
+}
+export type WorkspaceCheckpointListData = {
+  items: WorkspaceCheckpointData[]
+  current_version: number
+  row_version: number
+}
+export type WorkspaceOperationData = {
+  public_id: string
+  task_id: string
+  seq: number
+  event_type: string
+  phase: string
+  payload: Record<string, unknown>
+  result_summary: string
+  occurred_at: string
+  trace_id: string
+}
+export type WorkspaceEnvelope<T> = { data: T; meta: { trace_id?: string } }
+export type ReportAttachmentData = components['schemas']['ReportAttachmentData']
+export type ReportAttachmentUploadResponse = components['schemas']['ReportAttachmentUploadResponse']
+export type ReportDraftResponse = components['schemas']['ReportDraftResponse']
+export type ReportVersionData = components['schemas']['ReportVersionData']
+export type ReportVersionListResponse = components['schemas']['ReportVersionListResponse']
+export type ReportVersionResponse = components['schemas']['ReportVersionResponse']
+export type SystemArtifactData = components['schemas']['SystemArtifactData']
+export type ReportCompleteResponse = components['schemas']['ReportCompleteResponse']
+export type ReportPreviewResponse = components['schemas']['ReportPreviewResponse']
+export type ReportScanAnomalySummary = components['schemas']['ReportScanAnomalySummary']
+export type DownloadGrantResponse = components['schemas']['DownloadGrantResponse']
+export type DownloadGrantRevokeResponse = components['schemas']['DownloadGrantRevokeResponse']
+
 export interface ApiFailure {
   error: {
     code: string
@@ -153,7 +223,12 @@ export class RequestIntent {
 export interface ApiRequestInit extends RequestInit {
   ifMatch?: string
   intent?: RequestIntent
+  workspaceToken?: string
 }
+
+let workspaceToken: string | undefined
+export function setWorkspaceToken(token: string | undefined): void { workspaceToken = token }
+export function clearWorkspaceToken(): void { workspaceToken = undefined }
 
 function csrfToken(): string | undefined {
   const item = document.cookie
@@ -202,10 +277,12 @@ export async function apiRequestWithMetadata<T>(
   }
   if (init.ifMatch) headers.set('If-Match', init.ifMatch)
   if (init.intent) headers.set('Idempotency-Key', init.intent.bind(init.body))
+  if (init.workspaceToken ?? workspaceToken) headers.set('X-Workspace-Token', init.workspaceToken ?? workspaceToken ?? '')
 
   const requestInit = { ...init }
   delete requestInit.ifMatch
   delete requestInit.intent
+  delete requestInit.workspaceToken
   const response = await fetch(path, {
     ...requestInit,
     method,
@@ -236,4 +313,42 @@ export async function apiRequest<T>(path: string, init?: ApiRequestInit): Promis
 
 export function getHealth(signal?: AbortSignal): Promise<HealthResponse> {
   return apiRequest<HealthResponse>('/api/v2/health', { signal })
+}
+
+export async function enterWorkspace(taskId: string, ifMatch: string, intent = new RequestIntent()): Promise<ApiResult<WorkspaceEnvelope<{ task: TaskData; session: WorkspaceSessionData }>>> {
+  const result = await apiRequestWithMetadata<WorkspaceEnvelope<{ task: TaskData; session: WorkspaceSessionData }>>(`/api/v2/tasks/${encodeURIComponent(taskId)}/enter`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, ifMatch, intent, body: '{}' })
+  setWorkspaceToken(result.payload.data.session.workspace_token)
+  return result
+}
+
+export async function renewWorkspaceSession(sessionId: string, token?: string, intent = new RequestIntent()): Promise<ApiResult<WorkspaceEnvelope<WorkspaceSessionData>>> {
+  const result = await apiRequestWithMetadata<WorkspaceEnvelope<WorkspaceSessionData>>(`/api/v2/workspace-sessions/${encodeURIComponent(sessionId)}/renew`, { method: 'POST', body: '{}', headers: { 'Content-Type': 'application/json' }, workspaceToken: token, intent })
+  setWorkspaceToken(result.payload.data.workspace_token)
+  return result
+}
+
+export async function revokeWorkspaceSession(sessionId: string, ifMatch: string, token?: string, intent = new RequestIntent()): Promise<ApiResult<WorkspaceEnvelope<WorkspaceSessionData>>> {
+  const result = await apiRequestWithMetadata<WorkspaceEnvelope<WorkspaceSessionData>>(`/api/v2/workspace-sessions/${encodeURIComponent(sessionId)}/revoke`, { method: 'POST', body: '{}', headers: { 'Content-Type': 'application/json' }, ifMatch, workspaceToken: token, intent })
+  clearWorkspaceToken()
+  return result
+}
+
+export async function saveWorkspaceSnapshot(taskId: string, input: { clientSeq: number; baseVersion: number; file: Blob }, token?: string): Promise<ApiResult<WorkspaceEnvelope<{ snapshot: WorkspaceSnapshotData; confirmed_seq: number; result: string }>>> {
+  const body = new FormData()
+  body.set('client_seq', String(input.clientSeq))
+  body.set('base_version', String(input.baseVersion))
+  body.set('snapshot', input.file, 'workspace-snapshot.bin')
+  return apiRequestWithMetadata<WorkspaceEnvelope<{ snapshot: WorkspaceSnapshotData; confirmed_seq: number; result: string }>>(`/api/v2/tasks/${encodeURIComponent(taskId)}/workspace-snapshot`, { method: 'PUT', body, workspaceToken: token })
+}
+
+export function getWorkspaceCheckpoints(taskId: string): Promise<ApiResult<WorkspaceEnvelope<WorkspaceCheckpointListData>>> {
+  return apiRequestWithMetadata<WorkspaceEnvelope<WorkspaceCheckpointListData>>(`/api/v2/tasks/${encodeURIComponent(taskId)}/checkpoints`)
+}
+
+export function createWorkspaceCheckpoint(taskId: string, name: string, token?: string, intent = new RequestIntent()): Promise<ApiResult<WorkspaceEnvelope<WorkspaceCheckpointData>>> {
+  return apiRequestWithMetadata<WorkspaceEnvelope<WorkspaceCheckpointData>>(`/api/v2/tasks/${encodeURIComponent(taskId)}/checkpoints`, { method: 'POST', body: JSON.stringify({ name }), headers: { 'Content-Type': 'application/json' }, workspaceToken: token, intent })
+}
+
+export function restoreWorkspaceCheckpoint(taskId: string, checkpointId: string, rowVersion: number, token?: string, intent = new RequestIntent()): Promise<ApiResult<WorkspaceEnvelope<WorkspaceSnapshotData>>> {
+  return apiRequestWithMetadata<WorkspaceEnvelope<WorkspaceSnapshotData>>(`/api/v2/tasks/${encodeURIComponent(taskId)}/checkpoints/${encodeURIComponent(checkpointId)}/restore`, { method: 'POST', body: '{}', headers: { 'Content-Type': 'application/json' }, ifMatch: `"${rowVersion}"`, workspaceToken: token, intent })
 }

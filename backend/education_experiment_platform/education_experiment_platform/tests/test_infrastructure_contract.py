@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import yaml
@@ -117,6 +118,61 @@ def test_p01_splits_migration_and_runtime_database_accounts() -> None:
         "core_failure_record",
     ):
         assert f"GRANT SELECT, INSERT ON \\`${{MYSQL_DATABASE}}\\`.{table}" in bootstrap
+
+
+def test_p08_runtime_database_grants_workspace_append_only_tables_read_insert_only() -> None:
+    bootstrap = (ROOT / "infrastructure/mysql/configure-users.sh").read_text(encoding="utf-8")
+    assert (
+        "GRANT SELECT, INSERT, UPDATE ON \\`${MYSQL_DATABASE}\\`.workspaces_workspace_session"
+        in bootstrap
+    )
+    for table in (
+        "workspaces_workspace_snapshot",
+        "workspaces_workspace_autosave_log",
+        "workspaces_workspace_checkpoint",
+        "workspaces_operation_event",
+    ):
+        assert f"GRANT SELECT, INSERT ON \\`${{MYSQL_DATABASE}}\\`.{table}" in bootstrap
+        assert f"GRANT SELECT, INSERT, UPDATE ON \\`${{MYSQL_DATABASE}}\\`.{table}" not in bootstrap
+
+
+def test_p09_runtime_database_grants_reports_and_download_grants_least_privilege() -> None:
+    bootstrap = (ROOT / "infrastructure/mysql/configure-users.sh").read_text(encoding="utf-8")
+    assert (
+        "GRANT SELECT, INSERT, UPDATE ON \\`${MYSQL_DATABASE}\\`.core_file_download_grant"
+        in bootstrap
+    )
+    assert (
+        "GRANT SELECT, INSERT, UPDATE ON \\`${MYSQL_DATABASE}\\`.reports_report_draft"
+        in bootstrap
+    )
+    for table in (
+        "reports_report_attachment",
+        "reports_report_version",
+        "reports_report_version_attachment",
+        "reports_system_artifact",
+    ):
+        assert f"GRANT SELECT, INSERT ON \\`${{MYSQL_DATABASE}}\\`.{table}" in bootstrap
+        assert f"GRANT SELECT, INSERT, UPDATE ON \\`${{MYSQL_DATABASE}}\\`.{table}" not in bootstrap
+    compose = load_yaml("docker-compose.dev.yml")
+    assert compose["services"]["minio"]["ports"][0] == (
+        "127.0.0.1:${MINIO_API_PORT:-9000}:9000"
+    )
+    assert set(compose["services"]["minio"]["networks"]) == {"data", "minio-host-access"}
+    assert compose["networks"]["minio-host-access"] == {}
+
+
+def test_p08_minio_policy_scopes_versioned_workspace_objects() -> None:
+    policy = json.loads(
+        (ROOT / "infrastructure/minio/app-policy.json").read_text(encoding="utf-8")
+    )
+    object_statement = policy["Statement"][1]
+    assert set(object_statement["Resource"]) == {
+        "arn:aws:s3:::edu-platform/template-assets/*",
+        "arn:aws:s3:::edu-platform/workspaces/*",
+        "arn:aws:s3:::edu-platform/reports/*",
+    }
+    assert {"s3:GetObjectVersion", "s3:DeleteObjectVersion"} <= set(object_statement["Action"])
 
 
 def test_p01_declares_architecture_queue_names() -> None:

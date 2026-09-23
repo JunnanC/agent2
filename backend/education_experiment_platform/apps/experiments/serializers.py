@@ -135,6 +135,7 @@ class TaskDataSerializer(serializers.Serializer):
     template_name = serializers.CharField()
     template_spec_digest = serializers.CharField(allow_null=True)
     runtime_type = serializers.CharField()
+    report_required = serializers.BooleanField()
     status = serializers.ChoiceField(choices=ExperimentTask.Status.choices)
     terminal_target = serializers.CharField(allow_null=True)
     progress = serializers.IntegerField()
@@ -263,6 +264,7 @@ def task_data(
         "template_name": item.template_version.template.name,
         "template_spec_digest": item.template_version.spec_digest,
         "runtime_type": item.runtime_type,
+        "report_required": item.publication.report_required,
         "status": item.status,
         "terminal_target": item.terminal_target,
         "progress": item.progress,

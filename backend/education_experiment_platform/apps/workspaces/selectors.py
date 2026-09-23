@@ -41,7 +41,12 @@ def task_for_teaching(*, actor: User, course_id: str, task_id: str) -> Experimen
 def active_session_for_user(*, actor: User, task_id: str) -> WorkspaceSession:
     session = (
         WorkspaceSession.objects.select_related(
-            "task", "student", "course", "instance", "latest_snapshot"
+            "task__enrollment",
+            "task__publication",
+            "student",
+            "course",
+            "instance",
+            "latest_snapshot",
         )
         .filter(task__public_id=task_id, student=actor, status=WorkspaceSession.Status.ACTIVE)
         .order_by("-created_at")
@@ -55,7 +60,12 @@ def active_session_for_user(*, actor: User, task_id: str) -> WorkspaceSession:
 def session_by_public_id(*, session_id: str) -> WorkspaceSession:
     try:
         return WorkspaceSession.objects.select_related(
-            "task", "student", "course", "instance", "latest_snapshot"
+            "task__enrollment",
+            "task__publication",
+            "student",
+            "course",
+            "instance",
+            "latest_snapshot",
         ).get(public_id=session_id)
     except WorkspaceSession.DoesNotExist as exc:
         raise WorkspaceSessionInvalid() from exc

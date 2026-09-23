@@ -74,3 +74,21 @@ export const experimentKeys = {
   extensions: (taskId: string) => [...experimentKeys.task(taskId), 'extensions'] as const,
   anomalies: () => [...experimentKeys.all, 'anomalies'] as const,
 }
+
+export const workspaceKeys = {
+  all: ['workspaces'] as const,
+  session: (taskId: string) => [...workspaceKeys.all, 'session', taskId] as const,
+  snapshot: (taskId: string) => [...workspaceKeys.all, 'snapshot', taskId] as const,
+  checkpoints: (taskId: string) => [...workspaceKeys.all, 'checkpoints', taskId] as const,
+  replay: (taskId: string, scope = 'user') => [...workspaceKeys.all, 'replay', scope, taskId] as const,
+  teacher: (courseId: string, taskId: string) => [...workspaceKeys.all, 'teacher', courseId, taskId] as const,
+  adminSessions: () => [...workspaceKeys.all, 'admin', 'sessions'] as const,
+}
+
+export const reportKeys = {
+  all: ['reports'] as const,
+  draft: (taskId: string) => [...reportKeys.all, 'draft', taskId] as const,
+  versions: (taskId: string) => [...reportKeys.all, 'versions', taskId] as const,
+  preview: (courseId: string, taskId: string) => [...reportKeys.all, 'preview', courseId, taskId] as const,
+  scanAnomalies: () => [...reportKeys.all, 'scan-anomalies'] as const,
+}
