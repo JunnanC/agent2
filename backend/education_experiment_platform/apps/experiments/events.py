@@ -1,0 +1,7 @@
+PUBLICATION_PUBLISHED = "experiment.publication_published"
+PUBLICATION_FAILED = "experiment.publication_failed"
+PUBLICATION_CLOSED = "experiment.publication_closed"
+PUBLICATION_WITHDRAWN = "experiment.publication_withdrawn"
+TASK_ASSIGNED = "experiment.task_assigned"
+TASK_STATUS_CHANGED = "experiment.task_status_changed"
+TASK_EXTENSION_DECIDED = "experiment.task_extension_decided"

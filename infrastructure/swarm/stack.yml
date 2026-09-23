@@ -2,8 +2,8 @@ version: "3.9"
 
 x-app-environment: &app-environment
   APP_ENV: integration
-  APP_VERSION: ${APP_VERSION:-0.6.0-p05}
-  OPENAPI_REVISION: ${OPENAPI_REVISION:-v2-p05}
+  APP_VERSION: ${APP_VERSION:-0.7.0-p06}
+  OPENAPI_REVISION: ${OPENAPI_REVISION:-v2-p06}
   DJANGO_SETTINGS_MODULE: education_experiment_platform.settings.prod
   DJANGO_ALLOWED_HOSTS: django,user.example.edu,teacher.example.edu,admin.example.edu,api.example.edu
   DJANGO_TRUSTED_ORIGINS: https://user.example.edu,https://teacher.example.edu,https://admin.example.edu

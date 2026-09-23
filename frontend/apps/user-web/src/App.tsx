@@ -5,10 +5,11 @@ import { ApiError, RequestIntent, apiRequestWithMetadata, type CourseData, type 
 import { useSession } from '@edu/auth-client'
 import { accountKeys, courseKeys, governanceKeys } from '@edu/query-keys'
 import { AppErrorBoundary, LoginForm, PageHeader, PortalLayout, RequestStateView, StatusBadge, TextField } from '@edu/ui'
+import { ExperimentDashboardPage, ExperimentTaskDetailPage, ExperimentTaskListPage } from './p06'
 
 const release = {
-  version: import.meta.env.VITE_APP_VERSION ?? '0.6.0-p05',
-  openapiRevision: import.meta.env.VITE_OPENAPI_REVISION ?? 'v2-p05',
+  version: import.meta.env.VITE_APP_VERSION ?? '0.8.0-p07',
+  openapiRevision: import.meta.env.VITE_OPENAPI_REVISION ?? 'v2-p07',
   gitRevision: import.meta.env.VITE_GIT_REVISION ?? 'development',
   buildTime: import.meta.env.VITE_BUILD_TIME ?? 'development',
 }
@@ -174,9 +175,9 @@ function EnrollmentRow({ item }: { item: EnrollmentData }) {
 function AppRoutes() {
   const session = useSession(); const queryClient = useQueryClient()
   const signOut = async () => { await session.signOut(); queryClient.clear() }
-  const nav = session.status === 'authenticated' ? [{ href: '/courses', label: '课程目录' }, { href: '/my-courses', label: '我的课程' }, { href: '/profile', label: '个人资料' }] : [{ href: '/login', label: '登录' }]
+  const nav = session.status === 'authenticated' ? [{ href: '/dashboard', label: '实验工作台' }, { href: '/tasks', label: '我的实验' }, { href: '/courses', label: '课程目录' }, { href: '/my-courses', label: '我的课程' }, { href: '/profile', label: '个人资料' }] : [{ href: '/login', label: '登录' }]
   return <PortalLayout title="用户端" tone="user" release={release} nav={nav} actions={session.status === 'authenticated' ? <button className="text-button" onClick={() => void signOut()}>退出</button> : null}><AppErrorBoundary><Routes>
-    <Route path="/login" element={<LoginPage />} /><Route path="/" element={<Navigate to="/courses" replace />} /><Route path="/courses" element={<Guard><CourseCatalogPage /></Guard>} /><Route path="/courses/:courseId" element={<Guard><CourseDetailPage /></Guard>} /><Route path="/courses/:courseId/chapters" element={<Guard><CourseLearningPage /></Guard>} /><Route path="/my-courses" element={<Guard><MyCoursesPage /></Guard>} /><Route path="/profile" element={<Guard><ProfilePage /></Guard>} /><Route path="*" element={<Navigate to="/courses" replace />} />
+    <Route path="/login" element={<LoginPage />} /><Route path="/" element={<Navigate to="/dashboard" replace />} /><Route path="/dashboard" element={<Guard><ExperimentDashboardPage /></Guard>} /><Route path="/tasks" element={<Guard><ExperimentTaskListPage /></Guard>} /><Route path="/tasks/:taskId" element={<Guard><ExperimentTaskDetailPage /></Guard>} /><Route path="/courses" element={<Guard><CourseCatalogPage /></Guard>} /><Route path="/courses/:courseId" element={<Guard><CourseDetailPage /></Guard>} /><Route path="/courses/:courseId/chapters" element={<Guard><CourseLearningPage /></Guard>} /><Route path="/my-courses" element={<Guard><MyCoursesPage /></Guard>} /><Route path="/profile" element={<Guard><ProfilePage /></Guard>} /><Route path="*" element={<Navigate to="/dashboard" replace />} />
   </Routes></AppErrorBoundary></PortalLayout>
 }
 

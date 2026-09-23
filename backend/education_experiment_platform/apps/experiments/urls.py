@@ -1,0 +1,97 @@
+from django.urls import path
+
+from .views import (
+    ClosePublicationView,
+    PlatformTaskAnomalyView,
+    PublishPublicationView,
+    TeachingExtensionDecisionView,
+    TeachingExtensionRequestDetailView,
+    TeachingExtensionRequestListView,
+    TeachingProgressView,
+    TeachingPublicationDetailView,
+    TeachingPublicationListView,
+    TeachingTaskListView,
+    UserDashboardView,
+    UserTaskDetailView,
+    UserTaskExtensionListView,
+    UserTaskExtensionRequestView,
+    UserTaskListView,
+    UserTaskTransitionsView,
+    WithdrawPublicationView,
+)
+
+urlpatterns = [
+    path("me/dashboard", UserDashboardView.as_view(), name="me-dashboard"),
+    path("tasks", UserTaskListView.as_view(), name="tasks"),
+    path("tasks/<str:task_id>", UserTaskDetailView.as_view(), name="task-detail"),
+    path(
+        "tasks/<str:task_id>/transitions",
+        UserTaskTransitionsView.as_view(),
+        name="task-transitions",
+    ),
+    path(
+        "tasks/<str:task_id>/extensions",
+        UserTaskExtensionListView.as_view(),
+        name="task-extensions",
+    ),
+    path(
+        "tasks/<str:task_id>/extension-requests",
+        UserTaskExtensionRequestView.as_view(),
+        name="task-extension-request",
+    ),
+    path(
+        "teaching/courses/<str:course_id>/experiments",
+        TeachingPublicationListView.as_view(),
+        name="teaching-experiments",
+    ),
+    path(
+        "teaching/courses/<str:course_id>/experiments/<str:publication_id>",
+        TeachingPublicationDetailView.as_view(),
+        name="teaching-experiment-detail",
+    ),
+    path(
+        "teaching/courses/<str:course_id>/experiments/<str:publication_id>/publish",
+        PublishPublicationView.as_view(),
+        name="teaching-experiment-publish",
+    ),
+    path(
+        "teaching/courses/<str:course_id>/experiments/<str:publication_id>/close",
+        ClosePublicationView.as_view(),
+        name="teaching-experiment-close",
+    ),
+    path(
+        "teaching/courses/<str:course_id>/experiments/<str:publication_id>/withdraw",
+        WithdrawPublicationView.as_view(),
+        name="teaching-experiment-withdraw",
+    ),
+    path(
+        "teaching/courses/<str:course_id>/experiments/<str:publication_id>/tasks",
+        TeachingTaskListView.as_view(),
+        name="teaching-experiment-tasks",
+    ),
+    path(
+        "teaching/courses/<str:course_id>/progress",
+        TeachingProgressView.as_view(),
+        name="teaching-experiment-progress",
+    ),
+    path(
+        "teaching/courses/<str:course_id>/extension-requests",
+        TeachingExtensionRequestListView.as_view(),
+        name="teaching-extension-requests",
+    ),
+    path(
+        "teaching/courses/<str:course_id>/extension-requests/<str:request_id>",
+        TeachingExtensionRequestDetailView.as_view(),
+        name="teaching-extension-request",
+    ),
+    path(
+        "teaching/courses/<str:course_id>/extension-requests/<str:request_id>/decide",
+        TeachingExtensionDecisionView.as_view(),
+        name="teaching-extension-decide",
+    ),
+    path(
+        "platform/tasks/anomalies",
+        PlatformTaskAnomalyView.as_view(),
+        name="platform-task-anomalies",
+    ),
+]

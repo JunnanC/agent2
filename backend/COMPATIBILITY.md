@@ -15,7 +15,7 @@ This file freezes the P00 implementation baseline. Dependency upgrades require a
 | MongoDB | 8.0 replica set |
 | MinIO | RELEASE.2025-09-07T16-13-09Z |
 | ClamAV | 1.4 |
-| OpenAPI | 3.0.3, revision `v2-p05` |
+| OpenAPI | 3.0.3, revision `v2-p07` |
 
 The supported production path is ASGI behind Nginx and Kong. SQLite is permitted only by the isolated unit-test settings; local, integration, and production settings use MySQL.
 

@@ -169,6 +169,20 @@ def test_greenfield_backend_has_target_apps_and_no_teams_package() -> None:
     assert not (app_root / "teams").exists()
 
 
+def test_backend_has_single_canonical_django_project() -> None:
+    canonical = ROOT / "backend/education_experiment_platform"
+
+    assert (canonical / "manage.py").is_file()
+    assert (canonical / "education_experiment_platform/settings/base.py").is_file()
+    for legacy_path in (
+        ROOT / "backend/apps",
+        ROOT / "backend/config",
+        ROOT / "backend/manage.py",
+        ROOT / "backend/Dockerfile.prod",
+    ):
+        assert not legacy_path.exists()
+
+
 def test_frontends_are_independent_build_entries() -> None:
     apps_root = ROOT / "frontend/apps"
     for app_name in ("user-web", "teacher-web", "admin-web"):

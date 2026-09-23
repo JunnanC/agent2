@@ -28,12 +28,12 @@ class SettingsTests(SimpleTestCase):
         assert "teams" not in installed
 
     def test_contract_revision_and_api_prefix_are_fixed(self) -> None:
-        assert settings.OPENAPI_REVISION == "v2-p05"
+        assert settings.OPENAPI_REVISION == "v2-p07"
 
     def test_celery_preserves_structured_application_logging(self) -> None:
         assert settings.CELERY_WORKER_HIJACK_ROOT_LOGGER is False
 
-    def test_p05_models_are_limited_to_declared_domain_tables(self) -> None:
+    def test_domain_models_are_limited_to_declared_domain_tables(self) -> None:
         assert {model._meta.db_table for model in apps.get_app_config("core").get_models()} == {
             "core_object_asset",
             "core_object_purge_log",
@@ -100,6 +100,33 @@ class SettingsTests(SimpleTestCase):
             "reviews_rubric_version",
             "reviews_rubric_criterion",
         }
-        implemented = {"core", "accounts", "courses", "governance", "labtemplates", "reviews"}
+        assert {
+            model._meta.db_table for model in apps.get_app_config("experiments").get_models()
+        } == {
+            "experiments_task_publication",
+            "experiments_publication_audience",
+            "experiments_publication_prerequisite",
+            "experiments_experiment_task",
+            "experiments_task_state_transition",
+            "experiments_task_extension_request",
+            "experiments_task_extension_decision",
+        }
+        assert {
+            model._meta.db_table for model in apps.get_app_config("provisioning").get_models()
+        } == {
+            "provisioning_instance",
+            "provisioning_job",
+            "provisioning_stage_event",
+        }
+        implemented = {
+            "core",
+            "accounts",
+            "courses",
+            "governance",
+            "labtemplates",
+            "reviews",
+            "experiments",
+            "provisioning",
+        }
         for app_label in EXPECTED_DOMAIN_APPS - implemented:
             assert list(apps.get_app_config(app_label).get_models()) == []

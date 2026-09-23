@@ -2,8 +2,8 @@
     "openapi": "3.0.3",
     "info": {
         "title": "Education Agent Platform API",
-        "version": "v2-p05",
-        "description": "P05 templates, Rubrics, governed assets, and precheck contract."
+        "version": "v2-p07",
+        "description": "P07 asynchronous provisioning jobs, FakeRuntime orchestration, and P06 experiments."
     },
     "paths": {
         "/api/v2/auth/csrf": {
@@ -403,6 +403,15 @@
             "get": {
                 "operationId": "events_stream_retrieve",
                 "summary": "Portal event stream",
+                "parameters": [
+                    {
+                        "in": "query",
+                        "name": "channel",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
                 "tags": [
                     "events"
                 ],
@@ -584,6 +593,34 @@
                             "application/json": {
                                 "schema": {
                                     "$ref": "#/components/schemas/ResourceSummaryResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                },
+                "x-portals": [
+                    "USER"
+                ]
+            }
+        },
+        "/api/v2/me/dashboard": {
+            "get": {
+                "operationId": "me_dashboard",
+                "tags": [
+                    "me"
+                ],
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/DashboardData"
                                 }
                             }
                         },
@@ -2609,6 +2646,34 @@
                 ]
             }
         },
+        "/api/v2/platform/tasks/anomalies": {
+            "get": {
+                "operationId": "platform_experiment_task_anomalies",
+                "tags": [
+                    "platform"
+                ],
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/GenericResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                },
+                "x-portals": [
+                    "PLATFORM"
+                ]
+            }
+        },
         "/api/v2/platform/teacher-qualifications": {
             "get": {
                 "operationId": "platform_teacher_qualifications_retrieve",
@@ -3182,6 +3247,423 @@
                         "description": ""
                     }
                 }
+            }
+        },
+        "/api/v2/tasks": {
+            "get": {
+                "operationId": "tasks_list",
+                "tags": [
+                    "tasks"
+                ],
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/TaskData"
+                                    }
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                },
+                "x-portals": [
+                    "USER"
+                ]
+            }
+        },
+        "/api/v2/tasks/{task_id}": {
+            "get": {
+                "operationId": "tasks_retrieve",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "task_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "tasks"
+                ],
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/TaskData"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                },
+                "x-portals": [
+                    "USER"
+                ]
+            }
+        },
+        "/api/v2/tasks/{task_id}/extension-requests": {
+            "post": {
+                "operationId": "tasks_extension_requests_create",
+                "parameters": [
+                    {
+                        "in": "header",
+                        "name": "Idempotency-Key",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "task_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "tasks"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/TaskExtensionWrite"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/TaskExtensionWrite"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/TaskExtensionWrite"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ExtensionData"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                },
+                "x-portals": [
+                    "USER"
+                ]
+            }
+        },
+        "/api/v2/tasks/{task_id}/extensions": {
+            "get": {
+                "operationId": "tasks_extensions_list",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "task_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "tasks"
+                ],
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/ExtensionData"
+                                    }
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                },
+                "x-portals": [
+                    "USER"
+                ]
+            }
+        },
+        "/api/v2/tasks/{task_id}/provisioning-job": {
+            "get": {
+                "operationId": "tasks_provisioning_job_retrieve",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "task_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "tasks"
+                ],
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ProvisioningJob"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                },
+                "x-portals": [
+                    "USER"
+                ]
+            }
+        },
+        "/api/v2/tasks/{task_id}/provisioning-job/cancel": {
+            "post": {
+                "operationId": "tasks_provisioning_cancel",
+                "parameters": [
+                    {
+                        "in": "header",
+                        "name": "Idempotency-Key",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "header",
+                        "name": "If-Match",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "task_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "tasks"
+                ],
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ProvisioningActionResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                },
+                "x-portals": [
+                    "USER"
+                ]
+            }
+        },
+        "/api/v2/tasks/{task_id}/retry": {
+            "post": {
+                "operationId": "tasks_retry",
+                "parameters": [
+                    {
+                        "in": "header",
+                        "name": "Idempotency-Key",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "header",
+                        "name": "If-Match",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "task_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "tasks"
+                ],
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ProvisioningActionResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                },
+                "x-portals": [
+                    "USER"
+                ]
+            }
+        },
+        "/api/v2/tasks/{task_id}/start": {
+            "post": {
+                "operationId": "tasks_start",
+                "parameters": [
+                    {
+                        "in": "header",
+                        "name": "Idempotency-Key",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "header",
+                        "name": "If-Match",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "task_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "tasks"
+                ],
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ProvisioningActionResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                },
+                "x-portals": [
+                    "USER"
+                ]
+            }
+        },
+        "/api/v2/tasks/{task_id}/transitions": {
+            "get": {
+                "operationId": "tasks_transitions_list",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "task_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "tasks"
+                ],
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/TransitionData"
+                                    }
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                },
+                "x-portals": [
+                    "USER"
+                ]
             }
         },
         "/api/v2/teaching/courses": {
@@ -4287,6 +4769,692 @@
                 ]
             }
         },
+        "/api/v2/teaching/courses/{course_id}/experiments": {
+            "get": {
+                "operationId": "teaching_experiments_list",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "course_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "teaching"
+                ],
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/PublicationData"
+                                    }
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                },
+                "x-portals": [
+                    "TEACHING"
+                ]
+            },
+            "post": {
+                "operationId": "teaching_experiments_create",
+                "parameters": [
+                    {
+                        "in": "header",
+                        "name": "Idempotency-Key",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "course_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "teaching"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/PublicationWrite"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/PublicationWrite"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/PublicationWrite"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/PublicationData"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                },
+                "x-portals": [
+                    "TEACHING"
+                ]
+            }
+        },
+        "/api/v2/teaching/courses/{course_id}/experiments/{publication_id}": {
+            "get": {
+                "operationId": "teaching_experiments_retrieve",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "course_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "publication_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "teaching"
+                ],
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/PublicationData"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                },
+                "x-portals": [
+                    "TEACHING"
+                ]
+            },
+            "patch": {
+                "operationId": "teaching_experiments_update",
+                "parameters": [
+                    {
+                        "in": "header",
+                        "name": "If-Match",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "course_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "publication_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "teaching"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/PatchedPublicationPatch"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/PatchedPublicationPatch"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/PatchedPublicationPatch"
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/PublicationData"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                },
+                "x-portals": [
+                    "TEACHING"
+                ]
+            }
+        },
+        "/api/v2/teaching/courses/{course_id}/experiments/{publication_id}/close": {
+            "post": {
+                "operationId": "teaching_courses_experiments_close_create",
+                "parameters": [
+                    {
+                        "in": "header",
+                        "name": "Idempotency-Key",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "header",
+                        "name": "If-Match",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "course_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "publication_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "teaching"
+                ],
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/PublicationData"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "202": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/PublicationData"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/PublicationData"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                },
+                "x-portals": [
+                    "TEACHING"
+                ]
+            }
+        },
+        "/api/v2/teaching/courses/{course_id}/experiments/{publication_id}/publish": {
+            "post": {
+                "operationId": "teaching_courses_experiments_publish_create",
+                "parameters": [
+                    {
+                        "in": "header",
+                        "name": "Idempotency-Key",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "header",
+                        "name": "If-Match",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "course_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "publication_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "teaching"
+                ],
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/PublicationData"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "202": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/PublicationData"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/PublicationData"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                },
+                "x-portals": [
+                    "TEACHING"
+                ]
+            }
+        },
+        "/api/v2/teaching/courses/{course_id}/experiments/{publication_id}/tasks": {
+            "get": {
+                "operationId": "teaching_experiment_tasks_list",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "course_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "publication_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "teaching"
+                ],
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/TaskData"
+                                    }
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                },
+                "x-portals": [
+                    "TEACHING"
+                ]
+            }
+        },
+        "/api/v2/teaching/courses/{course_id}/experiments/{publication_id}/withdraw": {
+            "post": {
+                "operationId": "teaching_courses_experiments_withdraw_create",
+                "parameters": [
+                    {
+                        "in": "header",
+                        "name": "Idempotency-Key",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "header",
+                        "name": "If-Match",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "course_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "publication_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "teaching"
+                ],
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/PublicationData"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "202": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/PublicationData"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/PublicationData"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                },
+                "x-portals": [
+                    "TEACHING"
+                ]
+            }
+        },
+        "/api/v2/teaching/courses/{course_id}/extension-requests": {
+            "get": {
+                "operationId": "teaching_experiment_extensions_list",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "course_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "teaching"
+                ],
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/ExtensionData"
+                                    }
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                },
+                "x-portals": [
+                    "TEACHING"
+                ]
+            }
+        },
+        "/api/v2/teaching/courses/{course_id}/extension-requests/{request_id}": {
+            "get": {
+                "operationId": "teaching_experiment_extension_retrieve",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "course_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "request_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "teaching"
+                ],
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ExtensionData"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                },
+                "x-portals": [
+                    "TEACHING"
+                ]
+            }
+        },
+        "/api/v2/teaching/courses/{course_id}/extension-requests/{request_id}/decide": {
+            "post": {
+                "operationId": "teaching_experiment_extension_decide",
+                "parameters": [
+                    {
+                        "in": "header",
+                        "name": "Idempotency-Key",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "header",
+                        "name": "If-Match",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "course_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "request_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "teaching"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/TaskExtensionDecision"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/TaskExtensionDecision"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/TaskExtensionDecision"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ExtensionData"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                },
+                "x-portals": [
+                    "TEACHING"
+                ]
+            }
+        },
         "/api/v2/teaching/courses/{course_id}/governance": {
             "get": {
                 "operationId": "teaching_course_governance_retrieve",
@@ -4653,6 +5821,44 @@
                         "description": ""
                     }
                 }
+            }
+        },
+        "/api/v2/teaching/courses/{course_id}/progress": {
+            "get": {
+                "operationId": "teaching_experiment_progress",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "course_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "teaching"
+                ],
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/GenericResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                },
+                "x-portals": [
+                    "TEACHING"
+                ]
             }
         },
         "/api/v2/teaching/courses/{course_id}/publish": {
@@ -7080,6 +8286,14 @@
                     "body"
                 ]
             },
+            "AudienceModeEnum": {
+                "enum": [
+                    "ALL_ACTIVE",
+                    "SELECTED"
+                ],
+                "type": "string",
+                "description": "* `ALL_ACTIVE` - All Active\n* `SELECTED` - Selected"
+            },
             "AutoCheckRuleData": {
                 "type": "object",
                 "properties": {
@@ -7327,7 +8541,7 @@
                         "minimum": 1
                     },
                     "kind": {
-                        "$ref": "#/components/schemas/KindEnum"
+                        "$ref": "#/components/schemas/ContentWriteKindEnum"
                     },
                     "text_content": {
                         "type": "string"
@@ -7352,6 +8566,15 @@
                         "type": "boolean"
                     }
                 }
+            },
+            "ContentWriteKindEnum": {
+                "enum": [
+                    "FILE",
+                    "LINK",
+                    "TEXT"
+                ],
+                "type": "string",
+                "description": "* `FILE` - FILE\n* `LINK` - LINK\n* `TEXT` - TEXT"
             },
             "CopyWrite": {
                 "type": "object",
@@ -7653,7 +8876,26 @@
                     "meta"
                 ]
             },
-            "DecisionEnum": {
+            "DashboardData": {
+                "type": "object",
+                "properties": {
+                    "counts": {
+                        "type": "object",
+                        "additionalProperties": {}
+                    },
+                    "next_tasks": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/TaskData"
+                        }
+                    }
+                },
+                "required": [
+                    "counts",
+                    "next_tasks"
+                ]
+            },
+            "Decision328Enum": {
                 "enum": [
                     "APPROVE",
                     "REJECT"
@@ -7844,7 +9086,7 @@
                 "type": "object",
                 "properties": {
                     "decision": {
-                        "$ref": "#/components/schemas/DecisionEnum"
+                        "$ref": "#/components/schemas/Decision328Enum"
                     },
                     "note": {
                         "type": "string",
@@ -7892,6 +9134,88 @@
                 },
                 "required": [
                     "error"
+                ]
+            },
+            "ExtensionData": {
+                "type": "object",
+                "properties": {
+                    "public_id": {
+                        "type": "string"
+                    },
+                    "task_id": {
+                        "type": "string"
+                    },
+                    "requested_by": {
+                        "type": "string"
+                    },
+                    "original_deadline": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "requested_deadline": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "reason": {
+                        "type": "string"
+                    },
+                    "status": {
+                        "$ref": "#/components/schemas/ExtensionDataStatusEnum"
+                    },
+                    "effective_deadline": {
+                        "type": "string",
+                        "format": "date-time",
+                        "nullable": true
+                    },
+                    "row_version": {
+                        "type": "integer"
+                    },
+                    "decisions": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "additionalProperties": {}
+                        }
+                    }
+                },
+                "required": [
+                    "decisions",
+                    "effective_deadline",
+                    "original_deadline",
+                    "public_id",
+                    "reason",
+                    "requested_by",
+                    "requested_deadline",
+                    "row_version",
+                    "status",
+                    "task_id"
+                ]
+            },
+            "ExtensionDataStatusEnum": {
+                "enum": [
+                    "PENDING",
+                    "APPROVED",
+                    "REJECTED",
+                    "CANCELLED"
+                ],
+                "type": "string",
+                "description": "* `PENDING` - Pending\n* `APPROVED` - Approved\n* `REJECTED` - Rejected\n* `CANCELLED` - Cancelled"
+            },
+            "GenericResponse": {
+                "type": "object",
+                "properties": {
+                    "data": {
+                        "type": "object",
+                        "additionalProperties": {}
+                    },
+                    "meta": {
+                        "type": "object",
+                        "additionalProperties": {}
+                    }
+                },
+                "required": [
+                    "data",
+                    "meta"
                 ]
             },
             "GovernancePageMeta": {
@@ -8073,7 +9397,7 @@
                 "type": "object",
                 "properties": {
                     "decision": {
-                        "$ref": "#/components/schemas/DecisionEnum"
+                        "$ref": "#/components/schemas/Decision328Enum"
                     },
                     "reason": {
                         "type": "string",
@@ -8285,14 +9609,13 @@
                     "max_uses"
                 ]
             },
-            "KindEnum": {
+            "LateEnrollmentPolicyEnum": {
                 "enum": [
-                    "FILE",
-                    "LINK",
-                    "TEXT"
+                    "ASSIGN_UNTIL_DEADLINE",
+                    "DO_NOT_ASSIGN"
                 ],
                 "type": "string",
-                "description": "* `FILE` - FILE\n* `LINK` - LINK\n* `TEXT` - TEXT"
+                "description": "* `ASSIGN_UNTIL_DEADLINE` - Assign Until Deadline\n* `DO_NOT_ASSIGN` - Do Not Assign"
             },
             "LoginInput": {
                 "type": "object",
@@ -8523,6 +9846,57 @@
                     "display_name": {
                         "type": "string",
                         "maxLength": 64
+                    }
+                }
+            },
+            "PatchedPublicationPatch": {
+                "type": "object",
+                "properties": {
+                    "template_version_id": {
+                        "type": "string",
+                        "maxLength": 26
+                    },
+                    "rubric_version_id": {
+                        "type": "string",
+                        "maxLength": 26
+                    },
+                    "title": {
+                        "type": "string",
+                        "maxLength": 180
+                    },
+                    "description": {
+                        "type": "string"
+                    },
+                    "audience_mode": {
+                        "$ref": "#/components/schemas/AudienceModeEnum"
+                    },
+                    "late_enrollment_policy": {
+                        "$ref": "#/components/schemas/LateEnrollmentPolicyEnum"
+                    },
+                    "assignment_deadline": {
+                        "type": "string",
+                        "format": "date-time",
+                        "nullable": true
+                    },
+                    "window_start": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "window_end": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "report_required": {
+                        "type": "boolean"
+                    },
+                    "review_mode": {
+                        "$ref": "#/components/schemas/ReviewModeEnum"
+                    },
+                    "prerequisites": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/PrerequisiteWrite"
+                        }
                     }
                 }
             },
@@ -8995,6 +10369,33 @@
                     "meta"
                 ]
             },
+            "PrerequisiteWrite": {
+                "type": "object",
+                "properties": {
+                    "kind": {
+                        "$ref": "#/components/schemas/PrerequisiteWriteKindEnum"
+                    },
+                    "chapter_id": {
+                        "type": "string",
+                        "maxLength": 26
+                    },
+                    "publication_id": {
+                        "type": "string",
+                        "maxLength": 26
+                    }
+                },
+                "required": [
+                    "kind"
+                ]
+            },
+            "PrerequisiteWriteKindEnum": {
+                "enum": [
+                    "CHAPTER",
+                    "PUBLICATION"
+                ],
+                "type": "string",
+                "description": "* `CHAPTER` - CHAPTER\n* `PUBLICATION` - PUBLICATION"
+            },
             "ProtocolEnum": {
                 "enum": [
                     "TCP",
@@ -9002,6 +10403,329 @@
                 ],
                 "type": "string",
                 "description": "* `TCP` - Tcp\n* `UDP` - Udp"
+            },
+            "ProvisioningActionResponse": {
+                "type": "object",
+                "properties": {
+                    "job_id": {
+                        "type": "string"
+                    },
+                    "subject_id": {
+                        "type": "string"
+                    },
+                    "status": {
+                        "$ref": "#/components/schemas/Status4f0Enum"
+                    },
+                    "events_channel": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "events_channel",
+                    "job_id",
+                    "status",
+                    "subject_id"
+                ]
+            },
+            "ProvisioningJob": {
+                "type": "object",
+                "properties": {
+                    "public_id": {
+                        "type": "string"
+                    },
+                    "task_id": {
+                        "type": "string"
+                    },
+                    "course_id": {
+                        "type": "string"
+                    },
+                    "status": {
+                        "$ref": "#/components/schemas/Status4f0Enum"
+                    },
+                    "current_stage": {
+                        "type": "string"
+                    },
+                    "attempt_no": {
+                        "type": "integer"
+                    },
+                    "attempt_count": {
+                        "type": "integer"
+                    },
+                    "retryable": {
+                        "type": "boolean"
+                    },
+                    "trace_id": {
+                        "type": "string"
+                    },
+                    "reservation": {
+                        "type": "object",
+                        "additionalProperties": {}
+                    },
+                    "instance": {
+                        "type": "object",
+                        "additionalProperties": {},
+                        "nullable": true
+                    },
+                    "stages": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/ProvisioningStageEvent"
+                        }
+                    },
+                    "failure": {
+                        "type": "object",
+                        "additionalProperties": {},
+                        "nullable": true
+                    },
+                    "events_channel": {
+                        "type": "string"
+                    },
+                    "row_version": {
+                        "type": "integer"
+                    }
+                },
+                "required": [
+                    "attempt_count",
+                    "attempt_no",
+                    "course_id",
+                    "current_stage",
+                    "events_channel",
+                    "failure",
+                    "instance",
+                    "public_id",
+                    "reservation",
+                    "retryable",
+                    "row_version",
+                    "stages",
+                    "status",
+                    "task_id",
+                    "trace_id"
+                ]
+            },
+            "ProvisioningStageEvent": {
+                "type": "object",
+                "properties": {
+                    "public_id": {
+                        "type": "string"
+                    },
+                    "stage": {
+                        "$ref": "#/components/schemas/StageEnum"
+                    },
+                    "status": {
+                        "$ref": "#/components/schemas/ProvisioningStageEventStatusEnum"
+                    },
+                    "attempt_no": {
+                        "type": "integer"
+                    },
+                    "detail": {
+                        "type": "object",
+                        "additionalProperties": {}
+                    },
+                    "error_code": {
+                        "type": "string"
+                    },
+                    "trace_id": {
+                        "type": "string"
+                    },
+                    "started_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "nullable": true
+                    },
+                    "completed_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "nullable": true
+                    }
+                },
+                "required": [
+                    "attempt_no",
+                    "completed_at",
+                    "detail",
+                    "error_code",
+                    "public_id",
+                    "stage",
+                    "started_at",
+                    "status",
+                    "trace_id"
+                ]
+            },
+            "ProvisioningStageEventStatusEnum": {
+                "enum": [
+                    "STARTED",
+                    "PASSED",
+                    "FAILED",
+                    "SKIPPED"
+                ],
+                "type": "string",
+                "description": "* `STARTED` - Started\n* `PASSED` - Passed\n* `FAILED` - Failed\n* `SKIPPED` - Skipped"
+            },
+            "PublicationData": {
+                "type": "object",
+                "properties": {
+                    "public_id": {
+                        "type": "string"
+                    },
+                    "course_id": {
+                        "type": "string"
+                    },
+                    "template_version_id": {
+                        "type": "string"
+                    },
+                    "rubric_version_id": {
+                        "type": "string"
+                    },
+                    "title": {
+                        "type": "string"
+                    },
+                    "description": {
+                        "type": "string"
+                    },
+                    "audience_mode": {
+                        "$ref": "#/components/schemas/AudienceModeEnum"
+                    },
+                    "late_enrollment_policy": {
+                        "$ref": "#/components/schemas/LateEnrollmentPolicyEnum"
+                    },
+                    "window_start": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "window_end": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "assignment_deadline": {
+                        "type": "string",
+                        "format": "date-time",
+                        "nullable": true
+                    },
+                    "report_required": {
+                        "type": "boolean"
+                    },
+                    "review_mode": {
+                        "$ref": "#/components/schemas/ReviewModeEnum"
+                    },
+                    "status": {
+                        "$ref": "#/components/schemas/PublicationDataStatusEnum"
+                    },
+                    "audience_count": {
+                        "type": "integer"
+                    },
+                    "prerequisites": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "additionalProperties": {}
+                        }
+                    },
+                    "publication_error": {
+                        "type": "object",
+                        "additionalProperties": {}
+                    },
+                    "row_version": {
+                        "type": "integer"
+                    }
+                },
+                "required": [
+                    "assignment_deadline",
+                    "audience_count",
+                    "audience_mode",
+                    "course_id",
+                    "description",
+                    "late_enrollment_policy",
+                    "prerequisites",
+                    "public_id",
+                    "publication_error",
+                    "report_required",
+                    "review_mode",
+                    "row_version",
+                    "rubric_version_id",
+                    "status",
+                    "template_version_id",
+                    "title",
+                    "window_end",
+                    "window_start"
+                ]
+            },
+            "PublicationDataStatusEnum": {
+                "enum": [
+                    "DRAFT",
+                    "PUBLISHING",
+                    "PUBLISHED",
+                    "PUBLISH_FAILED",
+                    "CLOSED",
+                    "WITHDRAWN"
+                ],
+                "type": "string",
+                "description": "* `DRAFT` - Draft\n* `PUBLISHING` - Publishing\n* `PUBLISHED` - Published\n* `PUBLISH_FAILED` - Publish Failed\n* `CLOSED` - Closed\n* `WITHDRAWN` - Withdrawn"
+            },
+            "PublicationWrite": {
+                "type": "object",
+                "properties": {
+                    "template_version_id": {
+                        "type": "string",
+                        "maxLength": 26
+                    },
+                    "rubric_version_id": {
+                        "type": "string",
+                        "maxLength": 26
+                    },
+                    "title": {
+                        "type": "string",
+                        "maxLength": 180
+                    },
+                    "description": {
+                        "type": "string"
+                    },
+                    "audience_mode": {
+                        "$ref": "#/components/schemas/AudienceModeEnum"
+                    },
+                    "selected_enrollment_ids": {
+                        "type": "array",
+                        "items": {
+                            "type": "string",
+                            "maxLength": 26
+                        }
+                    },
+                    "late_enrollment_policy": {
+                        "$ref": "#/components/schemas/LateEnrollmentPolicyEnum"
+                    },
+                    "assignment_deadline": {
+                        "type": "string",
+                        "format": "date-time",
+                        "nullable": true
+                    },
+                    "window_start": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "window_end": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "report_required": {
+                        "type": "boolean"
+                    },
+                    "review_mode": {
+                        "$ref": "#/components/schemas/ReviewModeEnum"
+                    },
+                    "prerequisites": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/PrerequisiteWrite"
+                        }
+                    }
+                },
+                "required": [
+                    "audience_mode",
+                    "review_mode",
+                    "rubric_version_id",
+                    "template_version_id",
+                    "title",
+                    "window_end",
+                    "window_start"
+                ]
             },
             "PurposeEnum": {
                 "enum": [
@@ -9545,6 +11269,14 @@
                     "meta"
                 ]
             },
+            "ReviewModeEnum": {
+                "enum": [
+                    "MANUAL",
+                    "MANUAL_WITH_AUTO_CHECK"
+                ],
+                "type": "string",
+                "description": "* `MANUAL` - Manual\n* `MANUAL_WITH_AUTO_CHECK` - Manual With Auto Check"
+            },
             "RiskLevelEnum": {
                 "enum": [
                     "LOW",
@@ -10047,6 +11779,30 @@
                     "meta"
                 ]
             },
+            "StageEnum": {
+                "enum": [
+                    "QUOTA_CHECK",
+                    "IMAGE_PREPARE",
+                    "CREATE",
+                    "NETWORK_ATTACH",
+                    "BOOT_PROBE",
+                    "WORKSPACE_READY"
+                ],
+                "type": "string",
+                "description": "* `QUOTA_CHECK` - Quota Check\n* `IMAGE_PREPARE` - Image Prepare\n* `CREATE` - Create\n* `NETWORK_ATTACH` - Network Attach\n* `BOOT_PROBE` - Boot Probe\n* `WORKSPACE_READY` - Workspace Ready"
+            },
+            "Status4f0Enum": {
+                "enum": [
+                    "QUEUED",
+                    "RUNNING",
+                    "RETRY",
+                    "PASSED",
+                    "FAILED",
+                    "CANCELLED"
+                ],
+                "type": "string",
+                "description": "* `QUEUED` - Queued\n* `RUNNING` - Running\n* `RETRY` - Retry\n* `PASSED` - Passed\n* `FAILED` - Failed\n* `CANCELLED` - Cancelled"
+            },
             "Status9b1Enum": {
                 "enum": [
                     "DRAFT",
@@ -10078,6 +11834,175 @@
                 ],
                 "type": "string",
                 "description": "* `HOST` - Host\n* `CIDR` - Cidr"
+            },
+            "TaskData": {
+                "type": "object",
+                "properties": {
+                    "public_id": {
+                        "type": "string"
+                    },
+                    "course_id": {
+                        "type": "string"
+                    },
+                    "publication_id": {
+                        "type": "string"
+                    },
+                    "enrollment_id": {
+                        "type": "string"
+                    },
+                    "student_id": {
+                        "type": "string"
+                    },
+                    "student_name": {
+                        "type": "string"
+                    },
+                    "title": {
+                        "type": "string"
+                    },
+                    "template_version_id": {
+                        "type": "string"
+                    },
+                    "template_name": {
+                        "type": "string"
+                    },
+                    "template_spec_digest": {
+                        "type": "string",
+                        "nullable": true
+                    },
+                    "runtime_type": {
+                        "type": "string"
+                    },
+                    "status": {
+                        "$ref": "#/components/schemas/TaskDataStatusEnum"
+                    },
+                    "terminal_target": {
+                        "type": "string",
+                        "nullable": true
+                    },
+                    "progress": {
+                        "type": "integer"
+                    },
+                    "window_start": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "window_end": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "effective_deadline": {
+                        "type": "string",
+                        "format": "date-time",
+                        "nullable": true
+                    },
+                    "allowed_actions": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "blockers": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "additionalProperties": {}
+                        }
+                    },
+                    "current_failure": {
+                        "type": "object",
+                        "additionalProperties": {}
+                    },
+                    "provisioning": {
+                        "type": "object",
+                        "additionalProperties": {},
+                        "nullable": true
+                    },
+                    "row_version": {
+                        "type": "integer"
+                    }
+                },
+                "required": [
+                    "allowed_actions",
+                    "blockers",
+                    "course_id",
+                    "current_failure",
+                    "effective_deadline",
+                    "enrollment_id",
+                    "progress",
+                    "public_id",
+                    "publication_id",
+                    "row_version",
+                    "runtime_type",
+                    "status",
+                    "student_id",
+                    "template_name",
+                    "template_spec_digest",
+                    "template_version_id",
+                    "terminal_target",
+                    "title",
+                    "window_end",
+                    "window_start"
+                ]
+            },
+            "TaskDataStatusEnum": {
+                "enum": [
+                    "ASSIGNED",
+                    "PROVISIONING",
+                    "READY",
+                    "IN_PROGRESS",
+                    "REPORT_DRAFT",
+                    "UNDER_REVIEW",
+                    "APPROVED",
+                    "REJECTED",
+                    "ARCHIVING",
+                    "DESTROYING",
+                    "COMPLETED",
+                    "CANCELLED",
+                    "EXPIRED",
+                    "FAILED"
+                ],
+                "type": "string",
+                "description": "* `ASSIGNED` - Assigned\n* `PROVISIONING` - Provisioning\n* `READY` - Ready\n* `IN_PROGRESS` - In Progress\n* `REPORT_DRAFT` - Report Draft\n* `UNDER_REVIEW` - Under Review\n* `APPROVED` - Approved\n* `REJECTED` - Rejected\n* `ARCHIVING` - Archiving\n* `DESTROYING` - Destroying\n* `COMPLETED` - Completed\n* `CANCELLED` - Cancelled\n* `EXPIRED` - Expired\n* `FAILED` - Failed"
+            },
+            "TaskExtensionDecision": {
+                "type": "object",
+                "properties": {
+                    "decision": {
+                        "$ref": "#/components/schemas/TaskExtensionDecisionDecisionEnum"
+                    },
+                    "reason": {
+                        "type": "string",
+                        "maxLength": 2000
+                    }
+                },
+                "required": [
+                    "decision"
+                ]
+            },
+            "TaskExtensionDecisionDecisionEnum": {
+                "enum": [
+                    "APPROVE",
+                    "REJECT"
+                ],
+                "type": "string",
+                "description": "* `APPROVE` - Approve\n* `REJECT` - Reject"
+            },
+            "TaskExtensionWrite": {
+                "type": "object",
+                "properties": {
+                    "requested_deadline": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "reason": {
+                        "type": "string",
+                        "maxLength": 2000
+                    }
+                },
+                "required": [
+                    "reason",
+                    "requested_deadline"
+                ]
             },
             "TeacherQualificationUpdateStatusEnum": {
                 "enum": [
@@ -10630,6 +12555,47 @@
                 },
                 "required": [
                     "trace_id"
+                ]
+            },
+            "TransitionData": {
+                "type": "object",
+                "properties": {
+                    "public_id": {
+                        "type": "string"
+                    },
+                    "from_status": {
+                        "type": "string"
+                    },
+                    "to_status": {
+                        "type": "string"
+                    },
+                    "trigger": {
+                        "type": "string"
+                    },
+                    "reason": {
+                        "type": "string"
+                    },
+                    "detail": {
+                        "type": "object",
+                        "additionalProperties": {}
+                    },
+                    "trace_id": {
+                        "type": "string"
+                    },
+                    "created_at": {
+                        "type": "string",
+                        "format": "date-time"
+                    }
+                },
+                "required": [
+                    "created_at",
+                    "detail",
+                    "from_status",
+                    "public_id",
+                    "reason",
+                    "to_status",
+                    "trace_id",
+                    "trigger"
                 ]
             },
             "UsageData": {

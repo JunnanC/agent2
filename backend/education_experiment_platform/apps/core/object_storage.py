@@ -59,6 +59,34 @@ class S3ObjectStorage:
             version_id=str(response.get("VersionId", "")),
         )
 
+    def head_object(self, *, bucket: str, object_key: str, version_id: str = "") -> StoredObject:
+        kwargs: dict[str, str] = {"Bucket": bucket, "Key": object_key}
+        if version_id:
+            kwargs["VersionId"] = version_id
+        response = self.client.head_object(**kwargs)
+        return StoredObject(
+            body=None,
+            content_length=int(response.get("ContentLength", 0)),
+            content_type=str(response.get("ContentType", "")),
+            version_id=str(response.get("VersionId", version_id)),
+        )
+
+    def put_stream(
+        self, *, bucket: str, object_key: str, stream: Any, media_type: str
+    ) -> StoredObject:
+        response = self.client.put_object(
+            Bucket=bucket,
+            Key=object_key,
+            Body=stream,
+            ContentType=media_type,
+        )
+        return StoredObject(
+            body=None,
+            content_length=0,
+            content_type=media_type,
+            version_id=str(response.get("VersionId", "")),
+        )
+
     def delete_object(self, *, bucket: str, object_key: str, version_id: str = "") -> None:
         kwargs: dict[str, str] = {"Bucket": bucket, "Key": object_key}
         if version_id:

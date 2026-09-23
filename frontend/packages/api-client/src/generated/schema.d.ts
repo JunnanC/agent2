@@ -231,6 +231,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v2/me/dashboard": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["me_dashboard"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v2/me/enrollments": {
         parameters: {
             query?: never;
@@ -727,6 +743,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v2/platform/tasks/anomalies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["platform_experiment_task_anomalies"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v2/platform/teacher-qualifications": {
         parameters: {
             query?: never;
@@ -897,6 +929,150 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["user_question_answers_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/tasks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["tasks_list"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/tasks/{task_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["tasks_retrieve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/tasks/{task_id}/extension-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["tasks_extension_requests_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/tasks/{task_id}/extensions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["tasks_extensions_list"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/tasks/{task_id}/provisioning-job": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["tasks_provisioning_job_retrieve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/tasks/{task_id}/provisioning-job/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["tasks_provisioning_cancel"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/tasks/{task_id}/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["tasks_retry"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/tasks/{task_id}/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["tasks_start"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/tasks/{task_id}/transitions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["tasks_transitions_list"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1207,6 +1383,150 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v2/teaching/courses/{course_id}/experiments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["teaching_experiments_list"];
+        put?: never;
+        post: operations["teaching_experiments_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/teaching/courses/{course_id}/experiments/{publication_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["teaching_experiments_retrieve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch: operations["teaching_experiments_update"];
+        trace?: never;
+    };
+    "/api/v2/teaching/courses/{course_id}/experiments/{publication_id}/close": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["teaching_courses_experiments_close_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/teaching/courses/{course_id}/experiments/{publication_id}/publish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["teaching_courses_experiments_publish_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/teaching/courses/{course_id}/experiments/{publication_id}/tasks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["teaching_experiment_tasks_list"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/teaching/courses/{course_id}/experiments/{publication_id}/withdraw": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["teaching_courses_experiments_withdraw_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/teaching/courses/{course_id}/extension-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["teaching_experiment_extensions_list"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/teaching/courses/{course_id}/extension-requests/{request_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["teaching_experiment_extension_retrieve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/teaching/courses/{course_id}/extension-requests/{request_id}/decide": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["teaching_experiment_extension_decide"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v2/teaching/courses/{course_id}/governance": {
         parameters: {
             query?: never;
@@ -1280,6 +1600,22 @@ export interface paths {
         };
         get: operations["teaching_course_prerequisites_list"];
         put: operations["teaching_course_prerequisites_update"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/teaching/courses/{course_id}/progress": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["teaching_experiment_progress"];
+        put?: never;
         post?: never;
         delete?: never;
         options?: never;
@@ -1794,6 +2130,12 @@ export interface components {
         AnswerWrite: {
             body: string;
         };
+        /**
+         * @description * `ALL_ACTIVE` - All Active
+         *     * `SELECTED` - Selected
+         * @enum {string}
+         */
+        AudienceModeEnum: "ALL_ACTIVE" | "SELECTED";
         AutoCheckRuleData: {
             public_id: string;
             position: number;
@@ -1887,12 +2229,19 @@ export interface components {
             summary?: string;
             body?: string;
             position?: number;
-            kind?: components["schemas"]["KindEnum"];
+            kind?: components["schemas"]["ContentWriteKindEnum"];
             text_content?: string;
             link_url?: string;
             object_asset_id?: string;
             pinned?: boolean;
         };
+        /**
+         * @description * `FILE` - FILE
+         *     * `LINK` - LINK
+         *     * `TEXT` - TEXT
+         * @enum {string}
+         */
+        ContentWriteKindEnum: "FILE" | "LINK" | "TEXT";
         CopyWrite: {
             code?: string;
             title?: string;
@@ -1985,12 +2334,18 @@ export interface components {
             data: components["schemas"]["CsrfData"];
             meta: components["schemas"]["AccountTraceMeta"];
         };
+        DashboardData: {
+            counts: {
+                [key: string]: unknown;
+            };
+            next_tasks: components["schemas"]["TaskData"][];
+        };
         /**
          * @description * `APPROVE` - APPROVE
          *     * `REJECT` - REJECT
          * @enum {string}
          */
-        DecisionEnum: "APPROVE" | "REJECT";
+        Decision328Enum: "APPROVE" | "REJECT";
         /**
          * @description * `DOCKER_SWARM` - Docker Swarm
          *     * `LIBVIRT` - Libvirt
@@ -2050,7 +2405,7 @@ export interface components {
             meta: components["schemas"]["CourseTraceMeta"];
         };
         EnrollmentReview: {
-            decision: components["schemas"]["DecisionEnum"];
+            decision: components["schemas"]["Decision328Enum"];
             note?: string;
         };
         ErrorBody: {
@@ -2064,6 +2419,39 @@ export interface components {
         };
         ErrorEnvelope: {
             error: components["schemas"]["ErrorBody"];
+        };
+        ExtensionData: {
+            public_id: string;
+            task_id: string;
+            requested_by: string;
+            /** Format: date-time */
+            original_deadline: string;
+            /** Format: date-time */
+            requested_deadline: string;
+            reason: string;
+            status: components["schemas"]["ExtensionDataStatusEnum"];
+            /** Format: date-time */
+            effective_deadline: string | null;
+            row_version: number;
+            decisions: {
+                [key: string]: unknown;
+            }[];
+        };
+        /**
+         * @description * `PENDING` - Pending
+         *     * `APPROVED` - Approved
+         *     * `REJECTED` - Rejected
+         *     * `CANCELLED` - Cancelled
+         * @enum {string}
+         */
+        ExtensionDataStatusEnum: "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED";
+        GenericResponse: {
+            data: {
+                [key: string]: unknown;
+            };
+            meta: {
+                [key: string]: unknown;
+            };
         };
         GovernancePageMeta: {
             trace_id: string;
@@ -2112,7 +2500,7 @@ export interface components {
             meta: components["schemas"]["TraceMeta"];
         };
         IdentityReview: {
-            decision: components["schemas"]["DecisionEnum"];
+            decision: components["schemas"]["Decision328Enum"];
             reason?: string;
         };
         /**
@@ -2171,12 +2559,11 @@ export interface components {
             expires_at: string;
         };
         /**
-         * @description * `FILE` - FILE
-         *     * `LINK` - LINK
-         *     * `TEXT` - TEXT
+         * @description * `ASSIGN_UNTIL_DEADLINE` - Assign Until Deadline
+         *     * `DO_NOT_ASSIGN` - Do Not Assign
          * @enum {string}
          */
-        KindEnum: "FILE" | "LINK" | "TEXT";
+        LateEnrollmentPolicyEnum: "ASSIGN_UNTIL_DEADLINE" | "DO_NOT_ASSIGN";
         LoginInput: {
             identifier: string;
             password: string;
@@ -2244,6 +2631,23 @@ export interface components {
         };
         PatchedProfileUpdate: {
             display_name?: string;
+        };
+        PatchedPublicationPatch: {
+            template_version_id?: string;
+            rubric_version_id?: string;
+            title?: string;
+            description?: string;
+            audience_mode?: components["schemas"]["AudienceModeEnum"];
+            late_enrollment_policy?: components["schemas"]["LateEnrollmentPolicyEnum"];
+            /** Format: date-time */
+            assignment_deadline?: string | null;
+            /** Format: date-time */
+            window_start?: string;
+            /** Format: date-time */
+            window_end?: string;
+            report_required?: boolean;
+            review_mode?: components["schemas"]["ReviewModeEnum"];
+            prerequisites?: components["schemas"]["PrerequisiteWrite"][];
         };
         PatchedQuotaWrite: {
             scope_type?: string;
@@ -2396,12 +2800,130 @@ export interface components {
                 [key: string]: unknown;
             };
         };
+        PrerequisiteWrite: {
+            kind: components["schemas"]["PrerequisiteWriteKindEnum"];
+            chapter_id?: string;
+            publication_id?: string;
+        };
+        /**
+         * @description * `CHAPTER` - CHAPTER
+         *     * `PUBLICATION` - PUBLICATION
+         * @enum {string}
+         */
+        PrerequisiteWriteKindEnum: "CHAPTER" | "PUBLICATION";
         /**
          * @description * `TCP` - Tcp
          *     * `UDP` - Udp
          * @enum {string}
          */
         ProtocolEnum: "TCP" | "UDP";
+        ProvisioningActionResponse: {
+            job_id: string;
+            subject_id: string;
+            status: components["schemas"]["Status4f0Enum"];
+            events_channel: string;
+        };
+        ProvisioningJob: {
+            public_id: string;
+            task_id: string;
+            course_id: string;
+            status: components["schemas"]["Status4f0Enum"];
+            current_stage: string;
+            attempt_no: number;
+            attempt_count: number;
+            retryable: boolean;
+            trace_id: string;
+            reservation: {
+                [key: string]: unknown;
+            };
+            instance: {
+                [key: string]: unknown;
+            } | null;
+            stages: components["schemas"]["ProvisioningStageEvent"][];
+            failure: {
+                [key: string]: unknown;
+            } | null;
+            events_channel: string;
+            row_version: number;
+        };
+        ProvisioningStageEvent: {
+            public_id: string;
+            stage: components["schemas"]["StageEnum"];
+            status: components["schemas"]["ProvisioningStageEventStatusEnum"];
+            attempt_no: number;
+            detail: {
+                [key: string]: unknown;
+            };
+            error_code: string;
+            trace_id: string;
+            /** Format: date-time */
+            started_at: string | null;
+            /** Format: date-time */
+            completed_at: string | null;
+        };
+        /**
+         * @description * `STARTED` - Started
+         *     * `PASSED` - Passed
+         *     * `FAILED` - Failed
+         *     * `SKIPPED` - Skipped
+         * @enum {string}
+         */
+        ProvisioningStageEventStatusEnum: "STARTED" | "PASSED" | "FAILED" | "SKIPPED";
+        PublicationData: {
+            public_id: string;
+            course_id: string;
+            template_version_id: string;
+            rubric_version_id: string;
+            title: string;
+            description: string;
+            audience_mode: components["schemas"]["AudienceModeEnum"];
+            late_enrollment_policy: components["schemas"]["LateEnrollmentPolicyEnum"];
+            /** Format: date-time */
+            window_start: string;
+            /** Format: date-time */
+            window_end: string;
+            /** Format: date-time */
+            assignment_deadline: string | null;
+            report_required: boolean;
+            review_mode: components["schemas"]["ReviewModeEnum"];
+            status: components["schemas"]["PublicationDataStatusEnum"];
+            audience_count: number;
+            prerequisites: {
+                [key: string]: unknown;
+            }[];
+            publication_error: {
+                [key: string]: unknown;
+            };
+            row_version: number;
+        };
+        /**
+         * @description * `DRAFT` - Draft
+         *     * `PUBLISHING` - Publishing
+         *     * `PUBLISHED` - Published
+         *     * `PUBLISH_FAILED` - Publish Failed
+         *     * `CLOSED` - Closed
+         *     * `WITHDRAWN` - Withdrawn
+         * @enum {string}
+         */
+        PublicationDataStatusEnum: "DRAFT" | "PUBLISHING" | "PUBLISHED" | "PUBLISH_FAILED" | "CLOSED" | "WITHDRAWN";
+        PublicationWrite: {
+            template_version_id: string;
+            rubric_version_id: string;
+            title: string;
+            description?: string;
+            audience_mode: components["schemas"]["AudienceModeEnum"];
+            selected_enrollment_ids?: string[];
+            late_enrollment_policy?: components["schemas"]["LateEnrollmentPolicyEnum"];
+            /** Format: date-time */
+            assignment_deadline?: string | null;
+            /** Format: date-time */
+            window_start: string;
+            /** Format: date-time */
+            window_end: string;
+            report_required?: boolean;
+            review_mode: components["schemas"]["ReviewModeEnum"];
+            prerequisites?: components["schemas"]["PrerequisiteWrite"][];
+        };
         /**
          * @description * `MANUAL` - MANUAL
          *     * `STARTER` - STARTER
@@ -2545,6 +3067,12 @@ export interface components {
             data: components["schemas"]["ResourceSummaryData"];
             meta: components["schemas"]["GovernanceTraceMeta"];
         };
+        /**
+         * @description * `MANUAL` - Manual
+         *     * `MANUAL_WITH_AUTO_CHECK` - Manual With Auto Check
+         * @enum {string}
+         */
+        ReviewModeEnum: "MANUAL" | "MANUAL_WITH_AUTO_CHECK";
         /**
          * @description * `LOW` - Low
          *     * `MEDIUM` - Medium
@@ -2700,6 +3228,26 @@ export interface components {
             meta: components["schemas"]["CourseTraceMeta"];
         };
         /**
+         * @description * `QUOTA_CHECK` - Quota Check
+         *     * `IMAGE_PREPARE` - Image Prepare
+         *     * `CREATE` - Create
+         *     * `NETWORK_ATTACH` - Network Attach
+         *     * `BOOT_PROBE` - Boot Probe
+         *     * `WORKSPACE_READY` - Workspace Ready
+         * @enum {string}
+         */
+        StageEnum: "QUOTA_CHECK" | "IMAGE_PREPARE" | "CREATE" | "NETWORK_ATTACH" | "BOOT_PROBE" | "WORKSPACE_READY";
+        /**
+         * @description * `QUEUED` - Queued
+         *     * `RUNNING` - Running
+         *     * `RETRY` - Retry
+         *     * `PASSED` - Passed
+         *     * `FAILED` - Failed
+         *     * `CANCELLED` - Cancelled
+         * @enum {string}
+         */
+        Status4f0Enum: "QUEUED" | "RUNNING" | "RETRY" | "PASSED" | "FAILED" | "CANCELLED";
+        /**
          * @description * `DRAFT` - Draft
          *     * `PUBLISHED` - Published
          * @enum {string}
@@ -2715,6 +3263,72 @@ export interface components {
          * @enum {string}
          */
         TargetTypeEnum: "HOST" | "CIDR";
+        TaskData: {
+            public_id: string;
+            course_id: string;
+            publication_id: string;
+            enrollment_id: string;
+            student_id: string;
+            student_name?: string;
+            title: string;
+            template_version_id: string;
+            template_name: string;
+            template_spec_digest: string | null;
+            runtime_type: string;
+            status: components["schemas"]["TaskDataStatusEnum"];
+            terminal_target: string | null;
+            progress: number;
+            /** Format: date-time */
+            window_start: string;
+            /** Format: date-time */
+            window_end: string;
+            /** Format: date-time */
+            effective_deadline: string | null;
+            allowed_actions: string[];
+            blockers: {
+                [key: string]: unknown;
+            }[];
+            current_failure: {
+                [key: string]: unknown;
+            };
+            provisioning?: {
+                [key: string]: unknown;
+            } | null;
+            row_version: number;
+        };
+        /**
+         * @description * `ASSIGNED` - Assigned
+         *     * `PROVISIONING` - Provisioning
+         *     * `READY` - Ready
+         *     * `IN_PROGRESS` - In Progress
+         *     * `REPORT_DRAFT` - Report Draft
+         *     * `UNDER_REVIEW` - Under Review
+         *     * `APPROVED` - Approved
+         *     * `REJECTED` - Rejected
+         *     * `ARCHIVING` - Archiving
+         *     * `DESTROYING` - Destroying
+         *     * `COMPLETED` - Completed
+         *     * `CANCELLED` - Cancelled
+         *     * `EXPIRED` - Expired
+         *     * `FAILED` - Failed
+         * @enum {string}
+         */
+        TaskDataStatusEnum: "ASSIGNED" | "PROVISIONING" | "READY" | "IN_PROGRESS" | "REPORT_DRAFT" | "UNDER_REVIEW" | "APPROVED" | "REJECTED" | "ARCHIVING" | "DESTROYING" | "COMPLETED" | "CANCELLED" | "EXPIRED" | "FAILED";
+        TaskExtensionDecision: {
+            decision: components["schemas"]["TaskExtensionDecisionDecisionEnum"];
+            reason?: string;
+        };
+        /**
+         * @description * `APPROVE` - Approve
+         *     * `REJECT` - Reject
+         * @enum {string}
+         */
+        TaskExtensionDecisionDecisionEnum: "APPROVE" | "REJECT";
+        TaskExtensionWrite: {
+            /** Format: date-time */
+            requested_deadline: string;
+            reason: string;
+        };
         /**
          * @description * `SUSPENDED` - SUSPENDED
          *     * `REVOKED` - REVOKED
@@ -2912,6 +3526,19 @@ export interface components {
         };
         TraceMeta: {
             trace_id: string;
+        };
+        TransitionData: {
+            public_id: string;
+            from_status: string;
+            to_status: string;
+            trigger: string;
+            reason: string;
+            detail: {
+                [key: string]: unknown;
+            };
+            trace_id: string;
+            /** Format: date-time */
+            created_at: string;
         };
         UsageData: {
             reservation: {
@@ -3213,7 +3840,9 @@ export interface operations {
     };
     events_stream_retrieve: {
         parameters: {
-            query?: never;
+            query?: {
+                channel?: string;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -3336,6 +3965,25 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ResourceSummaryResponse"];
+                };
+            };
+        };
+    };
+    me_dashboard: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DashboardData"];
                 };
             };
         };
@@ -4396,6 +5044,25 @@ export interface operations {
             };
         };
     };
+    platform_experiment_task_anomalies: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GenericResponse"];
+                };
+            };
+        };
+    };
     platform_teacher_qualifications_retrieve: {
         parameters: {
             query?: never;
@@ -4697,6 +5364,210 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CourseContentResponse"];
+                };
+            };
+        };
+    };
+    tasks_list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskData"][];
+                };
+            };
+        };
+    };
+    tasks_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskData"];
+                };
+            };
+        };
+    };
+    tasks_extension_requests_create: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TaskExtensionWrite"];
+                "application/x-www-form-urlencoded": components["schemas"]["TaskExtensionWrite"];
+                "multipart/form-data": components["schemas"]["TaskExtensionWrite"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExtensionData"];
+                };
+            };
+        };
+    };
+    tasks_extensions_list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExtensionData"][];
+                };
+            };
+        };
+    };
+    tasks_provisioning_job_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProvisioningJob"];
+                };
+            };
+        };
+    };
+    tasks_provisioning_cancel: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+                "If-Match": string;
+            };
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProvisioningActionResponse"];
+                };
+            };
+        };
+    };
+    tasks_retry: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+                "If-Match": string;
+            };
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProvisioningActionResponse"];
+                };
+            };
+        };
+    };
+    tasks_start: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+                "If-Match": string;
+            };
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProvisioningActionResponse"];
+                };
+            };
+        };
+    };
+    tasks_transitions_list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TransitionData"][];
                 };
             };
         };
@@ -5258,6 +6129,327 @@ export interface operations {
             };
         };
     };
+    teaching_experiments_list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicationData"][];
+                };
+            };
+        };
+    };
+    teaching_experiments_create: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PublicationWrite"];
+                "application/x-www-form-urlencoded": components["schemas"]["PublicationWrite"];
+                "multipart/form-data": components["schemas"]["PublicationWrite"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicationData"];
+                };
+            };
+        };
+    };
+    teaching_experiments_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                course_id: string;
+                publication_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicationData"];
+                };
+            };
+        };
+    };
+    teaching_experiments_update: {
+        parameters: {
+            query?: never;
+            header: {
+                "If-Match": string;
+            };
+            path: {
+                course_id: string;
+                publication_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["PatchedPublicationPatch"];
+                "application/x-www-form-urlencoded": components["schemas"]["PatchedPublicationPatch"];
+                "multipart/form-data": components["schemas"]["PatchedPublicationPatch"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicationData"];
+                };
+            };
+        };
+    };
+    teaching_courses_experiments_close_create: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+                "If-Match": string;
+            };
+            path: {
+                course_id: string;
+                publication_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicationData"];
+                };
+            };
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicationData"];
+                };
+            };
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicationData"];
+                };
+            };
+        };
+    };
+    teaching_courses_experiments_publish_create: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+                "If-Match": string;
+            };
+            path: {
+                course_id: string;
+                publication_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicationData"];
+                };
+            };
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicationData"];
+                };
+            };
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicationData"];
+                };
+            };
+        };
+    };
+    teaching_experiment_tasks_list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                course_id: string;
+                publication_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskData"][];
+                };
+            };
+        };
+    };
+    teaching_courses_experiments_withdraw_create: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+                "If-Match": string;
+            };
+            path: {
+                course_id: string;
+                publication_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicationData"];
+                };
+            };
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicationData"];
+                };
+            };
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicationData"];
+                };
+            };
+        };
+    };
+    teaching_experiment_extensions_list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExtensionData"][];
+                };
+            };
+        };
+    };
+    teaching_experiment_extension_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                course_id: string;
+                request_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExtensionData"];
+                };
+            };
+        };
+    };
+    teaching_experiment_extension_decide: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+                "If-Match": string;
+            };
+            path: {
+                course_id: string;
+                request_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TaskExtensionDecision"];
+                "application/x-www-form-urlencoded": components["schemas"]["TaskExtensionDecision"];
+                "multipart/form-data": components["schemas"]["TaskExtensionDecision"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExtensionData"];
+                };
+            };
+        };
+    };
     teaching_course_governance_retrieve: {
         parameters: {
             query?: never;
@@ -5444,6 +6636,27 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CourseContentListResponse"];
+                };
+            };
+        };
+    };
+    teaching_experiment_progress: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GenericResponse"];
                 };
             };
         };

@@ -1,0 +1,7 @@
+JOB_CREATED = "provisioning.job_created"
+STAGE_CHANGED = "provisioning.stage_changed"
+JOB_PASSED = "provisioning.job_passed"
+JOB_FAILED = "provisioning.job_failed"
+JOB_CANCELLED = "provisioning.job_cancelled"
+INSTANCE_CREATED = "provisioning.instance_created"
+INSTANCE_DESTROYED = "provisioning.instance_destroyed"

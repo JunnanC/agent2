@@ -27,8 +27,8 @@ DEBUG = False
 ALLOWED_HOSTS = csv_env("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1,django")
 CSRF_TRUSTED_ORIGINS = csv_env("DJANGO_TRUSTED_ORIGINS")
 
-APP_VERSION = env("APP_VERSION", "0.6.0-p05")
-OPENAPI_REVISION = env("OPENAPI_REVISION", "v2-p05")
+APP_VERSION = env("APP_VERSION", "0.8.0-p08")
+OPENAPI_REVISION = env("OPENAPI_REVISION", "v2-p08")
 GIT_REVISION = env("GIT_REVISION", "development")
 BUILD_TIME = env("BUILD_TIME", "development")
 TRUSTED_PROXY_CIDRS = csv_env(
@@ -102,7 +102,9 @@ REST_FRAMEWORK: dict[str, object] = {
 
 SPECTACULAR_SETTINGS: dict[str, object] = {
     "TITLE": "Education Agent Platform API",
-    "DESCRIPTION": "P05 templates, Rubrics, governed assets, and precheck contract.",
+    "DESCRIPTION": (
+        "P07 asynchronous provisioning jobs, FakeRuntime orchestration, and P06 experiments."
+    ),
     "VERSION": OPENAPI_REVISION,
     "SERVE_INCLUDE_SCHEMA": False,
     "OAS_VERSION": "3.0.3",
@@ -144,7 +146,15 @@ CELERY_TASK_ROUTES = {
     "apps.analytics.*": {"queue": "q_analytics"},
     "apps.integrations.*": {"queue": "q_integrations"},
     "apps.notifications.*": {"queue": "q_default"},
+    "apps.experiments.*": {"queue": "q_default"},
+    "apps.workspaces.*": {"queue": "q_default"},
 }
+WORKSPACE_TOKEN_HMAC_KEY = env("WORKSPACE_TOKEN_HMAC_KEY", SECRET_KEY)
+WORKSPACE_SESSION_TTL_SECONDS = int(env("WORKSPACE_SESSION_TTL_SECONDS", "900"))
+WORKSPACE_SNAPSHOT_MAX_BYTES = int(env("WORKSPACE_SNAPSHOT_MAX_BYTES", str(20 * 1024 * 1024)))
+SSE_HEARTBEAT_SECONDS = int(env("SSE_HEARTBEAT_SECONDS", "20"))
+P06_PUBLICATION_SYNC_LIMIT = int(env("P06_PUBLICATION_SYNC_LIMIT", "100"))
+P06_PUBLICATION_CHUNK_SIZE = int(env("P06_PUBLICATION_CHUNK_SIZE", "50"))
 COURSE_INVITATION_HMAC_KEY = env("COURSE_INVITATION_HMAC_KEY", SECRET_KEY)
 GOVERNANCE_CACHE_TTL_SECONDS = int(env("GOVERNANCE_CACHE_TTL_SECONDS", "300"))
 GOVERNANCE_HEALTH_STALE_SECONDS = int(env("GOVERNANCE_HEALTH_STALE_SECONDS", "300"))

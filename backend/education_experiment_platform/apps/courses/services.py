@@ -30,7 +30,12 @@ from .models import (
     Enrollment,
     EnrollmentEvent,
 )
-from .ports import Blocker, course_archive_blockers, enrollment_blockers
+from .ports import (
+    Blocker,
+    course_archive_blockers,
+    enrollment_blockers,
+    run_enrollment_activation_handlers,
+)
 from .selectors import require_course_capability, require_owner
 
 
@@ -907,6 +912,8 @@ def apply_for_course(
             "status": status,
         },
     )
+    if status == Enrollment.Status.ACTIVE:
+        run_enrollment_activation_handlers(enrollment=enrollment, context=context)
     COURSE_ENROLLMENT_DECISIONS_TOTAL.labels(mode=course.enrollment_mode, result=status).inc()
     return enrollment
 
@@ -1037,6 +1044,8 @@ def review_enrollment(
             "status": next_status,
         },
     )
+    if next_status == Enrollment.Status.ACTIVE:
+        run_enrollment_activation_handlers(enrollment=changed, context=context)
     COURSE_ENROLLMENT_DECISIONS_TOTAL.labels(
         mode=course.enrollment_mode,
         result=next_status,

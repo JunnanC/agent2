@@ -1,9 +1,9 @@
-name: edu-platform-p05
+name: edu-platform-p07
 
 x-app-environment: &app-environment
   APP_ENV: local
-  APP_VERSION: ${APP_VERSION:-0.6.0-p05}
-  OPENAPI_REVISION: ${OPENAPI_REVISION:-v2-p05}
+  APP_VERSION: ${APP_VERSION:-0.8.0-p07}
+  OPENAPI_REVISION: ${OPENAPI_REVISION:-v2-p07}
   GIT_REVISION: ${GIT_REVISION:-development}
   BUILD_TIME: ${BUILD_TIME:-development}
   DJANGO_SETTINGS_MODULE: education_experiment_platform.settings.integration
@@ -377,8 +377,8 @@ services:
       args:
         NODE_BASE_IMAGE: ${NODE_BASE_IMAGE:-public.ecr.aws/docker/library/node:24-alpine}
         NGINX_BASE_IMAGE: ${NGINX_BASE_IMAGE:-m.daocloud.io/docker.io/library/nginx:1.29-alpine}
-        APP_VERSION: ${APP_VERSION:-0.6.0-p05}
-        OPENAPI_REVISION: ${OPENAPI_REVISION:-v2-p05}
+        APP_VERSION: ${APP_VERSION:-0.8.0-p07}
+        OPENAPI_REVISION: ${OPENAPI_REVISION:-v2-p07}
         GIT_REVISION: ${GIT_REVISION:-development}
         BUILD_TIME: ${BUILD_TIME:-development}
     read_only: true

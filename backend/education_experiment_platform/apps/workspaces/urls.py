@@ -1,0 +1,69 @@
+from django.urls import path
+
+from .views import (
+    PlatformWorkspaceSessionsView,
+    TeachingOperationReplayView,
+    TeachingWorkspaceView,
+    UserCheckpointListCreateView,
+    UserCheckpointRestoreView,
+    UserOperationReplayView,
+    UserTaskEnterView,
+    UserWorkspaceSessionCreateView,
+    UserWorkspaceSnapshotView,
+    WorkspaceSessionRenewView,
+    WorkspaceSessionRevokeView,
+)
+
+urlpatterns = [
+    path("tasks/<str:task_id>/enter", UserTaskEnterView.as_view(), name="workspace-task-enter"),
+    path(
+        "tasks/<str:task_id>/workspace-sessions",
+        UserWorkspaceSessionCreateView.as_view(),
+        name="workspace-session-create",
+    ),
+    path(
+        "workspace-sessions/<str:session_id>/renew",
+        WorkspaceSessionRenewView.as_view(),
+        name="workspace-session-renew",
+    ),
+    path(
+        "workspace-sessions/<str:session_id>/revoke",
+        WorkspaceSessionRevokeView.as_view(),
+        name="workspace-session-revoke",
+    ),
+    path(
+        "tasks/<str:task_id>/workspace-snapshot",
+        UserWorkspaceSnapshotView.as_view(),
+        name="workspace-snapshot",
+    ),
+    path(
+        "tasks/<str:task_id>/checkpoints",
+        UserCheckpointListCreateView.as_view(),
+        name="workspace-checkpoints",
+    ),
+    path(
+        "tasks/<str:task_id>/checkpoints/<str:checkpoint_id>/restore",
+        UserCheckpointRestoreView.as_view(),
+        name="workspace-checkpoint-restore",
+    ),
+    path(
+        "tasks/<str:task_id>/operation-replay",
+        UserOperationReplayView.as_view(),
+        name="workspace-operation-replay",
+    ),
+    path(
+        "teaching/courses/<str:course_id>/tasks/<str:task_id>/workspace",
+        TeachingWorkspaceView.as_view(),
+        name="teaching-workspace",
+    ),
+    path(
+        "teaching/courses/<str:course_id>/tasks/<str:task_id>/operation-replay",
+        TeachingOperationReplayView.as_view(),
+        name="teaching-workspace-replay",
+    ),
+    path(
+        "platform/workspaces/sessions",
+        PlatformWorkspaceSessionsView.as_view(),
+        name="platform-workspace-sessions",
+    ),
+]

@@ -58,3 +58,19 @@ export const rubricKeys = {
   versions: (courseId: string, rubricId: string) => [...rubricKeys.all, courseId, rubricId, 'versions'] as const,
   version: (courseId: string, versionId: string) => [...rubricKeys.all, courseId, 'versions', versionId] as const,
 }
+
+export const experimentKeys = {
+  all: ['experiments'] as const,
+  publications: (courseId: string) => [...experimentKeys.all, 'publications', courseId] as const,
+  publication: (courseId: string, publicationId: string) => [...experimentKeys.publications(courseId), publicationId] as const,
+  tasks: (courseId: string, publicationId: string, filters: object = {}) => [...experimentKeys.publication(courseId, publicationId), 'tasks', filters] as const,
+  progress: (courseId: string) => [...experimentKeys.all, 'progress', courseId] as const,
+  extensionRequests: (courseId: string, filters: object = {}) => [...experimentKeys.all, 'extensions', courseId, filters] as const,
+  dashboard: () => ['me', 'experiment-dashboard'] as const,
+  myTasks: (filters: object = {}) => ['me', 'experiment-tasks', filters] as const,
+  task: (taskId: string) => ['me', 'experiment-task', taskId] as const,
+  provisioningJob: (taskId: string) => [...experimentKeys.task(taskId), 'provisioning-job'] as const,
+  transitions: (taskId: string) => [...experimentKeys.task(taskId), 'transitions'] as const,
+  extensions: (taskId: string) => [...experimentKeys.task(taskId), 'extensions'] as const,
+  anomalies: () => [...experimentKeys.all, 'anomalies'] as const,
+}

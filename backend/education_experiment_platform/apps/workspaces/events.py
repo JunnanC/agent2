@@ -1,0 +1,8 @@
+SESSION_CREATED = "workspace.session.created"
+SESSION_RENEWED = "workspace.session.renewed"
+SESSION_REVOKED = "workspace.session.revoked"
+SNAPSHOT_SAVED = "workspace.snapshot.saved"
+CHECKPOINT_CREATED = "workspace.checkpoint.created"
+CHECKPOINT_RESTORED = "workspace.checkpoint.restored"
+OPERATION_RECORDED = "workspace.operation.recorded"
+RESYNC_REQUIRED = "resync.required"

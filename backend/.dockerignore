@@ -4,7 +4,6 @@ __pycache__/
 *.py[cod]
 .env
 .env.*
-!.env.example
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/
@@ -14,4 +13,3 @@ dist/
 build/
 media/
 staticfiles/
-education_experiment_platform/
