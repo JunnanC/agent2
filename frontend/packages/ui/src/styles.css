@@ -91,9 +91,12 @@ a { color: inherit; }
 .error-page__code { color: var(--accent); font-size: 64px; font-weight: 800; }
 .error-page p { margin-bottom: 28px; color: #60707d; }
 
-.workspace-page { width: 100%; align-self: start; display: grid; gap: 26px; }
+.workspace-page { width: 100%; min-width: 0; align-self: start; display: grid; gap: 26px; }
+.workspace-page > * { min-width: 0; }
 .page-header { display: flex; align-items: end; justify-content: space-between; gap: 24px; padding-bottom: 20px; border-bottom: 1px solid #d7dde1; }
+.page-header > div { min-width: 0; }
 .page-header h1 { margin: 8px 0 4px; font-size: 30px; line-height: 1.15; }
+.page-header h1 { overflow-wrap: anywhere; }
 .page-header p { margin: 0; color: #61707d; }
 .page-header__actions, .toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .summary-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
@@ -101,6 +104,7 @@ a { color: inherit; }
 .summary-item span { display: block; color: #6a7883; font-size: 12px; }
 .summary-item strong { display: block; margin-top: 10px; overflow-wrap: anywhere; font-size: 18px; }
 .section-block { display: grid; gap: 16px; padding: 22px 0; border-top: 1px solid #e0e4e7; }
+.section-block > * { min-width: 0; }
 .section-block:first-of-type { border-top: 0; }
 .section-block h2 { margin: 0; font-size: 19px; }
 .workspace-lab__grid { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(280px, .8fr); gap: 28px; }
@@ -129,6 +133,13 @@ a { color: inherit; }
 .data-table th { color: #566570; background: #f5f7f8; font-weight: 700; }
 .data-table tr:last-child td { border-bottom: 0; }
 .data-table td[data-wrap] { min-width: 180px; white-space: normal; }
+.archive-table { min-width: 0; table-layout: fixed; }
+.archive-table th, .archive-table td { overflow-wrap: anywhere; white-space: normal; }
+.archive-table td[data-wrap] { min-width: 0; }
+.archive-table th:nth-child(1), .archive-table td:nth-child(1) { width: 13%; }
+.archive-table th:nth-child(2), .archive-table td:nth-child(2) { width: 17%; }
+.archive-table th:nth-child(3), .archive-table td:nth-child(3) { width: 15%; }
+.archive-table th:nth-child(4), .archive-table td:nth-child(4) { width: 55%; }
 .status-badge { display: inline-flex; min-height: 24px; align-items: center; padding: 2px 8px; border-radius: 4px; color: #46535d; background: #edf0f2; font-size: 11px; font-weight: 750; }
 .status-badge--success { color: #0b6248; background: #e1f2eb; }
 .status-badge--warning { color: #80510d; background: #fff0d5; }

@@ -27,8 +27,8 @@ DEBUG = False
 ALLOWED_HOSTS = csv_env("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1,django")
 CSRF_TRUSTED_ORIGINS = csv_env("DJANGO_TRUSTED_ORIGINS")
 
-APP_VERSION = env("APP_VERSION", "0.10.0-p10")
-OPENAPI_REVISION = env("OPENAPI_REVISION", "v2-p10")
+APP_VERSION = env("APP_VERSION", "0.11.0-p11")
+OPENAPI_REVISION = env("OPENAPI_REVISION", "v2-p11")
 GIT_REVISION = env("GIT_REVISION", "development")
 BUILD_TIME = env("BUILD_TIME", "development")
 TRUSTED_PROXY_CIDRS = csv_env(
@@ -104,7 +104,7 @@ REST_FRAMEWORK: dict[str, object] = {
 SPECTACULAR_SETTINGS: dict[str, object] = {
     "TITLE": "Education Agent Platform API",
     "DESCRIPTION": (
-        "P10 teacher reviews, immutable decisions, auto-check evidence, and similarity support."
+        "P11 verified archives, controlled exports, runtime cleanup, and reconciliation."
     ),
     "VERSION": OPENAPI_REVISION,
     "SERVE_INCLUDE_SCHEMA": False,
@@ -154,6 +154,20 @@ CELERY_TASK_ROUTES = {
     "apps.reviews.run_similarity_check": {"queue": "q_analytics"},
     "apps.reviews.purge_similarity_evidence": {"queue": "q_default"},
 }
+CELERY_BEAT_SCHEDULE = {
+    "p11-scan-task-deadlines": {
+        "task": "apps.archives.scan_due_tasks",
+        "schedule": 60.0,
+    },
+    "p11-reconcile-archives-and-runtime": {
+        "task": "apps.archives.reconcile",
+        "schedule": 60.0,
+    },
+    "p11-run-compensations": {
+        "task": "apps.core.run_compensations",
+        "schedule": 30.0,
+    },
+}
 SIMILARITY_ALGORITHM_VERSION = env(
     "SIMILARITY_ALGORITHM_VERSION", "char-5gram-jaccard-v1"
 )
@@ -191,6 +205,10 @@ TEMPLATE_CHECK_TIMEOUT_MAX_SECONDS = int(env("TEMPLATE_CHECK_TIMEOUT_MAX_SECONDS
 REPORT_ATTACHMENT_MAX_BYTES = int(env("REPORT_ATTACHMENT_MAX_BYTES", str(20 * 1024 * 1024)))
 REPORT_UPLOAD_EXPIRES_SECONDS = int(env("REPORT_UPLOAD_EXPIRES_SECONDS", "900"))
 FILE_DOWNLOAD_GRANT_TTL_SECONDS = int(env("FILE_DOWNLOAD_GRANT_TTL_SECONDS", "300"))
+ARCHIVE_RETENTION_DAYS = int(env("ARCHIVE_RETENTION_DAYS", "365"))
+ARCHIVE_SAFE_RECYCLE_SECONDS = int(env("ARCHIVE_SAFE_RECYCLE_SECONDS", "900"))
+ARCHIVE_EXPORT_TTL_SECONDS = int(env("ARCHIVE_EXPORT_TTL_SECONDS", "300"))
+ARCHIVE_MAX_ATTEMPTS = int(env("ARCHIVE_MAX_ATTEMPTS", "5"))
 
 LOGGING = {
     "version": 1,

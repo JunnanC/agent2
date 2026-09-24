@@ -43,6 +43,7 @@ from .models import (
     TaskPublication,
     TaskStateTransition,
 )
+from .ports import request_task_terminal
 
 TASK_TRANSITIONS: dict[str, set[str]] = {
     ExperimentTask.Status.ASSIGNED: {
@@ -694,9 +695,7 @@ def execute_publication_assignment(*, publication_id: str, context: Any) -> Task
 
 def retry_publication_assignment_compensation(task: CompensationTask) -> None:
     with transaction.atomic():
-        publication = TaskPublication.objects.select_for_update().get(
-            public_id=task.subject_ref
-        )
+        publication = TaskPublication.objects.select_for_update().get(public_id=task.subject_ref)
         if publication.status in {
             TaskPublication.Status.PUBLISHED,
             TaskPublication.Status.CLOSED,
@@ -873,12 +872,13 @@ def withdraw_publication(
                 reason="publication withdrawn",
                 context=context,
             )
-        elif task.terminal_target is None:
-            compare_and_swap(
-                ExperimentTask,
-                pk=task.pk,
-                expected_version=task.row_version,
-                changes={"terminal_target": ExperimentTask.TerminalTarget.CANCELLED},
+        else:
+            request_task_terminal(
+                task_id=task.public_id,
+                terminal_target=ExperimentTask.TerminalTarget.CANCELLED,
+                trigger="WITHDRAW",
+                context=context,
+                actor=actor,
             )
     _emit(
         event_type=events.PUBLICATION_WITHDRAWN,

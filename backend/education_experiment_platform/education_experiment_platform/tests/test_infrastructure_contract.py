@@ -172,14 +172,31 @@ def test_p10_runtime_database_grants_keep_review_history_append_only() -> None:
         "reviews_similarity_run",
         "reviews_similarity_match",
     ):
-        assert f"GRANT SELECT, INSERT, UPDATE ON \`${{MYSQL_DATABASE}}\`.{table}" in bootstrap
+        assert rf"GRANT SELECT, INSERT, UPDATE ON \`${{MYSQL_DATABASE}}\`.{table}" in bootstrap
     for table in (
         "reviews_criterion_score_event",
         "reviews_review_decision",
         "reviews_annotation_revision",
     ):
-        assert f"GRANT SELECT, INSERT ON \`${{MYSQL_DATABASE}}\`.{table}" in bootstrap
-        assert f"GRANT SELECT, INSERT, UPDATE ON \`${{MYSQL_DATABASE}}\`.{table}" not in bootstrap
+        assert rf"GRANT SELECT, INSERT ON \`${{MYSQL_DATABASE}}\`.{table}" in bootstrap
+        assert rf"GRANT SELECT, INSERT, UPDATE ON \`${{MYSQL_DATABASE}}\`.{table}" not in bootstrap
+
+
+def test_p11_archive_permissions_and_scheduler_are_least_privilege() -> None:
+    bootstrap = (ROOT / "infrastructure/mysql/configure-users.sh").read_text(encoding="utf-8")
+    assert (
+        r"GRANT SELECT, INSERT, UPDATE ON \`${MYSQL_DATABASE}\`.archives_archive_job"
+        in bootstrap
+    )
+    for table in (
+        "archives_archive_manifest",
+        "archives_archive_verification",
+        "archives_export_grant",
+    ):
+        assert rf"GRANT SELECT, INSERT ON \`${{MYSQL_DATABASE}}\`.{table}" in bootstrap
+        assert rf"GRANT SELECT, INSERT, UPDATE ON \`${{MYSQL_DATABASE}}\`.{table}" not in bootstrap
+    compose = load_yaml("docker-compose.dev.yml")
+    assert compose["services"]["celery-beat"]["command"][3] == "beat"
 
 
 def test_p08_minio_policy_scopes_versioned_workspace_objects() -> None:
@@ -191,6 +208,7 @@ def test_p08_minio_policy_scopes_versioned_workspace_objects() -> None:
         "arn:aws:s3:::edu-platform/template-assets/*",
         "arn:aws:s3:::edu-platform/workspaces/*",
         "arn:aws:s3:::edu-platform/reports/*",
+        "arn:aws:s3:::edu-platform/archives/*",
     }
     assert {"s3:GetObjectVersion", "s3:DeleteObjectVersion"} <= set(object_statement["Action"])
 

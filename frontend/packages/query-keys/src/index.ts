@@ -104,3 +104,12 @@ export const reviewKeys = {
   result: (taskId: string) => [...reviewKeys.all, 'result', taskId] as const,
   monitor: () => [...reviewKeys.all, 'monitor'] as const,
 }
+
+export const archiveKeys = {
+  all: ['archives'] as const,
+  user: (taskId: string) => [...archiveKeys.all, 'user', taskId] as const,
+  course: (courseId: string) => [...archiveKeys.all, 'course', courseId] as const,
+  detail: (courseId: string, archiveId: string) => [...archiveKeys.course(courseId), archiveId] as const,
+  instances: () => [...archiveKeys.all, 'platform', 'instances'] as const,
+  compensations: (status = '') => [...archiveKeys.all, 'platform', 'compensations', status] as const,
+}

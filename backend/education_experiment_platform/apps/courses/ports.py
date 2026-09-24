@@ -27,11 +27,13 @@ EnrollmentBlockerProvider = Callable[[Enrollment], list[Blocker]]
 CourseBlockerProvider = Callable[[Course], list[Blocker]]
 CourseCopyHandler = Callable[[CourseCopyJob, Course, Course, User, Any], None]
 EnrollmentActivationHandler = Callable[[Enrollment, Any], None]
+CourseClosedHandler = Callable[[Course, Any], None]
 
 _enrollment_blocker_providers: list[EnrollmentBlockerProvider] = []
 _course_archive_blocker_providers: list[CourseBlockerProvider] = []
 _course_copy_handlers: list[CourseCopyHandler] = []
 _enrollment_activation_handlers: list[EnrollmentActivationHandler] = []
+_course_closed_handlers: list[CourseClosedHandler] = []
 
 
 def register_enrollment_blocker(provider: EnrollmentBlockerProvider) -> None:
@@ -54,6 +56,11 @@ def register_enrollment_activation_handler(handler: EnrollmentActivationHandler)
         _enrollment_activation_handlers.append(handler)
 
 
+def register_course_closed_handler(handler: CourseClosedHandler) -> None:
+    if handler not in _course_closed_handlers:
+        _course_closed_handlers.append(handler)
+
+
 def enrollment_blockers(enrollment: Enrollment) -> list[Blocker]:
     return [item for provider in _enrollment_blocker_providers for item in provider(enrollment)]
 
@@ -74,6 +81,11 @@ def run_enrollment_activation_handlers(*, enrollment: Enrollment, context: Any) 
         handler(enrollment, context)
 
 
+def run_course_closed_handlers(*, course: Course, context: Any) -> None:
+    for handler in _course_closed_handlers:
+        handler(course, context)
+
+
 def published_material_versions(
     *, course: Course, public_ids: Iterable[str] | None = None
 ) -> list[MaterialVersion]:
@@ -91,3 +103,4 @@ def clear_blocker_providers() -> None:
     _course_archive_blocker_providers.clear()
     _course_copy_handlers.clear()
     _enrollment_activation_handlers.clear()
+    _course_closed_handlers.clear()

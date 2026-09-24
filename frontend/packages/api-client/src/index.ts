@@ -153,6 +153,16 @@ export type ReviewResultResponse = components['schemas']['ReviewResultResponse']
 export type SimilarityRunResponse = components['schemas']['SimilarityRunResponse']
 export type SimilarityMatchListResponse = components['schemas']['SimilarityMatchListResponse']
 export type ReviewMonitorResponse = components['schemas']['ReviewMonitorResponse']
+export type ArchiveData = components['schemas']['ArchiveData']
+export type ArchiveResponse = components['schemas']['ArchiveResponse']
+export type ArchiveListResponse = components['schemas']['ArchiveListResponse']
+export type ArchiveExportResponse = components['schemas']['ArchiveExportResponse']
+export type InstanceData = components['schemas']['InstanceData']
+export type InstanceListResponse = components['schemas']['InstanceListResponse']
+export type InstanceResponse = components['schemas']['InstanceResponse']
+export type CompensationData = components['schemas']['CompensationData']
+export type CompensationListResponse = components['schemas']['CompensationListResponse']
+export type CompensationResponse = components['schemas']['CompensationResponse']
 
 export interface ApiFailure {
   error: {
@@ -318,6 +328,43 @@ export async function apiRequestWithMetadata<T>(
 
 export async function apiRequest<T>(path: string, init?: ApiRequestInit): Promise<T> {
   return (await apiRequestWithMetadata<T>(path, init)).payload
+}
+
+export async function downloadFileInMemory(
+  path: string,
+  onProgress?: (received: number, total: number | null) => void,
+): Promise<Blob> {
+  if (!path.startsWith('/files/')) throw new TypeError('Download path is invalid')
+  const response = await fetch(path, { credentials: 'include', headers: { Accept: 'application/octet-stream' } })
+  if (!response.ok || !response.body) throw new Error('DOWNLOAD_FAILED')
+  const totalHeader = response.headers.get('Content-Length')
+  const total = totalHeader ? Number(totalHeader) : null
+  const reader = response.body.getReader()
+  const chunks: ArrayBuffer[] = []
+  let received = 0
+  try {
+    while (true) {
+      const result = await reader.read()
+      if (result.done) break
+      const chunk = new Uint8Array(result.value.byteLength)
+      chunk.set(result.value)
+      chunks.push(chunk.buffer)
+      received += result.value.byteLength
+      onProgress?.(received, total)
+    }
+  } finally {
+    reader.releaseLock()
+  }
+  return new Blob(chunks, { type: response.headers.get('Content-Type') ?? 'application/octet-stream' })
+}
+
+export function saveMemoryBlob(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+  anchor.href = url
+  anchor.download = filename
+  anchor.click()
+  window.setTimeout(() => URL.revokeObjectURL(url), 0)
 }
 
 export function getHealth(signal?: AbortSignal): Promise<HealthResponse> {

@@ -14,6 +14,7 @@ urlpatterns = [
     path("", include("apps.workspaces.urls")),
     path("", include("apps.reports.urls")),
     path("", include("apps.reviews.urls")),
+    path("", include("apps.archives.urls")),
     path("", include("apps.courses.urls")),
     path("health", HealthView.as_view(), name="health"),
     path("health/ready", ReadinessView.as_view(), name="readiness"),

@@ -127,5 +127,9 @@ GRANT SELECT, INSERT ON \`${MYSQL_DATABASE}\`.reports_report_attachment TO '${MY
 GRANT SELECT, INSERT ON \`${MYSQL_DATABASE}\`.reports_report_version TO '${MYSQL_APP_USER}'@'%';
 GRANT SELECT, INSERT ON \`${MYSQL_DATABASE}\`.reports_report_version_attachment TO '${MYSQL_APP_USER}'@'%';
 GRANT SELECT, INSERT ON \`${MYSQL_DATABASE}\`.reports_system_artifact TO '${MYSQL_APP_USER}'@'%';
+GRANT SELECT, INSERT, UPDATE ON \`${MYSQL_DATABASE}\`.archives_archive_job TO '${MYSQL_APP_USER}'@'%';
+GRANT SELECT, INSERT ON \`${MYSQL_DATABASE}\`.archives_archive_manifest TO '${MYSQL_APP_USER}'@'%';
+GRANT SELECT, INSERT ON \`${MYSQL_DATABASE}\`.archives_archive_verification TO '${MYSQL_APP_USER}'@'%';
+GRANT SELECT, INSERT ON \`${MYSQL_DATABASE}\`.archives_export_grant TO '${MYSQL_APP_USER}'@'%';
 FLUSH PRIVILEGES;
 SQL

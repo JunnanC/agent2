@@ -3,6 +3,7 @@ from typing import Any
 
 from django.db import models
 from django.http import HttpRequest
+from django.utils import timezone
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -10,6 +11,7 @@ from rest_framework.views import APIView
 from apps.accounts.models import User
 from apps.accounts.permissions import IsPlatformPortal, IsTeachingPortal, IsUserPortal
 from apps.accounts.security import client_ip
+from apps.archives.models import ArchiveJob
 from apps.core.concurrency import etag_for_version, parse_if_match
 from apps.core.idempotency import PrincipalScope, StoredResponse, execute_idempotent
 from apps.core.models import CompensationTask
@@ -633,6 +635,11 @@ class PlatformTaskAnomalyView(APIView):
             ),
             terminal_target__isnull=False,
         ).exclude(status=models.F("terminal_target"))[:100]
+        archive_failures = (
+            ArchiveJob.objects.filter(status=ArchiveJob.Status.FAILED)
+            .select_related("task", "course", "failure_record", "compensation_task")
+            .order_by("safe_recycle_at", "id")[:100]
+        )
         reconciliation: list[dict[str, object]] = []
         publications = (
             TaskPublication.objects.filter(
@@ -680,6 +687,24 @@ class PlatformTaskAnomalyView(APIView):
                     for item in compensations
                 ],
                 "state_anomalies": [task_data(item) for item in state_anomalies],
+                "archive_failures": [
+                    {
+                        "archive_id": item.public_id,
+                        "task_id": item.task.public_id,
+                        "course_id": item.course.public_id,
+                        "terminal_target": item.terminal_target,
+                        "safe_recycle_at": item.safe_recycle_at,
+                        "safe_recycle_due": item.safe_recycle_at <= timezone.now(),
+                        "error_code": (
+                            item.failure_record.error_code if item.failure_record else ""
+                        ),
+                        "compensation_status": (
+                            item.compensation_task.status if item.compensation_task else ""
+                        ),
+                        "trace_id": item.trace_id,
+                    }
+                    for item in archive_failures
+                ],
                 "reconciliation_anomalies": reconciliation,
             },
         )

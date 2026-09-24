@@ -423,6 +423,22 @@ export interface paths {
         patch: operations["api_v2_platform_admin_assignments_partial_update"];
         trace?: never;
     };
+    "/api/v2/platform/compensations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["platform_compensations_list"];
+        put?: never;
+        post: operations["platform_compensations_retry"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v2/platform/courses": {
         parameters: {
             query?: never;
@@ -561,6 +577,38 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["platform_images_decide"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/platform/instances": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["platform_instances_list"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/platform/instances/{instance_id}/destroy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["platform_instances_destroy"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1047,6 +1095,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v2/tasks/{task_id}/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["tasks_archive_retrieve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v2/tasks/{task_id}/attachments": {
         parameters: {
             query?: never;
@@ -1473,6 +1537,54 @@ export interface paths {
         get: operations["api_v2_teaching_courses_archive_check_retrieve"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/teaching/courses/{course_id}/archives": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["teaching_archives_list"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/teaching/courses/{course_id}/archives/{archive_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["teaching_archives_retrieve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/teaching/courses/{course_id}/archives/{archive_id}/exports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["teaching_archives_exports_create"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2752,6 +2864,59 @@ export interface components {
         AnswerWrite: {
             body: string;
         };
+        ArchiveData: {
+            public_id: string;
+            task_id: string;
+            course_id: string;
+            student_id: string;
+            student_name: string;
+            status: string;
+            terminal_target: string;
+            task_status: string;
+            /** Format: date-time */
+            safe_recycle_at: string;
+            attempt_count: number;
+            max_attempts: number;
+            row_version: number;
+            failure: {
+                [key: string]: unknown;
+            } | null;
+            compensation: {
+                [key: string]: unknown;
+            } | null;
+            manifest: {
+                [key: string]: unknown;
+            } | null;
+            verifications: {
+                [key: string]: unknown;
+            }[];
+            recycle: {
+                [key: string]: unknown;
+            };
+        };
+        ArchiveDestroyReason: {
+            reason: string;
+        };
+        ArchiveExportResponse: {
+            data: {
+                [key: string]: unknown;
+            };
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        ArchiveListResponse: {
+            data: components["schemas"]["ArchiveData"][];
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        ArchiveResponse: {
+            data: components["schemas"]["ArchiveData"];
+            meta: {
+                [key: string]: unknown;
+            };
+        };
         /**
          * @description * `ALL_ACTIVE` - All Active
          *     * `SELECTED` - Selected
@@ -2874,6 +3039,36 @@ export interface components {
         };
         CheckpointWrite: {
             name?: string;
+        };
+        CompensationData: {
+            public_id: string;
+            task_type: string;
+            subject_type: string;
+            subject_ref: string;
+            status: string;
+            attempt_count: number;
+            max_attempts: number;
+            /** Format: date-time */
+            next_attempt_at: string | null;
+            error_code: string;
+            trace_id: string;
+            row_version: number;
+        };
+        CompensationListResponse: {
+            data: components["schemas"]["CompensationData"][];
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        CompensationResponse: {
+            data: components["schemas"]["CompensationData"];
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        CompensationRetry: {
+            reason: string;
+            compensation_id: string;
         };
         ContentWrite: {
             title?: string;
@@ -3293,6 +3488,31 @@ export interface components {
         ImageResponse: {
             data: components["schemas"]["ImageData"];
             meta: components["schemas"]["GovernanceTraceMeta"];
+        };
+        InstanceData: {
+            public_id: string;
+            task_id: string;
+            course_id: string;
+            student_id: string;
+            status: string;
+            external_id: string | null;
+            external_status: string;
+            orphan: boolean;
+            resource_leak: boolean;
+            row_version: number;
+            trace_id: string;
+        };
+        InstanceListResponse: {
+            data: components["schemas"]["InstanceData"][];
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        InstanceResponse: {
+            data: components["schemas"]["InstanceData"];
+            meta: {
+                [key: string]: unknown;
+            };
         };
         InvitationWrite: {
             max_uses: number;
@@ -5392,6 +5612,53 @@ export interface operations {
             };
         };
     };
+    platform_compensations_list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CompensationListResponse"];
+                };
+            };
+        };
+    };
+    platform_compensations_retry: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+                "If-Match": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CompensationRetry"];
+                "application/x-www-form-urlencoded": components["schemas"]["CompensationRetry"];
+                "multipart/form-data": components["schemas"]["CompensationRetry"];
+            };
+        };
+        responses: {
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CompensationResponse"];
+                };
+            };
+        };
+    };
     platform_courses_list: {
         parameters: {
             query?: never;
@@ -5648,6 +5915,55 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ImageResponse"];
+                };
+            };
+        };
+    };
+    platform_instances_list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InstanceListResponse"];
+                };
+            };
+        };
+    };
+    platform_instances_destroy: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+                "If-Match": string;
+            };
+            path: {
+                instance_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ArchiveDestroyReason"];
+                "application/x-www-form-urlencoded": components["schemas"]["ArchiveDestroyReason"];
+                "multipart/form-data": components["schemas"]["ArchiveDestroyReason"];
+            };
+        };
+        responses: {
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InstanceResponse"];
                 };
             };
         };
@@ -6644,6 +6960,27 @@ export interface operations {
             };
         };
     };
+    tasks_archive_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArchiveResponse"];
+                };
+            };
+        };
+    };
     tasks_report_attachments_create: {
         parameters: {
             query?: never;
@@ -7417,6 +7754,74 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CheckResponse"];
+                };
+            };
+        };
+    };
+    teaching_archives_list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArchiveListResponse"];
+                };
+            };
+        };
+    };
+    teaching_archives_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                archive_id: string;
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArchiveResponse"];
+                };
+            };
+        };
+    };
+    teaching_archives_exports_create: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+                "If-Match": string;
+            };
+            path: {
+                archive_id: string;
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArchiveExportResponse"];
                 };
             };
         };

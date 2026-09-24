@@ -26,7 +26,7 @@ from .adapters import FakeRuntimeFailure, runtime_for_driver
 from .errors import ProvisioningConfigurationError, ProvisioningStateConflict
 from .metrics import PROVISIONING_JOBS_TOTAL, PROVISIONING_STAGE_TOTAL
 from .models import ProvisioningInstance, ProvisioningJob, ProvisioningStageEvent, public_id_field
-from .ports import RuntimeSpec
+from .ports import RuntimeInventoryItem, RuntimeSpec
 from .selectors import active_job_for_task, jobs_for_task
 
 STAGES: tuple[str, ...] = tuple(ProvisioningJob.Stage.values)
@@ -278,9 +278,7 @@ def start_provisioning(
         raise ProvisioningConfigurationError(detail={"image": "not_approved_or_clean"})
     if task.template_version.resource_profile.status != "ACTIVE":
         raise ProvisioningConfigurationError(detail={"resource_profile": "not_active"})
-    job = _create_job_and_reservation(
-        task=task, context=context, attempt_no=_next_attempt_no(task)
-    )
+    job = _create_job_and_reservation(task=task, context=context, attempt_no=_next_attempt_no(task))
     changed = transition_task(
         task_id=task.public_id,
         to_status=ExperimentTask.Status.PROVISIONING,
@@ -743,3 +741,114 @@ def compensate_provisioning(task: CompensationTask) -> None:
         reason="provisioning compensation",
         context=context,
     )
+
+
+def runtime_inventory(*, driver: str = "FAKE") -> list[RuntimeInventoryItem]:
+    return runtime_for_driver(driver).inventory()
+
+
+def destroy_task_instance(
+    *,
+    task_id: str,
+    idempotency_key: str,
+    context: Any,
+    expected_version: int | None = None,
+) -> ProvisioningInstance | None:
+    """Destroy through the runtime adapter, verify absence, then close DB/quota facts."""
+
+    def release_latest_reservation() -> None:
+        job = (
+            ProvisioningJob.objects.select_related("reservation")
+            .filter(task__public_id=task_id)
+            .order_by("-attempt_no")
+            .first()
+        )
+        if job is not None:
+            release_reservation(
+                reservation_id=job.reservation.public_id,
+                reason="runtime destroyed",
+                context=ActorContext(
+                    actor_ref=str(getattr(context, "actor_ref", "worker")),
+                    portal=str(getattr(context, "portal", "WORKER")),
+                    trace_id=_trace(context),
+                ),
+            )
+
+    with transaction.atomic():
+        instance = (
+            ProvisioningInstance.objects.select_for_update()
+            .select_related("task", "course", "runtime_adapter")
+            .filter(task__public_id=task_id)
+            .first()
+        )
+        if instance is None:
+            release_latest_reservation()
+            return None
+        if expected_version is not None and instance.row_version != expected_version:
+            from apps.core.errors import RowVersionConflict
+
+            raise RowVersionConflict(
+                detail={
+                    "expected_row_version": expected_version,
+                    "actual_row_version": instance.row_version,
+                }
+            )
+        if instance.status == ProvisioningInstance.Status.DESTROYED:
+            release_latest_reservation()
+            return instance
+        if instance.status != ProvisioningInstance.Status.DESTROYING:
+            instance = compare_and_swap(
+                ProvisioningInstance,
+                pk=instance.pk,
+                expected_version=instance.row_version,
+                changes={"status": ProvisioningInstance.Status.DESTROYING, "endpoint": ""},
+            )
+        external_id = instance.external_id or ""
+        driver = instance.runtime_adapter.driver
+
+    adapter = runtime_for_driver(driver)
+    if external_id:
+        adapter.destroy(external_id, idempotency_key)
+        if adapter.status(external_id) != "ABSENT":
+            raise RuntimeError("RUNTIME_DESTROY_NOT_CONFIRMED")
+
+    with transaction.atomic():
+        current = (
+            ProvisioningInstance.objects.select_for_update()
+            .select_related("task", "course")
+            .get(pk=instance.pk)
+        )
+        if current.status != ProvisioningInstance.Status.DESTROYED:
+            current = compare_and_swap(
+                ProvisioningInstance,
+                pk=current.pk,
+                expected_version=current.row_version,
+                changes={
+                    "status": ProvisioningInstance.Status.DESTROYED,
+                    "endpoint": "",
+                    "destroyed_at": timezone.now(),
+                },
+            )
+            _audit(
+                context=context,
+                actor=None,
+                action="provisioning.instance.destroy",
+                target_type="provisioning_instance",
+                target_ref=current.public_id,
+                course_ref=current.course.public_id,
+                before={"status": instance.status},
+                after={"status": current.status, "external_absent": True},
+            )
+            _emit(
+                event_type=events.INSTANCE_DESTROYED,
+                aggregate_type="provisioning_instance",
+                aggregate_ref=current.public_id,
+                payload={
+                    "instance_id": current.public_id,
+                    "task_id": current.task.public_id,
+                    "status": current.status,
+                },
+                context=context,
+            )
+        release_latest_reservation()
+        return current

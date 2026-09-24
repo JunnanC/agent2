@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 
-from .ports import RuntimeAdapter, RuntimeResult, RuntimeSpec
+from .ports import RuntimeAdapter, RuntimeInventoryItem, RuntimeResult, RuntimeSpec
 
 
 class FakeRuntimeFailure(RuntimeError):
@@ -102,6 +102,16 @@ class FakeRuntimeAdapter:
             if result.external_id == external_id:
                 self.instances.pop(key, None)
                 break
+
+    def inventory(self) -> list[RuntimeInventoryItem]:
+        return [
+            RuntimeInventoryItem(
+                external_id=item.external_id,
+                status="READY",
+                metadata=dict(item.metadata),
+            )
+            for item in self.instances.values()
+        ]
 
 
 _fake_runtime = FakeRuntimeAdapter()

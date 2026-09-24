@@ -26,6 +26,13 @@ class RuntimeResult:
     metadata: Mapping[str, object] = field(default_factory=dict)
 
 
+@dataclass(frozen=True)
+class RuntimeInventoryItem:
+    external_id: str
+    status: str
+    metadata: Mapping[str, object] = field(default_factory=dict)
+
+
 class RuntimeAdapter(Protocol):
     def preflight(self, spec: RuntimeSpec) -> RuntimeResult: ...
 
@@ -42,3 +49,5 @@ class RuntimeAdapter(Protocol):
     def snapshot(self, external_id: str) -> str: ...
 
     def destroy(self, external_id: str, idempotency_key: str) -> None: ...
+
+    def inventory(self) -> list[RuntimeInventoryItem]: ...

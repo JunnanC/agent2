@@ -360,6 +360,48 @@ def revoke_session(
     return changed
 
 
+@transaction.atomic
+def revoke_task_sessions(*, task_id: str, reason: str, context: Any) -> int:
+    """Revoke every active ticket for a task without requiring the bearer token."""
+    now = timezone.now()
+    revoked = 0
+    sessions = (
+        WorkspaceSession.objects.select_for_update()
+        .select_related("task", "course", "student", "instance")
+        .filter(task__public_id=task_id, status=WorkspaceSession.Status.ACTIVE)
+    )
+    for session in sessions:
+        changed = compare_and_swap(
+            WorkspaceSession,
+            pk=session.pk,
+            expected_version=session.row_version,
+            changes={
+                "status": WorkspaceSession.Status.REVOKED,
+                "active_marker": None,
+                "revoked_at": now,
+                "revoke_reason": reason.strip()[:255] or "task lifecycle cleanup",
+            },
+        )
+        _audit(
+            context=context,
+            actor=None,
+            action="workspace.session.system_revoke",
+            target_type="workspace_session",
+            target_ref=changed.public_id,
+            course_ref=changed.course.public_id,
+            before={"status": session.status},
+            after={"status": changed.status, "reason": changed.revoke_reason},
+        )
+        _emit(
+            event_type=events.SESSION_REVOKED,
+            session=changed,
+            payload={"status": changed.status, "reason": changed.revoke_reason},
+            context=context,
+        )
+        revoked += 1
+    return revoked
+
+
 def _read_upload(upload: Any) -> tuple[io.BytesIO, int, str, str]:
     limit = int(getattr(settings, "WORKSPACE_SNAPSHOT_MAX_BYTES", 20 * 1024 * 1024))
     stream = io.BytesIO()

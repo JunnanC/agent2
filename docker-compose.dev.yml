@@ -1,13 +1,17 @@
-name: edu-platform-p10
+name: edu-platform-p11
 
 x-app-environment: &app-environment
   APP_ENV: local
-  APP_VERSION: ${APP_VERSION:-0.10.0-p10}
-  OPENAPI_REVISION: ${OPENAPI_REVISION:-v2-p10}
+  APP_VERSION: ${APP_VERSION:-0.11.0-p11}
+  OPENAPI_REVISION: ${OPENAPI_REVISION:-v2-p11}
   SIMILARITY_ALGORITHM_VERSION: ${SIMILARITY_ALGORITHM_VERSION:-char-5gram-jaccard-v1}
   SIMILARITY_THRESHOLD: ${SIMILARITY_THRESHOLD:-0.30}
   SIMILARITY_RETENTION_DAYS: ${SIMILARITY_RETENTION_DAYS:-180}
   P10_AUTO_CHECK_MAX_ATTEMPTS: ${P10_AUTO_CHECK_MAX_ATTEMPTS:-3}
+  ARCHIVE_RETENTION_DAYS: ${ARCHIVE_RETENTION_DAYS:-365}
+  ARCHIVE_SAFE_RECYCLE_SECONDS: ${ARCHIVE_SAFE_RECYCLE_SECONDS:-900}
+  ARCHIVE_EXPORT_TTL_SECONDS: ${ARCHIVE_EXPORT_TTL_SECONDS:-300}
+  ARCHIVE_MAX_ATTEMPTS: ${ARCHIVE_MAX_ATTEMPTS:-5}
   GIT_REVISION: ${GIT_REVISION:-development}
   BUILD_TIME: ${BUILD_TIME:-development}
   DJANGO_SETTINGS_MODULE: education_experiment_platform.settings.integration
@@ -290,6 +294,22 @@ services:
         limits: { cpus: "1.00", memory: 768M }
       update_config: { parallelism: 1, order: stop-first, failure_action: rollback }
 
+  celery-beat:
+    build: *backend-build
+    command: ["celery", "-A", "education_experiment_platform", "beat", "--loglevel=INFO"]
+    environment: *app-environment
+    networks: [app, data]
+    depends_on:
+      mysql-grants: { condition: service_completed_successfully }
+      redis: { condition: service_healthy }
+      fluent-bit: { condition: service_started }
+    logging: *fluentd-logging
+    deploy:
+      resources:
+        reservations: { cpus: "0.10", memory: 128M }
+        limits: { cpus: "0.50", memory: 384M }
+      update_config: { parallelism: 1, order: stop-first, failure_action: rollback }
+
   log-ingest:
     build: *backend-build
     command: ["python", "-m", "education_experiment_platform.log_ingest"]
@@ -381,8 +401,8 @@ services:
       args:
         NODE_BASE_IMAGE: ${NODE_BASE_IMAGE:-public.ecr.aws/docker/library/node:24-alpine}
         NGINX_BASE_IMAGE: ${NGINX_BASE_IMAGE:-m.daocloud.io/docker.io/library/nginx:1.29-alpine}
-        APP_VERSION: ${APP_VERSION:-0.10.0-p10}
-        OPENAPI_REVISION: ${OPENAPI_REVISION:-v2-p10}
+        APP_VERSION: ${APP_VERSION:-0.11.0-p11}
+        OPENAPI_REVISION: ${OPENAPI_REVISION:-v2-p11}
         GIT_REVISION: ${GIT_REVISION:-development}
         BUILD_TIME: ${BUILD_TIME:-development}
     read_only: true

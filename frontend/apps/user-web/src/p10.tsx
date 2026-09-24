@@ -6,6 +6,7 @@ import { ApiError, apiRequestWithMetadata } from '@edu/api-client'
 import { openPortalEventStream } from '@edu/event-client'
 import { reviewKeys } from '@edu/query-keys'
 import { PageHeader, RequestStateView, StatusBadge } from '@edu/ui'
+import { UserArchivePanel } from './p11'
 
 type CriterionResult = { public_id: string; title: string; max_score: string; score: string | null; note: string }
 type ReviewRound = {
@@ -51,5 +52,6 @@ export function UserReviewResultPage() {
       {round.scores ? <div className="data-table-wrap"><table className="data-table"><thead><tr><th>评分项</th><th>得分</th><th>反馈</th></tr></thead><tbody>{round.scores.criteria.map((criterion) => <tr key={criterion.public_id}><td data-wrap>{criterion.title}</td><td>{criterion.score} / {criterion.max_score}</td><td data-wrap>{criterion.note || '-'}</td></tr>)}</tbody></table></div> : null}
       {round.annotations.length ? <ol className="timeline">{round.annotations.map((item) => <li key={item.public_id}><span>{item.target_type} · {JSON.stringify(item.anchor)}</span><strong>{item.body}</strong></li>)}</ol> : null}
     </section>)}
+    <UserArchivePanel taskId={taskId} />
   </section>
 }

@@ -530,9 +530,9 @@ def create_review_for_submission(
         raise ReviewValidationError(detail={"report_version": "task_mismatch"})
     if system_artifact is not None and system_artifact.task_id != locked_task.pk:
         raise ReviewValidationError(detail={"system_artifact": "task_mismatch"})
-    latest_round = Review.objects.filter(task=locked_task).aggregate(value=Max("round_no"))[
-        "value"
-    ] or 0
+    latest_round = (
+        Review.objects.filter(task=locked_task).aggregate(value=Max("round_no"))["value"] or 0
+    )
     review = Review.objects.create(
         course=locked_task.course,
         task=locked_task,
@@ -627,9 +627,11 @@ def score_review_criteria(
             raise ReviewValidationError(
                 detail={"criterion_id": criterion_id, "max_score": str(criterion.max_score)}
             )
-        projection = CriterionScore.objects.select_for_update().filter(
-            review=review, criterion=criterion
-        ).first()
+        projection = (
+            CriterionScore.objects.select_for_update()
+            .filter(review=review, criterion=criterion)
+            .first()
+        )
         if projection is None:
             projection = CriterionScore.objects.create(
                 review=review,
@@ -969,6 +971,16 @@ def decide_review(
         context=context,
         detail={"review_id": review.public_id, "decision": decision, "score": str(total)},
     )
+    if decision == ReviewDecision.Decision.APPROVE:
+        from apps.experiments.ports import request_task_terminal
+
+        request_task_terminal(
+            task_id=changed_task.public_id,
+            terminal_target=ExperimentTask.TerminalTarget.COMPLETED,
+            trigger="REVIEW_APPROVED",
+            context=context,
+            actor=actor,
+        )
     if decision == ReviewDecision.Decision.REJECT:
         if review.report_version_id:
             try:
@@ -1347,12 +1359,14 @@ def review_monitor_summary() -> dict[str, Any]:
         for item in SimilarityRun.objects.values("status").annotate(total=Count("id"))
     }
     latest_trace = (
-        SimilarityRun.objects.exclude(trace_id="").order_by("-created_at").values_list(
-            "trace_id", flat=True
-        ).first()
-        or AutoCheckRun.objects.exclude(trace_id="").order_by("-created_at").values_list(
-            "trace_id", flat=True
-        ).first()
+        SimilarityRun.objects.exclude(trace_id="")
+        .order_by("-created_at")
+        .values_list("trace_id", flat=True)
+        .first()
+        or AutoCheckRun.objects.exclude(trace_id="")
+        .order_by("-created_at")
+        .values_list("trace_id", flat=True)
+        .first()
         or ""
     )
     return {

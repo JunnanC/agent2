@@ -28,7 +28,7 @@ class SettingsTests(SimpleTestCase):
         assert "teams" not in installed
 
     def test_contract_revision_and_api_prefix_are_fixed(self) -> None:
-        assert settings.OPENAPI_REVISION == "v2-p10"
+        assert settings.OPENAPI_REVISION == "v2-p11"
 
     def test_celery_preserves_structured_application_logging(self) -> None:
         assert settings.CELERY_WORKER_HIJACK_ROOT_LOGGER is False
@@ -144,6 +144,14 @@ class SettingsTests(SimpleTestCase):
             "reports_report_version_attachment",
             "reports_system_artifact",
         }
+        assert {
+            model._meta.db_table for model in apps.get_app_config("archives").get_models()
+        } == {
+            "archives_archive_job",
+            "archives_archive_manifest",
+            "archives_archive_verification",
+            "archives_export_grant",
+        }
         implemented = {
             "core",
             "accounts",
@@ -155,6 +163,7 @@ class SettingsTests(SimpleTestCase):
             "provisioning",
             "workspaces",
             "reports",
+            "archives",
         }
         for app_label in EXPECTED_DOMAIN_APPS - implemented:
             assert list(apps.get_app_config(app_label).get_models()) == []
