@@ -1,9 +1,13 @@
-name: edu-platform-p09
+name: edu-platform-p10
 
 x-app-environment: &app-environment
   APP_ENV: local
-  APP_VERSION: ${APP_VERSION:-0.9.0-p09}
-  OPENAPI_REVISION: ${OPENAPI_REVISION:-v2-p09}
+  APP_VERSION: ${APP_VERSION:-0.10.0-p10}
+  OPENAPI_REVISION: ${OPENAPI_REVISION:-v2-p10}
+  SIMILARITY_ALGORITHM_VERSION: ${SIMILARITY_ALGORITHM_VERSION:-char-5gram-jaccard-v1}
+  SIMILARITY_THRESHOLD: ${SIMILARITY_THRESHOLD:-0.30}
+  SIMILARITY_RETENTION_DAYS: ${SIMILARITY_RETENTION_DAYS:-180}
+  P10_AUTO_CHECK_MAX_ATTEMPTS: ${P10_AUTO_CHECK_MAX_ATTEMPTS:-3}
   GIT_REVISION: ${GIT_REVISION:-development}
   BUILD_TIME: ${BUILD_TIME:-development}
   DJANGO_SETTINGS_MODULE: education_experiment_platform.settings.integration
@@ -272,7 +276,7 @@ services:
 
   celery:
     build: *backend-build
-    command: ["celery", "-A", "education_experiment_platform", "worker", "--loglevel=INFO", "--queues=q_default,q_relay,q_provision,q_archive,q_compensate,q_agent,q_content,q_analytics,q_integrations"]
+    command: ["celery", "-A", "education_experiment_platform", "worker", "--loglevel=INFO", "--concurrency=${CELERY_CONCURRENCY:-4}", "--queues=q_default,q_relay,q_provision,q_archive,q_compensate,q_agent,q_content,q_analytics,q_integrations"]
     environment: *app-environment
     networks: [app, data]
     depends_on:
@@ -377,8 +381,8 @@ services:
       args:
         NODE_BASE_IMAGE: ${NODE_BASE_IMAGE:-public.ecr.aws/docker/library/node:24-alpine}
         NGINX_BASE_IMAGE: ${NGINX_BASE_IMAGE:-m.daocloud.io/docker.io/library/nginx:1.29-alpine}
-        APP_VERSION: ${APP_VERSION:-0.9.0-p09}
-        OPENAPI_REVISION: ${OPENAPI_REVISION:-v2-p09}
+        APP_VERSION: ${APP_VERSION:-0.10.0-p10}
+        OPENAPI_REVISION: ${OPENAPI_REVISION:-v2-p10}
         GIT_REVISION: ${GIT_REVISION:-development}
         BUILD_TIME: ${BUILD_TIME:-development}
     read_only: true

@@ -782,6 +782,13 @@ def submit_report(
         context=context,
         detail={"report_version_id": version.public_id, "version_no": version.version_no},
     )
+    from apps.reviews.services import create_review_for_submission
+
+    create_review_for_submission(
+        task=changed_task,
+        report_version=version,
+        context=context,
+    )
     _audit(
         context=context,
         actor=actor,
@@ -854,6 +861,13 @@ def complete_non_report_task(
         reason="student submitted system artifact",
         context=context,
         detail={"artifact_id": artifact.public_id, "digest_sha256": artifact.digest_sha256},
+    )
+    from apps.reviews.services import create_review_for_submission
+
+    create_review_for_submission(
+        task=changed_task,
+        system_artifact=artifact,
+        context=context,
     )
     _audit(
         context=context,

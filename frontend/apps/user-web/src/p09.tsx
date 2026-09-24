@@ -162,7 +162,7 @@ export function UserReportPage() {
   const versions = historyQuery.data?.payload.data ?? []
 
   return <section className="workspace-page">
-    <PageHeader eyebrow="REPORT / SUBMISSION" title="实验报告" actions={<a className="text-button" href={`/tasks/${taskId}`}>返回任务</a>} />
+    <PageHeader eyebrow="REPORT / SUBMISSION" title="实验报告" actions={<><a className="text-button" href={`/tasks/${taskId}/review-result`}>审核结果</a><a className="text-button" href={`/tasks/${taskId}`}>返回任务</a></>} />
     {notice ? <p className="notice" role="status">{notice}</p> : null}
     {error ? <p className="form-error" role="alert">{error}</p> : null}
     <div className="summary-grid">

@@ -28,7 +28,7 @@ class SettingsTests(SimpleTestCase):
         assert "teams" not in installed
 
     def test_contract_revision_and_api_prefix_are_fixed(self) -> None:
-        assert settings.OPENAPI_REVISION == "v2-p09"
+        assert settings.OPENAPI_REVISION == "v2-p10"
 
     def test_celery_preserves_structured_application_logging(self) -> None:
         assert settings.CELERY_WORKER_HIJACK_ROOT_LOGGER is False
@@ -100,6 +100,15 @@ class SettingsTests(SimpleTestCase):
             "reviews_rubric",
             "reviews_rubric_version",
             "reviews_rubric_criterion",
+            "reviews_review",
+            "reviews_criterion_score",
+            "reviews_criterion_score_event",
+            "reviews_review_decision",
+            "reviews_review_annotation",
+            "reviews_annotation_revision",
+            "reviews_auto_check_run",
+            "reviews_similarity_run",
+            "reviews_similarity_match",
         }
         assert {
             model._meta.db_table for model in apps.get_app_config("experiments").get_models()

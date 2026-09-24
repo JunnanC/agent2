@@ -130,8 +130,16 @@ class IdempotencyKeyMiddleware:
             request.method == "PUT"
             and re.fullmatch(r"/api/v2/tasks/[^/]+/report-draft", normalized_path) is not None
         )
+        review_scores_put = (
+            request.method == "PUT"
+            and re.fullmatch(
+                r"/api/v2/teaching/courses/[^/]+/reviews/[^/]+/criterion-scores",
+                normalized_path,
+            )
+            is not None
+        )
         if (
-            (request.method == "POST" or report_draft_put)
+            (request.method == "POST" or report_draft_put or review_scores_put)
             and request.path.startswith("/api/v2/")
             and normalized_path not in IDEMPOTENCY_EXEMPT_POST_PATHS
         ):

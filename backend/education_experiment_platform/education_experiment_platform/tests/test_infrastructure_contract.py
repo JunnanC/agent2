@@ -162,6 +162,26 @@ def test_p09_runtime_database_grants_reports_and_download_grants_least_privilege
     assert compose["networks"]["minio-host-access"] == {}
 
 
+def test_p10_runtime_database_grants_keep_review_history_append_only() -> None:
+    bootstrap = (ROOT / "infrastructure/mysql/configure-users.sh").read_text(encoding="utf-8")
+    for table in (
+        "reviews_review",
+        "reviews_criterion_score",
+        "reviews_review_annotation",
+        "reviews_auto_check_run",
+        "reviews_similarity_run",
+        "reviews_similarity_match",
+    ):
+        assert f"GRANT SELECT, INSERT, UPDATE ON \`${{MYSQL_DATABASE}}\`.{table}" in bootstrap
+    for table in (
+        "reviews_criterion_score_event",
+        "reviews_review_decision",
+        "reviews_annotation_revision",
+    ):
+        assert f"GRANT SELECT, INSERT ON \`${{MYSQL_DATABASE}}\`.{table}" in bootstrap
+        assert f"GRANT SELECT, INSERT, UPDATE ON \`${{MYSQL_DATABASE}}\`.{table}" not in bootstrap
+
+
 def test_p08_minio_policy_scopes_versioned_workspace_objects() -> None:
     policy = json.loads(
         (ROOT / "infrastructure/minio/app-policy.json").read_text(encoding="utf-8")

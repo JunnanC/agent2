@@ -8,10 +8,11 @@ import { AppErrorBoundary, LoginForm, PageHeader, PortalLayout, RequestStateView
 import { ExperimentDashboardPage, ExperimentTaskDetailPage, ExperimentTaskListPage } from './p06'
 import { WorkspaceCheckpointsPage, WorkspaceLabPage, WorkspaceReplayPage } from './p08'
 import { UserReportPage } from './p09'
+import { UserReviewResultPage } from './p10'
 
 const release = {
-  version: import.meta.env.VITE_APP_VERSION ?? '0.9.0-p09',
-  openapiRevision: import.meta.env.VITE_OPENAPI_REVISION ?? 'v2-p09',
+  version: import.meta.env.VITE_APP_VERSION ?? '0.10.0-p10',
+  openapiRevision: import.meta.env.VITE_OPENAPI_REVISION ?? 'v2-p10',
   gitRevision: import.meta.env.VITE_GIT_REVISION ?? 'development',
   buildTime: import.meta.env.VITE_BUILD_TIME ?? 'development',
 }
@@ -179,7 +180,7 @@ function AppRoutes() {
   const signOut = async () => { await session.signOut(); queryClient.clear() }
   const nav = session.status === 'authenticated' ? [{ href: '/dashboard', label: '实验工作台' }, { href: '/tasks', label: '我的实验' }, { href: '/courses', label: '课程目录' }, { href: '/my-courses', label: '我的课程' }, { href: '/profile', label: '个人资料' }] : [{ href: '/login', label: '登录' }]
   return <PortalLayout title="用户端" tone="user" release={release} nav={nav} actions={session.status === 'authenticated' ? <button className="text-button" onClick={() => void signOut()}>退出</button> : null}><AppErrorBoundary><Routes>
-    <Route path="/login" element={<LoginPage />} /><Route path="/" element={<Navigate to="/dashboard" replace />} /><Route path="/dashboard" element={<Guard><ExperimentDashboardPage /></Guard>} /><Route path="/tasks" element={<Guard><ExperimentTaskListPage /></Guard>} /><Route path="/tasks/:taskId" element={<Guard><ExperimentTaskDetailPage /></Guard>} /><Route path="/tasks/:taskId/report" element={<Guard><UserReportPage /></Guard>} /><Route path="/tasks/:taskId/lab" element={<Guard><WorkspaceLabPage /></Guard>} /><Route path="/tasks/:taskId/checkpoints" element={<Guard><WorkspaceCheckpointsPage /></Guard>} /><Route path="/tasks/:taskId/replay" element={<Guard><WorkspaceReplayPage /></Guard>} /><Route path="/experiments/:taskId/lab" element={<Guard><WorkspaceLabPage /></Guard>} /><Route path="/experiments/:taskId/checkpoints" element={<Guard><WorkspaceCheckpointsPage /></Guard>} /><Route path="/experiments/:taskId/replay" element={<Guard><WorkspaceReplayPage /></Guard>} /><Route path="/courses" element={<Guard><CourseCatalogPage /></Guard>} /><Route path="/courses/:courseId" element={<Guard><CourseDetailPage /></Guard>} /><Route path="/courses/:courseId/chapters" element={<Guard><CourseLearningPage /></Guard>} /><Route path="/my-courses" element={<Guard><MyCoursesPage /></Guard>} /><Route path="/profile" element={<Guard><ProfilePage /></Guard>} /><Route path="*" element={<Navigate to="/dashboard" replace />} />
+    <Route path="/login" element={<LoginPage />} /><Route path="/" element={<Navigate to="/dashboard" replace />} /><Route path="/dashboard" element={<Guard><ExperimentDashboardPage /></Guard>} /><Route path="/tasks" element={<Guard><ExperimentTaskListPage /></Guard>} /><Route path="/tasks/:taskId" element={<Guard><ExperimentTaskDetailPage /></Guard>} /><Route path="/tasks/:taskId/report" element={<Guard><UserReportPage /></Guard>} /><Route path="/tasks/:taskId/review-result" element={<Guard><UserReviewResultPage /></Guard>} /><Route path="/tasks/:taskId/lab" element={<Guard><WorkspaceLabPage /></Guard>} /><Route path="/tasks/:taskId/checkpoints" element={<Guard><WorkspaceCheckpointsPage /></Guard>} /><Route path="/tasks/:taskId/replay" element={<Guard><WorkspaceReplayPage /></Guard>} /><Route path="/experiments/:taskId/lab" element={<Guard><WorkspaceLabPage /></Guard>} /><Route path="/experiments/:taskId/checkpoints" element={<Guard><WorkspaceCheckpointsPage /></Guard>} /><Route path="/experiments/:taskId/replay" element={<Guard><WorkspaceReplayPage /></Guard>} /><Route path="/courses" element={<Guard><CourseCatalogPage /></Guard>} /><Route path="/courses/:courseId" element={<Guard><CourseDetailPage /></Guard>} /><Route path="/courses/:courseId/chapters" element={<Guard><CourseLearningPage /></Guard>} /><Route path="/my-courses" element={<Guard><MyCoursesPage /></Guard>} /><Route path="/profile" element={<Guard><ProfilePage /></Guard>} /><Route path="*" element={<Navigate to="/dashboard" replace />} />
   </Routes></AppErrorBoundary></PortalLayout>
 }
 
