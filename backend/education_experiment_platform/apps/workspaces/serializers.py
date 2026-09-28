@@ -85,13 +85,6 @@ class WorkspaceExecutionRunSerializer(serializers.Serializer):
     session_id = serializers.CharField()
     snapshot_id = serializers.CharField(allow_null=True)
     status = serializers.ChoiceField(choices=WorkspaceExecutionRun.Status.choices)
-    execution_rule_summary = serializers.DictField()
-    execution_rule_digest = serializers.CharField()
-    execution_spec = serializers.DictField()
-    execution_spec_digest = serializers.CharField()
-    stdout_asset_id = serializers.CharField(allow_null=True)
-    stderr_asset_id = serializers.CharField(allow_null=True)
-    test_report_asset_id = serializers.CharField(allow_null=True)
     error_code = serializers.CharField()
     result_summary = serializers.CharField()
     started_at = serializers.DateTimeField(allow_null=True)
@@ -289,15 +282,6 @@ def execution_run_data(item: WorkspaceExecutionRun) -> dict[str, object]:
         "session_id": item.session.public_id,
         "snapshot_id": item.snapshot.public_id if item.snapshot_id else None,
         "status": item.status,
-        "execution_rule_summary": item.execution_rule_summary,
-        "execution_rule_digest": item.execution_rule_digest,
-        "execution_spec": item.execution_spec,
-        "execution_spec_digest": item.execution_spec_digest,
-        "stdout_asset_id": item.stdout_asset.public_id if item.stdout_asset_id else None,
-        "stderr_asset_id": item.stderr_asset.public_id if item.stderr_asset_id else None,
-        "test_report_asset_id": (
-            item.test_report_asset.public_id if item.test_report_asset_id else None
-        ),
         "error_code": item.error_code,
         "result_summary": item.result_summary,
         "started_at": item.started_at,

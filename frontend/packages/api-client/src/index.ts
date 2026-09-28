@@ -165,13 +165,6 @@ export type WorkspaceExecutionRunData = {
   session_id: string
   snapshot_id: string | null
   status: 'QUEUED' | 'RUNNING' | 'PASSED' | 'FAILED' | 'TIMEOUT' | 'RESOURCE_EXCEEDED' | 'REJECTED'
-  execution_rule_summary: Record<string, unknown>
-  execution_rule_digest: string
-  execution_spec: Record<string, unknown>
-  execution_spec_digest: string
-  stdout_asset_id: string | null
-  stderr_asset_id: string | null
-  test_report_asset_id: string | null
   error_code: string
   result_summary: string
   started_at: string | null
@@ -483,5 +476,46 @@ export function getWorkspaceExecutionRun(taskId: string, executionId: string, to
   return apiRequestWithMetadata<WorkspaceEnvelope<WorkspaceExecutionRunData>>(
     `/api/v2/tasks/${encodeURIComponent(taskId)}/execution-runs/${encodeURIComponent(executionId)}`,
     { workspaceToken: token },
+  )
+}
+
+export function runWorkspaceOperation(
+  sessionId: string,
+  operation: string,
+  argumentsValue: Record<string, unknown>,
+  token?: string,
+  intent = new RequestIntent(),
+): Promise<ApiResult<WorkspaceEnvelope<WorkspaceOperationData>>> {
+  return apiRequestWithMetadata<WorkspaceEnvelope<WorkspaceOperationData>>(
+    `/workspace/${encodeURIComponent(sessionId)}/operations`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ operation, arguments: argumentsValue }),
+      workspaceToken: token,
+      intent,
+    },
+  )
+}
+
+export function submitTaskReport(
+  taskId: string,
+  ifMatch: string,
+  intent = new RequestIntent(),
+): Promise<ApiResult<ReportVersionResponse>> {
+  return apiRequestWithMetadata<ReportVersionResponse>(
+    `/api/v2/tasks/${encodeURIComponent(taskId)}/submit-report`,
+    { method: 'POST', ifMatch, intent },
+  )
+}
+
+export function completeTask(
+  taskId: string,
+  ifMatch: string,
+  intent = new RequestIntent(),
+): Promise<ApiResult<ReportCompleteResponse>> {
+  return apiRequestWithMetadata<ReportCompleteResponse>(
+    `/api/v2/tasks/${encodeURIComponent(taskId)}/complete`,
+    { method: 'POST', ifMatch, intent },
   )
 }

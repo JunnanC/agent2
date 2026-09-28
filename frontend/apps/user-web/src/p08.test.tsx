@@ -169,3 +169,125 @@ describe('P15-B workspace lifecycle', () => {
     expect((document.querySelector('iframe') as HTMLIFrameElement).src).toContain('/workspace/session-1/webide')
   })
 })
+
+describe('P15-D test results and submission footer', () => {
+  it('runs one check at a time and renders an explicit timeout result', async () => {
+    const activeSession = { ...session, current_version: 1, latest_client_seq: 1 }
+    const operation = {
+      public_id: 'operation-1', task_id: 'task-1', seq: 1, event_type: 'operation.run_check', phase: 'COMPLETED',
+      payload: { execution_run_id: 'execution-1', execution_status: 'QUEUED' }, result_summary: '测试已进入队列',
+      occurred_at: '2026-09-28T00:00:00Z', trace_id: 'trace-operation', execution_run_id: 'execution-1', execution_status: 'QUEUED',
+    }
+    const execution = {
+      public_id: 'execution-1', task_id: 'task-1', session_id: 'session-1', snapshot_id: 'snapshot-1', status: 'TIMEOUT',
+      error_code: 'EXECUTION_TIMEOUT', result_summary: '', started_at: '2026-09-28T00:00:00Z', finished_at: '2026-09-28T00:00:03Z',
+      duration_ms: 3000, trace_id: 'trace-execution',
+    }
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url.endsWith('/workbench')) return response(workbench)
+      if (url.endsWith('/provisioning-job')) return response(provisioningJob)
+      if (url.endsWith('/workspace-sessions')) return response(activeSession)
+      if (url.endsWith('/tasks/task-1')) return response({ ...baseTask, status: 'IN_PROGRESS', row_version: 2 })
+      if (url.endsWith('/workspace/session-1/operations') && init?.method === 'POST') return response(operation, 201)
+      if (url.endsWith('/execution-runs/execution-1')) return response(execution)
+      throw new Error(`unexpected request: ${url}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    renderPage()
+
+    const runButton = await screen.findByRole('button', { name: '运行测试' })
+    fireEvent.click(runButton)
+    fireEvent.click(runButton)
+
+    await waitFor(() => expect(screen.getByText(/测试超时/)).toBeTruthy())
+    expect(fetchMock.mock.calls.filter(([input, init]) => String(input).endsWith('/workspace/session-1/operations') && init?.method === 'POST')).toHaveLength(1)
+  })
+
+  it('submits a non-report task with the current row version and idempotency key', async () => {
+    const activeSession = { ...session, current_version: 1, latest_client_seq: 1 }
+    const readyWorkbench = { ...workbench, submission: { ...workbench.submission, can_submit: true, blocked_reason: null } }
+    let submitted = false
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url.endsWith('/workbench')) return response(readyWorkbench)
+      if (url.endsWith('/provisioning-job')) return response(provisioningJob)
+      if (url.endsWith('/workspace-sessions')) return response(activeSession)
+      if (url.endsWith('/tasks/task-1/complete') && init?.method === 'POST') {
+        const headers = new Headers(init.headers)
+        expect(headers.get('If-Match')).toBe('"2"')
+        expect(headers.get('Idempotency-Key')).toBeTruthy()
+        submitted = true
+        return response({ artifact: { public_id: 'artifact-1' }, task_status: 'UNDER_REVIEW', task_row_version: 3 }, 201)
+      }
+      if (url.endsWith('/tasks/task-1')) return response({ ...baseTask, status: submitted ? 'UNDER_REVIEW' : 'IN_PROGRESS', row_version: submitted ? 3 : 2 })
+      throw new Error(`unexpected request: ${url}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+
+    renderPage()
+
+    fireEvent.click(await screen.findByRole('button', { name: '提交实验' }))
+    expect(await screen.findByRole('heading', { name: '实验已提交' })).toBeTruthy()
+    expect(fetchMock.mock.calls.some(([input]) => String(input).endsWith('/submit-report'))).toBe(false)
+  })
+
+  it('keeps report submission disabled while an attachment is scanning', async () => {
+    const activeSession = { ...session, current_version: 1, latest_client_seq: 1 }
+    const reportWorkbench = {
+      ...workbench,
+      task: { ...workbench.task, report_required: true, report_strategy: 'REPORT', allowed_operations: ['SAVE_SNAPSHOT', 'RUN_TEST', 'SUBMIT_REPORT'] },
+      submission: { required: true, kind: 'REPORT', strategy: 'REPORT', can_submit: false, blocked_reason: { code: 'REPORT_ATTACHMENTS_SCANNING' }, draft_status: 'DRAFT' },
+    }
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.endsWith('/workbench')) return response(reportWorkbench)
+      if (url.endsWith('/provisioning-job')) return response(provisioningJob)
+      if (url.endsWith('/workspace-sessions')) return response(activeSession)
+      if (url.endsWith('/tasks/task-1')) return response({ ...baseTask, report_required: true, status: 'REPORT_DRAFT', row_version: 2 })
+      throw new Error(`unexpected request: ${url}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    renderPage()
+
+    expect(await screen.findByText('提交条件：报告附件仍在安全扫描。')).toBeTruthy()
+    expect(screen.getByRole('button', { name: '编辑报告' })).toBeTruthy()
+    expect((screen.getByRole('button', { name: '提交实验' }) as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it('routes report tasks only through submit-report', async () => {
+    const activeSession = { ...session, current_version: 1, latest_client_seq: 1 }
+    const reportWorkbench = {
+      ...workbench,
+      task: { ...workbench.task, report_required: true, report_strategy: 'REPORT', status: 'REPORT_DRAFT', row_version: 4 },
+      submission: { required: true, kind: 'REPORT', strategy: 'REPORT', can_submit: true, blocked_reason: null, draft_status: 'DRAFT' },
+    }
+    let submitted = false
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url.endsWith('/workbench')) return response(reportWorkbench)
+      if (url.endsWith('/provisioning-job')) return response(provisioningJob)
+      if (url.endsWith('/workspace-sessions')) return response(activeSession)
+      if (url.endsWith('/submit-report') && init?.method === 'POST') {
+        const headers = new Headers(init.headers)
+        expect(headers.get('If-Match')).toBe('"4"')
+        expect(headers.get('Idempotency-Key')).toBeTruthy()
+        submitted = true
+        return response({ public_id: 'report-version-1' }, 201)
+      }
+      if (url.endsWith('/tasks/task-1')) return response({ ...baseTask, report_required: true, status: submitted ? 'UNDER_REVIEW' : 'REPORT_DRAFT', row_version: submitted ? 5 : 4 })
+      throw new Error(`unexpected request: ${url}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+
+    renderPage()
+
+    fireEvent.click(await screen.findByRole('button', { name: '提交实验' }))
+    expect(await screen.findByRole('heading', { name: '实验已提交' })).toBeTruthy()
+    expect(fetchMock.mock.calls.some(([input]) => String(input).endsWith('/tasks/task-1/complete'))).toBe(false)
+  })
+})

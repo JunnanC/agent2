@@ -23107,32 +23107,6 @@
                     "status": {
                         "$ref": "#/components/schemas/StatusA0dEnum"
                     },
-                    "execution_rule_summary": {
-                        "type": "object",
-                        "additionalProperties": {}
-                    },
-                    "execution_rule_digest": {
-                        "type": "string"
-                    },
-                    "execution_spec": {
-                        "type": "object",
-                        "additionalProperties": {}
-                    },
-                    "execution_spec_digest": {
-                        "type": "string"
-                    },
-                    "stdout_asset_id": {
-                        "type": "string",
-                        "nullable": true
-                    },
-                    "stderr_asset_id": {
-                        "type": "string",
-                        "nullable": true
-                    },
-                    "test_report_asset_id": {
-                        "type": "string",
-                        "nullable": true
-                    },
                     "error_code": {
                         "type": "string"
                     },
@@ -23160,10 +23134,6 @@
                 "required": [
                     "duration_ms",
                     "error_code",
-                    "execution_rule_digest",
-                    "execution_rule_summary",
-                    "execution_spec",
-                    "execution_spec_digest",
                     "finished_at",
                     "public_id",
                     "result_summary",
@@ -23171,10 +23141,7 @@
                     "snapshot_id",
                     "started_at",
                     "status",
-                    "stderr_asset_id",
-                    "stdout_asset_id",
                     "task_id",
-                    "test_report_asset_id",
                     "trace_id"
                 ]
             },

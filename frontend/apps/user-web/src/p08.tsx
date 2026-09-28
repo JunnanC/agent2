@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { useNavigate, useParams } from 'react-router-dom'
+import { FileText, Flag, History, Play, Save, Send } from 'lucide-react'
 import {
   ApiError,
   RequestIntent,
   apiRequestWithMetadata,
   clearWorkspaceToken,
+  completeTask,
   createWorkspaceSession,
   createWorkspaceCheckpoint,
   enterWorkspace,
@@ -14,7 +16,9 @@ import {
   getWorkspaceCheckpoints,
   restoreWorkspaceCheckpoint,
   renewWorkspaceSession,
+  runWorkspaceOperation,
   saveWorkspaceSnapshot,
+  submitTaskReport,
   type ProvisioningJob,
   type ProvisioningStageEvent,
   type TaskData,
@@ -22,7 +26,6 @@ import {
   type WorkspaceCheckpointData,
   type WorkspaceCheckpointListData,
   type WorkspaceEnvelope,
-  type WorkspaceExecutionRunData,
   type WorkspaceOperationData,
   type WorkspaceSessionData,
 } from '@edu/api-client'
@@ -43,6 +46,29 @@ const stageLabels: Record<string, string> = {
 }
 
 const iframeRenewWindowMs = 5 * 60 * 1000
+const runningExecutionStatuses = new Set(['QUEUED', 'RUNNING'])
+
+const executionStatusMessages: Record<string, string> = {
+  QUEUED: '测试已排队，等待执行。',
+  RUNNING: '正在执行公开测试。',
+  PASSED: '测试通过。',
+  FAILED: '测试未通过，请根据公开摘要检查实现。',
+  TIMEOUT: '测试超时，请检查算法复杂度或阻塞操作。',
+  RESOURCE_EXCEEDED: '测试超出资源限制，请降低资源占用。',
+  REJECTED: '测试请求被拒绝，请保存最新快照后重试。',
+}
+
+const submissionBlockMessages: Record<string, string> = {
+  TASK_STATE: '当前任务状态不允许提交。',
+  TASK_BLOCKED: '任务仍有阻断条件。',
+  WORKSPACE_SNAPSHOT_REQUIRED: '请先保存工作区快照。',
+  REPORT_DRAFT_REQUIRED: '请先填写并保存报告草稿。',
+  REPORT_DRAFT_STALE: '工作区已更新，请重新保存报告草稿。',
+  REPORT_ATTACHMENTS_SCANNING: '报告附件仍在安全扫描。',
+  REPORT_ATTACHMENTS_NOT_READY: '报告附件尚未通过安全扫描。',
+  TEST_NOT_FINISHED: '请先完成当前快照的测试。',
+  TEST_SNAPSHOT_STALE: '测试结果不是基于当前快照，请重新运行测试。',
+}
 
 function etagVersion(etag: string | null, fallback: number): number {
   const parsed = Number(etag?.replaceAll('"', ''))
@@ -133,6 +159,11 @@ function messageFor(error: unknown): string {
   if (code === 'WORKSPACE_SESSION_REVOKED' || code === 'WORKSPACE_SESSION_INVALID') return '工作区会话已失效，请重新进入实验。'
   if (code === 'AUTOSAVE_CONFLICT' || error.status === 412) return '服务端版本冲突：可保留服务端、保留本地，或创建新版本。'
   if (code === 'AUTOSAVE_SEQ_STALE') return '本地保存序号已过期，请刷新后继续。'
+  if (code === 'REPORT_ATTACHMENT_NOT_READY') return '报告附件尚未通过安全扫描，请刷新状态后重试。'
+  if (code === 'REPORT_EXECUTION_NOT_READY') return '请先完成当前工作区快照的测试。'
+  if (code === 'REPORT_EXECUTION_CONFLICT') return '测试结果与当前工作区快照不一致，请刷新并重新运行测试。'
+  if (code === 'REPORT_SNAPSHOT_CONFLICT') return '工作区内容已变化，请刷新并重新保存报告草稿。'
+  if (code === 'ROW_VERSION_CONFLICT') return '任务版本已变化，请刷新后重新确认提交。'
   if (code === 'WORKSPACE_CAPABILITY_DENIED') return '当前工作区未启用此操作能力，请联系课程教师。'
   if (error.status === 409) return '工作区状态已变化，请刷新后重试。'
   if (error.status === 429) return '工作区请求过于频繁，请稍后重试。'
@@ -162,10 +193,16 @@ function publicText(value: unknown): string {
   try { return JSON.stringify(value) } catch { return '' }
 }
 
-function executionSummary(value: unknown): string {
+function executionMessage(value: { status: string; result_summary?: string; error_code?: string }): string {
+  const statusMessage = executionStatusMessages[value.status] || '测试状态已更新。'
+  const detail = value.result_summary || value.error_code || ''
+  return detail && !statusMessage.includes(detail) ? `${statusMessage} ${detail}` : statusMessage
+}
+
+function submissionBlockMessage(value: unknown): string {
   if (!value || typeof value !== 'object') return ''
-  const record = value as Record<string, unknown>
-  return publicText(record.result_summary ?? record.error_code ?? record.public_id)
+  const code = String((value as Record<string, unknown>).code ?? '')
+  return submissionBlockMessages[code] ?? '当前条件不允许提交，请刷新任务状态。'
 }
 
 function PublicList({ items, empty = '暂无公开内容。' }: { items: unknown[]; empty?: string }) {
@@ -349,9 +386,14 @@ export function WorkspaceLabPage() {
   const [notice, setNotice] = useState('')
   const [seq, setSeq] = useState(0)
   const [version, setVersion] = useState(0)
-  const [operations, setOperations] = useState<WorkspaceOperationData[]>([])
-  const [executionRun, setExecutionRun] = useState<WorkspaceExecutionRunData | null>(null)
+  const [executionId, setExecutionId] = useState('')
+  const [checking, setChecking] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
   const flushing = useRef(false)
+  const runningCheck = useRef(false)
+  const submittingRequest = useRef(false)
+  const checkIntent = useRef<RequestIntent | null>(null)
+  const submitIntent = useRef<RequestIntent | null>(null)
   const latest = useRef({ content: draftContent, seq, version })
   latest.current = { content: draftContent, seq, version }
   useEffect(() => {
@@ -362,6 +404,13 @@ export function WorkspaceLabPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [saveState])
   const session = workspace.data?.payload.data as unknown as WorkspaceSessionData | undefined
+  const blockWorkspaceSession = workspace.blockSession
+  const execution = useQuery({
+    queryKey: workspaceKeys.execution(taskId, executionId),
+    queryFn: () => getWorkspaceExecutionRun(taskId, executionId, session?.workspace_token),
+    enabled: Boolean(executionId && session?.workspace_token),
+    refetchInterval: (query) => runningExecutionStatuses.has(query.state.data?.payload.data.status ?? '') ? 750 : false,
+  })
   useEffect(() => {
     if (!session) return
     setSeq(session.latest_client_seq)
@@ -398,24 +447,18 @@ export function WorkspaceLabPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.public_id, session?.workspace_token, taskId])
   useEffect(() => {
-    const executionId = operations[0]?.payload?.execution_run_id
-    if (!session || typeof executionId !== 'string') return undefined
-    let cancelled = false
-    let timer: number | undefined
-    const poll = async () => {
-      try {
-        const result = await getWorkspaceExecutionRun(taskId, executionId, session.workspace_token)
-        if (cancelled) return
-        const run = result.payload.data
-        setExecutionRun(run)
-        if (run.status === 'QUEUED' || run.status === 'RUNNING') timer = window.setTimeout(() => void poll(), 750)
-      } catch { /* The operation timeline remains available when a poll races session expiry. */ }
-    }
-    void poll()
-    return () => { cancelled = true; if (timer) window.clearTimeout(timer) }
-  }, [operations, session, taskId])
-  const save = async (manual = true) => {
-    if (!session) return
+    const run = execution.data?.payload.data
+    if (!run || runningExecutionStatuses.has(run.status)) return
+    setNotice(executionMessage(run))
+    void queryClient.invalidateQueries({ queryKey: workspaceKeys.workbench(taskId) })
+  }, [execution.data, queryClient, taskId])
+  useEffect(() => {
+    if (!execution.isError || !session) return
+    blockWorkspaceSession(execution.error, session.workspace_token)
+    setError(messageFor(execution.error))
+  }, [blockWorkspaceSession, execution.error, execution.isError, session])
+  const save = async (manual = true): Promise<boolean> => {
+    if (!session) return false
     const nextSeq = latest.current.seq + 1
     setSaveState('saving'); setError('')
     try {
@@ -424,21 +467,78 @@ export function WorkspaceLabPage() {
       cacheWorkspaceVersion(queryClient, taskId, snapshot.version_no, snapshot.client_seq, etagVersion(result.etag, session.row_version + 1))
       setSeq(snapshot.client_seq); setVersion(snapshot.version_no); setSaveState('saved')
       if (manual) setNotice('已保存到工作区对象存储。')
+      await queryClient.invalidateQueries({ queryKey: workspaceKeys.workbench(taskId) })
+      return true
     } catch (reason) {
       workspace.blockSession(reason, session.workspace_token)
       if (!navigator.onLine) { await queueDraft(taskId, { clientSeq: nextSeq, baseVersion: latest.current.version, content: latest.current.content }); setSaveState('offline') }
       else setSaveState(reason instanceof ApiError && reason.status === 412 ? 'conflict' : 'dirty')
       setError(messageFor(reason))
+      return false
     }
   }
-  const operation = async (name: string) => {
-    if (!session) return
+  const runCheck = async () => {
+    if (!session || runningCheck.current) return
+    runningCheck.current = true
+    setChecking(true)
+    setError(''); setNotice('')
+    checkIntent.current ??= new RequestIntent()
     try {
-      const result = await apiRequestWithMetadata<WorkspaceEnvelope<WorkspaceOperationData>>(`/workspace/${session.public_id}/operations`, { method: 'POST', body: JSON.stringify({ operation: name, arguments: { source: 'user-web' } }), headers: { 'Content-Type': 'application/json' }, workspaceToken: session.workspace_token, intent: new RequestIntent() })
-      setOperations((items) => [result.payload.data, ...items]); setNotice(result.payload.data.result_summary)
-    } catch (reason) { workspace.blockSession(reason, session.workspace_token); setError(messageFor(reason)) }
+      const result = await runWorkspaceOperation(
+        session.public_id,
+        'RUN_CHECK',
+        { source: 'user-web' },
+        session.workspace_token,
+        checkIntent.current,
+      )
+      const operationData = result.payload.data
+      const nextExecutionId = operationData.execution_run_id ?? operationData.payload.execution_run_id
+      if (typeof nextExecutionId !== 'string' || !nextExecutionId) throw new Error('EXECUTION_ID_MISSING')
+      checkIntent.current = null
+      setExecutionId(nextExecutionId)
+      setNotice(operationData.result_summary || executionStatusMessages.QUEUED || '测试已排队，等待执行。')
+    } catch (reason) {
+      workspace.blockSession(reason, session.workspace_token)
+      if (reason instanceof ApiError) checkIntent.current = null
+      setError(messageFor(reason))
+    } finally {
+      runningCheck.current = false
+      setChecking(false)
+    }
   }
   const item = task.data?.payload.data
+  const submitExperiment = async () => {
+    if (!item || submitting || submittingRequest.current || saveState !== 'saved') return
+    const submission = workbench.data?.payload.data.submission
+    if (!submission?.can_submit) return
+    const label = item.report_required ? '当前报告和工作区快照' : '当前工作区快照'
+    if (!window.confirm(`确认提交${label}？提交后将进入审核流程。`)) return
+    submittingRequest.current = true
+    setSubmitting(true); setError(''); setNotice('')
+    submitIntent.current ??= new RequestIntent()
+    const rowVersion = workbench.data?.payload.data.task.row_version ?? item.row_version
+    try {
+      if (item.report_required) {
+        await submitTaskReport(taskId, `"${rowVersion}"`, submitIntent.current)
+      } else {
+        await completeTask(taskId, `"${rowVersion}"`, submitIntent.current)
+      }
+      submitIntent.current = null
+      setNotice(item.report_required ? '实验报告已提交，任务进入审核流程。' : '工作区成果已提交，任务进入审核流程。')
+      await Promise.all([
+        task.refetch(),
+        workbench.refetch(),
+        queryClient.invalidateQueries({ queryKey: experimentKeys.dashboard() }),
+        queryClient.invalidateQueries({ queryKey: experimentKeys.myTasks() }),
+      ])
+    } catch (reason) {
+      if (reason instanceof ApiError) submitIntent.current = null
+      setError(messageFor(reason))
+    } finally {
+      submittingRequest.current = false
+      setSubmitting(false)
+    }
+  }
   if (task.isPending) return <RequestStateView state="loading" />
   if (task.isError || !item) return <RequestStateView state={task.error instanceof ApiError && task.error.status === 403 ? 'forbidden' : 'error'} message={messageFor(task.error)} onRetry={() => void task.refetch()} />
   const job = provisioning.data?.payload.data
@@ -452,8 +552,8 @@ export function WorkspaceLabPage() {
     const failure = job?.failure ?? item.current_failure
     return <section className="workspace-page"><PageHeader eyebrow="ENVIRONMENT" title={item.title} description="环境装载未完成，当前不会签发工作区票据。" /><RequestStateView state="error" title="环境加载失败" message={String((failure as Record<string, unknown> | null)?.message ?? (failure as Record<string, unknown> | null)?.error_code ?? '请返回任务页面重试。')} traceId={job?.trace_id} onRetry={() => window.location.assign(`/tasks/${taskId}`)} /></section>
   }
-  if (['ASSIGNED', 'CANCELLED', 'EXPIRED', 'COMPLETED'].includes(item.status)) {
-    return <section className="workspace-page"><PageHeader eyebrow="EXPERIMENT LAB" title={item.title} description="当前任务状态不允许创建新的工作区 Session。" /><RequestStateView state="empty" title={item.status === 'ASSIGNED' ? '请先开始实验' : '工作区已归档'} message={item.status === 'ASSIGNED' ? '返回任务详情页开始环境装载。' : '任务已结束或被取消，当前仅可查看结果。'} onRetry={() => window.location.assign(`/tasks/${taskId}`)} /></section>
+  if (!['READY', 'IN_PROGRESS', 'REPORT_DRAFT'].includes(item.status)) {
+    return <section className="workspace-page"><PageHeader eyebrow="EXPERIMENT LAB" title={item.title} description="当前任务状态不允许创建新的工作区 Session。" /><RequestStateView state="empty" title={item.status === 'ASSIGNED' ? '请先开始实验' : item.status === 'UNDER_REVIEW' ? '实验已提交' : '工作区已归档'} message={item.status === 'ASSIGNED' ? '返回任务详情页开始环境装载。' : item.status === 'UNDER_REVIEW' ? '当前成果正在审核，工作区已切换为只读结果流程。' : '任务已结束或被取消，当前仅可查看结果。'} onRetry={() => window.location.assign(`/tasks/${taskId}`)} /></section>
   }
   if (workspace.isPending || workspace.issue.isPending) return <RequestStateView state="loading" title="正在进入工作区" message="正在创建或恢复当前任务的唯一有效 Session。" />
   if (workspace.isError || !session) return <RequestStateView state={workspace.error instanceof ApiError && workspace.error.status === 403 ? 'forbidden' : 'error'} message={messageFor(workspace.error)} onRetry={workspace.retry} />
@@ -461,10 +561,24 @@ export function WorkspaceLabPage() {
   const runtimeTabs = Object.keys(runtimeTabLabels).filter((key) => session.capabilities[key] !== false && (Boolean(session.workspace_urls?.[key]) || session.capabilities[key] === true))
   const activeUrl = session.workspace_urls?.[runtimeTab]
   const workbenchData = workbench.data?.payload.data
-  const recentExecution = executionRun ?? workbenchData?.tests.recent_execution
+  const recentExecution = execution.data?.payload.data ?? workbenchData?.tests.recent_execution
   const workbenchContent = workbenchData?.content
   const template = workbenchData?.template
   const tests = workbenchData?.tests
+  const executionRunning = checking || runningExecutionStatuses.has(recentExecution?.status ?? '')
+  const testBlocked = saveState !== 'saved'
+    ? '请先保存当前工作区内容。'
+    : (version || session.current_version) === 0
+      ? '请先创建工作区快照。'
+      : ''
+  const submissionBlocked = saveState !== 'saved'
+    ? '请先保存当前工作区内容。'
+    : workbench.isPending
+      ? '正在同步提交条件。'
+      : workbench.isError
+        ? '提交条件暂不可用，请刷新后重试。'
+        : submissionBlockMessage(workbenchData?.submission.blocked_reason)
+  const canSubmit = !submitting && !submissionBlocked && workbenchData?.submission.can_submit === true
   const contentTabs: Array<{ id: ContentTab; label: string }> = [
     { id: 'content', label: '实验内容' },
     { id: 'template', label: '实验模板' },
@@ -492,10 +606,10 @@ export function WorkspaceLabPage() {
   </> : <>
     <h3>公开测试</h3>
     <p>公开用例 {tests?.public_count ?? 0} 个；隐藏测试和判题细节不会在工作台展示。</p>
-    {tests?.summary?.length ? <ul>{tests.summary.map((test, index) => { const summary = test.summary && typeof test.summary === 'object' ? test.summary as Record<string, unknown> : {}; const title = publicText(summary.title ?? summary.label ?? `公开用例 ${index + 1}`); const description = summary.description ? `：${publicText(summary.description)}` : ''; return <li key={`${test.position}-${index}`}>{title}{description}</li> })}</ul> : <p className="muted">暂无公开用例说明。</p>}
+    {tests?.summary?.length ? <ul>{tests.summary.map((test, index) => { const summary = test.summary && typeof test.summary === 'object' ? test.summary as Record<string, unknown> : {}; const title = publicText(summary.title ?? summary.label ?? `公开用例 ${index + 1}`); const details = [summary.description, summary.input_format, summary.pass_condition].map(publicText).filter(Boolean); return <li key={`${test.position}-${index}`}><strong>{title}</strong>{details.length ? <small>{details.join('；')}</small> : null}</li> })}</ul> : <p className="muted">暂无公开用例说明。</p>}
   </>
   return <section className="workspace-page workspace-page--immersive workspace-lab">
-    <PageHeader eyebrow="EXPERIMENT LAB" title={item?.title ?? '工作区'} description="受控实验工作区；快照和操作均可审计回放。" actions={<><button className="text-button" onClick={() => navigate(`/tasks/${taskId}/checkpoints`)}>检查点</button><button className="text-button" onClick={() => navigate(`/tasks/${taskId}/replay`)}>回放</button></>} />
+    <PageHeader eyebrow="EXPERIMENT LAB" title={item?.title ?? '工作区'} description="受控实验工作区；快照和操作均可审计回放。" />
     {notice ? <p className="notice" role="status">{notice}</p> : null}{error ? <p className="form-error" role="alert">{error}</p> : null}
     <div className="workspace-lab__layout">
       <aside className="workspace-lab__content-pane" aria-label="实验资料">
@@ -523,15 +637,18 @@ export function WorkspaceLabPage() {
       <div className="workspace-lab__footer-status">
         <span>连接 <StatusBadge status={session.status} /></span>
         <span>保存 <strong>{saveState === 'saved' ? '已保存' : saveState === 'saving' ? '保存中' : saveState === 'offline' ? '待同步' : saveState === 'conflict' ? '版本冲突' : '有未保存内容'}</strong></span>
-        <span>版本 <strong>v{version || session.current_version}</strong></span>
-        {recentExecution ? <span className="workspace-lab__footer-result">测试 <StatusBadge status={recentExecution.status} /><small>{executionSummary(recentExecution)}</small></span> : null}
+        <span>版本 <strong>v{version || session.current_version}</strong> / 序号 <strong>{seq || session.latest_client_seq}</strong></span>
+        <span className="workspace-lab__footer-result">测试 {recentExecution ? <><StatusBadge status={recentExecution.status} /><small>{executionMessage(recentExecution)}</small></> : <strong>尚未运行</strong>}<button className="workspace-lab__test-link" onClick={() => setContentTab('tests')}>查看 {tests?.public_count ?? 0} 个公开用例</button></span>
         {saveState === 'conflict' ? <div className="conflict-actions" role="group" aria-label="版本冲突处理"><span>版本冲突：</span><button className="text-button" onClick={() => { setSaveState('saved'); setError(''); setNotice('已保留服务端版本；本地草稿仍保留在当前页面。') }}>保留服务端</button><button className="text-button" onClick={() => { setVersion(session.current_version); setSaveState('dirty'); setError(''); setNotice('已保留本地内容，可再次保存。') }}>保留本地</button></div> : null}
+        {submissionBlocked ? <span className="workspace-lab__submission-note">提交条件：{submissionBlocked}</span> : null}
       </div>
       <div className="workspace-lab__footer-actions">
-        <button className="text-button" disabled={session.capabilities.run_check === false} onClick={() => void operation('RUN_CHECK')}>运行测试</button>
-        {session.capabilities.preview !== false && runtimeTabs.includes('preview') ? <button className="text-button" onClick={() => setRuntimeTab('preview')}>打开预览</button> : null}
-        {session.capabilities.webide !== false && runtimeTabs.includes('webide') ? <button className="text-button" onClick={() => void operation('FORMAT_DOCUMENT')}>格式化</button> : null}
-        <button className="primary-button" onClick={() => void save()}>保存快照</button>
+        <button className="icon-button" title="检查点" aria-label="检查点" onClick={() => navigate(`/tasks/${taskId}/checkpoints`)}><Flag size={18} aria-hidden="true" /></button>
+        <button className="icon-button" title="回放" aria-label="回放" onClick={() => navigate(`/tasks/${taskId}/replay`)}><History size={18} aria-hidden="true" /></button>
+        {item.report_required ? <button className="text-button" onClick={() => navigate(`/tasks/${taskId}/report`)}><FileText size={16} aria-hidden="true" /> 编辑报告</button> : null}
+        <button className="text-button" disabled={session.capabilities.run_check === false || executionRunning || Boolean(testBlocked)} title={testBlocked || undefined} onClick={() => void runCheck()}><Play size={16} aria-hidden="true" /> {executionRunning ? '测试中' : '运行测试'}</button>
+        <button className="text-button" disabled={saveState === 'saving' || submitting} onClick={() => void save()}><Save size={16} aria-hidden="true" /> {saveState === 'saving' ? '保存中' : '保存'}</button>
+        <button className="primary-button" disabled={!canSubmit} title={submissionBlocked || undefined} onClick={() => void submitExperiment()}><Send size={16} aria-hidden="true" /> {submitting ? '提交中' : '提交实验'}</button>
       </div>
     </div>
     <div className="workspace-lab__agent-anchor" data-agent-mount="workspace" />

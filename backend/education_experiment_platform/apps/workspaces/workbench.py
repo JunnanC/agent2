@@ -12,6 +12,7 @@ from apps.labtemplates.models import AutoCheckRule, TemplateVersion
 from apps.provisioning.models import ProvisioningJob, ProvisioningStageEvent
 from apps.reports.models import ReportDraft
 
+from .models import WorkspaceExecutionRun, WorkspaceSnapshot
 from .selectors import workbench_task_for_user
 
 PUBLIC_STAGES = tuple(ProvisioningJob.Stage.values)
@@ -51,7 +52,15 @@ def _validate_tests_asset(version: TemplateVersion) -> None:
 def _public_display_policy(policy: Any) -> dict[str, Any]:
     if not isinstance(policy, dict):
         return {}
-    allowed = {"title", "label", "description", "show_score", "show_output"}
+    allowed = {
+        "title",
+        "label",
+        "description",
+        "input_format",
+        "pass_condition",
+        "show_score",
+        "show_output",
+    }
     return {key: value for key, value in policy.items() if key in allowed}
 
 
@@ -217,21 +226,94 @@ def _tests_data(task: ExperimentTask) -> dict[str, Any]:
     }
 
 
-def _submission_data(task: ExperimentTask) -> dict[str, Any]:
+def _valid_submission_snapshot(task: ExperimentTask) -> WorkspaceSnapshot | None:
+    snapshot = (
+        WorkspaceSnapshot.objects.select_related("asset")
+        .filter(task=task)
+        .order_by("-version_no", "-created_at", "-id")
+        .first()
+    )
+    if snapshot is None:
+        return None
+    asset = snapshot.asset
+    if (
+        asset.owner_type != "WORKSPACE_TASK"
+        or asset.owner_ref != task.public_id
+        or asset.digest_sha256 != snapshot.digest_sha256
+        or asset.scan_status != ObjectAsset.ScanStatus.CLEAN
+        or asset.status != ObjectAsset.Status.ACTIVE
+    ):
+        return None
+    return snapshot
+
+
+def _submission_data(
+    task: ExperimentTask, *, blockers: list[dict[str, Any]]
+) -> dict[str, Any]:
     required = bool(task.publication.report_required)
-    can_submit = task.status in _ACTIVE_TASK_STATUSES
     draft = None
     if required:
         try:
             draft = task.report_draft
         except ReportDraft.DoesNotExist:
             draft = None
+    blocked_reason: dict[str, Any] | None = None
+    if task.status not in _ACTIVE_TASK_STATUSES:
+        blocked_reason = {"code": "TASK_STATE", "status": task.status}
+    elif blockers:
+        blocked_reason = {"code": "TASK_BLOCKED"}
+
+    snapshot = _valid_submission_snapshot(task)
+    if blocked_reason is None and snapshot is None:
+        blocked_reason = {"code": "WORKSPACE_SNAPSHOT_REQUIRED"}
+
+    if required and blocked_reason is None:
+        if draft is None or draft.status != ReportDraft.Status.DRAFT or not draft.body_markdown.strip():
+            blocked_reason = {"code": "REPORT_DRAFT_REQUIRED"}
+        elif (
+            draft.workspace_snapshot_id != snapshot.pk
+            or draft.snapshot_digest != snapshot.digest_sha256
+        ):
+            blocked_reason = {"code": "REPORT_DRAFT_STALE"}
+        else:
+            attachments = list(draft.attachments.select_related("asset"))
+            if any(
+                item.asset.scan_status == ObjectAsset.ScanStatus.PENDING
+                and item.asset.status == ObjectAsset.Status.ACTIVE
+                for item in attachments
+            ):
+                blocked_reason = {"code": "REPORT_ATTACHMENTS_SCANNING"}
+            elif any(
+                item.asset.scan_status != ObjectAsset.ScanStatus.CLEAN
+                or item.asset.status != ObjectAsset.Status.ACTIVE
+                for item in attachments
+            ):
+                blocked_reason = {"code": "REPORT_ATTACHMENTS_NOT_READY"}
+
+    if required and blocked_reason is None:
+        driver = task.runtime_adapter_driver or (
+            task.runtime_adapter.driver if task.runtime_adapter_id else "FAKE"
+        )
+        if driver != "FAKE":
+            run = (
+                WorkspaceExecutionRun.objects.filter(task=task)
+                .order_by("-created_at", "-id")
+                .first()
+            )
+            if run is None or run.status in {
+                WorkspaceExecutionRun.Status.QUEUED,
+                WorkspaceExecutionRun.Status.RUNNING,
+            }:
+                blocked_reason = {"code": "TEST_NOT_FINISHED"}
+            elif run.snapshot_id != snapshot.pk:
+                blocked_reason = {"code": "TEST_SNAPSHOT_STALE"}
+
     return {
         "required": required,
         "kind": "REPORT" if required else "SYSTEM_ARTIFACT",
         "strategy": "REPORT" if required else "COMPLETE",
-        "can_submit": can_submit,
-        "blocked_reason": None if can_submit else {"status": task.status},
+        "can_submit": blocked_reason is None,
+        "blocked_reason": blocked_reason,
         "draft_status": draft.status if draft is not None else None,
     }
 
@@ -266,5 +348,5 @@ def workbench_data(*, actor: User, task_id: str) -> dict[str, Any]:
         "template": _template_data(task.template_version),
         "tests": _tests_data(task),
         "provisioning": _provisioning_data(task),
-        "submission": _submission_data(task),
+        "submission": _submission_data(task, blockers=blockers),
     }

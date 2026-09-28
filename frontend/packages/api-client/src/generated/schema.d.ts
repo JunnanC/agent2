@@ -6631,17 +6631,6 @@ export interface components {
             session_id: string;
             snapshot_id: string | null;
             status: components["schemas"]["StatusA0dEnum"];
-            execution_rule_summary: {
-                [key: string]: unknown;
-            };
-            execution_rule_digest: string;
-            execution_spec: {
-                [key: string]: unknown;
-            };
-            execution_spec_digest: string;
-            stdout_asset_id: string | null;
-            stderr_asset_id: string | null;
-            test_report_asset_id: string | null;
             error_code: string;
             result_summary: string;
             /** Format: date-time */

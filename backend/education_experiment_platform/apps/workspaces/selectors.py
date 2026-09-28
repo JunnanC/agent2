@@ -36,6 +36,7 @@ def workbench_task_for_user(*, actor: User, task_id: str) -> ExperimentTask:
                 "publication",
                 "enrollment",
                 "student",
+                "runtime_adapter",
                 "template_version__template",
                 "template_version__manual_asset",
                 "template_version__starter_asset",
@@ -45,6 +46,7 @@ def workbench_task_for_user(*, actor: User, task_id: str) -> ExperimentTask:
                 "template_version__auto_check_rules",
                 "provisioning_jobs__failure_record",
                 "provisioning_jobs__stage_events",
+                "report_draft__attachments__asset",
                 "workspace_execution_runs",
             )
             .get(

@@ -4,6 +4,7 @@ from django.test import Client, TestCase, override_settings
 from django.utils import timezone
 
 from apps.accounts.models import User
+from apps.core.models import ObjectAsset
 from apps.courses.models import Enrollment
 from apps.courses.services import ActorContext
 from apps.experiments.models import TaskPublication
@@ -18,8 +19,10 @@ from apps.provisioning.adapters import reset_fake_runtime
 from apps.provisioning.services import execute_provisioning_job, start_provisioning
 
 from ..errors import WorkspaceSessionInvalid, WorkspaceSessionRevoked
-from ..models import WorkspaceExecutionRun, WorkspaceSession
+from ..models import WorkspaceExecutionRun, WorkspaceSession, WorkspaceSnapshot
 from ..permissions import require_workspace_session
+from ..serializers import execution_run_data
+from ..workbench import workbench_data
 from ..services import (
     enter_task,
     execute_execution_run,
@@ -103,6 +106,51 @@ class WorkspaceSessionServiceTests(TestCase):
         self.assertNotEqual(session.token_hash, token)
         self.assertNotIn(token, session.token_hash)
         require_workspace_session(session=session, token=token, task_id=self.task.public_id)
+
+    def test_non_report_submission_requires_a_clean_workspace_snapshot(self) -> None:
+        TaskPublication.objects.filter(pk=self.publication.pk).update(report_required=False)
+        _, session, _token = enter_task(
+            task_id=self.task.public_id,
+            actor=self.task.student,
+            expected_version=self.task.row_version,
+            context=self.context,
+        )
+        blocked = workbench_data(actor=self.task.student, task_id=self.task.public_id)
+        self.assertFalse(blocked["submission"]["can_submit"])
+        self.assertEqual(
+            blocked["submission"]["blocked_reason"]["code"],
+            "WORKSPACE_SNAPSHOT_REQUIRED",
+        )
+
+        digest = "a" * 64
+        asset = ObjectAsset.objects.create(
+            bucket="edu-platform",
+            object_key=f"workspaces/{self.task.public_id}/{digest}",
+            object_version="snapshot-version-1",
+            digest_sha256=digest,
+            size_bytes=8,
+            media_type="text/plain",
+            owner_type="WORKSPACE_TASK",
+            owner_ref=self.task.public_id,
+            purpose="WORKSPACE_SNAPSHOT",
+            scan_status=ObjectAsset.ScanStatus.CLEAN,
+        )
+        WorkspaceSnapshot.objects.create(
+            task=self.task,
+            session=session,
+            asset=asset,
+            version_no=1,
+            client_seq=1,
+            digest_sha256=digest,
+            size_bytes=8,
+            media_type="text/plain",
+            saved_at=timezone.now(),
+            trace_id="snapshot".ljust(32, "0"),
+        )
+
+        ready = workbench_data(actor=self.task.student, task_id=self.task.public_id)
+        self.assertTrue(ready["submission"]["can_submit"])
+        self.assertIsNone(ready["submission"]["blocked_reason"])
 
     def test_renew_rotates_token_and_old_token_is_invalid(self) -> None:
         _, session, token = enter_task(
@@ -246,6 +294,17 @@ class WorkspaceSessionServiceTests(TestCase):
         run = WorkspaceExecutionRun.objects.get(public_id=execution_id)
         self.assertEqual(run.status, WorkspaceExecutionRun.Status.PASSED)
         self.assertEqual(run.task_id, self.task.pk)
+        public_run = execution_run_data(run)
+        for hidden_field in (
+            "execution_rule_summary",
+            "execution_rule_digest",
+            "execution_spec",
+            "execution_spec_digest",
+            "stdout_asset_id",
+            "stderr_asset_id",
+            "test_report_asset_id",
+        ):
+            self.assertNotIn(hidden_field, public_run)
         replay = client.post(
             f"/workspace/{session.public_id}/operations",
             data=json.dumps({"operation": "RUN_CHECK", "arguments": {"source": "test"}}),
