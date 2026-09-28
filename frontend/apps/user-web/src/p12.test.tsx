@@ -181,4 +181,34 @@ describe('P15-E workspace Agent drawer', () => {
     expect(new Headers(decideCall?.[1]?.headers).get('If-Match')).toBe('"7"')
     expect(JSON.parse(String(decideCall?.[1]?.body))).toEqual({ decision: 'APPROVED', reason: 'student confirmed' })
   })
+
+  it('renders an asynchronous failure and never re-approves an expired tool call', async () => {
+    const failedMessage = {
+      ...assistantMessage,
+      public_id: 'message-assistant-failed',
+      status: 'FAILED',
+      body: 'Agent 请求失败，请稍后重试。',
+      tool_calls: [{
+        public_id: 'tool-call-expired', session_id: agentSession.public_id, tool_name: 'workspace_draft', risk: 'HIGH', arguments_digest: 'redacted', trace_id: 'trace-tool',
+        state: { public_id: 'tool-state-expired', status: 'EXPIRED', output: {}, error_code: 'APPROVAL_EXPIRED', row_version: 9 },
+      }],
+    }
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
+      void _init
+      const url = String(input)
+      if (url.endsWith('/tasks/task-1/agent-sessions')) return response(agentSession, 201)
+      if (url.endsWith('/agent-sessions/agent-session-1/messages')) return response([failedMessage])
+      if (url.endsWith('/agent-sessions/agent-session-1')) return response(agentSession)
+      throw new Error(`unexpected request: ${url}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    renderOrb()
+    fireEvent.click(screen.getByRole('button', { name: '打开 Agent 助手' }))
+
+    expect(await screen.findByText('Agent 请求失败，请稍后重试。')).toBeTruthy()
+    expect(screen.getByText('EXPIRED')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: '批准本次' })).toBeNull()
+    expect(fetchMock.mock.calls.some(([input]) => String(input).includes('/decide'))).toBe(false)
+  })
 })

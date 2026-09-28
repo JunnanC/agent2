@@ -2,8 +2,8 @@ name: edu-platform-p14
 
 x-app-environment: &app-environment
   APP_ENV: local
-  APP_VERSION: ${APP_VERSION:-0.14.0-p14}
-  OPENAPI_REVISION: ${OPENAPI_REVISION:-v2-p14}
+  APP_VERSION: ${APP_VERSION:-0.15.0-p15}
+  OPENAPI_REVISION: ${OPENAPI_REVISION:-v2-p15}
   SIMILARITY_ALGORITHM_VERSION: ${SIMILARITY_ALGORITHM_VERSION:-char-5gram-jaccard-v1}
   SIMILARITY_THRESHOLD: ${SIMILARITY_THRESHOLD:-0.30}
   SIMILARITY_RETENTION_DAYS: ${SIMILARITY_RETENTION_DAYS:-180}
@@ -485,8 +485,8 @@ services:
       args:
         NODE_BASE_IMAGE: ${NODE_BASE_IMAGE:-public.ecr.aws/docker/library/node:24-alpine}
         NGINX_BASE_IMAGE: ${NGINX_BASE_IMAGE:-m.daocloud.io/docker.io/library/nginx:1.29-alpine}
-        APP_VERSION: ${APP_VERSION:-0.14.0-p14}
-        OPENAPI_REVISION: ${OPENAPI_REVISION:-v2-p14}
+        APP_VERSION: ${APP_VERSION:-0.15.0-p15}
+        OPENAPI_REVISION: ${OPENAPI_REVISION:-v2-p15}
         GIT_REVISION: ${GIT_REVISION:-development}
         BUILD_TIME: ${BUILD_TIME:-development}
     read_only: true

@@ -17,7 +17,7 @@ import { TeachingAnalyticsPage } from './p13'
 function TeachingAgentRoute() { const { courseId = '' } = useParams(); return <TeachingAgentPage courseId={courseId} /> }
 function TeachingAnalyticsRoute() { const { courseId = '' } = useParams(); return <TeachingAnalyticsPage courseId={courseId} /> }
 
-const release = { version: import.meta.env.VITE_APP_VERSION ?? '0.14.0-p14', openapiRevision: import.meta.env.VITE_OPENAPI_REVISION ?? 'v2-p14', gitRevision: import.meta.env.VITE_GIT_REVISION ?? 'development', buildTime: import.meta.env.VITE_BUILD_TIME ?? 'development' }
+const release = { version: import.meta.env.VITE_APP_VERSION ?? '0.15.0-p15', openapiRevision: import.meta.env.VITE_OPENAPI_REVISION ?? 'v2-p15', gitRevision: import.meta.env.VITE_GIT_REVISION ?? 'development', buildTime: import.meta.env.VITE_BUILD_TIME ?? 'development' }
 
 function LoginPage() {
   const session = useSession(); const navigate = useNavigate(); const [busy, setBusy] = useState(false); const [error, setError] = useState('')

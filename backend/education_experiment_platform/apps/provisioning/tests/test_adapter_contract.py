@@ -321,9 +321,11 @@ class FakeDockerEngine:
 
 class DockerLocalAdapterTests(SimpleTestCase):
     def test_docker_client_construction_failure_uses_runtime_error_contract(self) -> None:
-        with patch("docker.APIClient", side_effect=OSError("docker socket missing")):
-            with self.assertRaises(RuntimeAdapterFailure) as raised:
-                DockerLocalAdapter(config_ref="runtime/local-docker")
+        with (
+            patch("docker.APIClient", side_effect=OSError("docker socket missing")),
+            self.assertRaises(RuntimeAdapterFailure) as raised,
+        ):
+            DockerLocalAdapter(config_ref="runtime/local-docker")
 
         self.assertEqual(raised.exception.code, "RUNTIME_CLIENT_UNAVAILABLE")
 

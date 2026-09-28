@@ -2,8 +2,8 @@
     "openapi": "3.0.3",
     "info": {
         "title": "Education Agent Platform API",
-        "version": "v2-p14",
-        "description": "P13 notifications, analytics, integrations, and platform operations."
+        "version": "v2-p15",
+        "description": "P15 student experiment workbench and platform operations."
     },
     "paths": {
         "/api/v2/agent-messages/{message_id}/feedback": {

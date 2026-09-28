@@ -22,7 +22,6 @@ from ..errors import WorkspaceSessionInvalid, WorkspaceSessionRevoked
 from ..models import WorkspaceExecutionRun, WorkspaceSession, WorkspaceSnapshot
 from ..permissions import require_workspace_session
 from ..serializers import execution_run_data
-from ..workbench import workbench_data
 from ..services import (
     enter_task,
     execute_execution_run,
@@ -30,6 +29,7 @@ from ..services import (
     request_execution_run,
     revoke_session,
 )
+from ..workbench import workbench_data
 
 
 class WorkspaceSessionServiceTests(TestCase):

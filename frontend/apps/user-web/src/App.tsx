@@ -13,8 +13,8 @@ import { UserCourseAgentRoute, UserTaskAgentRoute } from './p12'
 import { UserP13Page } from './p13'
 
 const release = {
-  version: import.meta.env.VITE_APP_VERSION ?? '0.14.0-p14',
-  openapiRevision: import.meta.env.VITE_OPENAPI_REVISION ?? 'v2-p14',
+  version: import.meta.env.VITE_APP_VERSION ?? '0.15.0-p15',
+  openapiRevision: import.meta.env.VITE_OPENAPI_REVISION ?? 'v2-p15',
   gitRevision: import.meta.env.VITE_GIT_REVISION ?? 'development',
   buildTime: import.meta.env.VITE_BUILD_TIME ?? 'development',
 }

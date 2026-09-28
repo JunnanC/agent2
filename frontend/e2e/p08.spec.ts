@@ -32,7 +32,7 @@ test('@user P08 workspace lab, checkpoint and replay are reachable', async ({ pa
   const checkpointName = `P08 integration checkpoint ${Date.now()}`
   await login(page, 'student.integration@example.edu')
   await page.goto('/tasks')
-  await page.getByRole('link', { name: '查看' }).first().click()
+  await page.getByRole('row').filter({ hasText: 'P07 FakeRuntime 任务' }).getByRole('link', { name: '查看' }).click()
   await page.getByRole('link', { name: '进入工作区' }).click()
   await expect(page.getByRole('heading', { name: 'IDE / 内容' })).toBeVisible()
   await responsive(page)

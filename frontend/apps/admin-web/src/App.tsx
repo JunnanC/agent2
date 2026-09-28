@@ -38,7 +38,7 @@ import { ReviewMonitorPage } from './p10'
 import { PlatformCompensationsPage, PlatformInstancesPage } from './p11'
 import { PlatformP13Page } from './p13'
 
-const release = { version: import.meta.env.VITE_APP_VERSION ?? '0.14.0-p14', openapiRevision: import.meta.env.VITE_OPENAPI_REVISION ?? 'v2-p14', gitRevision: import.meta.env.VITE_GIT_REVISION ?? 'development', buildTime: import.meta.env.VITE_BUILD_TIME ?? 'development' }
+const release = { version: import.meta.env.VITE_APP_VERSION ?? '0.15.0-p15', openapiRevision: import.meta.env.VITE_OPENAPI_REVISION ?? 'v2-p15', gitRevision: import.meta.env.VITE_GIT_REVISION ?? 'development', buildTime: import.meta.env.VITE_BUILD_TIME ?? 'development' }
 const tabs = [{ href: '/users', label: '用户' }, { href: '/teachers', label: '教师资格' }, { href: '/admins', label: '管理员资格' }, { href: '/verifications', label: '身份审核' }, { href: '/courses', label: '课程监管' }, { href: '/experiment-anomalies', label: '实验异常' }, { href: '/instances', label: '实例回收' }, { href: '/compensations', label: '补偿任务' }, { href: '/runtimes', label: '运行时' }, { href: '/images', label: '镜像' }, { href: '/resource-profiles', label: '资源规格' }, { href: '/quotas', label: '配额' }, { href: '/security', label: '安全策略' }, { href: '/template-prechecks', label: '模板预检' }, { href: '/report-scan-anomalies', label: '报告扫描' }, { href: '/review-monitor', label: '审核监管' }, { href: '/agent-policies', label: 'Agent 策略' }, { href: '/p13', label: 'P13 运维' }]
 
 function messageFor(error: unknown): string {

@@ -40,8 +40,8 @@ DEBUG = False
 ALLOWED_HOSTS = csv_env("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1,django")
 CSRF_TRUSTED_ORIGINS = csv_env("DJANGO_TRUSTED_ORIGINS")
 
-APP_VERSION = env("APP_VERSION", "0.14.0-p14")
-OPENAPI_REVISION = env("OPENAPI_REVISION", "v2-p14")
+APP_VERSION = env("APP_VERSION", "0.15.0-p15")
+OPENAPI_REVISION = env("OPENAPI_REVISION", "v2-p15")
 GIT_REVISION = env("GIT_REVISION", "development")
 BUILD_TIME = env("BUILD_TIME", "development")
 TRUSTED_PROXY_CIDRS = csv_env(
@@ -116,9 +116,7 @@ REST_FRAMEWORK: dict[str, object] = {
 
 SPECTACULAR_SETTINGS: dict[str, object] = {
     "TITLE": "Education Agent Platform API",
-    "DESCRIPTION": (
-        "P13 notifications, analytics, integrations, and platform operations."
-    ),
+    "DESCRIPTION": "P15 student experiment workbench and platform operations.",
     "VERSION": OPENAPI_REVISION,
     "SERVE_INCLUDE_SCHEMA": False,
     "OAS_VERSION": "3.0.3",

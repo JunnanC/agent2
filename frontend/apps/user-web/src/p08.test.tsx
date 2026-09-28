@@ -49,6 +49,12 @@ function response(data: unknown, status = 200) {
   })
 }
 
+function errorResponse(code: string, status: number, message = code) {
+  return new Response(JSON.stringify({
+    error: { code, message, detail: {}, trace_id: 'trace-error', retryable: false },
+  }), { status, headers: { 'Content-Type': 'application/json' } })
+}
+
 function renderPage() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
@@ -168,6 +174,64 @@ describe('P15-B workspace lifecycle', () => {
     expect(document.querySelectorAll('iframe')).toHaveLength(1)
     expect((document.querySelector('iframe') as HTMLIFrameElement).src).toContain('/workspace/session-1/webide')
   })
+
+  it('renders a failed provisioning trace without issuing a workspace session', async () => {
+    const failedJob = {
+      ...provisioningJob,
+      status: 'FAILED',
+      current_stage: 'CREATE',
+      retryable: true,
+      failure: { error_code: 'RUNTIME_CREATE_FAILED', message: '环境创建失败' },
+    }
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.endsWith('/workbench')) return response(workbench)
+      if (url.endsWith('/provisioning-job')) return response(failedJob)
+      if (url.endsWith('/tasks/task-1')) return response({ ...baseTask, status: 'FAILED', current_failure: failedJob.failure })
+      throw new Error(`unexpected request: ${url}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    renderPage()
+
+    expect(await screen.findByRole('heading', { name: '环境加载失败' })).toBeTruthy()
+    expect(screen.getByText('环境创建失败')).toBeTruthy()
+    expect(screen.getByText('trace-job')).toBeTruthy()
+    expect(fetchMock.mock.calls.some(([input]) => String(input).includes('workspace-sessions'))).toBe(false)
+  })
+
+  it('keeps expired tasks out of the workspace session flow', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.endsWith('/workbench')) return response({ ...workbench, task: { ...workbench.task, status: 'EXPIRED' } })
+      if (url.endsWith('/provisioning-job')) return response(provisioningJob)
+      if (url.endsWith('/tasks/task-1')) return response({ ...baseTask, status: 'EXPIRED' })
+      throw new Error(`unexpected request: ${url}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    renderPage()
+
+    expect(await screen.findByRole('heading', { name: '工作区已归档' })).toBeTruthy()
+    expect(fetchMock.mock.calls.some(([input]) => String(input).includes('workspace-sessions'))).toBe(false)
+  })
+
+  it('shows a re-entry action when the workspace session has expired', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.endsWith('/workbench')) return response(workbench)
+      if (url.endsWith('/provisioning-job')) return response(provisioningJob)
+      if (url.endsWith('/workspace-sessions')) return errorResponse('WORKSPACE_SESSION_EXPIRED', 401)
+      if (url.endsWith('/tasks/task-1')) return response({ ...baseTask, status: 'IN_PROGRESS', row_version: 2 })
+      throw new Error(`unexpected request: ${url}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    renderPage()
+
+    expect(await screen.findByText('工作区会话已过期，请重新进入实验。')).toBeTruthy()
+    expect(screen.getByRole('button', { name: '重试' })).toBeTruthy()
+  })
 })
 
 describe('P15-D test results and submission footer', () => {
@@ -232,6 +296,48 @@ describe('P15-D test results and submission footer', () => {
     fireEvent.click(await screen.findByRole('button', { name: '提交实验' }))
     expect(await screen.findByRole('heading', { name: '实验已提交' })).toBeTruthy()
     expect(fetchMock.mock.calls.some(([input]) => String(input).endsWith('/submit-report'))).toBe(false)
+  })
+
+  it('offers explicit choices after an autosave version conflict', async () => {
+    const activeSession = { ...session, current_version: 1, latest_client_seq: 1 }
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url.endsWith('/workbench')) return response(workbench)
+      if (url.endsWith('/provisioning-job')) return response(provisioningJob)
+      if (url.endsWith('/workspace-sessions')) return response(activeSession)
+      if (url.endsWith('/workspace-snapshot') && init?.method === 'PUT') return errorResponse('AUTOSAVE_CONFLICT', 412)
+      if (url.endsWith('/tasks/task-1')) return response({ ...baseTask, status: 'IN_PROGRESS', row_version: 2 })
+      throw new Error(`unexpected request: ${url}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    renderPage()
+
+    fireEvent.change(await screen.findByRole('textbox', { name: '实验内容' }), { target: { value: 'conflicting draft' } })
+    fireEvent.click(screen.getByRole('button', { name: /^保存$/ }))
+    expect(await screen.findByRole('group', { name: '版本冲突处理' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '保留服务端' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '保留本地' })).toBeTruthy()
+  })
+
+  it('reports a task row-version conflict during submission', async () => {
+    const activeSession = { ...session, current_version: 1, latest_client_seq: 1 }
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url.endsWith('/workbench')) return response(workbench)
+      if (url.endsWith('/provisioning-job')) return response(provisioningJob)
+      if (url.endsWith('/workspace-sessions')) return response(activeSession)
+      if (url.endsWith('/tasks/task-1/complete') && init?.method === 'POST') return errorResponse('ROW_VERSION_CONFLICT', 412)
+      if (url.endsWith('/tasks/task-1')) return response({ ...baseTask, status: 'IN_PROGRESS', row_version: 2 })
+      throw new Error(`unexpected request: ${url}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+
+    renderPage()
+
+    fireEvent.click(await screen.findByRole('button', { name: '提交实验' }))
+    expect(await screen.findByText('任务版本已变化，请刷新后重新确认提交。')).toBeTruthy()
   })
 
   it('keeps report submission disabled while an attachment is scanning', async () => {

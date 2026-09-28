@@ -3,6 +3,7 @@ from unittest.mock import patch
 from django.test import Client, SimpleTestCase, TestCase, override_settings
 from rest_framework.response import Response
 
+from apps.accounts.models import User
 from apps.accounts.tests.helpers import create_user
 from apps.core.models import OutboxEvent
 from apps.experiments.models import ExperimentTask
@@ -87,7 +88,7 @@ class WorkbenchReadOnlyApiTests(TestCase):
         )
         self.task = ExperimentTask.objects.get(publication=published, student=self.student)
 
-    def _client(self, user, *, portal: str = "USER") -> Client:
+    def _client(self, user: User, *, portal: str = "USER") -> Client:
         client = Client(enforce_csrf_checks=True)
         client.get(
             "/api/v2/auth/csrf",

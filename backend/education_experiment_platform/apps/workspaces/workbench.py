@@ -267,8 +267,12 @@ def _submission_data(
     if blocked_reason is None and snapshot is None:
         blocked_reason = {"code": "WORKSPACE_SNAPSHOT_REQUIRED"}
 
-    if required and blocked_reason is None:
-        if draft is None or draft.status != ReportDraft.Status.DRAFT or not draft.body_markdown.strip():
+    if required and blocked_reason is None and snapshot is not None:
+        if (
+            draft is None
+            or draft.status != ReportDraft.Status.DRAFT
+            or not draft.body_markdown.strip()
+        ):
             blocked_reason = {"code": "REPORT_DRAFT_REQUIRED"}
         elif (
             draft.workspace_snapshot_id != snapshot.pk
@@ -290,7 +294,7 @@ def _submission_data(
             ):
                 blocked_reason = {"code": "REPORT_ATTACHMENTS_NOT_READY"}
 
-    if required and blocked_reason is None:
+    if required and blocked_reason is None and snapshot is not None:
         driver = task.runtime_adapter_driver or (
             task.runtime_adapter.driver if task.runtime_adapter_id else "FAKE"
         )
