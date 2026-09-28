@@ -710,31 +710,34 @@ def create_agent_session(
         "DESTROYING",
     }:
         raise AgentScopeDenied(detail={"task_status": task.status})
-    session = AgentSession.objects.create(
+    session, created = AgentSession.objects.get_or_create(
         student=actor,
         course=course,
-        enrollment=enrollment,
         task=task,
-        profile=profile,
-        definition=profile.definition,
         profile_version=profile.version_no,
         mode=mode,
-        prompt_version=profile.prompt_version,
-        knowledge_base=profile.knowledge_base,
-        tool_policy=profile.tool_policy,
-        model_route=profile.model_route,
-        budget_snapshot=profile.budget,
-        knowledge_snapshot=_knowledge_snapshot(profile),
-        trace_id=context.trace_id,
+        defaults={
+            "enrollment": enrollment,
+            "profile": profile,
+            "definition": profile.definition,
+            "prompt_version": profile.prompt_version,
+            "knowledge_base": profile.knowledge_base,
+            "tool_policy": profile.tool_policy,
+            "model_route": profile.model_route,
+            "budget_snapshot": profile.budget,
+            "knowledge_snapshot": _knowledge_snapshot(profile),
+            "trace_id": context.trace_id,
+        },
     )
-    _audit(
-        context,
-        action="agent.session.create",
-        target_type="agent_session",
-        target_ref=session.public_id,
-        course_ref=course.public_id,
-        after={"mode": mode, "task_id": task.public_id if task else ""},
-    )
+    if created:
+        _audit(
+            context,
+            action="agent.session.create",
+            target_type="agent_session",
+            target_ref=session.public_id,
+            course_ref=course.public_id,
+            after={"mode": mode, "task_id": task.public_id if task else ""},
+        )
     return session
 
 

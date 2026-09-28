@@ -121,6 +121,38 @@ class AgentSafetyTests(TestCase):
         self.assertEqual(session.knowledge_base_id, self.knowledge.pk)
         self.assertEqual(session.tool_policy_id, self.policy.pk)
 
+    def test_task_session_creation_reuses_the_frozen_scope(self) -> None:
+        first = create_agent_session(
+            actor=self.student,
+            course_id=self.course.public_id,
+            task_id=self.task.public_id,
+            mode=AgentSession.Mode.WORKSPACE_ASSIST,
+            context=self.context,
+        )
+        repeated = create_agent_session(
+            actor=self.student,
+            course_id=self.course.public_id,
+            task_id=self.task.public_id,
+            mode=AgentSession.Mode.WORKSPACE_ASSIST,
+            context=ActorContext(
+                actor_ref=self.student.public_id,
+                portal="USER",
+                trace_id="p12-repeated-session",
+            ),
+        )
+
+        self.assertEqual(repeated.pk, first.pk)
+        self.assertEqual(repeated.trace_id, "p12-test")
+        self.assertEqual(
+            AgentSession.objects.filter(
+                student=self.student,
+                task=self.task,
+                mode=AgentSession.Mode.WORKSPACE_ASSIST,
+                profile_version=self.profile.version_no,
+            ).count(),
+            1,
+        )
+
     def test_high_risk_tool_requires_matching_approval(self) -> None:
         session = AgentSession.objects.create(
             student=self.student,

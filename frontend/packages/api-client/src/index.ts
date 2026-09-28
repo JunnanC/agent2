@@ -79,10 +79,11 @@ export type AgentMode = 'KNOWLEDGE_QA' | 'SOCRATIC_HINT' | 'DEBUG_ASSIST' | 'REP
 export type AgentProfileData = { public_id: string; course_id: string; version_no: number; status: string; modes: AgentMode[]; model_route: string; budget: Record<string, unknown>; knowledge_base_id: string | null; prompt_version_id: string | null; tool_policy_id: string | null; last_eval_run_id: string | null; row_version: number }
 export type AgentSessionData = { public_id: string; course_id: string; enrollment_id: string; task_id: string | null; mode: AgentMode; status: string; profile_id: string; profile_version: number; row_version: number; trace_id: string }
 export type AgentCitationData = { public_id: string; source_version_id: string; title: string; snippet: string; score: number; accessible: boolean; asset_id: string | null }
-export type AgentMessageData = { public_id: string; role: string; body: string; status: string; citation_status: string; token_count: number; created_at: string; trace_id: string; citations: AgentCitationData[] }
 export type AgentToolCallData = { public_id: string; session_id: string; tool_name: string; risk: string; arguments_digest: string; state: { public_id: string; status: string; output: Record<string, unknown>; error_code: string; row_version: number } | null; trace_id: string }
+export type AgentMessageData = { public_id: string; role: string; body: string; status: string; citation_status: string; token_count: number; created_at: string; trace_id: string; citations: AgentCitationData[]; tool_calls?: AgentToolCallData[] }
 export type AgentProfileResponse = { data: { course_id: string; enrollment_id: string; profile: AgentProfileData; capabilities: { modes: AgentMode[]; tool_risk: string | null } }; meta: { trace_id: string } }
 export type AgentSessionResponse = { data: AgentSessionData; meta: { trace_id: string } }
+export type AgentMessageResponse = { data: AgentMessageData; meta: { trace_id: string } }
 export type AgentMessagesResponse = { data: AgentMessageData[]; meta: { trace_id: string } }
 export type AgentToolResponse = { data: { tool_call: string } | AgentToolCallData; meta: { trace_id: string } }
 export type AgentProfileListResponse = { data: AgentProfileData[]; meta: { trace_id: string } }
@@ -93,11 +94,23 @@ export function createAgentSession(courseId: string, mode: AgentMode, intent = n
 export function createTaskAgentSession(taskId: string, mode: AgentMode, intent = new RequestIntent()) {
   return apiRequestWithMetadata<AgentSessionResponse>(`/api/v2/tasks/${encodeURIComponent(taskId)}/agent-sessions`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode }), intent })
 }
+export function getAgentSession(sessionId: string, signal?: AbortSignal) {
+  return apiRequestWithMetadata<AgentSessionResponse>(`/api/v2/agent-sessions/${encodeURIComponent(sessionId)}`, { signal })
+}
+export function getAgentMessages(sessionId: string, signal?: AbortSignal) {
+  return apiRequestWithMetadata<AgentMessagesResponse>(`/api/v2/agent-sessions/${encodeURIComponent(sessionId)}/messages`, { signal })
+}
 export function sendAgentMessage(sessionId: string, body: string, intent = new RequestIntent()) {
-  return apiRequestWithMetadata<AgentSessionResponse>(`/api/v2/agent-sessions/${encodeURIComponent(sessionId)}/messages`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ body }), intent })
+  return apiRequestWithMetadata<AgentMessageResponse>(`/api/v2/agent-sessions/${encodeURIComponent(sessionId)}/messages`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ body }), intent })
 }
 export function requestAgentTool(sessionId: string, toolName: string, argumentsValue: Record<string, unknown>, intent = new RequestIntent()) {
   return apiRequestWithMetadata<AgentToolResponse>(`/api/v2/agent-sessions/${encodeURIComponent(sessionId)}/tool-calls`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tool_name: toolName, arguments: argumentsValue }), intent })
+}
+export function submitAgentFeedback(messageId: string, rating: 'USEFUL' | 'NOT_USEFUL', intent = new RequestIntent()) {
+  return apiRequestWithMetadata<{ data: { public_id: string; status: string }; meta: { trace_id: string } }>(`/api/v2/agent-messages/${encodeURIComponent(messageId)}/feedback`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rating }), intent })
+}
+export function decideAgentToolCall(callId: string, decision: 'APPROVED' | 'REJECTED', rowVersion: number, intent = new RequestIntent()) {
+  return apiRequestWithMetadata<{ data: { public_id: string; status: string; row_version: number }; meta: { trace_id: string } }>(`/api/v2/agent-tool-calls/${encodeURIComponent(callId)}/decide`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ decision, reason: decision === 'APPROVED' ? 'student confirmed' : 'student rejected' }), ifMatch: `"${rowVersion}"`, intent })
 }
 
 export type WorkspaceCapabilities = Record<string, boolean>

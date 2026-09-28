@@ -32,6 +32,7 @@ import {
 import { PortalEventClient } from '@edu/event-client'
 import { experimentKeys, workspaceKeys } from '@edu/query-keys'
 import { PageHeader, RequestStateView, StatusBadge } from '@edu/ui'
+import { AgentOrb } from './p12'
 
 type QueuedDraft = { clientSeq: number; baseVersion: number; content: string }
 type WorkspaceSessionResult = ApiResult<WorkspaceEnvelope<WorkspaceSessionData>>
@@ -651,7 +652,9 @@ export function WorkspaceLabPage() {
         <button className="primary-button" disabled={!canSubmit} title={submissionBlocked || undefined} onClick={() => void submitExperiment()}><Send size={16} aria-hidden="true" /> {submitting ? '提交中' : '提交实验'}</button>
       </div>
     </div>
-    <div className="workspace-lab__agent-anchor" data-agent-mount="workspace" />
+    <div className="workspace-lab__agent-anchor" data-agent-mount="workspace">
+      <AgentOrb taskId={taskId} workspaceAvailable={session.status === 'ACTIVE' && Boolean(session.workspace_token)} />
+    </div>
   </section>
 }
 
