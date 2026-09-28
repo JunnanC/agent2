@@ -27,8 +27,8 @@ DEBUG = False
 ALLOWED_HOSTS = csv_env("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1,django")
 CSRF_TRUSTED_ORIGINS = csv_env("DJANGO_TRUSTED_ORIGINS")
 
-APP_VERSION = env("APP_VERSION", "0.9.0-p09")
-OPENAPI_REVISION = env("OPENAPI_REVISION", "v2-p09")
+APP_VERSION = env("APP_VERSION", "0.10.0-p10")
+OPENAPI_REVISION = env("OPENAPI_REVISION", "v2-p10")
 GIT_REVISION = env("GIT_REVISION", "development")
 BUILD_TIME = env("BUILD_TIME", "development")
 TRUSTED_PROXY_CIDRS = csv_env(
@@ -104,7 +104,7 @@ REST_FRAMEWORK: dict[str, object] = {
 SPECTACULAR_SETTINGS: dict[str, object] = {
     "TITLE": "Education Agent Platform API",
     "DESCRIPTION": (
-        "P09 reports, scanned attachments, immutable submissions, and system artifacts."
+        "P10 teacher reviews, immutable decisions, auto-check evidence, and similarity support."
     ),
     "VERSION": OPENAPI_REVISION,
     "SERVE_INCLUDE_SCHEMA": False,
@@ -150,7 +150,16 @@ CELERY_TASK_ROUTES = {
     "apps.experiments.*": {"queue": "q_default"},
     "apps.workspaces.*": {"queue": "q_default"},
     "apps.reports.*": {"queue": "q_provision"},
+    "apps.reviews.run_auto_check": {"queue": "q_provision"},
+    "apps.reviews.run_similarity_check": {"queue": "q_analytics"},
+    "apps.reviews.purge_similarity_evidence": {"queue": "q_default"},
 }
+SIMILARITY_ALGORITHM_VERSION = env(
+    "SIMILARITY_ALGORITHM_VERSION", "char-5gram-jaccard-v1"
+)
+SIMILARITY_THRESHOLD = env("SIMILARITY_THRESHOLD", "0.30")
+SIMILARITY_RETENTION_DAYS = int(env("SIMILARITY_RETENTION_DAYS", "180"))
+P10_AUTO_CHECK_MAX_ATTEMPTS = int(env("P10_AUTO_CHECK_MAX_ATTEMPTS", "3"))
 WORKSPACE_TOKEN_HMAC_KEY = env("WORKSPACE_TOKEN_HMAC_KEY", SECRET_KEY)
 WORKSPACE_SESSION_TTL_SECONDS = int(env("WORKSPACE_SESSION_TTL_SECONDS", "900"))
 WORKSPACE_SNAPSHOT_MAX_BYTES = int(env("WORKSPACE_SNAPSHOT_MAX_BYTES", str(20 * 1024 * 1024)))

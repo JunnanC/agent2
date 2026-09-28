@@ -92,3 +92,15 @@ export const reportKeys = {
   preview: (courseId: string, taskId: string) => [...reportKeys.all, 'preview', courseId, taskId] as const,
   scanAnomalies: () => [...reportKeys.all, 'scan-anomalies'] as const,
 }
+
+export const reviewKeys = {
+  all: ['reviews'] as const,
+  queue: (courseId: string, filters: object = {}) => [...reviewKeys.all, 'queue', courseId, filters] as const,
+  detail: (courseId: string, reviewId: string) => [...reviewKeys.all, 'detail', courseId, reviewId] as const,
+  scores: (courseId: string, reviewId: string) => [...reviewKeys.detail(courseId, reviewId), 'scores'] as const,
+  annotations: (courseId: string, reviewId: string) => [...reviewKeys.detail(courseId, reviewId), 'annotations'] as const,
+  similarity: (courseId: string, runId: string) => [...reviewKeys.all, 'similarity', courseId, runId] as const,
+  similarityMatches: (courseId: string, runId: string) => [...reviewKeys.similarity(courseId, runId), 'matches'] as const,
+  result: (taskId: string) => [...reviewKeys.all, 'result', taskId] as const,
+  monitor: () => [...reviewKeys.all, 'monitor'] as const,
+}

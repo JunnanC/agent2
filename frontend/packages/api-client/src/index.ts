@@ -144,6 +144,15 @@ export type ReportPreviewResponse = components['schemas']['ReportPreviewResponse
 export type ReportScanAnomalySummary = components['schemas']['ReportScanAnomalySummary']
 export type DownloadGrantResponse = components['schemas']['DownloadGrantResponse']
 export type DownloadGrantRevokeResponse = components['schemas']['DownloadGrantRevokeResponse']
+export type ReviewListResponse = components['schemas']['ReviewListResponse']
+export type ReviewDetailResponse = components['schemas']['ReviewDetailResponse']
+export type CriterionScoresResponse = components['schemas']['CriterionScoresResponse']
+export type AnnotationResponse = components['schemas']['AnnotationResponse']
+export type ReviewDecisionResponse = components['schemas']['ReviewDecisionResponse']
+export type ReviewResultResponse = components['schemas']['ReviewResultResponse']
+export type SimilarityRunResponse = components['schemas']['SimilarityRunResponse']
+export type SimilarityMatchListResponse = components['schemas']['SimilarityMatchListResponse']
+export type ReviewMonitorResponse = components['schemas']['ReviewMonitorResponse']
 
 export interface ApiFailure {
   error: {
