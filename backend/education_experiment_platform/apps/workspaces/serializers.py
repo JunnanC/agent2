@@ -1,6 +1,12 @@
 from rest_framework import serializers
 
-from .models import OperationEvent, WorkspaceCheckpoint, WorkspaceSession, WorkspaceSnapshot
+from .models import (
+    OperationEvent,
+    WorkspaceCheckpoint,
+    WorkspaceExecutionRun,
+    WorkspaceSession,
+    WorkspaceSnapshot,
+)
 
 
 class WorkspaceSessionSerializer(serializers.Serializer):
@@ -11,6 +17,7 @@ class WorkspaceSessionSerializer(serializers.Serializer):
     portal = serializers.CharField()
     status = serializers.ChoiceField(choices=WorkspaceSession.Status.choices)
     capabilities = serializers.DictField()
+    workspace_urls = serializers.DictField(child=serializers.CharField())
     expires_at = serializers.DateTimeField()
     revoked_at = serializers.DateTimeField(allow_null=True)
     current_version = serializers.IntegerField()
@@ -68,6 +75,33 @@ class OperationEventSerializer(serializers.Serializer):
     result_summary = serializers.CharField()
     occurred_at = serializers.DateTimeField()
     trace_id = serializers.CharField()
+    execution_run_id = serializers.CharField(required=False, allow_null=True)
+    execution_status = serializers.CharField(required=False, allow_null=True)
+
+
+class WorkspaceExecutionRunSerializer(serializers.Serializer):
+    public_id = serializers.CharField()
+    task_id = serializers.CharField()
+    session_id = serializers.CharField()
+    snapshot_id = serializers.CharField(allow_null=True)
+    status = serializers.ChoiceField(choices=WorkspaceExecutionRun.Status.choices)
+    execution_rule_summary = serializers.DictField()
+    execution_rule_digest = serializers.CharField()
+    execution_spec = serializers.DictField()
+    execution_spec_digest = serializers.CharField()
+    stdout_asset_id = serializers.CharField(allow_null=True)
+    stderr_asset_id = serializers.CharField(allow_null=True)
+    test_report_asset_id = serializers.CharField(allow_null=True)
+    error_code = serializers.CharField()
+    result_summary = serializers.CharField()
+    started_at = serializers.DateTimeField(allow_null=True)
+    finished_at = serializers.DateTimeField(allow_null=True)
+    duration_ms = serializers.IntegerField(allow_null=True)
+    trace_id = serializers.CharField()
+
+
+class WorkspaceExecutionRunListSerializer(serializers.Serializer):
+    items = WorkspaceExecutionRunSerializer(many=True)
 
 
 class CheckpointWriteSerializer(serializers.Serializer):
@@ -79,7 +113,106 @@ class WorkspaceOperationSerializer(serializers.Serializer):
     arguments = serializers.DictField(required=False)
 
 
+class WorkbenchTaskSerializer(serializers.Serializer):
+    public_id = serializers.CharField()
+    course_id = serializers.CharField()
+    publication_id = serializers.CharField()
+    title = serializers.CharField()
+    description = serializers.CharField()
+    status = serializers.CharField()
+    deadline = serializers.DateTimeField(allow_null=True)
+    assignment_deadline = serializers.DateTimeField(allow_null=True)
+    report_required = serializers.BooleanField()
+    report_strategy = serializers.ChoiceField(choices=("REPORT", "COMPLETE"))
+    allowed_actions = serializers.ListField(child=serializers.CharField())
+    allowed_operations = serializers.ListField(child=serializers.CharField())
+    blockers = serializers.ListField(child=serializers.DictField())
+    current_failure = serializers.DictField()
+    row_version = serializers.IntegerField()
+
+
+class WorkbenchContentSerializer(serializers.Serializer):
+    description = serializers.CharField()
+    objectives = serializers.ListField(child=serializers.JSONField())
+    steps = serializers.ListField(child=serializers.JSONField())
+    constraints = serializers.ListField(child=serializers.JSONField())
+    deliverables = serializers.ListField(child=serializers.JSONField())
+    materials = serializers.ListField(child=serializers.DictField())
+
+
+class WorkbenchTemplateSerializer(serializers.Serializer):
+    public_id = serializers.CharField()
+    name = serializers.CharField()
+    version_id = serializers.CharField()
+    version_no = serializers.IntegerField()
+    dependencies = serializers.ListField(child=serializers.JSONField())
+    workspace_capabilities = serializers.DictField()
+    manual_asset_id = serializers.CharField(allow_null=True)
+    starter_asset_id = serializers.CharField(allow_null=True)
+    report_template_asset_id = serializers.CharField(allow_null=True)
+
+
+class WorkbenchRecentExecutionSerializer(serializers.Serializer):
+    public_id = serializers.CharField()
+    status = serializers.CharField()
+    result_summary = serializers.CharField()
+    finished_at = serializers.DateTimeField(allow_null=True)
+    duration_ms = serializers.IntegerField(allow_null=True)
+
+
+class WorkbenchTestsSerializer(serializers.Serializer):
+    public_count = serializers.IntegerField()
+    count = serializers.IntegerField()
+    summary = serializers.ListField(child=serializers.DictField())
+    recent_execution = WorkbenchRecentExecutionSerializer(allow_null=True)
+
+
+class WorkbenchStageSerializer(serializers.Serializer):
+    public_id = serializers.CharField(required=False)
+    stage = serializers.CharField()
+    status = serializers.CharField()
+    attempt_no = serializers.IntegerField(allow_null=True)
+    error_code = serializers.CharField(required=False)
+    started_at = serializers.DateTimeField(allow_null=True)
+    completed_at = serializers.DateTimeField(allow_null=True)
+
+
+class WorkbenchProvisioningSerializer(serializers.Serializer):
+    status = serializers.CharField()
+    job_id = serializers.CharField(allow_null=True)
+    current_stage = serializers.CharField(allow_null=True)
+    progress = serializers.IntegerField()
+    attempt_no = serializers.IntegerField(required=False)
+    retryable = serializers.BooleanField()
+    failure = serializers.DictField(allow_null=True)
+    stages = WorkbenchStageSerializer(many=True)
+    events_channel = serializers.CharField()
+
+
+class WorkbenchSubmissionSerializer(serializers.Serializer):
+    required = serializers.BooleanField()
+    kind = serializers.ChoiceField(choices=("REPORT", "SYSTEM_ARTIFACT"))
+    strategy = serializers.ChoiceField(choices=("REPORT", "COMPLETE"))
+    can_submit = serializers.BooleanField()
+    blocked_reason = serializers.DictField(allow_null=True)
+    draft_status = serializers.CharField(allow_null=True)
+
+
+class WorkbenchSerializer(serializers.Serializer):
+    task = WorkbenchTaskSerializer()
+    content = WorkbenchContentSerializer()
+    template = WorkbenchTemplateSerializer()
+    tests = WorkbenchTestsSerializer()
+    provisioning = WorkbenchProvisioningSerializer()
+    submission = WorkbenchSubmissionSerializer()
+
+
 def session_data(item: WorkspaceSession, *, token: str | None = None) -> dict[str, object]:
+    workspace_urls = {
+        capability: f"/workspace/{item.public_id}/{capability}/"
+        for capability in ("webide", "notebook", "terminal", "preview")
+        if bool((item.capabilities or {}).get(capability))
+    }
     value: dict[str, object] = {
         "public_id": item.public_id,
         "task_id": item.task.public_id,
@@ -88,6 +221,7 @@ def session_data(item: WorkspaceSession, *, token: str | None = None) -> dict[st
         "portal": item.portal,
         "status": item.status,
         "capabilities": item.capabilities,
+        "workspace_urls": workspace_urls,
         "expires_at": item.expires_at,
         "revoked_at": item.revoked_at,
         "current_version": item.current_version,
@@ -130,14 +264,44 @@ def checkpoint_data(item: WorkspaceCheckpoint) -> dict[str, object]:
 
 
 def operation_data(item: OperationEvent) -> dict[str, object]:
-    return {
+    payload = item.payload_masked
+    result: dict[str, object] = {
         "public_id": item.public_id,
         "task_id": item.task.public_id,
         "seq": item.seq,
         "event_type": item.event_type,
         "phase": item.phase,
-        "payload": item.payload_masked,
+        "payload": payload,
         "result_summary": item.result_summary,
         "occurred_at": item.occurred_at,
+        "trace_id": item.trace_id,
+    }
+    if "execution_run_id" in payload:
+        result["execution_run_id"] = payload["execution_run_id"]
+        result["execution_status"] = payload.get("execution_status")
+    return result
+
+
+def execution_run_data(item: WorkspaceExecutionRun) -> dict[str, object]:
+    return {
+        "public_id": item.public_id,
+        "task_id": item.task.public_id,
+        "session_id": item.session.public_id,
+        "snapshot_id": item.snapshot.public_id if item.snapshot_id else None,
+        "status": item.status,
+        "execution_rule_summary": item.execution_rule_summary,
+        "execution_rule_digest": item.execution_rule_digest,
+        "execution_spec": item.execution_spec,
+        "execution_spec_digest": item.execution_spec_digest,
+        "stdout_asset_id": item.stdout_asset.public_id if item.stdout_asset_id else None,
+        "stderr_asset_id": item.stderr_asset.public_id if item.stderr_asset_id else None,
+        "test_report_asset_id": (
+            item.test_report_asset.public_id if item.test_report_asset_id else None
+        ),
+        "error_code": item.error_code,
+        "result_summary": item.result_summary,
+        "started_at": item.started_at,
+        "finished_at": item.finished_at,
+        "duration_ms": item.duration_ms,
         "trace_id": item.trace_id,
     }

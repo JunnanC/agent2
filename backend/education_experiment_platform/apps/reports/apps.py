@@ -14,3 +14,4 @@ class ReportsConfig(AppConfig):
         register_compensation_handler("DELETE_REPORT_ASSET", delete_report_asset_compensation)
         register_download_authorizer("REPORT_ATTACHMENT", authorize_report_asset_download)
         register_download_authorizer("WORKSPACE_TASK", authorize_report_asset_download)
+        register_download_authorizer("WORKSPACE_EXECUTION", authorize_report_asset_download)

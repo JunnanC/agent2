@@ -24,7 +24,12 @@ def publication_for_course(*, actor: User, course_id: str, publication_id: str) 
     try:
         return (
             TaskPublication.objects.select_related(
-                "course", "template_version__template", "rubric_version__rubric"
+                "course",
+                "template_version__template",
+                "rubric_version__rubric",
+                "runtime_adapter",
+                "image",
+                "resource_profile",
             )
             .prefetch_related("prerequisites", "audience")
             .get(public_id=publication_id, course=course)
@@ -41,7 +46,13 @@ def publications_for_course(*, actor: User, course_id: str) -> QuerySet[TaskPubl
     )
     return (
         TaskPublication.objects.filter(course=course)
-        .select_related("template_version__template", "rubric_version__rubric")
+        .select_related(
+            "template_version__template",
+            "rubric_version__rubric",
+            "runtime_adapter",
+            "image",
+            "resource_profile",
+        )
         .order_by("-created_at", "-id")
     )
 
@@ -49,7 +60,13 @@ def publications_for_course(*, actor: User, course_id: str) -> QuerySet[TaskPubl
 def task_for_user(*, actor: User, task_id: str) -> ExperimentTask:
     try:
         return ExperimentTask.objects.select_related(
-            "course", "publication", "enrollment", "template_version__template"
+            "course",
+            "publication",
+            "enrollment",
+            "template_version__template",
+            "runtime_adapter",
+            "image",
+            "resource_profile",
         ).get(public_id=task_id, student=actor)
     except ExperimentTask.DoesNotExist as exc:
         raise ResourceNotFound() from exc
@@ -63,7 +80,14 @@ def task_for_teaching(*, actor: User, course_id: str, task_id: str) -> Experimen
     )
     try:
         return ExperimentTask.objects.select_related(
-            "course", "publication", "student", "enrollment", "template_version__template"
+            "course",
+            "publication",
+            "student",
+            "enrollment",
+            "template_version__template",
+            "runtime_adapter",
+            "image",
+            "resource_profile",
         ).get(public_id=task_id, course=course)
     except ExperimentTask.DoesNotExist as exc:
         raise ResourceNotFound() from exc
@@ -72,7 +96,13 @@ def task_for_teaching(*, actor: User, course_id: str, task_id: str) -> Experimen
 def task_for_platform(*, task_id: str) -> ExperimentTask:
     try:
         return ExperimentTask.objects.select_related(
-            "course", "publication", "student", "enrollment"
+            "course",
+            "publication",
+            "student",
+            "enrollment",
+            "runtime_adapter",
+            "image",
+            "resource_profile",
         ).get(public_id=task_id)
     except ExperimentTask.DoesNotExist as exc:
         raise ResourceNotFound() from exc
@@ -88,7 +118,14 @@ def paged_user_tasks(
     query: str = "",
 ) -> tuple[QuerySet[ExperimentTask], int]:
     tasks = ExperimentTask.objects.select_related(
-        "course", "publication", "template_version__template", "enrollment", "student"
+        "course",
+        "publication",
+        "template_version__template",
+        "enrollment",
+        "student",
+        "runtime_adapter",
+        "image",
+        "resource_profile",
     ).filter(student=actor)
     if course_id:
         tasks = tasks.filter(course__public_id=course_id)
@@ -117,7 +154,14 @@ def paged_teaching_tasks(
         capability=CourseStaffGrant.Capability.VIEW_PROGRESS,
     )
     tasks = ExperimentTask.objects.select_related(
-        "course", "student", "publication", "enrollment", "template_version__template"
+        "course",
+        "student",
+        "publication",
+        "enrollment",
+        "template_version__template",
+        "runtime_adapter",
+        "image",
+        "resource_profile",
     ).filter(course=course, publication__public_id=publication_id)
     if status:
         tasks = tasks.filter(status=status)

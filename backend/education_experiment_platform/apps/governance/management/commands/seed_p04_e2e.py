@@ -88,6 +88,17 @@ class Command(BaseCommand):
                 "change_reason": "P04 disposable seed",
             },
         )
+        RuntimeAdapter.objects.get_or_create(
+            code="LOCAL-DOCKER",
+            defaults={
+                "name": "本地 Docker 算法运行时治理项",
+                "runtime_type": RuntimeAdapter.RuntimeType.CONTAINER,
+                "driver": RuntimeAdapter.Driver.DOCKER_LOCAL,
+                "status": RuntimeAdapter.Status.DISABLED,
+                "config_ref": "runtime/local-docker",
+                "change_reason": "P04 disposable seed",
+            },
+        )
         ImageAsset.objects.get_or_create(
             digest=f"sha256:{'a' * 64}",
             defaults={

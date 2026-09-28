@@ -22,6 +22,7 @@ from apps.courses.services import ActorContext
 from apps.experiments.models import ExperimentTask
 from apps.experiments.services import transition_task
 from apps.labtemplates.models import AutoCheckRule
+from apps.labtemplates.services import build_execution_command
 from apps.reports.models import (
     ReportDraft,
     ReportVersion,
@@ -30,7 +31,7 @@ from apps.reports.models import (
 )
 
 from . import events
-from .checkers import auto_check_executor
+from .checkers import AUTO_CHECK_TERMINAL_STATUSES, AutoCheckRejected, auto_check_executor
 from .errors import (
     AutoCheckPending,
     ReviewStateConflict,
@@ -511,6 +512,39 @@ def _enqueue_auto_check_runs(run_ids: list[str]) -> None:
     transaction.on_commit(enqueue)
 
 
+def _frozen_execution_contract(
+    *, task: ExperimentTask, report_version: ReportVersion | None
+) -> tuple[dict[str, Any], str]:
+    """Return the exact execution contract used by both student and judge runs."""
+    spec = dict(task.execution_spec or task.template_version.execution_spec or {})
+    summary: dict[str, Any] = {
+        "language": spec.get("language", ""),
+        "entrypoint": spec.get("entrypoint", ""),
+        "timeout_seconds": spec.get("timeout_seconds", 0),
+        "memory_mb": spec.get("memory_mb", 0),
+        "cpu_millicores": spec.get("cpu_millicores", 0),
+        "comparator": spec.get("comparator", "token"),
+        "network_mode": spec.get("network_mode", "DENY_ALL"),
+        "tests_asset": spec.get("tests_asset", ""),
+        "command": [],
+    }
+    try:
+        summary["command"] = list(build_execution_command(spec))
+    except Exception:  # noqa: BLE001 - legacy FakeRuntime tasks have no spec
+        summary["command"] = []
+    digest = hashlib.sha256(
+        json.dumps(summary, ensure_ascii=True, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+    # ReportVersion is itself server-created, but keep the task snapshot as
+    # the authority if a stale or malformed report fact is ever replayed.
+    if report_version is not None and report_version.execution_rule_summary:
+        report_summary = dict(report_version.execution_rule_summary)
+        report_digest = str(report_version.execution_rule_digest or "")
+        if report_digest == digest and report_summary == summary:
+            return report_summary, report_digest
+    return summary, digest
+
+
 @transaction.atomic
 def create_review_for_submission(
     *,
@@ -553,6 +587,9 @@ def create_review_for_submission(
             if report_version is not None
             else system_artifact.digest_sha256  # type: ignore[union-attr]
         )
+        execution_summary, execution_digest = _frozen_execution_contract(
+            task=locked_task, report_version=report_version
+        )
         for rule in AutoCheckRule.objects.filter(
             template_version=locked_task.template_version, is_active=True
         ).order_by("position"):
@@ -563,6 +600,8 @@ def create_review_for_submission(
                 checker_type=rule.checker_type,
                 rule_digest=rule.rule_digest,
                 artifact_digest=artifact_digest,
+                execution_rule_summary=execution_summary,
+                execution_rule_digest=execution_digest,
                 trace_id=context.trace_id,
             )
             run_ids.append(run.public_id)
@@ -1041,7 +1080,7 @@ def execute_auto_check(*, run_id: str) -> AutoCheckRun:
             )
         except AutoCheckRun.DoesNotExist as exc:
             raise ResourceNotFound() from exc
-        if run.status in (AutoCheckRun.Status.PASSED, AutoCheckRun.Status.FAILED):
+        if run.status in AUTO_CHECK_TERMINAL_STATUSES:
             return run
         if run.status == AutoCheckRun.Status.RUNNING:
             return run
@@ -1057,7 +1096,11 @@ def execute_auto_check(*, run_id: str) -> AutoCheckRun:
         )  # type: ignore[assignment]
     try:
         result = auto_check_executor().execute(run)
-        final_status = AutoCheckRun.Status.PASSED if result.passed else AutoCheckRun.Status.FAILED
+        final_status = result.status
+        if final_status not in AUTO_CHECK_TERMINAL_STATUSES:
+            final_status = (
+                AutoCheckRun.Status.PASSED if result.passed else AutoCheckRun.Status.FAILED
+            )
         with transaction.atomic():
             current = AutoCheckRun.objects.select_for_update().get(pk=run.pk)
             completed = compare_and_swap(
@@ -1068,11 +1111,23 @@ def execute_auto_check(*, run_id: str) -> AutoCheckRun:
                     "status": final_status,
                     "result_summary": result.summary,
                     "evidence": result.evidence,
+                    "error_code": result.error_code[:64],
+                    "duration_ms": result.duration_ms,
                     "completed_at": timezone.now(),
                 },
             )
     except Exception as exc:
-        retryable = run.attempt_count < int(getattr(settings, "P10_AUTO_CHECK_MAX_ATTEMPTS", 3))
+        timed_out = isinstance(exc, TimeoutError)
+        retryable = (
+            not timed_out
+            and bool(getattr(exc, "retryable", True))
+            and run.attempt_count < int(getattr(settings, "P10_AUTO_CHECK_MAX_ATTEMPTS", 3))
+        )
+        error_code = str(
+            "AUTO_CHECK_TIMEOUT"
+            if timed_out
+            else getattr(exc, "code", "AUTO_CHECK_EXECUTION_FAILED")
+        )[:64]
         with transaction.atomic():
             current = AutoCheckRun.objects.select_for_update().get(pk=run.pk)
             completed = compare_and_swap(
@@ -1081,9 +1136,19 @@ def execute_auto_check(*, run_id: str) -> AutoCheckRun:
                 expected_version=current.row_version,
                 changes={
                     "status": (
-                        AutoCheckRun.Status.QUEUED if retryable else AutoCheckRun.Status.FAILED
+                        AutoCheckRun.Status.QUEUED
+                        if retryable
+                        else (
+                            AutoCheckRun.Status.TIMEOUT
+                            if timed_out
+                            else (
+                                AutoCheckRun.Status.REJECTED
+                                if isinstance(exc, AutoCheckRejected)
+                                else AutoCheckRun.Status.FAILED
+                            )
+                        )
                     ),
-                    "error_code": "AUTO_CHECK_EXECUTION_FAILED",
+                    "error_code": error_code,
                     "error_detail_masked": {"exception": type(exc).__name__},
                     "completed_at": None if retryable else timezone.now(),
                 },
@@ -1092,7 +1157,7 @@ def execute_auto_check(*, run_id: str) -> AutoCheckRun:
                 failure_type="AUTO_CHECK",
                 subject_type="AUTO_CHECK_RUN",
                 subject_ref=run.public_id,
-                error_code="AUTO_CHECK_EXECUTION_FAILED",
+                error_code=error_code,
                 message="Auto check executor failed",
                 detail={"exception": type(exc).__name__},
                 retryable=retryable,

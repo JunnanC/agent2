@@ -15,39 +15,50 @@ async function responsive(page: Page) {
   for (const viewport of [{ width: 1440, height: 900 }, { width: 920, height: 900 }, { width: 390, height: 844 }]) {
     await page.setViewportSize(viewport)
     await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+    const toolbarOverlapsFrame = await page.evaluate(() => {
+      const layout = document.querySelector('.workspace-lab__layout')?.getBoundingClientRect()
+      const frame = document.querySelector('.workspace-lab__frames')?.getBoundingClientRect()
+      const footer = document.querySelector('.workspace-lab__footer')?.getBoundingClientRect()
+      if (!layout || !frame || !footer) return true
+      const visibleTop = Math.max(layout.top, frame.top)
+      const visibleBottom = Math.min(layout.bottom, frame.bottom)
+      return visibleTop < footer.bottom && visibleBottom > footer.top && visibleTop < visibleBottom
+    })
+    expect(toolbarOverlapsFrame).toBe(false)
   }
 }
 
 test('@user P08 workspace lab, checkpoint and replay are reachable', async ({ page, context }) => {
+  const checkpointName = `P08 integration checkpoint ${Date.now()}`
   await login(page, 'student.integration@example.edu')
   await page.goto('/tasks')
   await page.getByRole('link', { name: '查看' }).first().click()
   await page.getByRole('link', { name: '进入工作区' }).click()
   await expect(page.getByRole('heading', { name: 'IDE / 内容' })).toBeVisible()
   await responsive(page)
-  await page.getByLabel('实验内容').fill('// P08 integration snapshot\nconsole.log("saved")\n')
-  await page.getByRole('button', { name: '立即保存' }).click()
+  await page.getByRole('textbox', { name: '实验内容' }).fill('// P08 integration snapshot\nconsole.log("saved")\n')
+  await page.getByRole('button', { name: '保存快照' }).click()
   await expect(page.getByRole('status')).toContainText('已保存到工作区对象存储')
   await context.setOffline(true)
-  await page.getByLabel('实验内容').fill('// P08 queued while offline\n')
-  await page.getByRole('button', { name: '立即保存' }).click()
+  await page.getByRole('textbox', { name: '实验内容' }).fill('// P08 queued while offline\n')
+  await page.getByRole('button', { name: '保存快照' }).click()
   await expect(page.getByText('待同步', { exact: true })).toBeVisible()
   await context.setOffline(false)
   await expect(page.getByText('已保存', { exact: true })).toBeVisible()
-  await page.getByRole('button', { name: '运行检查' }).click()
+  await page.getByRole('button', { name: '运行测试' }).click()
   await expect(page.getByRole('status')).toContainText('accepted by FakeRuntime')
   await page.getByRole('button', { name: '检查点' }).click()
   await expect(page.getByRole('heading', { name: '命名检查点' })).toBeVisible()
-  await page.getByLabel('检查点名称').fill('P08 integration checkpoint')
+  await page.getByLabel('检查点名称').fill(checkpointName)
   await page.getByRole('button', { name: '创建检查点' }).click()
   await expect(page.getByRole('status')).toContainText('检查点已创建')
-  await page.getByRole('button', { name: '恢复' }).click()
-  await expect(page.getByRole('status')).toContainText('已恢复“P08 integration checkpoint”并创建 v3')
+  await page.getByRole('row').filter({ hasText: checkpointName }).getByRole('button', { name: '恢复' }).click()
+  await expect(page.getByRole('status')).toContainText(new RegExp(`已恢复“${checkpointName}”并创建 v\\d+`))
   await page.getByRole('link', { name: '返回实验室' }).click()
   await page.getByRole('button', { name: '回放' }).click()
   await expect(page.getByRole('heading', { name: '工作区回放' })).toBeVisible()
-  await expect(page.getByText('operation.run_check')).toBeVisible()
-  await expect(page.getByText('checkpoint.restored')).toBeVisible()
+  await expect(page.getByText('operation.run_check').first()).toBeVisible()
+  await expect(page.getByText('checkpoint.restored').first()).toBeVisible()
 })
 
 test('@teacher P08 workspace projection never exposes a token', async ({ page }) => {

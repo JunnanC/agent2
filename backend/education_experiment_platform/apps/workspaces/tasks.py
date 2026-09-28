@@ -8,13 +8,23 @@ from apps.core.models import ObjectAsset
 from apps.core.object_storage import object_storage
 
 from .models import WorkspaceSnapshot
-from .services import expire_sessions
+from .services import execute_execution_run, expire_sessions
 
 
 @shared_task(bind=True, acks_late=True, queue="q_default")
 def expire_workspace_sessions(_task: Any, *, trace_id: str = "") -> int:
     """Expire ticket rows by id; the worker never receives a token or payload."""
     return expire_sessions(trace_id=trace_id)
+
+
+@shared_task(bind=True, acks_late=True, queue="q_default")
+def execute_workspace_execution_run(
+    _task: Any, *, execution_run_id: str, trace_id: str = ""
+) -> str:
+    """Execute a queued RUN_CHECK using only the persisted run identifier."""
+
+    run = execute_execution_run(execution_run_id=execution_run_id, trace_id=trace_id)
+    return run.public_id
 
 
 @shared_task(bind=True, acks_late=True, queue="q_default")

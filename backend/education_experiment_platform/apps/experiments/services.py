@@ -162,6 +162,35 @@ def _digest(values: Iterable[str]) -> str:
     return hashlib.sha256("\n".join(sorted(values)).encode()).hexdigest()
 
 
+def _runtime_snapshot(template: TemplateVersion) -> dict[str, Any]:
+    """Capture mutable runtime inputs when a publication is frozen."""
+
+    adapter = template.runtime_adapter
+    image = template.image
+    profile = template.resource_profile
+    return {
+        "template_spec_digest": template.spec_digest,
+        "execution_spec": dict(template.execution_spec or {}),
+        "runtime_adapter": adapter,
+        "runtime_adapter_driver": adapter.driver,
+        "runtime_adapter_config_ref": adapter.config_ref,
+        "image": image,
+        "image_registry": image.registry,
+        "image_repository": image.repository,
+        "image_digest": image.digest,
+        "resource_profile": profile,
+        "resource_profile_snapshot": {
+            "public_id": profile.public_id,
+            "code": profile.code,
+            "runtime_type": profile.runtime_type,
+            "cpu_millicores": profile.cpu_millicores,
+            "memory_mb": profile.memory_mb,
+            "disk_gb": profile.disk_gb,
+            "network_mode": profile.network_mode,
+        },
+    }
+
+
 def _course_prerequisite_blockers(*, course: Any, student: User) -> list[dict[str, Any]]:
     return [
         {
@@ -420,10 +449,22 @@ def _audience_enrollments(
     *, publication: TaskPublication, selected_ids: list[str]
 ) -> list[Enrollment]:
     if publication.audience_mode == TaskPublication.AudienceMode.ALL_ACTIVE:
+        if selected_ids:
+            raise PublicationValidationError(
+                detail={"selected_enrollment_ids": "全部在读学生模式不能指定单独受众"}
+            )
         return list(
             Enrollment.objects.filter(course=publication.course, status=Enrollment.Status.ACTIVE)
             .select_related("student")
             .order_by("id")
+        )
+    if not selected_ids:
+        raise PublicationValidationError(
+            detail={"selected_enrollment_ids": "指定学生模式至少选择一名在读学生"}
+        )
+    if len(selected_ids) != len(set(selected_ids)):
+        raise PublicationValidationError(
+            detail={"selected_enrollment_ids": "指定学生列表不能包含重复记录"}
         )
     enrollments = list(
         Enrollment.objects.filter(
@@ -431,7 +472,9 @@ def _audience_enrollments(
         ).select_related("student")
     )
     if len(enrollments) != len(set(selected_ids)):
-        raise PublicationValidationError(detail={"reason": "SELECTED_ENROLLMENT_INVALID"})
+        raise PublicationValidationError(
+            detail={"selected_enrollment_ids": "指定学生包含不存在、非在读或其他课程的选课记录"}
+        )
     return enrollments
 
 
@@ -491,14 +534,43 @@ def _transition_row(
 def _create_task(
     *, publication: TaskPublication, enrollment: Enrollment, actor: User | None, context: Any
 ) -> ExperimentTask:
+    template = publication.template_version
+    snapshot = _runtime_snapshot(template)
+    # Publications created before T03 have no snapshot columns. Keep those
+    # historical rows assignable while every new task is fully frozen.
+    if publication.runtime_adapter_id:
+        snapshot = {
+            "template_spec_digest": publication.template_spec_digest,
+            "execution_spec": dict(publication.execution_spec or {}),
+            "runtime_adapter": publication.runtime_adapter,
+            "runtime_adapter_driver": publication.runtime_adapter_driver,
+            "runtime_adapter_config_ref": publication.runtime_adapter_config_ref,
+            "image": publication.image,
+            "image_registry": publication.image_registry,
+            "image_repository": publication.image_repository,
+            "image_digest": publication.image_digest,
+            "resource_profile": publication.resource_profile,
+            "resource_profile_snapshot": dict(publication.resource_profile_snapshot or {}),
+        }
     try:
         task = ExperimentTask.objects.create(
             course=publication.course,
             publication=publication,
             enrollment=enrollment,
             student=enrollment.student,
-            template_version=publication.template_version,
-            runtime_type=publication.template_version.runtime_type,
+            template_version=template,
+            runtime_type=template.runtime_type,
+            template_spec_digest=snapshot["template_spec_digest"],
+            execution_spec=snapshot["execution_spec"],
+            runtime_adapter=snapshot["runtime_adapter"],
+            runtime_adapter_driver=snapshot["runtime_adapter_driver"],
+            runtime_adapter_config_ref=snapshot["runtime_adapter_config_ref"],
+            image=snapshot["image"],
+            image_registry=snapshot["image_registry"],
+            image_repository=snapshot["image_repository"],
+            image_digest=snapshot["image_digest"],
+            resource_profile=snapshot["resource_profile"],
+            resource_profile_snapshot=snapshot["resource_profile_snapshot"],
             effective_deadline=publication.window_end,
         )
     except IntegrityError:
@@ -563,7 +635,11 @@ def publish_publication(
     next_status = (
         TaskPublication.Status.PUBLISHING if async_assignment else TaskPublication.Status.PUBLISHED
     )
-    changes: dict[str, Any] = {"status": next_status, "published_by": actor}
+    changes: dict[str, Any] = {
+        "status": next_status,
+        "published_by": actor,
+        **_runtime_snapshot(publication.template_version),
+    }
     if not async_assignment:
         changes["published_at"] = now
     published = compare_and_swap(

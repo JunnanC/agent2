@@ -59,6 +59,10 @@ class InstanceDataSerializer(serializers.Serializer):
     status = serializers.CharField()
     external_id = serializers.CharField(allow_null=True)
     external_status = serializers.CharField()
+    runtime_driver = serializers.CharField()
+    service_name = serializers.CharField()
+    runtime_task_count = serializers.IntegerField()
+    runtime_health = serializers.CharField()
     orphan = serializers.BooleanField()
     resource_leak = serializers.BooleanField()
     row_version = serializers.IntegerField()
@@ -183,8 +187,13 @@ def archive_data(job: ArchiveJob) -> dict[str, Any]:
 
 
 def instance_data(
-    item: ProvisioningInstance, *, external_status: str, orphan: bool = False
+    item: ProvisioningInstance,
+    *,
+    external_status: str,
+    orphan: bool = False,
+    external_metadata: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    metadata = external_metadata or {}
     return {
         "public_id": item.public_id,
         "task_id": item.task.public_id,
@@ -193,6 +202,10 @@ def instance_data(
         "status": item.status,
         "external_id": item.external_id,
         "external_status": external_status,
+        "runtime_driver": item.runtime_adapter.driver,
+        "service_name": str(metadata.get("service_name", "")),
+        "runtime_task_count": int(metadata.get("task_count", 0)),
+        "runtime_health": str(metadata.get("health", external_status)),
         "orphan": orphan,
         "resource_leak": item.task.status in {"COMPLETED", "CANCELLED", "EXPIRED"}
         and item.status != ProvisioningInstance.Status.DESTROYED,

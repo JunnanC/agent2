@@ -7,6 +7,8 @@ from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
 
 from apps.accounts.models import User
+from apps.core.identifiers import new_ulid
+from apps.core.models import ObjectAsset
 from apps.courses.models import Course, MaterialVersion
 from apps.courses.services import ActorContext
 from apps.governance.models import ImageAsset, ResourceProfile, RuntimeAdapter
@@ -66,7 +68,15 @@ class Command(BaseCommand):
                     "resource_profile_id": profile.public_id,
                     "dependencies": [{"name": "pytest", "version": "8"}],
                     "network_policy": {"mode": "DENY_ALL", "privileged": False},
-                    "workspace_capabilities": {"require_gateway": True},
+                    "workspace_capabilities": {
+                        "require_gateway": True,
+                        "webide": True,
+                        "notebook": True,
+                        "terminal": True,
+                        "preview": True,
+                        "snapshot": True,
+                        "checkpoint": True,
+                    },
                     "material_version_ids": [material.public_id] if material else [],
                     "report_policy": {"required": True},
                     "review_policy": {"mode": "MANUAL_WITH_AUTO_CHECK"},
@@ -74,6 +84,44 @@ class Command(BaseCommand):
                 },
                 context=context,
             )
+        tests_asset = ObjectAsset.objects.filter(
+            owner_type="TEMPLATE_VERSION",
+            owner_ref=version.public_id,
+            purpose="TESTS",
+        ).first()
+        if tests_asset is None:
+            tests_asset = ObjectAsset.objects.create(
+                public_id=new_ulid(),
+                bucket="template-assets",
+                object_key=f"template-tests/{version.public_id}/tests.json",
+                object_version="seed-v1",
+                digest_sha256="c" * 64,
+                size_bytes=2,
+                media_type="application/json",
+                original_name="tests.json",
+                owner_type="TEMPLATE_VERSION",
+                owner_ref=version.public_id,
+                purpose="TESTS",
+                scan_status=ObjectAsset.ScanStatus.CLEAN,
+                status=ObjectAsset.Status.ACTIVE,
+            )
+        if not version.execution_spec and version.status in {
+            TemplateVersion.Status.DRAFT,
+            TemplateVersion.Status.PRECHECK_FAILED,
+        }:
+            TemplateVersion.objects.filter(pk=version.pk).update(
+                execution_spec={
+                    "language": "python",
+                    "entrypoint": "main.py",
+                    "timeout_seconds": 5,
+                    "memory_mb": 256,
+                    "cpu_millicores": 500,
+                    "comparator": "token",
+                    "tests_asset": tests_asset.public_id,
+                    "network_mode": "DENY_ALL",
+                }
+            )
+            version.refresh_from_db()
         if version.status == TemplateVersion.Status.DRAFT and not version.auto_check_rules.filter(
             is_active=True
         ).exists():

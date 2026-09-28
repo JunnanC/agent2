@@ -184,7 +184,7 @@ export function UserReportPage() {
     </section>
     <section className="section-block">
       <h2>提交历史</h2>
-      {versions.length ? <div className="data-table-wrap"><table className="data-table"><thead><tr><th>版本</th><th>提交时间</th><th>Trace</th><th>附件</th></tr></thead><tbody>{versions.map((version) => <tr key={version.public_id}><td>v{version.version_no}</td><td>{new Date(version.submitted_at).toLocaleString()}</td><td>{version.trace_id}</td><td>{version.attachments.length ? version.attachments.map((attachment) => <button className="text-button" key={attachment.public_id} onClick={() => void downloadAsset(attachment.asset_id)}><Download size={14} aria-hidden="true" /> {attachment.file_name}</button>) : '-'}</td></tr>)}</tbody></table></div> : <RequestStateView state="empty" />}
+      {versions.length ? <div className="data-table-wrap"><table className="data-table"><thead><tr><th>版本</th><th>提交时间</th><th>执行结果</th><th>执行摘要</th><th>Trace</th><th>附件</th></tr></thead><tbody>{versions.map((version) => <tr key={version.public_id}><td>v{version.version_no}</td><td>{new Date(version.submitted_at).toLocaleString()}</td><td><StatusBadge status={version.execution_status || 'NOT_AVAILABLE'} /></td><td data-wrap>{version.execution_result_summary || '-'}</td><td>{version.trace_id}</td><td>{version.attachments.length ? version.attachments.map((attachment) => <button className="text-button" key={attachment.public_id} onClick={() => void downloadAsset(attachment.asset_id)}><Download size={14} aria-hidden="true" /> {attachment.file_name}</button>) : '-'}</td></tr>)}</tbody></table></div> : <RequestStateView state="empty" />}
     </section>
   </section>
 }

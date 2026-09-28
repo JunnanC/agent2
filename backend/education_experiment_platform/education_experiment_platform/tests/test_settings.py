@@ -28,7 +28,7 @@ class SettingsTests(SimpleTestCase):
         assert "teams" not in installed
 
     def test_contract_revision_and_api_prefix_are_fixed(self) -> None:
-        assert settings.OPENAPI_REVISION == "v2-p11"
+        assert settings.OPENAPI_REVISION == "v2-p14"
 
     def test_celery_preserves_structured_application_logging(self) -> None:
         assert settings.CELERY_WORKER_HIJACK_ROOT_LOGGER is False
@@ -136,6 +136,7 @@ class SettingsTests(SimpleTestCase):
             "workspaces_workspace_autosave_log",
             "workspaces_workspace_checkpoint",
             "workspaces_operation_event",
+            "workspaces_execution_run",
         }
         assert {model._meta.db_table for model in apps.get_app_config("reports").get_models()} == {
             "reports_report_draft",
@@ -152,6 +153,56 @@ class SettingsTests(SimpleTestCase):
             "archives_archive_verification",
             "archives_export_grant",
         }
+        assert {
+            model._meta.db_table for model in apps.get_app_config("agents").get_models()
+        } == {
+            "agents_agent_definition",
+            "agents_knowledge_base",
+            "agents_source",
+            "agents_source_version",
+            "agents_ingestion_run",
+            "agents_prompt_template",
+            "agents_prompt_version",
+            "agents_model_route",
+            "agents_tool_policy",
+            "agents_course_profile",
+            "agents_session",
+            "agents_message",
+            "agents_retrieval_trace",
+            "agents_citation",
+            "agents_tool_call",
+            "agents_tool_call_state",
+            "agents_approval",
+            "agents_eval_suite",
+            "agents_eval_case",
+            "agents_eval_run",
+            "agents_eval_result",
+            "agents_session_feedback",
+            "agents_session_feedback_triage",
+        }
+        assert {
+            model._meta.db_table for model in apps.get_app_config("notifications").get_models()
+        } == {"notifications_notification", "notifications_preference"}
+        assert {
+            model._meta.db_table for model in apps.get_app_config("analytics").get_models()
+        } == {
+            "analytics_course_daily",
+            "analytics_student_risk_signal",
+            "analytics_course_quality_snapshot",
+            "analytics_learning_recommendation",
+            "analytics_resource_cost_daily",
+        }
+        assert {
+            model._meta.db_table for model in apps.get_app_config("integrations").get_models()
+        } == {
+            "integrations_oidc_provider",
+            "integrations_oidc_identity",
+            "integrations_api_client",
+            "integrations_api_client_grant",
+            "integrations_webhook_endpoint",
+            "integrations_webhook_delivery",
+            "integrations_webhook_delivery_attempt",
+        }
         implemented = {
             "core",
             "accounts",
@@ -164,6 +215,10 @@ class SettingsTests(SimpleTestCase):
             "workspaces",
             "reports",
             "archives",
+            "agents",
+            "notifications",
+            "analytics",
+            "integrations",
         }
         for app_label in EXPECTED_DOMAIN_APPS - implemented:
             assert list(apps.get_app_config(app_label).get_models()) == []

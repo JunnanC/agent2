@@ -50,6 +50,7 @@ class CopyWriteSerializer(serializers.Serializer):
     include_calendar = serializers.BooleanField(required=False, default=True)
     include_templates = serializers.BooleanField(required=False, default=True)
     include_rubrics = serializers.BooleanField(required=False, default=True)
+    include_agents = serializers.BooleanField(required=False, default=True)
 
 
 class CourseContentResponseSerializer(serializers.Serializer):

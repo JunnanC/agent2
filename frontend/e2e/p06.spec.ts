@@ -2,6 +2,7 @@ import { expect, test, type Page } from '@playwright/test'
 
 const password = process.env.P02_E2E_PASSWORD ?? 'P06-Disposable-Seed-Only-2026!'
 test.setTimeout(60_000)
+test.describe.configure({ mode: 'serial' })
 
 async function login(page: Page, identifier: string) {
   await page.goto('/login')
@@ -22,6 +23,11 @@ async function assertResponsive(page: Page) {
   }
 }
 
+function localDateTime(date: Date) {
+  const pad = (value: number) => String(value).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
+}
+
 test('@teacher P06 publication, tasks, and extension decisions are reachable', async ({ page }) => {
   await login(page, 'teacher.integration@example.edu')
   await page.goto('/courses')
@@ -35,6 +41,35 @@ test('@teacher P06 publication, tasks, and extension decisions are reachable', a
   await expect(page.getByRole('heading', { name: '任务追踪' })).toBeVisible()
   await expect(page.getByRole('heading', { name: '延期申请' })).toBeVisible()
   await assertResponsive(page)
+})
+
+test('@teacher P06 selected audience draft can be created and published', async ({ page }) => {
+  await login(page, 'teacher.integration@example.edu')
+  await page.goto('/courses')
+  const coursePath = await page.locator('a[href^="/courses/"]').first().getAttribute('href')
+  expect(coursePath).toMatch(/^\/courses\/[A-Z0-9]+$/)
+  await page.goto(`${coursePath}/experiments`)
+
+  await page.getByRole('button', { name: '新建草稿' }).click()
+  const title = `P06 指定学生发布 ${Date.now()}`
+  const now = new Date()
+  await page.getByLabel('实验标题').fill(title)
+  await page.getByLabel('模板版本').selectOption({ index: 1 })
+  await page.getByLabel('Rubric 版本').selectOption({ index: 1 })
+  await page.getByLabel('受众').selectOption('SELECTED')
+  await page.getByLabel('开放时间').fill(localDateTime(new Date(now.getTime() - 60_000)))
+  await page.getByLabel('截止时间', { exact: true }).fill(localDateTime(new Date(now.getTime() + 86_400_000)))
+  await page.getByLabel('分配截止时间').fill(localDateTime(new Date(now.getTime() + 43_200_000)))
+  await page.getByRole('button', { name: '保存草稿' }).click()
+
+  const publicationRow = page.locator('tr', { hasText: title })
+  await expect(publicationRow).toBeVisible()
+  await publicationRow.getByRole('link', { name: '管理' }).click()
+  const student = page.getByRole('checkbox', { name: /^选择 / }).first()
+  await expect(student).toBeVisible()
+  await student.check()
+  await page.getByRole('button', { name: '发布实验' }).click()
+  await expect(page.getByText('PUBLISHED', { exact: true })).toBeVisible()
 })
 
 test('@user P06 dashboard and task detail expose frozen task facts', async ({ page }) => {

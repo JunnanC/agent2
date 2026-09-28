@@ -34,6 +34,26 @@ class GovernanceModelTests(TestCase):
                 change_reason="invalid",
             )
 
+    def test_local_docker_requires_container_and_config_reference(self) -> None:
+        with transaction.atomic(), self.assertRaises(IntegrityError):
+            RuntimeAdapter.objects.create(
+                code="LOCAL-VM",
+                name="Invalid local VM",
+                runtime_type="VM",
+                driver="DOCKER_LOCAL",
+                change_reason="invalid",
+            )
+
+    def test_local_docker_requires_config_reference(self) -> None:
+        with transaction.atomic(), self.assertRaises(IntegrityError):
+            RuntimeAdapter.objects.create(
+                code="LOCAL-NO-CONFIG",
+                name="Missing local config",
+                runtime_type="CONTAINER",
+                driver="DOCKER_LOCAL",
+                change_reason="invalid",
+            )
+
     def test_image_digest_is_unique_and_profile_has_positive_resources(self) -> None:
         ImageAsset.objects.create(
             registry="registry.example",

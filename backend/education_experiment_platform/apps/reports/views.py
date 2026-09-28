@@ -263,7 +263,15 @@ class UserReportVersionsView(APIView):
     def get(self, request: HttpRequest, task_id: str) -> Response:
         report_draft_for_user(task_id=task_id, actor=request.user)
         versions = (
-            ReportVersion.objects.select_related("task", "student")
+            ReportVersion.objects.select_related(
+                "task",
+                "student",
+                "execution_run",
+                "execution_snapshot",
+                "execution_stdout_asset",
+                "execution_stderr_asset",
+                "execution_test_report_asset",
+            )
             .prefetch_related("attachments__attachment__asset")
             .filter(task__public_id=task_id, student=request.user)
             .order_by("-version_no")

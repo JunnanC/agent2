@@ -44,6 +44,35 @@ class ContentScanner:
 
 
 class TemplateAssetTests(TestCase):
+    def test_clean_tests_asset_is_scanned_without_foreign_key_attachment(self) -> None:
+        payload = b'{"cases": []}'
+        owner, course, template, version = create_template_version(suffix="tests-asset")
+        storage = FakeStorage(payload, media_type="application/json")
+        with patch("apps.labtemplates.assets.object_storage", return_value=storage):
+            asset, _upload = create_asset_upload(
+                course_id=course.public_id,
+                template_id=template.public_id,
+                version_id=version.public_id,
+                actor=owner,
+                expected_version=version.row_version,
+                purpose="TESTS",
+                file_name="tests.json",
+                media_type="application/json",
+                size_bytes=len(payload),
+                digest_sha256=hashlib.sha256(payload).hexdigest(),
+                context=context(owner),
+            )
+        with (
+            patch("apps.labtemplates.assets.object_storage", return_value=storage),
+            patch("apps.labtemplates.assets.ClamAVScanner", return_value=ContentScanner()),
+        ):
+            changed = scan_and_attach_asset(asset_id=asset.public_id, trace_id="t" * 32)
+        self.assertEqual(changed.scan_status, ObjectAsset.ScanStatus.CLEAN)
+        version.refresh_from_db()
+        self.assertIsNone(version.manual_asset_id)
+        self.assertIsNone(version.starter_asset_id)
+        self.assertIsNone(version.report_template_asset_id)
+
     def _asset(
         self, payload: bytes, *, name: str = "manual.txt"
     ) -> tuple[ObjectAsset, FakeStorage]:

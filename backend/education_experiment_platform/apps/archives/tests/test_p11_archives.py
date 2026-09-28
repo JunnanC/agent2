@@ -408,3 +408,18 @@ class P11ArchiveServiceTests(TestCase):
         self.assertEqual(replay["X-Idempotent-Replayed"], "true")
         self.assertEqual(first.json(), replay.json())
         enqueue.assert_called_once()
+
+    def test_admin_instance_list_api_degrades_when_runtime_inventory_is_unavailable(self) -> None:
+        admin, _csrf, proxy = self.client_for(identifier=self.admin.username, portal="PLATFORM")
+        with patch(
+            "apps.provisioning.services.runtime_inventory",
+            side_effect=RuntimeError("docker socket is unavailable"),
+        ):
+            response = admin.get(
+                "/api/v2/platform/instances",
+                HTTP_X_PORTAL="PLATFORM",
+                **proxy,
+            )
+
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(response.json()["data"][0]["external_status"], "UNAVAILABLE")

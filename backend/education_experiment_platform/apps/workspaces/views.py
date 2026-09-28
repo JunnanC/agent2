@@ -1,6 +1,7 @@
 from collections.abc import Callable
 from typing import Any
 
+from django.conf import settings
 from django.http import HttpRequest
 from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, extend_schema
 from rest_framework.parsers import MultiPartParser
@@ -18,8 +19,12 @@ from apps.experiments.serializers import task_data
 from apps.experiments.services import allowed_actions
 
 from .models import WorkspaceSession
+from .permissions import require_workspace_session
 from .selectors import (
+    active_session_for_user,
     checkpoints_for_user,
+    execution_run_for_user,
+    execution_runs_for_user,
     replay_for_teaching,
     replay_for_user,
     sessions_for_platform,
@@ -30,12 +35,16 @@ from .selectors import (
 from .serializers import (
     CheckpointWriteSerializer,
     OperationEventSerializer,
+    WorkbenchSerializer,
     WorkspaceCheckpointListSerializer,
     WorkspaceCheckpointSerializer,
     WorkspaceEnterSerializer,
+    WorkspaceExecutionRunListSerializer,
+    WorkspaceExecutionRunSerializer,
     WorkspaceSessionSerializer,
     WorkspaceSnapshotSerializer,
     checkpoint_data,
+    execution_run_data,
     operation_data,
     session_data,
     snapshot_data,
@@ -49,6 +58,7 @@ from .services import (
     revoke_session,
     save_snapshot,
 )
+from .workbench import workbench_data
 
 IF_MATCH = OpenApiParameter("If-Match", str, OpenApiParameter.HEADER, required=True)
 IDEMPOTENCY_KEY = OpenApiParameter("Idempotency-Key", str, OpenApiParameter.HEADER, required=True)
@@ -103,6 +113,43 @@ def _workspace_token(request: HttpRequest) -> str:
     return str(request.headers.get("X-Workspace-Token", ""))
 
 
+def _set_workspace_cookie(
+    response: Response, *, session_id: str, token: str, max_age: int
+) -> Response:
+    response.set_cookie(
+        key=str(getattr(settings, "WORKSPACE_COOKIE_NAME", "workspace_ticket")),
+        value=token,
+        max_age=max(1, max_age),
+        path=f"/workspace/{session_id}/",
+        secure=settings.SESSION_COOKIE_SECURE,
+        httponly=True,
+        samesite="Strict",
+    )
+    return response
+
+
+def _delete_workspace_cookie(response: Response, *, session_id: str) -> Response:
+    response.delete_cookie(
+        key=str(getattr(settings, "WORKSPACE_COOKIE_NAME", "workspace_ticket")),
+        path=f"/workspace/{session_id}/",
+        samesite="Strict",
+    )
+    return response
+
+
+class UserTaskWorkbenchView(APIView):
+    permission_classes = [IsUserPortal]
+
+    @extend_schema(
+        operation_id="tasks_workbench_retrieve",
+        responses={200: WorkbenchSerializer},
+        tags=["workspaces"],
+        extensions={"x-portals": ["USER"]},
+    )
+    def get(self, request: HttpRequest, task_id: str) -> Response:
+        return _response(request, workbench_data(actor=request.user, task_id=task_id))
+
+
 class UserTaskEnterView(APIView):
     permission_classes = [IsUserPortal]
     serializer_class = WorkspaceSessionSerializer
@@ -133,7 +180,14 @@ class UserTaskEnterView(APIView):
             )
             return StoredResponse(200, payload, {"ETag": etag_for_version(task.row_version)})
 
-        return _idempotent(request, payload={}, operation=operation)
+        response = _idempotent(request, payload={}, operation=operation)
+        session_payload = response.data["data"]["session"]
+        return _set_workspace_cookie(
+            response,
+            session_id=str(session_payload["public_id"]),
+            token=str(session_payload["workspace_token"]),
+            max_age=int(getattr(settings, "WORKSPACE_SESSION_TTL_SECONDS", 900)),
+        )
 
 
 class UserWorkspaceSessionCreateView(APIView):
@@ -162,7 +216,14 @@ class UserWorkspaceSessionCreateView(APIView):
                 {"ETag": etag_for_version(session.row_version)},
             )
 
-        return _idempotent(request, payload={}, operation=operation)
+        response = _idempotent(request, payload={}, operation=operation)
+        session_payload = response.data["data"]
+        return _set_workspace_cookie(
+            response,
+            session_id=str(session_payload["public_id"]),
+            token=str(session_payload["workspace_token"]),
+            max_age=int(getattr(settings, "WORKSPACE_SESSION_TTL_SECONDS", 900)),
+        )
 
 
 class WorkspaceSessionRenewView(APIView):
@@ -199,7 +260,14 @@ class WorkspaceSessionRenewView(APIView):
                 {"ETag": etag_for_version(changed.row_version)},
             )
 
-        return _idempotent(request, payload={}, operation=operation)
+        response = _idempotent(request, payload={}, operation=operation)
+        session_payload = response.data["data"]
+        return _set_workspace_cookie(
+            response,
+            session_id=str(session_payload["public_id"]),
+            token=str(session_payload["workspace_token"]),
+            max_age=int(getattr(settings, "WORKSPACE_SESSION_TTL_SECONDS", 900)),
+        )
 
 
 class WorkspaceSessionRevokeView(APIView):
@@ -238,7 +306,9 @@ class WorkspaceSessionRevokeView(APIView):
                 {"ETag": etag_for_version(changed.row_version)},
             )
 
-        return _idempotent(request, payload={}, operation=operation)
+        return _delete_workspace_cookie(
+            _idempotent(request, payload={}, operation=operation), session_id=session_id
+        )
 
 
 class UserWorkspaceSnapshotView(APIView):
@@ -247,6 +317,7 @@ class UserWorkspaceSnapshotView(APIView):
     serializer_class = WorkspaceSnapshotSerializer
 
     @extend_schema(
+        operation_id="tasks_execution_runs_list",
         parameters=[WORKSPACE_TOKEN],
         tags=["workspaces"],
         responses={200: WorkspaceSnapshotSerializer},
@@ -398,6 +469,49 @@ class UserOperationReplayView(APIView):
             operation_data(item) for item in replay_for_user(actor=request.user, task_id=task_id)
         ]
         return _cursor_page(request, rows, key="occurred_at")
+
+
+class UserExecutionRunListView(APIView):
+    permission_classes = [IsUserPortal]
+
+    @extend_schema(
+        operation_id="tasks_execution_run_retrieve",
+        parameters=[WORKSPACE_TOKEN],
+        responses=WorkspaceExecutionRunListSerializer,
+        tags=["workspaces"],
+        extensions={"x-portals": ["USER"]},
+    )
+    def get(self, request: HttpRequest, task_id: str) -> Response:
+        task_for_user(actor=request.user, task_id=task_id)
+        session = active_session_for_user(actor=request.user, task_id=task_id)
+        require_workspace_session(
+            session=session, token=_workspace_token(request), task_id=task_id
+        )
+        rows = [
+            execution_run_data(item)
+            for item in execution_runs_for_user(actor=request.user, task_id=task_id)[:100]
+        ]
+        return _response(request, {"items": rows})
+
+
+class UserExecutionRunDetailView(APIView):
+    permission_classes = [IsUserPortal]
+
+    @extend_schema(
+        parameters=[WORKSPACE_TOKEN],
+        responses=WorkspaceExecutionRunSerializer,
+        tags=["workspaces"],
+        extensions={"x-portals": ["USER"]},
+    )
+    def get(self, request: HttpRequest, task_id: str, execution_id: str) -> Response:
+        session = active_session_for_user(actor=request.user, task_id=task_id)
+        require_workspace_session(
+            session=session, token=_workspace_token(request), task_id=task_id
+        )
+        run = execution_run_for_user(
+            actor=request.user, task_id=task_id, execution_id=execution_id
+        )
+        return _response(request, execution_run_data(run))
 
 
 class TeachingWorkspaceView(APIView):

@@ -13,6 +13,18 @@ class ReportSnapshotConflict(CoreError):
     status_code = 412
 
 
+class ReportExecutionNotReady(CoreError):
+    code = "REPORT_EXECUTION_NOT_READY"
+    message = "提交报告前必须完成当前工作区快照的执行"
+    status_code = 409
+
+
+class ReportExecutionConflict(CoreError):
+    code = "REPORT_EXECUTION_CONFLICT"
+    message = "执行结果与报告快照不匹配"
+    status_code = 412
+
+
 class ReportAttachmentNotReady(CoreError):
     code = "REPORT_ATTACHMENT_NOT_READY"
     message = "附件尚未通过安全扫描"

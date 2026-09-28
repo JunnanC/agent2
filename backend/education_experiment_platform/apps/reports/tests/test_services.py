@@ -2,11 +2,13 @@ import hashlib
 from datetime import timedelta
 from io import BytesIO
 from types import SimpleNamespace
+from typing import cast
 from unittest.mock import patch
 
 from django.test import Client, TestCase
 from django.utils import timezone
 
+from apps.core.concurrency import compare_and_swap
 from apps.core.downloads import (
     consume_download_grant,
     create_download_grant,
@@ -31,17 +33,18 @@ from apps.experiments.tests.helpers import (
 from apps.governance.models import Quota, RuntimeAdapter
 from apps.provisioning.adapters import reset_fake_runtime
 from apps.provisioning.services import execute_provisioning_job, start_provisioning
-from apps.workspaces.models import WorkspaceSnapshot
+from apps.workspaces.models import WorkspaceExecutionRun, WorkspaceSnapshot
 from apps.workspaces.permissions import require_workspace_session
 from apps.workspaces.services import enter_task, issue_session
 
-from ..errors import ReportSnapshotConflict
+from ..errors import ReportExecutionConflict, ReportExecutionNotReady, ReportSnapshotConflict
 from ..models import (
     ReportAttachment,
     ReportDraft,
     ReportVersion,
     SystemArtifact,
 )
+from ..serializers import report_version_data
 from ..services import (
     complete_non_report_task,
     create_attachment_upload,
@@ -145,6 +148,49 @@ class ReportServiceTests(TestCase):
             saved_at=timezone.now(),
             trace_id="x" * 32,
         )
+
+    def _execution(
+        self,
+        snapshot: WorkspaceSnapshot,
+        *,
+        status: str = WorkspaceExecutionRun.Status.PASSED,
+        asset_owner_ref: str | None = None,
+    ) -> WorkspaceExecutionRun:
+        run = WorkspaceExecutionRun.objects.create(
+            task=self.task,
+            session=self.session,
+            snapshot=snapshot,
+            status=status,
+            execution_rule_summary={"language": "python", "entrypoint": "main.py"},
+            execution_rule_digest="a" * 64,
+            idempotency_key=f"report-test-{snapshot.public_id}-{status}",
+            result_summary=f"{status} result",
+            started_at=timezone.now(),
+            finished_at=timezone.now(),
+            duration_ms=4,
+            trace_id="e" * 32,
+        )
+        if asset_owner_ref is not None:
+            asset = ObjectAsset.objects.create(
+                bucket="edu-platform",
+                object_key=f"execution/{run.public_id}/stdout",
+                object_version="execution-v1",
+                digest_sha256="b" * 64,
+                size_bytes=4,
+                media_type="text/plain",
+                original_name="stdout.txt",
+                owner_type="WORKSPACE_EXECUTION",
+                owner_ref=asset_owner_ref,
+                purpose="EXECUTION_STDOUT",
+                scan_status=ObjectAsset.ScanStatus.CLEAN,
+            )
+            run = compare_and_swap(
+                WorkspaceExecutionRun,
+                pk=run.pk,
+                expected_version=run.row_version,
+                changes={"stdout_asset": asset},
+            )
+        return run
 
     def _student_client(self) -> tuple[Client, str]:
         client = Client(enforce_csrf_checks=True)
@@ -307,6 +353,82 @@ class ReportServiceTests(TestCase):
             version.save()
         with self.assertRaises(ImmutableRecordError):
             ReportVersion.objects.filter(pk=version.pk).update(body_markdown="mutated")
+
+    def test_submit_copies_latest_execution_evidence_into_immutable_report(self) -> None:
+        snapshot = self._snapshot()
+        run = self._execution(snapshot, asset_owner_ref="placeholder")
+        ObjectAsset.objects.filter(pk=run.stdout_asset_id).update(owner_ref=run.public_id)
+        run.refresh_from_db()
+        draft = ReportDraft.objects.get(task=self.task)
+        update_report_draft(
+            task_id=self.task.public_id,
+            actor=self.task.student,
+            body_markdown="# With execution evidence",
+            expected_version=draft.row_version,
+            context=self.context,
+        )
+        self.task.refresh_from_db()
+        version, _ = submit_report(
+            task_id=self.task.public_id,
+            actor=self.task.student,
+            expected_task_version=self.task.row_version,
+            context=self.context,
+        )
+        self.assertEqual(version.execution_run_id, run.pk)
+        self.assertEqual(version.execution_status, run.status)
+        self.assertEqual(version.execution_result_summary, run.result_summary)
+        self.assertEqual(version.execution_snapshot_id, snapshot.pk)
+        self.assertEqual(version.execution_stdout_asset_id, run.stdout_asset_id)
+        payload = report_version_data(version)
+        evidence = cast(dict[str, object], payload["execution_evidence"])
+        self.assertEqual(evidence["execution_run_id"], run.public_id)
+        with self.assertRaises(ImmutableRecordError):
+            ReportVersion.objects.filter(pk=version.pk).update(execution_result_summary="changed")
+
+    def test_submit_rejects_missing_execution_for_non_fake_runtime(self) -> None:
+        type(self.task).objects.filter(pk=self.task.pk).update(
+            runtime_adapter_driver=RuntimeAdapter.Driver.DOCKER_LOCAL,
+            runtime_adapter_config_ref="runtime/local-algorithm",
+        )
+        self._snapshot()
+        draft = ReportDraft.objects.get(task=self.task)
+        update_report_draft(
+            task_id=self.task.public_id,
+            actor=self.task.student,
+            body_markdown="# Missing execution",
+            expected_version=draft.row_version,
+            context=self.context,
+        )
+        self.task.refresh_from_db()
+        with self.assertRaises(ReportExecutionNotReady):
+            submit_report(
+                task_id=self.task.public_id,
+                actor=self.task.student,
+                expected_task_version=self.task.row_version,
+                context=self.context,
+            )
+        self.assertFalse(ReportVersion.objects.filter(task=self.task).exists())
+
+    def test_submit_rejects_execution_asset_owned_by_another_run(self) -> None:
+        snapshot = self._snapshot()
+        run = self._execution(snapshot, asset_owner_ref="another-run")
+        draft = ReportDraft.objects.get(task=self.task)
+        update_report_draft(
+            task_id=self.task.public_id,
+            actor=self.task.student,
+            body_markdown="# Cross task asset",
+            expected_version=draft.row_version,
+            context=self.context,
+        )
+        self.task.refresh_from_db()
+        with self.assertRaises(ReportExecutionConflict):
+            submit_report(
+                task_id=self.task.public_id,
+                actor=self.task.student,
+                expected_task_version=self.task.row_version,
+                context=self.context,
+            )
+        self.assertEqual(run.status, WorkspaceExecutionRun.Status.PASSED)
 
     def test_submit_rejects_when_workspace_snapshot_changes_after_draft_save(self) -> None:
         first = self._snapshot(payload=b"saved workspace")

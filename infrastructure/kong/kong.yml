@@ -118,8 +118,10 @@ services:
               remove: { headers: [X-Portal, X-Auth-Context, X-Client-Id, X-Scopes, X-Proxy-Context] }
               add: { headers: ["X-Portal:PLATFORM", "X-Proxy-Context:ingress-v1"] }
 
+  # Keep the historical service identifier for protocol timeout contracts;
+  # the upstream is the dedicated gateway process, never Django or a runtime.
   - name: django-workspace
-    url: http://django:8000
+    url: http://workspace-gateway:8080
     connect_timeout: 5000
     read_timeout: 600000
     write_timeout: 600000

@@ -50,7 +50,16 @@ def draft_for_user(*, actor: User, task_id: str) -> ReportDraft:
 def versions_for_user(*, actor: User, task_id: str) -> QuerySet[ReportVersion]:
     task_for_user(actor=actor, task_id=task_id)
     return (
-        ReportVersion.objects.select_related("task", "student", "workspace_snapshot")
+        ReportVersion.objects.select_related(
+            "task",
+            "student",
+            "workspace_snapshot",
+            "execution_run",
+            "execution_snapshot",
+            "execution_stdout_asset",
+            "execution_stderr_asset",
+            "execution_test_report_asset",
+        )
         .prefetch_related("attachments__attachment__asset")
         .filter(task__public_id=task_id, student=actor)
         .order_by("-version_no")

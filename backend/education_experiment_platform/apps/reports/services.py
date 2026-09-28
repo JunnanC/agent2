@@ -1,4 +1,5 @@
 import hashlib
+import json
 import secrets
 import tempfile
 import zipfile
@@ -27,11 +28,13 @@ from apps.courses.selectors import require_course_capability
 from apps.courses.services import ActorContext
 from apps.experiments.models import ExperimentTask
 from apps.experiments.services import transition_task
-from apps.workspaces.models import WorkspaceSnapshot
+from apps.workspaces.models import WorkspaceExecutionRun, WorkspaceSnapshot
 
 from . import events
 from .errors import (
     ReportAttachmentNotReady,
+    ReportExecutionConflict,
+    ReportExecutionNotReady,
     ReportSnapshotConflict,
     ReportStateConflict,
     ReportUploadInvalid,
@@ -159,6 +162,152 @@ def _snapshot_is_valid(snapshot: WorkspaceSnapshot, task: ExperimentTask) -> boo
         and asset.digest_sha256 == snapshot.digest_sha256
         and asset.scan_status == ObjectAsset.ScanStatus.CLEAN
         and asset.status == ObjectAsset.Status.ACTIVE
+    )
+
+
+_EXECUTION_TERMINAL_STATUSES = frozenset(
+    {
+        WorkspaceExecutionRun.Status.PASSED,
+        WorkspaceExecutionRun.Status.FAILED,
+        WorkspaceExecutionRun.Status.TIMEOUT,
+        WorkspaceExecutionRun.Status.RESOURCE_EXCEEDED,
+        WorkspaceExecutionRun.Status.REJECTED,
+    }
+)
+
+
+def _execution_asset_is_valid(asset: ObjectAsset | None, run: WorkspaceExecutionRun) -> bool:
+    if asset is None:
+        return True
+    return (
+        asset.owner_type == "WORKSPACE_EXECUTION"
+        and asset.owner_ref == run.public_id
+        and asset.scan_status == ObjectAsset.ScanStatus.CLEAN
+        and asset.status == ObjectAsset.Status.ACTIVE
+    )
+
+
+def _legacy_fake_execution(
+    *, task: ExperimentTask, snapshot: WorkspaceSnapshot
+) -> WorkspaceExecutionRun:
+    """Materialize the pre-P08 FakeRuntime submit behavior once per snapshot."""
+
+    summary = dict(getattr(task, "execution_spec", None) or {})
+    digest = hashlib.sha256(
+        json.dumps(summary, ensure_ascii=True, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+    key = hashlib.sha256(
+        f"legacy-report-fake:{task.public_id}:{snapshot.public_id}".encode()
+    ).hexdigest()
+    run, _ = WorkspaceExecutionRun.objects.get_or_create(
+        idempotency_key=key,
+        defaults={
+            "task": task,
+            "session": snapshot.session,
+            "snapshot": snapshot,
+            "status": WorkspaceExecutionRun.Status.PASSED,
+            "execution_rule_summary": summary,
+            "execution_rule_digest": digest,
+            "result_summary": "PASSED by FakeRuntime (report compatibility)",
+            "started_at": timezone.now(),
+            "finished_at": timezone.now(),
+            "duration_ms": 0,
+            "trace_id": "legacy-fake".ljust(32, "0"),
+        },
+    )
+    return run
+
+
+def _latest_execution_for_submission(
+    *, task: ExperimentTask, snapshot: WorkspaceSnapshot
+) -> WorkspaceExecutionRun:
+    """Return the newest run, requiring it to prove the submitted snapshot.
+
+    Looking at the newest run before checking its state prevents a student from
+    submitting an older passing run while a newer run is still queued or points at
+    a newer snapshot.  All copied fields are later written to the append-only report
+    version, so this check is the only live run read needed during submission.
+    """
+
+    run = (
+        WorkspaceExecutionRun.objects.select_related(
+            "task",
+            "session",
+            "snapshot__asset",
+            "stdout_asset",
+            "stderr_asset",
+            "test_report_asset",
+        )
+        .filter(task=task)
+        .order_by("-created_at", "-id")
+        .first()
+    )
+    if run is None:
+        driver = task.runtime_adapter_driver or (
+            task.runtime_adapter.driver if task.runtime_adapter_id else "FAKE"
+        )
+        if driver == "FAKE" or ReportVersion.objects.filter(
+            task=task, execution_run__isnull=True
+        ).exists():
+            return _legacy_fake_execution(task=task, snapshot=snapshot)
+        raise ReportExecutionNotReady(detail={"execution": "missing"})
+    if run.status not in _EXECUTION_TERMINAL_STATUSES:
+        raise ReportExecutionNotReady(
+            detail={"execution_run_id": run.public_id, "status": run.status}
+        )
+    if (
+        run.session.task_id != task.pk
+        or run.session.student_id != task.student_id
+        or run.snapshot_id != snapshot.pk
+        or run.snapshot is None
+        or run.snapshot.digest_sha256 != snapshot.digest_sha256
+    ):
+        raise ReportExecutionConflict(
+            detail={
+                "execution_run_id": run.public_id,
+                "execution_snapshot_id": run.snapshot.public_id if run.snapshot else None,
+                "report_snapshot_id": snapshot.public_id,
+            }
+        )
+    if not _snapshot_is_valid(run.snapshot, task):
+        raise ReportExecutionConflict(detail={"execution": "snapshot_not_clean"})
+    if not all(
+        _execution_asset_is_valid(asset, run)
+        for asset in (run.stdout_asset, run.stderr_asset, run.test_report_asset)
+    ):
+        raise ReportExecutionConflict(detail={"execution": "asset_not_available"})
+    return run
+
+
+def _report_execution_is_consistent(version: ReportVersion, task: ExperimentTask) -> bool:
+    """Validate the immutable report projection before exposing its evidence."""
+
+    try:
+        run = version.execution_run
+    except WorkspaceExecutionRun.DoesNotExist:
+        return False
+    if run is None:
+        return False
+    if (
+        run.task_id != task.pk
+        or run.session.task_id != task.pk
+        or run.session.student_id != task.student_id
+        or version.execution_snapshot_id != version.workspace_snapshot_id
+        or version.execution_snapshot_digest != version.snapshot_digest
+        or version.execution_status not in _EXECUTION_TERMINAL_STATUSES
+    ):
+        return False
+    return all(
+        asset is None
+        or (
+            asset.owner_type == "WORKSPACE_EXECUTION"
+            and asset.owner_ref == run.public_id
+        )
+        for asset in (
+            version.execution_stdout_asset,
+            version.execution_stderr_asset,
+            version.execution_test_report_asset,
+        )
     )
 
 
@@ -602,7 +751,7 @@ def scan_report_attachment(*, asset_id: str, trace_id: str) -> ObjectAsset:
         locked = ObjectAsset.objects.select_for_update().get(pk=asset.pk)
         if locked.scan_status != ObjectAsset.ScanStatus.PENDING:
             return locked
-        changed: ObjectAsset = locked
+        changed = locked
         try:
             task = (
                 ExperimentTask.objects.select_for_update()
@@ -721,6 +870,7 @@ def submit_report(
                 "latest_snapshot_digest": snapshot.digest_sha256,
             }
         )
+    execution = _latest_execution_for_submission(task=task, snapshot=snapshot)
     pending = ObjectAsset.objects.filter(
         owner_type=REPORT_OWNER,
         owner_ref=task.public_id,
@@ -756,6 +906,16 @@ def submit_report(
         body_digest=hashlib.sha256(draft.body_markdown.encode()).hexdigest(),
         workspace_snapshot=snapshot,
         snapshot_digest=snapshot.digest_sha256,
+        execution_run=execution,
+        execution_status=execution.status,
+        execution_result_summary=execution.result_summary,
+        execution_rule_summary=dict(execution.execution_rule_summary or {}),
+        execution_rule_digest=execution.execution_rule_digest,
+        execution_snapshot=execution.snapshot,
+        execution_snapshot_digest=execution.snapshot.digest_sha256,
+        execution_stdout_asset=execution.stdout_asset,
+        execution_stderr_asset=execution.stderr_asset,
+        execution_test_report_asset=execution.test_report_asset,
         submitted_by=actor,
         submitted_at=submitted_at,
         trace_id=_trace(context),
@@ -801,6 +961,9 @@ def submit_report(
             "version_no": version.version_no,
             "snapshot_digest": version.snapshot_digest,
             "attachment_count": len(attachments),
+            "execution_run_id": execution.public_id,
+            "execution_status": execution.status,
+            "execution_rule_digest": execution.execution_rule_digest,
         },
     )
     _emit(
@@ -813,6 +976,19 @@ def submit_report(
             "version_no": version.version_no,
             "body_digest": version.body_digest,
             "snapshot_digest": version.snapshot_digest,
+            "execution_run_id": execution.public_id,
+            "execution_status": execution.status,
+            "execution_rule_digest": execution.execution_rule_digest,
+            "execution_snapshot_id": execution.snapshot.public_id,
+            "stdout_asset_id": execution.stdout_asset.public_id
+            if execution.stdout_asset_id
+            else None,
+            "stderr_asset_id": execution.stderr_asset.public_id
+            if execution.stderr_asset_id
+            else None,
+            "test_report_asset_id": execution.test_report_asset.public_id
+            if execution.test_report_asset_id
+            else None,
         },
         trace_id=_trace(context),
     )
@@ -923,6 +1099,50 @@ def authorize_report_asset_download(asset: ObjectAsset, actor: User, portal: str
         )
         if artifact:
             task = artifact.task
+    elif asset.owner_type == "WORKSPACE_EXECUTION":
+        version = (
+            ReportVersion.objects.select_related(
+                "task__course",
+                "task__publication",
+                "task__enrollment",
+                "task__student",
+                "execution_run",
+            )
+            .filter(execution_stdout_asset=asset)
+            .first()
+        )
+        if version is None:
+            version = (
+                ReportVersion.objects.select_related(
+                    "task__course",
+                    "task__publication",
+                    "task__enrollment",
+                    "task__student",
+                    "execution_run",
+                )
+                .filter(execution_stderr_asset=asset)
+                .first()
+            )
+        if version is None:
+            version = (
+                ReportVersion.objects.select_related(
+                    "task__course",
+                    "task__publication",
+                    "task__enrollment",
+                    "task__student",
+                    "execution_run",
+                )
+                .filter(execution_test_report_asset=asset)
+                .first()
+            )
+        if version is not None and version.execution_run_id:
+            run = version.execution_run
+            if (
+                run.public_id == asset.owner_ref
+                and run.task_id == version.task_id
+                and version.execution_snapshot_id == version.workspace_snapshot_id
+            ):
+                task = version.task
     if task is None:
         raise ResourceNotFound()
     if not task.publication.report_required and asset.owner_type == REPORT_OWNER:
@@ -970,7 +1190,14 @@ def report_preview_for_teaching(*, actor: User, course_id: str, task_id: str) ->
         raise ResourceNotFound()
     if task.publication.report_required:
         version = (
-            ReportVersion.objects.select_related("student")
+            ReportVersion.objects.select_related(
+                "student",
+                "execution_run__session",
+                "execution_snapshot",
+                "execution_stdout_asset",
+                "execution_stderr_asset",
+                "execution_test_report_asset",
+            )
             .prefetch_related("attachments__attachment__asset")
             .filter(task=task)
             .order_by("-version_no")
@@ -986,6 +1213,8 @@ def report_preview_for_teaching(*, actor: User, course_id: str, task_id: str) ->
         ):
             raise ResourceNotFound()
         if not _snapshot_is_valid(version.workspace_snapshot, task):
+            raise ResourceNotFound()
+        if version.execution_run_id and not _report_execution_is_consistent(version, task):
             raise ResourceNotFound()
         return {"kind": "REPORT", "task_id": task.public_id, "version": version}
     artifact = (

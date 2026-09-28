@@ -88,6 +88,53 @@ class ReportVersion(AppendOnlyModel):
     workspace_snapshot = models.ForeignKey(
         "workspaces.WorkspaceSnapshot", on_delete=models.PROTECT, related_name="report_versions"
     )
+    # Execution facts are copied at submission time.  The source run and output
+    # objects are retained with PROTECT, while these fields make the report a
+    # self-contained immutable audit record even if a worker later inspects the run.
+    execution_run = models.ForeignKey(
+        "workspaces.WorkspaceExecutionRun",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="report_versions",
+    )
+    execution_status = models.CharField(max_length=24, blank=True, default="")
+    execution_result_summary = models.CharField(max_length=500, blank=True, default="")
+    execution_rule_summary = models.JSONField(default=dict)
+    execution_rule_digest = models.CharField(
+        max_length=64, blank=True, default="", db_collation="ascii_bin"
+    )
+    execution_snapshot = models.ForeignKey(
+        "workspaces.WorkspaceSnapshot",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="execution_report_versions",
+    )
+    execution_snapshot_digest = models.CharField(
+        max_length=64, blank=True, default="", db_collation="ascii_bin"
+    )
+    execution_stdout_asset = models.ForeignKey(
+        ObjectAsset,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="report_execution_stdout_versions",
+    )
+    execution_stderr_asset = models.ForeignKey(
+        ObjectAsset,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="report_execution_stderr_versions",
+    )
+    execution_test_report_asset = models.ForeignKey(
+        ObjectAsset,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="report_execution_test_report_versions",
+    )
     snapshot_digest = models.CharField(max_length=64, db_collation="ascii_bin")
     submitted_by = models.ForeignKey(
         User, on_delete=models.PROTECT, related_name="submitted_report_versions"
@@ -103,6 +150,19 @@ class ReportVersion(AppendOnlyModel):
             ),
             models.CheckConstraint(
                 condition=models.Q(version_no__gte=1), name="reports_version_no_ck"
+            ),
+            models.CheckConstraint(
+                condition=models.Q(execution_run__isnull=True)
+                | models.Q(
+                    execution_status__in=(
+                        "PASSED",
+                        "FAILED",
+                        "TIMEOUT",
+                        "RESOURCE_EXCEEDED",
+                        "REJECTED",
+                    )
+                ),
+                name="reports_version_exec_status_ck",
             ),
         ]
         indexes = [models.Index(fields=("task", "created_at"), name="reports_version_task_idx")]

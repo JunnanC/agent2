@@ -5,6 +5,8 @@ import {
   ApiError,
   RequestIntent,
   apiRequestWithMetadata,
+  type EnrollmentData,
+  type EnrollmentListResponse,
   type ExtensionData,
   type ListEnvelope,
   type PublicationData,
@@ -12,20 +14,16 @@ import {
   type TaskData,
   type TemplateListResponse,
 } from '@edu/api-client'
-import { experimentKeys, rubricKeys, templateKeys } from '@edu/query-keys'
+import { courseKeys, experimentKeys, rubricKeys, templateKeys } from '@edu/query-keys'
 import { PageHeader, RequestStateView, StatusBadge, TextField } from '@edu/ui'
+
+import { messageFor } from './p06-errors'
 
 type Envelope<T> = { data: T; meta: Record<string, unknown> }
 
-function messageFor(error: unknown): string {
-  if (!(error instanceof ApiError)) return '请求未完成，请稍后重试。'
-  if (error.status === 409) return '当前状态已变化，请刷新后重试。'
-  if (error.status === 412) return '内容已被其他操作更新，请刷新后重试。'
-  return error.payload.error.message
-}
-
-function toIso(value: FormDataEntryValue | null): string {
-  return new Date(String(value ?? '')).toISOString()
+function validDate(value: FormDataEntryValue | null): Date | null {
+  const result = new Date(String(value ?? ''))
+  return Number.isNaN(result.getTime()) ? null : result
 }
 
 function parsePrerequisites(value: FormDataEntryValue | null) {
@@ -33,6 +31,23 @@ function parsePrerequisites(value: FormDataEntryValue | null) {
     const [kind, id] = line.split(':', 2)
     return kind === 'CHAPTER' ? { kind, chapter_id: id } : { kind: 'PUBLICATION', publication_id: id }
   })
+}
+
+async function activeEnrollments(courseId: string): Promise<EnrollmentData[]> {
+  const pageSize = 100
+  const values: EnrollmentData[] = []
+  let page = 1
+  let total = 0
+  do {
+    const result = await apiRequestWithMetadata<EnrollmentListResponse>(
+      `/api/v2/teaching/courses/${courseId}/enrollments?status=ACTIVE&page=${page}&page_size=${pageSize}`,
+    )
+    values.push(...result.payload.data)
+    total = result.payload.meta.total
+    if (!result.payload.data.length) break
+    page += 1
+  } while (values.length < total)
+  return values
 }
 
 export function ExperimentListPage() {
@@ -55,21 +70,30 @@ export function ExperimentListPage() {
   })
   const create = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault(); setBusy(true); setError('')
-    const form = new FormData(event.currentTarget)
-    const body = {
-      title: form.get('title'), description: form.get('description'),
-      template_version_id: form.get('template_version_id'), rubric_version_id: form.get('rubric_version_id'),
-      audience_mode: form.get('audience_mode'), late_enrollment_policy: form.get('late_enrollment_policy'),
-      window_start: toIso(form.get('window_start')), window_end: toIso(form.get('window_end')),
-      assignment_deadline: form.get('assignment_deadline') ? toIso(form.get('assignment_deadline')) : null,
-      report_required: form.get('report_required') === 'on', review_mode: form.get('review_mode'),
-      prerequisites: parsePrerequisites(form.get('prerequisites')),
-    }
+    const formElement = event.currentTarget
     try {
+      const form = new FormData(formElement)
+      const windowStart = validDate(form.get('window_start'))
+      const windowEnd = validDate(form.get('window_end'))
+      const deadlineValue = form.get('assignment_deadline')
+      const assignmentDeadline = deadlineValue ? validDate(deadlineValue) : null
+      if (!windowStart || !windowEnd) throw new Error('请输入有效的开放时间和截止时间。')
+      if (windowEnd <= windowStart) throw new Error('截止时间必须晚于开放时间。')
+      if (deadlineValue && !assignmentDeadline) throw new Error('请输入有效的分配截止时间。')
+      if (assignmentDeadline && assignmentDeadline > windowEnd) throw new Error('分配截止时间不能晚于实验截止时间。')
+      const body = {
+        title: form.get('title'), description: form.get('description'),
+        template_version_id: form.get('template_version_id'), rubric_version_id: form.get('rubric_version_id'),
+        audience_mode: form.get('audience_mode'), late_enrollment_policy: form.get('late_enrollment_policy'),
+        window_start: windowStart.toISOString(), window_end: windowEnd.toISOString(),
+        assignment_deadline: assignmentDeadline?.toISOString() ?? null,
+        report_required: form.get('report_required') === 'on', review_mode: form.get('review_mode'),
+        prerequisites: parsePrerequisites(form.get('prerequisites')),
+      }
       await apiRequestWithMetadata(`/api/v2/teaching/courses/${courseId}/experiments`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), intent: new RequestIntent() })
-      event.currentTarget.reset(); setShowCreate(false)
+      formElement.reset(); setShowCreate(false)
       await queryClient.invalidateQueries({ queryKey: experimentKeys.publications(courseId) })
-    } catch (reason) { setError(messageFor(reason)) } finally { setBusy(false) }
+    } catch (reason) { setError(reason instanceof Error && !(reason instanceof ApiError) ? reason.message : messageFor(reason)) } finally { setBusy(false) }
   }
   if (publications.isPending || templates.isPending || rubrics.isPending) return <RequestStateView state="loading" />
   const failed = [publications, templates, rubrics].find((query) => query.isError)
@@ -101,16 +125,21 @@ export function ExperimentListPage() {
 
 export function ExperimentDetailPage() {
   const { courseId = '', publicationId = '' } = useParams()
-  const [error, setError] = useState(''); const [busy, setBusy] = useState(false); const [selected, setSelected] = useState('')
+  const [error, setError] = useState(''); const [busy, setBusy] = useState(false); const [selected, setSelected] = useState<string[]>([])
   const publication = useQuery({ queryKey: experimentKeys.publication(courseId, publicationId), queryFn: () => apiRequestWithMetadata<Envelope<PublicationData>>(`/api/v2/teaching/courses/${courseId}/experiments/${publicationId}`) })
+  const item = publication.data?.payload.data
+  const roster = useQuery({
+    queryKey: courseKeys.roster(courseId, { status: 'ACTIVE', purpose: 'experiment-publication' }),
+    queryFn: () => activeEnrollments(courseId),
+    enabled: item?.status === 'DRAFT' && item.audience_mode === 'SELECTED',
+  })
   const tasks = useQuery({ queryKey: experimentKeys.tasks(courseId, publicationId), queryFn: () => apiRequestWithMetadata<ListEnvelope<TaskData>>(`/api/v2/teaching/courses/${courseId}/experiments/${publicationId}/tasks`) })
   const progress = useQuery({ queryKey: experimentKeys.progress(courseId), queryFn: () => apiRequestWithMetadata<Envelope<{ total: number; task_counts: Record<string, number> }>>(`/api/v2/teaching/courses/${courseId}/progress`) })
   const extensions = useQuery({ queryKey: experimentKeys.extensionRequests(courseId, { publicationId }), queryFn: () => apiRequestWithMetadata<ListEnvelope<ExtensionData>>(`/api/v2/teaching/courses/${courseId}/extension-requests?publication_id=${publicationId}`) })
-  const item = publication.data?.payload.data
   const action = async (name: 'publish' | 'close' | 'withdraw') => {
     if (!item) return; setBusy(true); setError('')
     try {
-      const body = name === 'publish' ? { selected_enrollment_ids: selected.split(',').map((value) => value.trim()).filter(Boolean) } : {}
+      const body = name === 'publish' && item.audience_mode === 'SELECTED' ? { selected_enrollment_ids: selected } : {}
       await apiRequestWithMetadata(`/api/v2/teaching/courses/${courseId}/experiments/${publicationId}/${name}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), ifMatch: `"${item.row_version}"`, intent: new RequestIntent() })
       await Promise.all([publication.refetch(), tasks.refetch(), progress.refetch()])
     } catch (reason) { setError(messageFor(reason)) } finally { setBusy(false) }
@@ -125,13 +154,13 @@ export function ExperimentDetailPage() {
   }
   if (publication.isPending) return <RequestStateView state="loading" />
   if (publication.isError || !item) return <RequestStateView state={publication.error instanceof ApiError && publication.error.status === 403 ? 'forbidden' : 'error'} message={messageFor(publication.error)} onRetry={() => void publication.refetch()} />
-  const taskItems = tasks.data?.payload.data ?? []; const requestItems = extensions.data?.payload.data ?? []; const summary = progress.data?.payload.data
+  const taskItems = tasks.data?.payload.data ?? []; const requestItems = extensions.data?.payload.data ?? []; const summary = progress.data?.payload.data; const rosterItems = roster.data ?? []
   return <section className="workspace-page">
     <PageHeader eyebrow="EXPERIMENT" title={item.title} description={item.description} actions={<a className="text-button" href={`/courses/${courseId}/experiments`}>返回列表</a>} />
     {error ? <p className="form-error" role="alert">{error}</p> : null}
     {Object.keys(item.publication_error ?? {}).length ? <p className="form-error">发布失败：{JSON.stringify(item.publication_error)}</p> : null}
     <div className="summary-grid"><div className="summary-item"><span>发布状态</span><strong><StatusBadge status={item.status} /></strong></div><div className="summary-item"><span>任务总数</span><strong>{summary?.total ?? taskItems.length}</strong></div><div className="summary-item"><span>受众快照</span><strong>{item.audience_count}</strong></div></div>
-    {item.status === 'DRAFT' ? <section className="section-block"><h2>发布</h2>{item.audience_mode === 'SELECTED' ? <TextField label="Enrollment ID（逗号分隔）" value={selected} onChange={(event) => setSelected(event.target.value)} /> : null}<div className="toolbar"><button className="primary-button" disabled={busy} onClick={() => void action('publish')}>发布实验</button></div></section> : null}
+    {item.status === 'DRAFT' ? <section className="section-block"><h2>发布</h2>{item.audience_mode === 'SELECTED' ? roster.isPending ? <RequestStateView state="loading" /> : roster.isError ? <RequestStateView state="error" message={messageFor(roster.error)} onRetry={() => void roster.refetch()} /> : rosterItems.length ? <div className="data-table-wrap"><table className="data-table"><thead><tr><th>选择</th><th>学生</th><th>选课记录</th></tr></thead><tbody>{rosterItems.map((enrollment) => <tr key={enrollment.public_id}><td><input type="checkbox" aria-label={`选择 ${enrollment.student_name}`} checked={selected.includes(enrollment.public_id)} onChange={(event) => setSelected((current) => event.target.checked ? [...current, enrollment.public_id] : current.filter((id) => id !== enrollment.public_id))} /></td><td>{enrollment.student_name}</td><td className="digest">{enrollment.public_id}</td></tr>)}</tbody></table></div> : <p className="notice">当前课程没有可发布的在读学生。</p> : null}<div className="toolbar"><button className="primary-button" disabled={busy || roster.isPending || roster.isError || (item.audience_mode === 'SELECTED' && selected.length === 0)} onClick={() => void action('publish')}>{busy ? '发布中' : '发布实验'}</button></div></section> : null}
     {['PUBLISHED', 'PUBLISHING', 'PUBLISH_FAILED'].includes(item.status) ? <div className="toolbar">{item.status === 'PUBLISHED' ? <button className="text-button" disabled={busy} onClick={() => void action('close')}>关闭发布</button> : null}<button className="text-button text-button--danger" disabled={busy} onClick={() => void action('withdraw')}>撤回发布</button></div> : null}
     <section className="section-block"><h2>任务追踪</h2>{tasks.isPending ? <RequestStateView state="loading" /> : tasks.isError ? <RequestStateView state="error" onRetry={() => void tasks.refetch()} /> : taskItems.length ? <div className="data-table-wrap"><table className="data-table"><thead><tr><th>学生</th><th>任务状态</th><th>装载作业</th><th>阶段</th><th>进度</th><th>个人截止时间</th><th>成果</th></tr></thead><tbody>{taskItems.map((task) => { const provisioning = (task.provisioning ?? {}) as Record<string, unknown>; return <tr key={task.public_id}><td data-wrap>{task.student_name}<br /><small>{task.public_id}</small></td><td><StatusBadge status={task.status} /></td><td>{provisioning.status ? <StatusBadge status={String(provisioning.status)} /> : '-'}</td><td>{String(provisioning.current_stage ?? '-')}</td><td>{task.progress}%</td><td>{task.effective_deadline ? new Date(task.effective_deadline).toLocaleString() : '-'}</td><td>{task.status === 'UNDER_REVIEW' ? <a className="text-button" href={`/courses/${courseId}/tasks/${task.public_id}/submission`}>只读预览</a> : '-'}</td></tr> })}</tbody></table></div> : <RequestStateView state="empty" />}</section>
     <section className="section-block"><h2>延期申请</h2>{extensions.isPending ? <RequestStateView state="loading" /> : extensions.isError ? <RequestStateView state="error" onRetry={() => void extensions.refetch()} /> : requestItems.length ? <div className="data-table-wrap"><table className="data-table"><thead><tr><th>任务</th><th>申请截止时间</th><th>状态</th><th>决定历史</th><th>操作</th></tr></thead><tbody>{requestItems.map((request) => <tr key={request.public_id}><td>{request.task_id}</td><td>{new Date(request.requested_deadline).toLocaleString()}</td><td><StatusBadge status={request.status} /></td><td>{request.decisions.length}</td><td>{request.status === 'PENDING' ? <div className="toolbar"><button className="text-button" onClick={() => void decide(request, 'APPROVE')}>批准</button><button className="text-button text-button--danger" onClick={() => void decide(request, 'REJECT')}>拒绝</button></div> : null}</td></tr>)}</tbody></table></div> : <RequestStateView state="empty" />}</section>

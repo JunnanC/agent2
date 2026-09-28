@@ -1,6 +1,6 @@
 # Education Agent Platform
 
-Greenfield implementation of the teaching cloud experiment platform. The current deliverable is P06: experiment publications, frozen audiences, prerequisites, personal tasks, state transitions, and extension decisions on top of the P00-P05 foundation.
+Greenfield implementation of the teaching cloud experiment platform. The working tree contains the P00-P13 business capabilities and the P14 Docker Swarm runtime adapter. P13 local gates and the single-node runtime contract can be verified locally; P14 production-candidate HA, recovery, performance, and full-journey acceptance still require the real staging environment.
 
 ## Local prerequisites
 
@@ -22,7 +22,7 @@ The edge entry point listens on port `8080`. Use the hostnames below so portal c
 - `http://admin.localhost:8080`
 - `http://api.localhost:8080` (machine API only; no web application)
 
-Run `./scripts/verify-p06.ps1` for the P06 static checks and `./scripts/verify-p06-integration.ps1` for isolated MySQL/Redis/MinIO/ClamAV and real-entry checks. Architecture and stage requirements live under `documents/`.
+Run `./scripts/verify-p13-c.ps1` for the current local static gate. P12 and earlier isolated integration gates remain available as `verify-pXX-integration.ps1`; P13 browser coverage is in `frontend/e2e/p13.spec.ts`. P14 deployment, rollback, evidence collection, and bounded runtime smoke commands are under `scripts/p14-*.ps1` and `scripts/p14-runtime-smoke.py`. Architecture and stage requirements live under `documents/`.
 
 The backend has one canonical Django project at `backend/education_experiment_platform`.
 All applications, settings, migrations, tests, and management commands belong under that

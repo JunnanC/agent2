@@ -1,6 +1,6 @@
 import json
 
-from django.test import Client, TestCase
+from django.test import Client, TestCase, override_settings
 from django.utils import timezone
 
 from apps.accounts.models import User
@@ -18,9 +18,15 @@ from apps.provisioning.adapters import reset_fake_runtime
 from apps.provisioning.services import execute_provisioning_job, start_provisioning
 
 from ..errors import WorkspaceSessionInvalid, WorkspaceSessionRevoked
-from ..models import WorkspaceSession
+from ..models import WorkspaceExecutionRun, WorkspaceSession
 from ..permissions import require_workspace_session
-from ..services import enter_task, renew_session, revoke_session
+from ..services import (
+    enter_task,
+    execute_execution_run,
+    renew_session,
+    request_execution_run,
+    revoke_session,
+)
 
 
 class WorkspaceSessionServiceTests(TestCase):
@@ -169,6 +175,7 @@ class WorkspaceSessionServiceTests(TestCase):
                 )
             model.objects.filter(pk=pk).update(**original)
 
+    @override_settings(WORKSPACE_INTERNAL_KEY="internal-secret")
     def test_gateway_records_only_whitelisted_operation_and_returns_unified_errors(self) -> None:
         _, session, token = enter_task(
             task_id=self.task.public_id,
@@ -176,12 +183,13 @@ class WorkspaceSessionServiceTests(TestCase):
             expected_version=self.task.row_version,
             context=self.context,
         )
-        client = Client()
+        client = Client(enforce_csrf_checks=True)
         response = client.post(
             f"/workspace/{session.public_id}/operations",
             data=json.dumps({"operation": "RUN_CHECK", "arguments": {"secret": "redact-me"}}),
             content_type="application/json",
             HTTP_X_PORTAL="USER",
+            HTTP_X_WORKSPACE_INTERNAL_KEY="internal-secret",
             HTTP_X_WORKSPACE_TOKEN=token,
         )
         self.assertEqual(response.status_code, 201)
@@ -193,7 +201,85 @@ class WorkspaceSessionServiceTests(TestCase):
             data=json.dumps({"operation": "SHELL"}),
             content_type="application/json",
             HTTP_X_PORTAL="USER",
+            HTTP_X_WORKSPACE_INTERNAL_KEY="internal-secret",
             HTTP_X_WORKSPACE_TOKEN=token,
         )
         self.assertEqual(denied.status_code, 403)
         self.assertEqual(denied.json()["error"]["code"], "WORKSPACE_OPERATION_DENIED")
+
+        internal_denied = client.post(
+            f"/workspace/{session.public_id}/operations",
+            data=json.dumps({"operation": "RUN_CHECK"}),
+            content_type="application/json",
+            HTTP_X_PORTAL="USER",
+            HTTP_X_WORKSPACE_TOKEN=token,
+        )
+        self.assertEqual(internal_denied.status_code, 403)
+        self.assertEqual(
+            internal_denied.json()["error"]["code"], "WORKSPACE_INTERNAL_DENIED"
+        )
+
+    @override_settings(WORKSPACE_INTERNAL_KEY="internal-secret")
+    def test_run_check_creates_a_fake_execution_and_replays_by_request_key(self) -> None:
+        _, session, token = enter_task(
+            task_id=self.task.public_id,
+            actor=self.task.student,
+            expected_version=self.task.row_version,
+            context=self.context,
+        )
+        client = Client(enforce_csrf_checks=True)
+        headers = {
+            "HTTP_X_PORTAL": "USER",
+            "HTTP_X_WORKSPACE_INTERNAL_KEY": "internal-secret",
+            "HTTP_X_WORKSPACE_TOKEN": token,
+            "HTTP_IDEMPOTENCY_KEY": "execution-request-1",
+        }
+        response = client.post(
+            f"/workspace/{session.public_id}/operations",
+            data=json.dumps({"operation": "RUN_CHECK", "arguments": {"source": "test"}}),
+            content_type="application/json",
+            **headers,
+        )
+        self.assertEqual(response.status_code, 201)
+        operation_id = response.json()["data"]["public_id"]
+        execution_id = response.json()["data"]["payload"]["execution_run_id"]
+        run = WorkspaceExecutionRun.objects.get(public_id=execution_id)
+        self.assertEqual(run.status, WorkspaceExecutionRun.Status.PASSED)
+        self.assertEqual(run.task_id, self.task.pk)
+        replay = client.post(
+            f"/workspace/{session.public_id}/operations",
+            data=json.dumps({"operation": "RUN_CHECK", "arguments": {"source": "test"}}),
+            content_type="application/json",
+            **headers,
+        )
+        self.assertEqual(replay.status_code, 201)
+        self.assertEqual(replay.json()["data"]["public_id"], operation_id)
+        self.assertEqual(WorkspaceExecutionRun.objects.filter(task=self.task).count(), 1)
+
+    def test_non_fake_run_is_queued_and_worker_publishes_terminal_rejection(self) -> None:
+        RuntimeAdapter.objects.filter(pk=self.task.runtime_adapter_id).update(
+            driver=RuntimeAdapter.Driver.DOCKER_LOCAL,
+            config_ref="runtime/local-algorithm",
+        )
+        type(self.task).objects.filter(pk=self.task.pk).update(
+            runtime_adapter_driver=RuntimeAdapter.Driver.DOCKER_LOCAL,
+            runtime_adapter_config_ref="runtime/local-algorithm",
+        )
+        _, session, token = enter_task(
+            task_id=self.task.public_id,
+            actor=self.task.student,
+            expected_version=self.task.row_version,
+            context=self.context,
+        )
+        run = request_execution_run(
+            session=session,
+            token=token,
+            actor=self.task.student,
+            arguments={},
+            request_key="docker-local-execution-1",
+            context=self.context,
+        )
+        self.assertEqual(run.status, WorkspaceExecutionRun.Status.QUEUED)
+        completed = execute_execution_run(execution_run_id=run.public_id, trace_id="e" * 32)
+        self.assertEqual(completed.status, WorkspaceExecutionRun.Status.REJECTED)
+        self.assertEqual(completed.error_code, "EXECUTION_SNAPSHOT_REQUIRED")

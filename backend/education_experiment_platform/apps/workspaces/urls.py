@@ -6,8 +6,11 @@ from .views import (
     TeachingWorkspaceView,
     UserCheckpointListCreateView,
     UserCheckpointRestoreView,
+    UserExecutionRunDetailView,
+    UserExecutionRunListView,
     UserOperationReplayView,
     UserTaskEnterView,
+    UserTaskWorkbenchView,
     UserWorkspaceSessionCreateView,
     UserWorkspaceSnapshotView,
     WorkspaceSessionRenewView,
@@ -15,6 +18,11 @@ from .views import (
 )
 
 urlpatterns = [
+    path(
+        "tasks/<str:task_id>/workbench",
+        UserTaskWorkbenchView.as_view(),
+        name="workspace-workbench",
+    ),
     path("tasks/<str:task_id>/enter", UserTaskEnterView.as_view(), name="workspace-task-enter"),
     path(
         "tasks/<str:task_id>/workspace-sessions",
@@ -50,6 +58,16 @@ urlpatterns = [
         "tasks/<str:task_id>/operation-replay",
         UserOperationReplayView.as_view(),
         name="workspace-operation-replay",
+    ),
+    path(
+        "tasks/<str:task_id>/execution-runs",
+        UserExecutionRunListView.as_view(),
+        name="workspace-execution-runs",
+    ),
+    path(
+        "tasks/<str:task_id>/execution-runs/<str:execution_id>",
+        UserExecutionRunDetailView.as_view(),
+        name="workspace-execution-run-detail",
     ),
     path(
         "teaching/courses/<str:course_id>/tasks/<str:task_id>/workspace",

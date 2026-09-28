@@ -22,7 +22,9 @@ class Command(BaseCommand):
             raise CommandError("Run seed_p02_e2e through seed_p07_e2e first")
         instance = (
             ProvisioningInstance.objects.filter(
-                task__student=student, status=ProvisioningInstance.Status.READY
+                task__student=student,
+                task__runtime_adapter_driver="FAKE",
+                status=ProvisioningInstance.Status.READY,
             )
             .select_related("task", "task__course", "task__enrollment")
             .order_by("-ready_at", "-created_at")
@@ -31,6 +33,7 @@ class Command(BaseCommand):
         if instance is None:
             task = (
                 ExperimentTask.objects.filter(student=student)
+                .filter(runtime_adapter_driver="FAKE")
                 .select_related("course", "enrollment")
                 .order_by("-created_at")
                 .first()

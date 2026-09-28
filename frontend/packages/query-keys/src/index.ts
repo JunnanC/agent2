@@ -77,10 +77,13 @@ export const experimentKeys = {
 
 export const workspaceKeys = {
   all: ['workspaces'] as const,
+  workbench: (taskId: string) => [...workspaceKeys.all, 'workbench', taskId] as const,
   session: (taskId: string) => [...workspaceKeys.all, 'session', taskId] as const,
   snapshot: (taskId: string) => [...workspaceKeys.all, 'snapshot', taskId] as const,
   checkpoints: (taskId: string) => [...workspaceKeys.all, 'checkpoints', taskId] as const,
   replay: (taskId: string, scope = 'user') => [...workspaceKeys.all, 'replay', scope, taskId] as const,
+  executions: (taskId: string) => [...workspaceKeys.all, 'executions', taskId] as const,
+  execution: (taskId: string, executionId: string) => [...workspaceKeys.executions(taskId), executionId] as const,
   teacher: (courseId: string, taskId: string) => [...workspaceKeys.all, 'teacher', courseId, taskId] as const,
   adminSessions: () => [...workspaceKeys.all, 'admin', 'sessions'] as const,
 }
@@ -112,4 +115,39 @@ export const archiveKeys = {
   detail: (courseId: string, archiveId: string) => [...archiveKeys.course(courseId), archiveId] as const,
   instances: () => [...archiveKeys.all, 'platform', 'instances'] as const,
   compensations: (status = '') => [...archiveKeys.all, 'platform', 'compensations', status] as const,
+}
+
+export const agentKeys = {
+  all: ['agents'] as const,
+  profile: (courseId: string) => [...agentKeys.all, 'profile', courseId] as const,
+  sessions: (courseId: string) => [...agentKeys.all, 'sessions', courseId] as const,
+  session: (sessionId: string) => [...agentKeys.all, 'session', sessionId] as const,
+  messages: (sessionId: string) => [...agentKeys.session(sessionId), 'messages'] as const,
+  teachingProfiles: (courseId: string) => [...agentKeys.all, 'teaching', 'profiles', courseId] as const,
+  teachingKnowledge: (courseId: string) => [...agentKeys.all, 'teaching', 'knowledge', courseId] as const,
+  teachingFeedback: (courseId: string) => [...agentKeys.all, 'teaching', 'feedback', courseId] as const,
+  platformPolicies: () => [...agentKeys.all, 'platform', 'policies'] as const,
+}
+
+export const notificationKeys = {
+  all: ['notifications'] as const,
+  list: (portal = '') => [...notificationKeys.all, 'list', portal] as const,
+  preference: (portal = '') => [...notificationKeys.all, 'preference', portal] as const,
+}
+
+export const analyticsKeys = {
+  all: ['analytics'] as const,
+  recommendations: () => [...analyticsKeys.all, 'recommendations'] as const,
+  risks: (courseId = '') => [...analyticsKeys.all, 'risks', courseId] as const,
+  overview: (courseId: string) => [...analyticsKeys.all, 'overview', courseId] as const,
+  quality: (courseId: string) => [...analyticsKeys.all, 'quality', courseId] as const,
+  resourceCosts: (courseId: string) => [...analyticsKeys.all, 'resource-costs', courseId] as const,
+  projections: () => [...analyticsKeys.all, 'projections'] as const,
+}
+
+export const integrationKeys = {
+  all: ['integrations'] as const,
+  providers: () => [...integrationKeys.all, 'providers'] as const,
+  clients: () => [...integrationKeys.all, 'clients'] as const,
+  deliveries: () => [...integrationKeys.all, 'deliveries'] as const,
 }

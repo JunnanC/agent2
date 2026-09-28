@@ -19,6 +19,7 @@ from apps.core.idempotency import PrincipalScope, StoredResponse, execute_idempo
 from apps.core.pagination import PageSpec
 from apps.courses.services import ActorContext
 from apps.governance.errors import RecentAuthenticationRequired
+from apps.provisioning.services import enabled_runtime_inventory
 
 from .selectors import (
     archive_for_course,
@@ -45,9 +46,19 @@ from .serializers import (
 from .services import (
     create_archive_export,
     request_instance_destroy_as_admin,
+    request_orphan_destroy_as_admin,
     retry_compensation_as_admin,
-    runtime_inventory,
 )
+
+
+def _metadata_int(value: object) -> int:
+    if not isinstance(value, (str, bytes, bytearray, int, float)):
+        return 0
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
+
 
 IF_MATCH = OpenApiParameter("If-Match", str, OpenApiParameter.HEADER, required=True)
 IDEMPOTENCY_KEY = OpenApiParameter("Idempotency-Key", str, OpenApiParameter.HEADER, required=True)
@@ -239,36 +250,64 @@ class PlatformInstanceListView(APIView):
         extensions={"x-portals": ["PLATFORM"]},
     )
     def get(self, request: HttpRequest) -> Response:
-        inventory = {item.external_id: item for item in runtime_inventory(driver="FAKE")}
+        inventory_items = enabled_runtime_inventory(
+            include_unavailable=True,
+            trace_id=str(getattr(request, "trace_id", "")),
+        )
+        unavailable_adapters = {
+            str(item.metadata.get("adapter_id", ""))
+            for item in inventory_items
+            if item.metadata.get("inventory_unavailable")
+        }
+        inventory = {
+            (str(item.metadata.get("adapter_id", "")), item.external_id): item
+            for item in inventory_items
+            if item.external_id
+        }
         rows = list(instance_rows())
         data = [
             instance_data(
                 item,
                 external_status=(
-                    inventory[item.external_id].status
-                    if item.external_id in inventory
+                    inventory[(item.runtime_adapter.public_id, item.external_id)].status
+                    if (item.runtime_adapter.public_id, item.external_id) in inventory
+                    else "UNAVAILABLE"
+                    if item.runtime_adapter.public_id in unavailable_adapters
                     else "ABSENT"
+                ),
+                external_metadata=(
+                    dict(inventory[(item.runtime_adapter.public_id, item.external_id)].metadata)
+                    if (item.runtime_adapter.public_id, item.external_id) in inventory
+                    else {}
                 ),
             )
             for item in rows
         ]
-        known = {item.external_id for item in rows if item.external_id}
+        known = {
+            (item.runtime_adapter.public_id, item.external_id)
+            for item in rows
+            if item.external_id
+        }
         data.extend(
             {
-                "public_id": f"external:{external_id}",
+                "public_id": f"external:{adapter_id}:{external_id}",
                 "task_id": "",
                 "course_id": "",
                 "student_id": "",
                 "status": "ORPHANED",
                 "external_id": external_id,
                 "external_status": item.status,
+                "runtime_driver": str(item.metadata.get("driver", "")),
+                "service_name": str(item.metadata.get("service_name", "")),
+                "runtime_task_count": _metadata_int(item.metadata.get("task_count", 0)),
+                "runtime_health": str(item.metadata.get("health", item.status)),
                 "orphan": True,
                 "resource_leak": True,
                 "row_version": 1,
                 "trace_id": "",
             }
-            for external_id, item in inventory.items()
-            if external_id not in known
+            for (adapter_id, external_id), item in inventory.items()
+            if (adapter_id, external_id) not in known
         )
         return _page_response(request, data, serializer=lambda item: item)
 
@@ -291,6 +330,38 @@ class PlatformInstanceDestroyView(APIView):
         expected = parse_if_match(request.headers.get("If-Match"))
 
         def operation() -> StoredResponse:
+            if instance_id.startswith("external:"):
+                request_orphan_destroy_as_admin(
+                    orphan_ref=instance_id,
+                    actor=request.user,
+                    expected_version=expected,
+                    reason=serializer.validated_data["reason"],
+                    context=_context(request),
+                )
+                return StoredResponse(
+                    202,
+                    _body(
+                        request,
+                        {
+                            "public_id": instance_id,
+                            "task_id": "",
+                            "course_id": "",
+                            "student_id": "",
+                            "status": "DESTROY_PENDING",
+                            "external_id": instance_id.rsplit(":", 1)[-1],
+                            "external_status": "DESTROY_PENDING",
+                            "runtime_driver": "",
+                            "service_name": "",
+                            "runtime_task_count": 0,
+                            "runtime_health": "UNKNOWN",
+                            "orphan": True,
+                            "resource_leak": True,
+                            "row_version": 1,
+                            "trace_id": str(getattr(request, "trace_id", "")),
+                        },
+                    ),
+                    {"ETag": etag_for_version(1)},
+                )
             instance = request_instance_destroy_as_admin(
                 instance_id=instance_id,
                 actor=request.user,

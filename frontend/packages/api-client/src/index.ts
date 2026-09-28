@@ -75,6 +75,31 @@ export type ChapterData = Record<string, unknown>
 export type MaterialData = Record<string, unknown>
 export type QuestionData = Record<string, unknown>
 
+export type AgentMode = 'KNOWLEDGE_QA' | 'SOCRATIC_HINT' | 'DEBUG_ASSIST' | 'REPORT_COACH' | 'WORKSPACE_ASSIST'
+export type AgentProfileData = { public_id: string; course_id: string; version_no: number; status: string; modes: AgentMode[]; model_route: string; budget: Record<string, unknown>; knowledge_base_id: string | null; prompt_version_id: string | null; tool_policy_id: string | null; last_eval_run_id: string | null; row_version: number }
+export type AgentSessionData = { public_id: string; course_id: string; enrollment_id: string; task_id: string | null; mode: AgentMode; status: string; profile_id: string; profile_version: number; row_version: number; trace_id: string }
+export type AgentCitationData = { public_id: string; source_version_id: string; title: string; snippet: string; score: number; accessible: boolean; asset_id: string | null }
+export type AgentMessageData = { public_id: string; role: string; body: string; status: string; citation_status: string; token_count: number; created_at: string; trace_id: string; citations: AgentCitationData[] }
+export type AgentToolCallData = { public_id: string; session_id: string; tool_name: string; risk: string; arguments_digest: string; state: { public_id: string; status: string; output: Record<string, unknown>; error_code: string; row_version: number } | null; trace_id: string }
+export type AgentProfileResponse = { data: { course_id: string; enrollment_id: string; profile: AgentProfileData; capabilities: { modes: AgentMode[]; tool_risk: string | null } }; meta: { trace_id: string } }
+export type AgentSessionResponse = { data: AgentSessionData; meta: { trace_id: string } }
+export type AgentMessagesResponse = { data: AgentMessageData[]; meta: { trace_id: string } }
+export type AgentToolResponse = { data: { tool_call: string } | AgentToolCallData; meta: { trace_id: string } }
+export type AgentProfileListResponse = { data: AgentProfileData[]; meta: { trace_id: string } }
+
+export function createAgentSession(courseId: string, mode: AgentMode, intent = new RequestIntent()) {
+  return apiRequestWithMetadata<AgentSessionResponse>(`/api/v2/courses/${encodeURIComponent(courseId)}/agent-sessions`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode }), intent })
+}
+export function createTaskAgentSession(taskId: string, mode: AgentMode, intent = new RequestIntent()) {
+  return apiRequestWithMetadata<AgentSessionResponse>(`/api/v2/tasks/${encodeURIComponent(taskId)}/agent-sessions`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode }), intent })
+}
+export function sendAgentMessage(sessionId: string, body: string, intent = new RequestIntent()) {
+  return apiRequestWithMetadata<AgentSessionResponse>(`/api/v2/agent-sessions/${encodeURIComponent(sessionId)}/messages`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ body }), intent })
+}
+export function requestAgentTool(sessionId: string, toolName: string, argumentsValue: Record<string, unknown>, intent = new RequestIntent()) {
+  return apiRequestWithMetadata<AgentToolResponse>(`/api/v2/agent-sessions/${encodeURIComponent(sessionId)}/tool-calls`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tool_name: toolName, arguments: argumentsValue }), intent })
+}
+
 export type WorkspaceCapabilities = Record<string, boolean>
 export type WorkspaceSessionData = {
   public_id: string
@@ -84,6 +109,7 @@ export type WorkspaceSessionData = {
   portal: 'USER'
   status: 'ACTIVE' | 'REVOKED' | 'EXPIRED'
   capabilities: WorkspaceCapabilities
+  workspace_urls: Record<string, string>
   expires_at: string
   revoked_at: string | null
   current_version: number
@@ -130,8 +156,32 @@ export type WorkspaceOperationData = {
   result_summary: string
   occurred_at: string
   trace_id: string
+  execution_run_id?: string | null
+  execution_status?: string | null
 }
+export type WorkspaceExecutionRunData = {
+  public_id: string
+  task_id: string
+  session_id: string
+  snapshot_id: string | null
+  status: 'QUEUED' | 'RUNNING' | 'PASSED' | 'FAILED' | 'TIMEOUT' | 'RESOURCE_EXCEEDED' | 'REJECTED'
+  execution_rule_summary: Record<string, unknown>
+  execution_rule_digest: string
+  execution_spec: Record<string, unknown>
+  execution_spec_digest: string
+  stdout_asset_id: string | null
+  stderr_asset_id: string | null
+  test_report_asset_id: string | null
+  error_code: string
+  result_summary: string
+  started_at: string | null
+  finished_at: string | null
+  duration_ms: number | null
+  trace_id: string
+}
+export type WorkspaceExecutionRunListData = { items: WorkspaceExecutionRunData[] }
 export type WorkspaceEnvelope<T> = { data: T; meta: { trace_id?: string } }
+export type WorkbenchData = components['schemas']['Workbench']
 export type ReportAttachmentData = components['schemas']['ReportAttachmentData']
 export type ReportAttachmentUploadResponse = components['schemas']['ReportAttachmentUploadResponse']
 export type ReportDraftResponse = components['schemas']['ReportDraftResponse']
@@ -377,6 +427,19 @@ export async function enterWorkspace(taskId: string, ifMatch: string, intent = n
   return result
 }
 
+export async function createWorkspaceSession(taskId: string, intent = new RequestIntent()): Promise<ApiResult<WorkspaceEnvelope<WorkspaceSessionData>>> {
+  const result = await apiRequestWithMetadata<WorkspaceEnvelope<WorkspaceSessionData>>(`/api/v2/tasks/${encodeURIComponent(taskId)}/workspace-sessions`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}', intent })
+  setWorkspaceToken(result.payload.data.workspace_token)
+  return result
+}
+
+export function getTaskWorkbench(taskId: string, signal?: AbortSignal): Promise<ApiResult<WorkspaceEnvelope<WorkbenchData>>> {
+  return apiRequestWithMetadata<WorkspaceEnvelope<WorkbenchData>>(
+    `/api/v2/tasks/${encodeURIComponent(taskId)}/workbench`,
+    { signal },
+  )
+}
+
 export async function renewWorkspaceSession(sessionId: string, token?: string, intent = new RequestIntent()): Promise<ApiResult<WorkspaceEnvelope<WorkspaceSessionData>>> {
   const result = await apiRequestWithMetadata<WorkspaceEnvelope<WorkspaceSessionData>>(`/api/v2/workspace-sessions/${encodeURIComponent(sessionId)}/renew`, { method: 'POST', body: '{}', headers: { 'Content-Type': 'application/json' }, workspaceToken: token, intent })
   setWorkspaceToken(result.payload.data.workspace_token)
@@ -407,4 +470,18 @@ export function createWorkspaceCheckpoint(taskId: string, name: string, token?: 
 
 export function restoreWorkspaceCheckpoint(taskId: string, checkpointId: string, rowVersion: number, token?: string, intent = new RequestIntent()): Promise<ApiResult<WorkspaceEnvelope<WorkspaceSnapshotData>>> {
   return apiRequestWithMetadata<WorkspaceEnvelope<WorkspaceSnapshotData>>(`/api/v2/tasks/${encodeURIComponent(taskId)}/checkpoints/${encodeURIComponent(checkpointId)}/restore`, { method: 'POST', body: '{}', headers: { 'Content-Type': 'application/json' }, ifMatch: `"${rowVersion}"`, workspaceToken: token, intent })
+}
+
+export function getWorkspaceExecutionRuns(taskId: string, token?: string): Promise<ApiResult<WorkspaceEnvelope<WorkspaceExecutionRunListData>>> {
+  return apiRequestWithMetadata<WorkspaceEnvelope<WorkspaceExecutionRunListData>>(
+    `/api/v2/tasks/${encodeURIComponent(taskId)}/execution-runs`,
+    { workspaceToken: token },
+  )
+}
+
+export function getWorkspaceExecutionRun(taskId: string, executionId: string, token?: string): Promise<ApiResult<WorkspaceEnvelope<WorkspaceExecutionRunData>>> {
+  return apiRequestWithMetadata<WorkspaceEnvelope<WorkspaceExecutionRunData>>(
+    `/api/v2/tasks/${encodeURIComponent(taskId)}/execution-runs/${encodeURIComponent(executionId)}`,
+    { workspaceToken: token },
+  )
 }

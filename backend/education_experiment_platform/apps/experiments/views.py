@@ -4,7 +4,7 @@ from typing import Any
 from django.db import models
 from django.http import HttpRequest
 from django.utils import timezone
-from drf_spectacular.utils import OpenApiParameter, extend_schema
+from drf_spectacular.utils import OpenApiParameter, extend_schema, extend_schema_view
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -35,6 +35,7 @@ from .serializers import (
     GenericResponseSerializer,
     PublicationDataSerializer,
     PublicationPatchSerializer,
+    PublicationPublishSerializer,
     PublicationWriteSerializer,
     TaskDataSerializer,
     TaskExtensionDecisionSerializer,
@@ -224,23 +225,13 @@ class TeachingPublicationActionView(APIView):
     permission_classes = [IsTeachingPortal]
     action = ""
 
-    @extend_schema(
-        request=None,
-        responses={
-            201: PublicationDataSerializer,
-            202: PublicationDataSerializer,
-            200: PublicationDataSerializer,
-        },
-        parameters=[IF_MATCH, IDEMPOTENCY_KEY],
-        extensions={"x-portals": ["TEACHING"]},
-    )
     def post(self, request: HttpRequest, course_id: str, publication_id: str) -> Response:
         expected = parse_if_match(request.headers.get("If-Match"))
-        selected_ids = (
-            request.data.get("selected_enrollment_ids", [])
-            if isinstance(request.data, dict)
-            else []
-        )
+        selected_ids: list[str] = []
+        if self.action == "publish":
+            serializer = PublicationPublishSerializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
+            selected_ids = list(serializer.validated_data.get("selected_enrollment_ids", []))
 
         def operation() -> StoredResponse:
             context = _context(request)
@@ -285,14 +276,41 @@ class TeachingPublicationActionView(APIView):
         )
 
 
+@extend_schema_view(
+    post=extend_schema(
+        operation_id="teaching_experiments_publish",
+        request=PublicationPublishSerializer,
+        responses={201: PublicationDataSerializer, 202: PublicationDataSerializer},
+        parameters=[IF_MATCH, IDEMPOTENCY_KEY],
+        extensions={"x-portals": ["TEACHING"]},
+    )
+)
 class PublishPublicationView(TeachingPublicationActionView):
     action = "publish"
 
 
+@extend_schema_view(
+    post=extend_schema(
+        operation_id="teaching_experiments_close",
+        request=None,
+        responses={200: PublicationDataSerializer},
+        parameters=[IF_MATCH, IDEMPOTENCY_KEY],
+        extensions={"x-portals": ["TEACHING"]},
+    )
+)
 class ClosePublicationView(TeachingPublicationActionView):
     action = "close"
 
 
+@extend_schema_view(
+    post=extend_schema(
+        operation_id="teaching_experiments_withdraw",
+        request=None,
+        responses={200: PublicationDataSerializer},
+        parameters=[IF_MATCH, IDEMPOTENCY_KEY],
+        extensions={"x-portals": ["TEACHING"]},
+    )
+)
 class WithdrawPublicationView(TeachingPublicationActionView):
     action = "withdraw"
 

@@ -91,6 +91,7 @@ export class PortalEventClient {
         this.retry = 0
         this.setState('live')
         await this.consume(response.body)
+        if (this.running && this.poll) throw new Error('SSE_CLOSED')
       } catch (error) {
         if (!this.running) break
         this.onError?.(error)

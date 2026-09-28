@@ -17,7 +17,8 @@ RUN sed -i \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-COPY requirements/base.txt /tmp/requirements.txt
+ARG REQUIREMENTS_FILE=base.txt
+COPY requirements/${REQUIREMENTS_FILE} /tmp/requirements.txt
 RUN python -m pip install -r /tmp/requirements.txt
 
 COPY education_experiment_platform /app

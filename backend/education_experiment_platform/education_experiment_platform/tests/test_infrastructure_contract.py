@@ -70,6 +70,74 @@ def test_production_edge_terminates_tls_from_swarm_secrets() -> None:
     assert {"tls_certificate", "tls_private_key"} <= set(stack["services"]["nginx"]["secrets"])
 
 
+def test_workspace_edge_allows_only_same_origin_embedding() -> None:
+    for relative_path in (
+        "infrastructure/nginx/nginx.conf",
+        "infrastructure/nginx/nginx.prod.conf",
+    ):
+        nginx = (ROOT / relative_path).read_text(encoding="utf-8")
+        user_server = nginx.split("server_name", maxsplit=1)[1]
+        workspace = user_server.split("location /workspace/ {", maxsplit=1)[1]
+        workspace = workspace.split("}", maxsplit=1)[0]
+
+        assert "proxy_hide_header X-Frame-Options;" in workspace
+        assert "proxy_hide_header Content-Security-Policy;" in workspace
+        assert "add_header X-Frame-Options SAMEORIGIN always;" in workspace
+        assert "frame-ancestors 'self'" in workspace
+
+
+def test_p14_workspace_internal_key_is_scoped_to_gateway_and_authority() -> None:
+    stack = load_yaml("infrastructure/swarm/stack.yml")
+
+    assert "WORKSPACE_INTERNAL_KEY_FILE" not in stack["x-app-environment"]
+    for service in ("django", "workspace-gateway"):
+        assert "workspace_internal_key" in stack["services"][service]["secrets"]
+        assert (
+            stack["services"][service]["environment"]["WORKSPACE_INTERNAL_KEY_FILE"]
+            == "/run/secrets/workspace_internal_key"
+        )
+    for service in ("celery", "runtime-worker"):
+        assert "workspace_internal_key" not in stack["services"][service]["secrets"]
+
+
+def test_p14_swarm_hosts_network_and_support_images_are_deployment_injected() -> None:
+    stack = load_yaml("infrastructure/swarm/stack.yml")
+    environment = stack["x-app-environment"]
+
+    assert environment["DJANGO_ALLOWED_HOSTS"] == "${DJANGO_ALLOWED_HOSTS}"
+    assert environment["DJANGO_TRUSTED_ORIGINS"] == "${DJANGO_TRUSTED_ORIGINS}"
+    assert environment["WORKSPACE_ALLOWED_ORIGINS"] == "${WORKSPACE_ALLOWED_ORIGINS}"
+    assert environment["TRUSTED_PROXY_CIDRS"] == "${TRUSTED_PROXY_CIDRS}"
+    assert stack["networks"]["app"]["ipam"]["config"][0]["subnet"] == "${APP_NETWORK_SUBNET}"
+    assert "example.edu" not in (ROOT / "infrastructure/swarm/stack.yml").read_text(
+        encoding="utf-8"
+    )
+
+
+def test_local_runtime_docker_access_is_scoped_to_runtime_worker() -> None:
+    compose = load_yaml("docker-compose.dev.yml")
+    services = compose["services"]
+    assert "/var/run/docker.sock:/var/run/docker.sock" in services["runtime-worker"]["volumes"]
+    for service in ("django", "celery", "workspace-gateway"):
+        assert not any(
+            "docker.sock" in str(item) for item in services[service].get("volumes", [])
+        )
+    environment = compose["x-app-environment"]
+    assert environment["LOCAL_RUNTIME_IMAGE"] == (
+        "${LOCAL_RUNTIME_IMAGE:-edu-platform-algorithm-workspace:local}"
+    )
+    assert environment["LOCAL_RUNTIME_NETWORK"] == (
+        "${LOCAL_RUNTIME_NETWORK:-edu-platform-p14_runtime}"
+    )
+    assert environment["LOCAL_DOCKER_HOST"] == (
+        "${LOCAL_DOCKER_HOST:-unix:///var/run/docker.sock}"
+    )
+    assert environment["RUNTIME_ADAPTER_CONFIGS"] == (
+        '${RUNTIME_ADAPTER_CONFIGS:-{"runtime/local-docker":'
+        '{"runtime_network":"edu-platform-p14_runtime"}}}'
+    )
+
+
 def test_compose_declares_foundation_services_and_isolated_app_network() -> None:
     compose = load_yaml("docker-compose.dev.yml")
     assert {
@@ -134,6 +202,10 @@ def test_p08_runtime_database_grants_workspace_append_only_tables_read_insert_on
     ):
         assert f"GRANT SELECT, INSERT ON \\`${{MYSQL_DATABASE}}\\`.{table}" in bootstrap
         assert f"GRANT SELECT, INSERT, UPDATE ON \\`${{MYSQL_DATABASE}}\\`.{table}" not in bootstrap
+    assert (
+        "GRANT SELECT, INSERT, UPDATE ON \\`${MYSQL_DATABASE}\\`.workspaces_execution_run"
+        " TO '${MYSQL_APP_USER}'@'%'" in bootstrap
+    )
 
 
 def test_p09_runtime_database_grants_reports_and_download_grants_least_privilege() -> None:

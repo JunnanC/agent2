@@ -7,6 +7,8 @@ from apps.core.errors import ResourceNotFound, RowVersionConflict
 from apps.core.models import OutboxEvent
 from apps.courses.models import Chapter, Course, Enrollment
 from apps.courses.tests.helpers import create_draft_course, create_teacher
+from apps.governance.models import RuntimeAdapter
+from apps.labtemplates.models import TemplateVersion
 
 from ..errors import (
     PublicationPrerequisiteBlocked,
@@ -68,6 +70,52 @@ class ExperimentServiceTests(TestCase):
         self.assertEqual(TaskStateTransition.objects.filter(task__publication=published).count(), 1)
         self.assertTrue(OutboxEvent.objects.filter(event_type="experiment.task_assigned").exists())
 
+    def test_publish_freezes_template_execution_and_runtime_inputs(self) -> None:
+        published = self._publish()
+        task = ExperimentTask.objects.get(publication=published)
+        original = {
+            "template_spec_digest": task.template_spec_digest,
+            "execution_spec": task.execution_spec,
+            "runtime_adapter_id": task.runtime_adapter_id,
+            "runtime_adapter_driver": task.runtime_adapter_driver,
+            "runtime_adapter_config_ref": task.runtime_adapter_config_ref,
+            "image_id": task.image_id,
+            "image_digest": task.image_digest,
+            "resource_profile_id": task.resource_profile_id,
+            "resource_profile_snapshot": task.resource_profile_snapshot,
+        }
+        replacement = RuntimeAdapter.objects.create(
+            code="runtime-p06-replacement",
+            name="Replacement runtime",
+            runtime_type=RuntimeAdapter.RuntimeType.CONTAINER,
+            driver=RuntimeAdapter.Driver.DOCKER_LOCAL,
+            status=RuntimeAdapter.Status.ENABLED,
+            health_status=RuntimeAdapter.HealthStatus.HEALTHY,
+            config_ref="runtime/replacement",
+        )
+        self.template_version.refresh_from_db()
+        TemplateVersion.objects.filter(pk=self.template_version.pk).update(
+            spec_digest="f" * 64,
+            execution_spec={"language": "python", "entrypoint": "changed.py"},
+            runtime_adapter=replacement,
+        )
+
+        task.refresh_from_db()
+        publication_snapshot = TaskPublication.objects.get(pk=published.pk)
+        self.assertEqual(task.template_spec_digest, original["template_spec_digest"])
+        self.assertEqual(task.execution_spec, original["execution_spec"])
+        self.assertEqual(task.runtime_adapter_id, original["runtime_adapter_id"])
+        self.assertEqual(task.runtime_adapter_driver, original["runtime_adapter_driver"])
+        self.assertEqual(task.runtime_adapter_config_ref, original["runtime_adapter_config_ref"])
+        self.assertEqual(task.image_id, original["image_id"])
+        self.assertEqual(task.image_digest, original["image_digest"])
+        self.assertEqual(task.resource_profile_id, original["resource_profile_id"])
+        self.assertEqual(task.resource_profile_snapshot, original["resource_profile_snapshot"])
+        self.assertEqual(
+            publication_snapshot.template_spec_digest, original["template_spec_digest"]
+        )
+        self.assertEqual(publication_snapshot.runtime_adapter_id, original["runtime_adapter_id"])
+
     @override_settings(P06_PUBLICATION_SYNC_LIMIT=1)
     @patch("apps.experiments.tasks.assign_publication_tasks.delay")
     def test_async_boundary_uses_frozen_snapshot_and_worker_replay_is_idempotent(
@@ -96,7 +144,7 @@ class ExperimentServiceTests(TestCase):
         )
         self.assertEqual(ExperimentTask.objects.filter(publication=published).count(), 1)
 
-    def test_selected_audience_rejects_cross_course_or_inactive_enrollment(self) -> None:
+    def test_publish_rejects_invalid_audience_without_side_effects(self) -> None:
         publication = create_draft_publication(
             owner=self.owner,
             course=self.course,
@@ -110,15 +158,55 @@ class ExperimentServiceTests(TestCase):
         Course.objects.filter(pk=other_course.pk).update(status=Course.Status.PUBLISHED)
         other_course.refresh_from_db()
         other = create_enrollment(other_course, suffix="other-student")
-        with self.assertRaises(PublicationValidationError):
+        inactive = create_enrollment(self.course, suffix="inactive-student")
+        Enrollment.objects.filter(pk=inactive.pk).update(status=Enrollment.Status.DROPPED)
+
+        invalid_selections: tuple[tuple[list[str], str], ...] = (
+            ([], "指定学生模式至少选择一名在读学生"),
+            (
+                [self.enrollment.public_id, self.enrollment.public_id],
+                "指定学生列表不能包含重复记录",
+            ),
+            ([other.public_id], "指定学生包含不存在、非在读或其他课程的选课记录"),
+            ([inactive.public_id], "指定学生包含不存在、非在读或其他课程的选课记录"),
+        )
+        for selected_ids, message in invalid_selections:
+            with (
+                self.subTest(selected_ids=selected_ids),
+                self.assertRaises(PublicationValidationError) as raised,
+            ):
+                publish_publication(
+                    course_id=self.course.public_id,
+                    publication_id=publication.public_id,
+                    actor=self.owner,
+                    expected_version=publication.row_version,
+                    selected_ids=selected_ids,
+                    context=context(self.owner),
+                )
+            self.assertEqual(raised.exception.detail["selected_enrollment_ids"], message)
+
+        with self.assertRaises(PublicationValidationError) as raised:
             publish_publication(
                 course_id=self.course.public_id,
-                publication_id=publication.public_id,
+                publication_id=self.publication.public_id,
                 actor=self.owner,
-                expected_version=publication.row_version,
-                selected_ids=[other.public_id],
+                expected_version=self.publication.row_version,
+                selected_ids=[self.enrollment.public_id],
                 context=context(self.owner),
             )
+        self.assertEqual(
+            raised.exception.detail["selected_enrollment_ids"],
+            "全部在读学生模式不能指定单独受众",
+        )
+
+        publication.refresh_from_db()
+        self.publication.refresh_from_db()
+        self.assertEqual(publication.status, TaskPublication.Status.DRAFT)
+        self.assertEqual(self.publication.status, TaskPublication.Status.DRAFT)
+        self.assertFalse(PublicationAudience.objects.filter(publication=publication).exists())
+        self.assertFalse(PublicationAudience.objects.filter(publication=self.publication).exists())
+        self.assertFalse(ExperimentTask.objects.filter(publication=publication).exists())
+        self.assertFalse(ExperimentTask.objects.filter(publication=self.publication).exists())
         self.assertIsNotNone(other_owner)
 
     def test_start_checks_prerequisite_and_terminal_state(self) -> None:
