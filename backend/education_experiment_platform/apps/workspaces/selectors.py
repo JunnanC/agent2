@@ -14,6 +14,7 @@ from .models import (
     WorkspaceExecutionRun,
     WorkspaceSession,
     WorkspaceSnapshot,
+    WorkspaceStorageJob,
 )
 
 
@@ -172,3 +173,47 @@ def execution_run_for_user(
         )
     except WorkspaceExecutionRun.DoesNotExist as exc:
         raise ResourceNotFound() from exc
+
+
+def storage_job_for_user(*, actor: User, job_id: str) -> WorkspaceStorageJob:
+    """Return a storage job only when it belongs to the current student."""
+
+    try:
+        return (
+            WorkspaceStorageJob.objects.select_related(
+                "task",
+                "session",
+                "source_snapshot",
+                "result_snapshot",
+                "failure_record",
+            )
+            .get(public_id=job_id, task__student=actor)
+        )
+    except WorkspaceStorageJob.DoesNotExist as exc:
+        raise ResourceNotFound() from exc
+
+
+def active_storage_job_for_user(*, actor: User, task_id: str) -> WorkspaceStorageJob | None:
+    return (
+        WorkspaceStorageJob.objects.select_related(
+            "task",
+            "session",
+            "source_snapshot",
+            "result_snapshot",
+            "failure_record",
+        )
+        .filter(
+            task__public_id=task_id,
+            task__student=actor,
+            session__status=WorkspaceSession.Status.ACTIVE,
+            kind__in=(
+                WorkspaceStorageJob.Kind.INITIALIZE,
+                WorkspaceStorageJob.Kind.CAPTURE,
+                WorkspaceStorageJob.Kind.RESTORE,
+                WorkspaceStorageJob.Kind.FINALIZE,
+            ),
+            status__in=(WorkspaceStorageJob.Status.QUEUED, WorkspaceStorageJob.Status.RUNNING),
+        )
+        .order_by("queued_at", "id")
+        .first()
+    )

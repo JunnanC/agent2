@@ -6,6 +6,7 @@ from .models import (
     WorkspaceExecutionRun,
     WorkspaceSession,
     WorkspaceSnapshot,
+    WorkspaceStorageJob,
 )
 
 
@@ -44,6 +45,32 @@ class WorkspaceSnapshotSerializer(serializers.Serializer):
     size_bytes = serializers.IntegerField()
     media_type = serializers.CharField()
     saved_at = serializers.DateTimeField()
+
+
+class WorkspaceStorageJobWriteSerializer(serializers.Serializer):
+    kind = serializers.ChoiceField(
+        choices=(WorkspaceStorageJob.Kind.CAPTURE, WorkspaceStorageJob.Kind.RESTORE)
+    )
+    client_seq = serializers.IntegerField(required=False, min_value=1)
+    base_version = serializers.IntegerField(required=False, min_value=0)
+    snapshot_id = serializers.CharField(required=False, allow_blank=False)
+
+
+class WorkspaceStorageJobSerializer(serializers.Serializer):
+    public_id = serializers.CharField()
+    task_id = serializers.CharField()
+    session_id = serializers.CharField()
+    kind = serializers.ChoiceField(choices=WorkspaceStorageJob.Kind.choices)
+    status = serializers.ChoiceField(choices=WorkspaceStorageJob.Status.choices)
+    client_seq = serializers.IntegerField(allow_null=True)
+    base_version = serializers.IntegerField(allow_null=True)
+    source_snapshot_id = serializers.CharField(allow_null=True)
+    result_snapshot_id = serializers.CharField(allow_null=True)
+    failure = serializers.DictField(allow_null=True)
+    queued_at = serializers.DateTimeField()
+    started_at = serializers.DateTimeField(allow_null=True)
+    completed_at = serializers.DateTimeField(allow_null=True)
+    row_version = serializers.IntegerField()
 
 
 class WorkspaceCheckpointSerializer(serializers.Serializer):
@@ -191,12 +218,22 @@ class WorkbenchSubmissionSerializer(serializers.Serializer):
     draft_status = serializers.CharField(allow_null=True)
 
 
+class WorkbenchWorkspaceSerializer(serializers.Serializer):
+    mode = serializers.ChoiceField(choices=("LEGACY_DRAFT", "RUNTIME_IDE", "READ_ONLY"))
+    entrypoint = serializers.CharField()
+    capture_supported = serializers.BooleanField()
+    last_synchronized_version = serializers.IntegerField()
+    last_synchronized_snapshot_id = serializers.CharField(allow_null=True)
+    active_storage_job = WorkspaceStorageJobSerializer(allow_null=True)
+
+
 class WorkbenchSerializer(serializers.Serializer):
     task = WorkbenchTaskSerializer()
     content = WorkbenchContentSerializer()
     template = WorkbenchTemplateSerializer()
     tests = WorkbenchTestsSerializer()
     provisioning = WorkbenchProvisioningSerializer()
+    workspace = WorkbenchWorkspaceSerializer()
     submission = WorkbenchSubmissionSerializer()
 
 
@@ -238,6 +275,37 @@ def snapshot_data(item: WorkspaceSnapshot) -> dict[str, object]:
         "size_bytes": item.size_bytes,
         "media_type": item.media_type,
         "saved_at": item.saved_at,
+    }
+
+
+def storage_job_data(item: WorkspaceStorageJob) -> dict[str, object]:
+    failure = None
+    if item.failure_record is not None:
+        failure = {
+            "code": item.failure_record.error_code,
+            "message": item.failure_record.message_masked,
+            "retryable": item.failure_record.retryable,
+            "trace_id": item.failure_record.trace_id,
+        }
+    return {
+        "public_id": item.public_id,
+        "task_id": item.task.public_id,
+        "session_id": item.session.public_id,
+        "kind": item.kind,
+        "status": item.status,
+        "client_seq": item.client_seq,
+        "base_version": item.base_version,
+        "source_snapshot_id": item.source_snapshot.public_id
+        if item.source_snapshot_id
+        else None,
+        "result_snapshot_id": item.result_snapshot.public_id
+        if item.result_snapshot_id
+        else None,
+        "failure": failure,
+        "queued_at": item.queued_at,
+        "started_at": item.started_at,
+        "completed_at": item.completed_at,
+        "row_version": item.row_version,
     }
 
 

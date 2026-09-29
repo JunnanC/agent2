@@ -1,6 +1,8 @@
 import hashlib
+import hmac
 import io
 import json
+import mimetypes
 import re
 import tarfile
 import time
@@ -11,12 +13,15 @@ from typing import Any
 
 from django.conf import settings
 
+from apps.core.workspace_tokens import workspace_upstream_token
+
 from .ports import (
     RuntimeAdapter,
     RuntimeExecutionResult,
     RuntimeInventoryItem,
     RuntimeResult,
     RuntimeSpec,
+    RuntimeWorkspaceArtifact,
 )
 
 MANAGED_LABEL = "edu.platform.managed"
@@ -58,6 +63,84 @@ def _config_float(value: object) -> float:
         except (TypeError, ValueError) as exc:
             raise RuntimeAdapterFailure("RUNTIME_CONFIG_INVALID", retryable=False) from exc
     raise RuntimeAdapterFailure("RUNTIME_CONFIG_INVALID", retryable=False)
+
+
+def _validated_workspace_path(relative_path: str) -> str:
+    """Only the first-version single-file contract is accepted here."""
+
+    value = str(relative_path).replace("\\", "/")
+    if value != "main.py" or "/" in value or ".." in value or not value:
+        raise RuntimeAdapterFailure("WORKSPACE_PATH_INVALID", retryable=False)
+    return value
+
+
+def _workspace_artifact(content: bytes, relative_path: str) -> RuntimeWorkspaceArtifact:
+    return RuntimeWorkspaceArtifact(
+        content=content,
+        size=len(content),
+        digest=hashlib.sha256(content).hexdigest(),
+        media_type=mimetypes.guess_type(relative_path)[0] or "text/plain",
+        relative_path=relative_path,
+    )
+
+
+def _workspace_archive(relative_path: str, content: bytes) -> bytes:
+    buffer = io.BytesIO()
+    with tarfile.open(fileobj=buffer, mode="w") as archive:
+        info = tarfile.TarInfo(relative_path)
+        info.size = len(content)
+        info.mode = 0o600
+        info.uid = 10001
+        info.gid = 10001
+        info.uname = "workspace"
+        info.gname = "workspace"
+        archive.addfile(info, io.BytesIO(content))
+    return buffer.getvalue()
+
+
+def _bounded_archive_bytes(stream: Any, max_bytes: int) -> bytes:
+    if max_bytes < 1:
+        raise RuntimeAdapterFailure("WORKSPACE_FILE_TOO_LARGE", retryable=False)
+    buffer = io.BytesIO()
+    chunks = [stream] if isinstance(stream, (bytes, bytearray)) else stream
+    for chunk in chunks:
+        data = bytes(chunk)
+        if len(data) > max_bytes - buffer.tell():
+            raise RuntimeAdapterFailure("WORKSPACE_FILE_TOO_LARGE", retryable=False)
+        buffer.write(data)
+    return buffer.getvalue()
+
+
+def _extract_workspace_archive(archive_bytes: bytes, relative_path: str, max_bytes: int) -> bytes:
+    try:
+        with tarfile.open(fileobj=io.BytesIO(archive_bytes), mode="r:*") as archive:
+            members = archive.getmembers()
+            for item in members:
+                if item.name not in {relative_path, f"./{relative_path}"}:
+                    raise RuntimeAdapterFailure("WORKSPACE_FILE_INVALID", retryable=False)
+                if not item.isreg() or item.issym() or item.islnk():
+                    raise RuntimeAdapterFailure("WORKSPACE_FILE_INVALID", retryable=False)
+            matching = [
+                item
+                for item in members
+                if item.name in {relative_path, f"./{relative_path}"}
+            ]
+            if len(matching) != 1:
+                raise RuntimeAdapterFailure("WORKSPACE_FILE_MISSING", retryable=False)
+            member = matching[0]
+            if member.size > max_bytes:
+                raise RuntimeAdapterFailure("WORKSPACE_FILE_TOO_LARGE", retryable=False)
+            handle = archive.extractfile(member)
+            if handle is None:
+                raise RuntimeAdapterFailure("WORKSPACE_FILE_MISSING", retryable=False)
+            content = handle.read(max_bytes + 1)
+            if len(content) > max_bytes:
+                raise RuntimeAdapterFailure("WORKSPACE_FILE_TOO_LARGE", retryable=False)
+            return content
+    except RuntimeAdapterFailure:
+        raise
+    except (tarfile.TarError, OSError) as exc:
+        raise RuntimeAdapterFailure("WORKSPACE_FILE_INVALID", retryable=False) from exc
 
 
 class FakeRuntimeFailure(RuntimeAdapterFailure):
@@ -155,6 +238,23 @@ class FakeRuntimeAdapter:
         if failure:
             raise failure
         return f"fake-snapshot:{external_id}"
+
+    def capture_workspace(
+        self, *, external_id: str, relative_path: str, max_bytes: int
+    ) -> RuntimeWorkspaceArtifact:
+        del external_id, relative_path, max_bytes
+        raise RuntimeAdapterFailure("WORKSPACE_CAPTURE_UNSUPPORTED", retryable=False)
+
+    def restore_workspace(
+        self,
+        *,
+        external_id: str,
+        relative_path: str,
+        content: bytes,
+        expected_digest: str,
+    ) -> None:
+        del external_id, relative_path, content, expected_digest
+        raise RuntimeAdapterFailure("WORKSPACE_CAPTURE_UNSUPPORTED", retryable=False)
 
     def destroy(self, external_id: str, idempotency_key: str) -> None:
         del idempotency_key
@@ -467,6 +567,7 @@ class DockerLocalAdapter(DockerLocalProtocolStub):
         if not self.config_ref:
             raise RuntimeAdapterFailure("RUNTIME_CONFIG_INVALID", retryable=False)
         self.client = client or self._build_client()
+        self._secret_volumes: dict[str, str] = {}
 
     def _build_client(self) -> Any:
         try:
@@ -576,6 +677,7 @@ class DockerLocalAdapter(DockerLocalProtocolStub):
             "edu.platform.student": spec.student_id,
             "edu.platform.trace": spec.trace_id,
             "edu.platform.spec_digest": self._spec_digest(spec),
+            "edu.platform.instance": spec.instance_public_id,
             "edu.platform.config_ref": self.config_ref,
         }
         if idempotency_key:
@@ -596,18 +698,19 @@ class DockerLocalAdapter(DockerLocalProtocolStub):
         volume_target: str = "/workspace",
         volume_mode: str = "rw",
         read_only: bool = True,
+        extra_binds: Mapping[str, Mapping[str, str]] | None = None,
     ) -> Any:
         if memory_mb < 1 or cpu_millicores < 1:
             raise RuntimeAdapterFailure("RUNTIME_RESOURCE_LIMIT_INVALID", retryable=False)
-        binds = (
-            {volume_name: {"bind": volume_target, "mode": volume_mode}}
-            if volume_name
-            else None
-        )
+        binds: dict[str, Mapping[str, str]] = {}
+        if volume_name:
+            binds[volume_name] = {"bind": volume_target, "mode": volume_mode}
+        if extra_binds:
+            binds.update(extra_binds)
         kwargs: dict[str, object] = {
             "mem_limit": f"{memory_mb}m",
             "nano_cpus": cpu_millicores * 1_000_000,
-            "pids_limit": _config_int(self.config.get("pids_limit", 64)),
+            "pids_limit": _config_int(self.config.get("pids_limit", 128)),
             "read_only": read_only,
             "cap_drop": ["ALL"],
             "security_opt": ["no-new-privileges:true"],
@@ -623,11 +726,9 @@ class DockerLocalAdapter(DockerLocalProtocolStub):
         )
 
     def _healthcheck(self, spec: RuntimeSpec) -> dict[str, object]:
+        del spec
         return {
-            "Test": [
-                "CMD-SHELL",
-                f"curl -fsS -o /dev/null http://127.0.0.1:{spec.workspace_port}{spec.healthcheck_path}",
-            ],
+            "Test": ["CMD", "/usr/local/bin/workspace-router", "healthcheck"],
             "Interval": 5_000_000_000,
             "Timeout": 2_000_000_000,
             "Retries": 12,
@@ -704,11 +805,75 @@ class DockerLocalAdapter(DockerLocalProtocolStub):
     def _volume_name(self, spec: RuntimeSpec, idempotency_key: str) -> str:
         return self._safe_name(f"{spec.task_id}:{idempotency_key}", prefix="edu-volume")
 
+    def _secret_volume_name(self, spec: RuntimeSpec, idempotency_key: str) -> str:
+        return self._safe_name(f"{spec.task_id}:{idempotency_key}", prefix="edu-secret")
+
+    def _stage_workspace_secret(
+        self,
+        *,
+        spec: RuntimeSpec,
+        idempotency_key: str,
+        secret_volume: str,
+        token: str,
+    ) -> None:
+        labels = {
+            MANAGED_LABEL: "true",
+            KIND_LABEL: "workspace-secret",
+            "edu.platform.task": spec.task_id,
+            "edu.platform.student": spec.student_id,
+            "edu.platform.config_ref": self.config_ref,
+        }
+        self._call(
+            "RUNTIME_SECRET_VOLUME_CREATE_FAILED",
+            lambda: self.client.create_volume(name=secret_volume, driver="local", labels=labels),
+        )
+        stage_id = ""
+        try:
+            host_config = self._host_config(
+                memory_mb=min(max(spec.memory_mb, 16), 64),
+                cpu_millicores=min(max(spec.cpu_millicores, 10), 100),
+                volume_name=secret_volume,
+                volume_target="/run/secrets",
+                read_only=False,
+                network_mode="none",
+            )
+            staged = self._call(
+                "RUNTIME_SECRET_STAGE_CREATE_FAILED",
+                lambda: self.client.create_container(
+                    image=self._image_ref(spec),
+                    name=self._safe_name(
+                        f"{spec.task_id}:{idempotency_key}", prefix="edu-secret-stage"
+                    ),
+                    command=["python", "-c", "import time; time.sleep(30)"],
+                    labels={**labels, "edu.platform.secret_stage": "true"},
+                    host_config=host_config,
+                ),
+            )
+            stage_id = str(staged["Id"])
+            self._call("RUNTIME_SECRET_STAGE_START_FAILED", lambda: self.client.start(stage_id))
+            archive = _workspace_archive("workspace_upstream_token", token.encode("ascii"))
+            self._call(
+                "RUNTIME_SECRET_UPLOAD_FAILED",
+                lambda: self.client.put_archive(stage_id, "/run/secrets", archive),
+            )
+        finally:
+            if stage_id:
+                with suppress(Exception):
+                    self.client.remove_container(stage_id, force=True, v=False)
+
     def _create_workspace(self, spec: RuntimeSpec, idempotency_key: str) -> RuntimeResult:
         expires_at = int(time.time()) + max(spec.ttl_seconds, 0)
         container_name = self._safe_name(spec.task_id)
         volume_name = self._volume_name(spec, idempotency_key)
+        secret_volume_name = self._secret_volume_name(spec, idempotency_key)
         container_id = ""
+        upstream_token = workspace_upstream_token(
+            instance_id=spec.instance_public_id or idempotency_key,
+            task_id=spec.task_id,
+            spec_digest=self._spec_digest(spec),
+        )
+        if not upstream_token:
+            raise RuntimeAdapterFailure("RUNTIME_UPSTREAM_TOKEN_UNAVAILABLE", retryable=False)
         labels = self._labels(
             kind=RUNTIME_KIND,
             spec=spec,
@@ -720,6 +885,7 @@ class DockerLocalAdapter(DockerLocalProtocolStub):
             MANAGED_LABEL: "true",
             KIND_LABEL: "volume",
             "edu.platform.task": spec.task_id,
+            "edu.platform.instance": spec.instance_public_id,
             "edu.platform.student": spec.student_id,
             "edu.platform.config_ref": self.config_ref,
             "edu.platform.expires_at": str(expires_at),
@@ -746,6 +912,18 @@ class DockerLocalAdapter(DockerLocalProtocolStub):
                 memory_mb=spec.memory_mb,
                 cpu_millicores=spec.cpu_millicores,
                 volume_name=volume_name,
+                extra_binds={
+                    secret_volume_name: {
+                        "bind": "/run/secrets",
+                        "mode": "ro",
+                    }
+                },
+            )
+            self._stage_workspace_secret(
+                spec=spec,
+                idempotency_key=idempotency_key,
+                secret_volume=secret_volume_name,
+                token=upstream_token,
             )
             container = self._call(
                 "RUNTIME_CREATE_FAILED",
@@ -764,6 +942,7 @@ class DockerLocalAdapter(DockerLocalProtocolStub):
                 "RUNTIME_CONTAINER_QUERY_FAILED",
                 lambda: self.client.inspect_container(container_id),
             )
+            self._secret_volumes[container_id] = secret_volume_name
             return self._container_result(inspected)
         except RuntimeAdapterFailure as exc:
             if container_id:
@@ -775,10 +954,14 @@ class DockerLocalAdapter(DockerLocalProtocolStub):
                     ) from exc
             with suppress(RuntimeAdapterFailure):
                 self._remove_managed_volume(volume_name)
+            with suppress(RuntimeAdapterFailure):
+                self._remove_managed_secret_volume(secret_volume_name)
             raise
         except Exception as exc:
             with suppress(RuntimeAdapterFailure):
                 self._remove_managed_volume(volume_name)
+            with suppress(RuntimeAdapterFailure):
+                self._remove_managed_secret_volume(secret_volume_name)
             raise RuntimeAdapterFailure("RUNTIME_CREATE_FAILED") from exc
 
     def create(self, spec: RuntimeSpec, idempotency_key: str) -> RuntimeResult:
@@ -842,6 +1025,98 @@ class DockerLocalAdapter(DockerLocalProtocolStub):
             raise RuntimeAdapterFailure("RUNTIME_CONTAINER_NOT_FOUND", retryable=False)
         return f"docker-local-container:{external_id}"
 
+    def _workspace_container(self, external_id: str) -> dict[str, object]:
+        container = self._inspect(external_id)
+        if container is None:
+            raise RuntimeAdapterFailure("RUNTIME_CONTAINER_NOT_FOUND", retryable=False)
+        config_value = container.get("Config")
+        config = config_value if isinstance(config_value, Mapping) else {}
+        labels_value = config.get("Labels") or container.get("Labels")
+        labels = dict(labels_value) if isinstance(labels_value, Mapping) else {}
+        if labels.get(MANAGED_LABEL) != "true" or labels.get(KIND_LABEL) != RUNTIME_KIND:
+            raise RuntimeAdapterFailure("RUNTIME_RESOURCE_NOT_MANAGED", retryable=False)
+        state_value = container.get("State")
+        state = state_value if isinstance(state_value, Mapping) else {}
+        if not state.get("Running"):
+            raise RuntimeAdapterFailure("WORKSPACE_VOLUME_UNAVAILABLE")
+        return container
+
+    def capture_workspace(
+        self, *, external_id: str, relative_path: str, max_bytes: int
+    ) -> RuntimeWorkspaceArtifact:
+        path = _validated_workspace_path(relative_path)
+        if max_bytes < 1:
+            raise RuntimeAdapterFailure("WORKSPACE_FILE_TOO_LARGE", retryable=False)
+        before = self._workspace_container(external_id)
+        try:
+            stream, _stat = self.client.get_archive(external_id, f"/workspace/{path}")
+            archive_bytes = _bounded_archive_bytes(stream, max_bytes=max_bytes + 1024 * 1024)
+        except RuntimeAdapterFailure:
+            raise
+        except Exception as exc:
+            raise RuntimeAdapterFailure("WORKSPACE_FILE_MISSING", retryable=False) from exc
+        content = _extract_workspace_archive(archive_bytes, path, max_bytes)
+        after = self._workspace_container(external_id)
+        before_id = str(before.get("Id") or before.get("ID") or external_id)
+        after_id = str(after.get("Id") or after.get("ID") or external_id)
+        if before_id != after_id:
+            raise RuntimeAdapterFailure("WORKSPACE_CAPTURE_CONFLICT", retryable=False)
+        try:
+            content.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            raise RuntimeAdapterFailure("WORKSPACE_FILE_INVALID", retryable=False) from exc
+        return _workspace_artifact(content, path)
+
+    def _exec(self, external_id: str, command: list[str]) -> None:
+        try:
+            created = self.client.exec_create(external_id, command, user="10001:10001")
+            exec_id = str(created.get("Id") if isinstance(created, Mapping) else created)
+            self.client.exec_start(exec_id, detach=False)
+            result = self.client.exec_inspect(exec_id)
+        except Exception as exc:
+            raise RuntimeAdapterFailure("WORKSPACE_RESTORE_FAILED") from exc
+        exit_code = int(result.get("ExitCode", 1)) if isinstance(result, Mapping) else 1
+        if exit_code != 0:
+            raise RuntimeAdapterFailure("WORKSPACE_RESTORE_FAILED")
+
+    def restore_workspace(
+        self,
+        *,
+        external_id: str,
+        relative_path: str,
+        content: bytes,
+        expected_digest: str,
+    ) -> None:
+        path = _validated_workspace_path(relative_path)
+        self._workspace_container(external_id)
+        digest = hashlib.sha256(content).hexdigest()
+        if not expected_digest or not hmac.compare_digest(digest, str(expected_digest)):
+            raise RuntimeAdapterFailure("WORKSPACE_DIGEST_MISMATCH", retryable=False)
+        temporary = f".edu-restore-{digest[:24]}.tmp"
+        archive = _workspace_archive(temporary, bytes(content))
+        try:
+            result = self.client.put_archive(external_id, "/workspace", archive)
+            if result is False:
+                raise RuntimeAdapterFailure("WORKSPACE_RESTORE_FAILED")
+            command = [
+                "python",
+                "-c",
+                (
+                    "import os; "
+                    f"os.replace('/workspace/{temporary}', '/workspace/{path}')"
+                ),
+            ]
+            self._exec(external_id, command)
+            artifact = self.capture_workspace(
+                external_id=external_id, relative_path=path, max_bytes=len(content)
+            )
+            if not hmac.compare_digest(artifact.digest, digest):
+                raise RuntimeAdapterFailure("WORKSPACE_RESTORE_FAILED")
+        except RuntimeAdapterFailure:
+            raise
+        except Exception as exc:
+            raise RuntimeAdapterFailure("WORKSPACE_RESTORE_FAILED") from exc
+
     def destroy(self, external_id: str, idempotency_key: str) -> None:
         del idempotency_key
         container = self._inspect(external_id)
@@ -853,13 +1128,48 @@ class DockerLocalAdapter(DockerLocalProtocolStub):
         labels = dict(labels_value) if isinstance(labels_value, Mapping) else {}
         if labels.get(MANAGED_LABEL) != "true" or labels.get(KIND_LABEL) != RUNTIME_KIND:
             raise RuntimeAdapterFailure("RUNTIME_RESOURCE_NOT_MANAGED", retryable=False)
-        self._call(
-            "RUNTIME_DESTROY_FAILED",
-            lambda: self.client.remove_container(external_id, force=True, v=True),
-        )
         volume_name = self._volume_name_from_container(container)
         if volume_name:
-            self._remove_managed_volume(volume_name)
+            self._retain_workspace_volume(
+                volume_name, task_id=str(labels.get("edu.platform.task") or "")
+            )
+        self._call(
+            "RUNTIME_DESTROY_FAILED",
+            lambda: self.client.remove_container(external_id, force=True, v=False),
+        )
+        mounted_secret = self._secret_volume_name_from_container(container)
+        secret_volume_name = mounted_secret or self._secret_volumes.get(external_id, "")
+        if secret_volume_name:
+            self._remove_managed_secret_volume(secret_volume_name)
+        self._secret_volumes.pop(external_id, None)
+
+    def _retain_workspace_volume(self, volume_name: str, *, task_id: str) -> None:
+        try:
+            volume = self.client.inspect_volume(volume_name)
+        except Exception as exc:
+            raise RuntimeAdapterFailure("RUNTIME_VOLUME_RETENTION_FAILED") from exc
+        labels = dict(volume.get("Labels") or {})
+        if (
+            labels.get(MANAGED_LABEL) != "true"
+            or labels.get(KIND_LABEL) != "volume"
+            or labels.get("edu.platform.config_ref") != self.config_ref
+            or not task_id
+            or labels.get("edu.platform.task") != task_id
+        ):
+            raise RuntimeAdapterFailure("RUNTIME_RESOURCE_NOT_MANAGED", retryable=False)
+        update_volume = getattr(self.client, "update_volume", None)
+        if not callable(update_volume):
+            # Docker Local volume labels are immutable. Keep the validated
+            # creation-time expiry so a reconciler can still collect it.
+            return
+        labels["edu.platform.expires_at"] = str(
+            int(time.time())
+            + max(60, int(getattr(settings, "WORKSPACE_VOLUME_RETENTION_SECONDS", 900)))
+        )
+        self._call(
+            "RUNTIME_VOLUME_RETENTION_FAILED",
+            lambda: update_volume(volume_name, labels=labels),
+        )
 
     def _volume_name_from_container(self, container: Mapping[str, object]) -> str:
         mounts_value = container.get("Mounts")
@@ -871,6 +1181,16 @@ class DockerLocalAdapter(DockerLocalProtocolStub):
                 return str(mount.get("Name") or mount.get("Source") or "")
         return ""
 
+    def _secret_volume_name_from_container(self, container: Mapping[str, object]) -> str:
+        mounts_value = container.get("Mounts")
+        mounts = mounts_value if isinstance(mounts_value, list) else []
+        for mount in mounts:
+            if not isinstance(mount, Mapping):
+                continue
+            if str(mount.get("Destination", "")) == "/run/secrets":
+                return str(mount.get("Name") or mount.get("Source") or "")
+        return ""
+
     def _remove_managed_volume(self, volume_name: str) -> bool:
         try:
             volume = self.client.inspect_volume(volume_name)
@@ -878,6 +1198,22 @@ class DockerLocalAdapter(DockerLocalProtocolStub):
             return False
         labels = dict(volume.get("Labels") or {})
         if labels.get(MANAGED_LABEL) != "true" or labels.get(KIND_LABEL) != "volume":
+            raise RuntimeAdapterFailure("RUNTIME_RESOURCE_NOT_MANAGED", retryable=False)
+        self._call(
+            "RUNTIME_RESOURCE_DESTROY_FAILED",
+            lambda: self.client.remove_volume(volume_name, force=True),
+        )
+        return True
+
+    def _remove_managed_secret_volume(self, volume_name: str) -> bool:
+        if not volume_name:
+            return False
+        try:
+            volume = self.client.inspect_volume(volume_name)
+        except Exception:
+            return False
+        labels = dict(volume.get("Labels") or {})
+        if labels.get(MANAGED_LABEL) != "true" or labels.get(KIND_LABEL) != "workspace-secret":
             raise RuntimeAdapterFailure("RUNTIME_RESOURCE_NOT_MANAGED", retryable=False)
         self._call(
             "RUNTIME_RESOURCE_DESTROY_FAILED",
@@ -1487,6 +1823,12 @@ print(
         except RuntimeAdapterFailure as exc:
             if exc.code != "RUNTIME_RESOURCE_NOT_MANAGED":
                 raise
+        try:
+            if self._remove_managed_secret_volume(external_id):
+                return
+        except RuntimeAdapterFailure as exc:
+            if exc.code != "RUNTIME_RESOURCE_NOT_MANAGED":
+                raise
         self.destroy_judge(external_id)
 
 
@@ -1496,6 +1838,7 @@ class DockerSwarmAdapter:
     def __init__(self, *, client: Any | None = None, config: Mapping[str, object] | None = None):
         self.config = dict(config or {})
         self.client = client or self._build_client()
+        self._service_secrets: dict[str, str] = {}
 
     def _build_client(self) -> Any:
         try:
@@ -1690,11 +2033,39 @@ class DockerSwarmAdapter:
             "edu.platform.trace": spec.trace_id,
             "edu.platform.idempotency": idempotency_digest,
             "edu.platform.spec_digest": spec_digest,
+            "edu.platform.instance": spec.instance_public_id,
             "edu.platform.service_name": service_name,
             "edu.platform.workspace_port": str(spec.workspace_port),
             "edu.platform.expires_at": str(int(time.time()) + max(spec.ttl_seconds, 0)),
         }
-        task_template = {
+        upstream_token = workspace_upstream_token(
+            instance_id=spec.instance_public_id or idempotency_key,
+            task_id=spec.task_id,
+            spec_digest=spec_digest,
+        )
+        secret_name = self._safe_name(
+            f"{spec.task_id}:{idempotency_key}", prefix="edu-workspace-secret"
+        )
+        secret_ref: dict[str, object] | None = None
+        if upstream_token and callable(getattr(self.client, "create_secret", None)):
+            try:
+                self.client.create_secret(
+                    name=secret_name,
+                    data=upstream_token.encode("ascii"),
+                    labels={**labels, KIND_LABEL: "workspace-secret"},
+                )
+            except Exception as exc:
+                raise RuntimeAdapterFailure("RUNTIME_SECRET_CREATE_FAILED") from exc
+            secret_ref = {
+                "SecretName": secret_name,
+                "File": {
+                    "Name": "workspace_upstream_token",
+                    "UID": "10001",
+                    "GID": "10001",
+                    "Mode": 0o400,
+                },
+            }
+        task_template: dict[str, Any] = {
             "ContainerSpec": {
                 "Image": spec.image_ref,
                 "Labels": labels,
@@ -1728,6 +2099,10 @@ class DockerSwarmAdapter:
             "Placement": {"Constraints": ["node.labels.edu.role.runtime == true"]},
             "Networks": self._networks(spec),
         }
+        if secret_ref is not None:
+            container_spec = task_template["ContainerSpec"]
+            if isinstance(container_spec, dict):
+                container_spec["Secrets"] = [secret_ref]
         try:
             response = self.client.create_service(
                 task_template=task_template,
@@ -1742,14 +2117,22 @@ class DockerSwarmAdapter:
                 rollback_config={"Parallelism": 1, "Order": "stop-first"},
             )
             service = self.client.inspect_service(response["ID"])
-            return self._result(service)
+            result = self._result(service)
+            if secret_ref is not None:
+                self._service_secrets[result.external_id] = secret_name
+            return result
         except Exception as exc:
             recovered = self._existing(idempotency_digest)
             if recovered:
                 result = self._result(recovered[0])
+                if secret_ref is not None:
+                    self._service_secrets[result.external_id] = secret_name
                 raise RuntimeAdapterFailure(
                     "RUNTIME_CREATE_UNCONFIRMED", partial=True, result=result
                 ) from exc
+            if secret_ref is not None and callable(getattr(self.client, "remove_secret", None)):
+                with suppress(Exception):
+                    self.client.remove_secret(secret_name)
             raise RuntimeAdapterFailure("RUNTIME_CREATE_FAILED") from exc
 
     def _status_once(self, external_id: str) -> str:
@@ -1815,6 +2198,55 @@ class DockerSwarmAdapter:
         self._call("RUNTIME_SERVICE_QUERY_FAILED", lambda: self.client.inspect_service(external_id))
         return f"swarm-service:{external_id}"
 
+    def _running_container_id(self, external_id: str) -> str:
+        tasks = self._call(
+            "RUNTIME_STATUS_FAILED", lambda: self.client.tasks(filters={"service": external_id})
+        )
+        for task in tasks:
+            status = task.get("Status", {}) if isinstance(task, Mapping) else {}
+            if str(status.get("State", "")).casefold() != "running":
+                continue
+            container_id = str(status.get("ContainerStatus", {}).get("ContainerID", ""))
+            if container_id:
+                return container_id
+        raise RuntimeAdapterFailure("WORKSPACE_VOLUME_UNAVAILABLE")
+
+    def _workspace_adapter(self) -> DockerLocalAdapter:
+        # The Engine API has the same get/put archive and exec operations for
+        # Swarm task containers.  The helper contains the shared path and
+        # atomic-write validation without exposing a second public adapter API.
+        return DockerLocalAdapter(
+            client=self.client,
+            config={"runtime_network": self._network_name()},
+            config_ref="runtime/swarm-workspace",
+        )
+
+    def capture_workspace(
+        self, *, external_id: str, relative_path: str, max_bytes: int
+    ) -> RuntimeWorkspaceArtifact:
+        container_id = self._running_container_id(external_id)
+        return self._workspace_adapter().capture_workspace(
+            external_id=container_id,
+            relative_path=relative_path,
+            max_bytes=max_bytes,
+        )
+
+    def restore_workspace(
+        self,
+        *,
+        external_id: str,
+        relative_path: str,
+        content: bytes,
+        expected_digest: str,
+    ) -> None:
+        container_id = self._running_container_id(external_id)
+        self._workspace_adapter().restore_workspace(
+            external_id=container_id,
+            relative_path=relative_path,
+            content=content,
+            expected_digest=expected_digest,
+        )
+
     def destroy(self, external_id: str, idempotency_key: str) -> None:
         del idempotency_key
         try:
@@ -1825,6 +2257,10 @@ class DockerSwarmAdapter:
         if labels.get(MANAGED_LABEL) != "true" or labels.get(KIND_LABEL) != RUNTIME_KIND:
             raise RuntimeAdapterFailure("RUNTIME_RESOURCE_NOT_MANAGED", retryable=False)
         self._call("RUNTIME_DESTROY_FAILED", lambda: self.client.remove_service(external_id))
+        secret_name = self._service_secrets.pop(external_id, "")
+        if secret_name and callable(getattr(self.client, "remove_secret", None)):
+            with suppress(Exception):
+                self.client.remove_secret(secret_name)
 
     def inventory(self) -> list[RuntimeInventoryItem]:
         services = self._call(

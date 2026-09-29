@@ -17,7 +17,8 @@ from apps.core.assets import register_asset, set_scan_result
 from apps.core.audit import append_audit, hash_client_ip
 from apps.core.concurrency import compare_and_swap
 from apps.core.errors import ResourceNotFound, RowVersionConflict, StateConflict
-from apps.core.models import ObjectAsset
+from apps.core.idempotency import request_digest
+from apps.core.models import FailureRecord, ObjectAsset
 from apps.core.object_storage import iter_chunks, object_storage
 from apps.core.outbox import append_outbox_event, enqueue_relay_after_commit
 from apps.core.redaction import redact
@@ -41,9 +42,13 @@ from .errors import (
     AutosaveStale,
     CheckpointStateConflict,
     WorkspaceCapabilityDenied,
+    WorkspaceCaptureConflict,
+    WorkspaceCaptureUnsupported,
     WorkspaceOperationDenied,
     WorkspaceScanUnavailable,
     WorkspaceSessionInvalid,
+    WorkspaceSnapshotNotReady,
+    WorkspaceStorageJobActive,
 )
 from .metrics import WORKSPACE_AUTOSAVES_TOTAL, WORKSPACE_SESSIONS_TOTAL
 from .models import (
@@ -53,10 +58,28 @@ from .models import (
     WorkspaceExecutionRun,
     WorkspaceSession,
     WorkspaceSnapshot,
+    WorkspaceStorageJob,
 )
 from .permissions import require_workspace_session, token_digest
 
 logger = logging.getLogger("runtime.execution")
+
+_STORAGE_JOB_TRANSITIONS: dict[str, set[str]] = {
+    WorkspaceStorageJob.Status.QUEUED: {
+        WorkspaceStorageJob.Status.RUNNING,
+        WorkspaceStorageJob.Status.CANCELLED,
+        WorkspaceStorageJob.Status.FAILED,
+    },
+    WorkspaceStorageJob.Status.RUNNING: {
+        WorkspaceStorageJob.Status.RUNNING,
+        WorkspaceStorageJob.Status.PASSED,
+        WorkspaceStorageJob.Status.FAILED,
+        WorkspaceStorageJob.Status.CANCELLED,
+    },
+    WorkspaceStorageJob.Status.PASSED: set(),
+    WorkspaceStorageJob.Status.FAILED: set(),
+    WorkspaceStorageJob.Status.CANCELLED: set(),
+}
 
 WORKSPACE_CAPABILITIES = (
     "webide",
@@ -301,6 +324,9 @@ def issue_session(
         payload={"expires_at": expiry.isoformat()},
         context=context,
     )
+    from .storage import create_initialization_job
+
+    create_initialization_job(session=session, context=context)
     WORKSPACE_SESSIONS_TOTAL.labels(action="enter", result="succeeded").inc()
     return task, session, token
 
@@ -458,6 +484,260 @@ def _read_upload(upload: Any) -> tuple[io.BytesIO, int, str, str]:
                 detail={"reason": "MAGIC_MISMATCH", "media_type": media_type}
             ) from exc
     return stream, size, digest, media_type or "application/octet-stream"
+
+
+@transaction.atomic
+def create_storage_job(
+    *,
+    task_id: str,
+    actor: User,
+    token: str,
+    expected_version: int,
+    kind: str,
+    client_seq: int | None,
+    base_version: int | None,
+    snapshot_id: str | None,
+    idempotency_key: str,
+    request_payload: dict[str, Any],
+    context: Any,
+) -> tuple[WorkspaceSession, WorkspaceStorageJob]:
+    """Declare a storage operation without performing external I/O.
+
+    P16-A owns the durable request boundary.  Worker execution is deliberately
+    left to the later storage-worker phase.
+    """
+
+    task = _task_for_actor(task_id=task_id, actor=actor)
+    session = (
+        WorkspaceSession.objects.select_for_update()
+        .select_related(
+            "task__enrollment",
+            "task__publication",
+            "student",
+            "course",
+            "instance",
+        )
+        .filter(task=task, student=actor, status=WorkspaceSession.Status.ACTIVE)
+        .first()
+    )
+    if session is None:
+        raise WorkspaceSessionInvalid()
+    require_workspace_session(session=session, token=token, task_id=task_id)
+    payload_digest = request_digest(request_payload)
+    existing = WorkspaceStorageJob.objects.filter(
+        session=session, idempotency_key=idempotency_key
+    ).first()
+    if existing is not None:
+        if existing.request_digest != payload_digest:
+            from apps.core.errors import IdempotencyKeyReused
+
+            raise IdempotencyKeyReused()
+        return session, existing
+    if session.row_version != expected_version:
+        raise RowVersionConflict(
+            detail={
+                "expected_row_version": expected_version,
+                "actual_row_version": session.row_version,
+            }
+        )
+
+    driver = task.runtime_adapter_driver or (
+        task.runtime_adapter.driver if task.runtime_adapter_id else "FAKE"
+    )
+    if driver == "FAKE":
+        raise WorkspaceCaptureUnsupported(detail={"driver": driver, "kind": kind})
+
+    if kind == WorkspaceStorageJob.Kind.CAPTURE:
+        require_workspace_session(
+            session=session, token=token, task_id=task_id, capability="snapshot"
+        )
+        if client_seq is None or base_version is None:
+            raise WorkspaceCaptureConflict(
+                detail={"client_seq": client_seq, "base_version": base_version}
+            )
+        if base_version != session.current_version:
+            raise WorkspaceCaptureConflict(
+                detail={"base_version": base_version, "current_version": session.current_version}
+            )
+        if snapshot_id:
+            raise WorkspaceCaptureConflict(detail={"snapshot_id": "not_allowed_for_capture"})
+        if WorkspaceStorageJob.objects.filter(
+            task=task, client_seq=client_seq, kind=WorkspaceStorageJob.Kind.CAPTURE
+        ).exists():
+            raise WorkspaceCaptureConflict(detail={"client_seq": client_seq})
+    elif kind == WorkspaceStorageJob.Kind.RESTORE:
+        require_workspace_session(
+            session=session, token=token, task_id=task_id, capability="checkpoint"
+        )
+        if client_seq is not None or base_version is not None:
+            raise WorkspaceCaptureConflict(detail={"reason": "restore_fields_not_allowed"})
+        try:
+            source_snapshot = WorkspaceSnapshot.objects.select_related("asset").get(
+                public_id=str(snapshot_id or ""), task=task
+            )
+        except WorkspaceSnapshot.DoesNotExist as exc:
+            raise ResourceNotFound() from exc
+        if (
+            source_snapshot.asset.status != ObjectAsset.Status.ACTIVE
+            or source_snapshot.asset.scan_status != ObjectAsset.ScanStatus.CLEAN
+            or source_snapshot.asset.digest_sha256 != source_snapshot.digest_sha256
+        ):
+            raise WorkspaceSnapshotNotReady(detail={"snapshot_id": source_snapshot.public_id})
+    else:
+        raise WorkspaceCaptureUnsupported(detail={"kind": kind})
+
+    active = (
+        WorkspaceStorageJob.objects.select_for_update()
+        .filter(
+            session=session,
+            kind__in=(
+                WorkspaceStorageJob.Kind.INITIALIZE,
+                WorkspaceStorageJob.Kind.CAPTURE,
+                WorkspaceStorageJob.Kind.RESTORE,
+                WorkspaceStorageJob.Kind.FINALIZE,
+            ),
+            status__in=(WorkspaceStorageJob.Status.QUEUED, WorkspaceStorageJob.Status.RUNNING),
+        )
+        .first()
+    )
+    if active is not None:
+        raise WorkspaceStorageJobActive(detail={"job_id": active.public_id})
+
+    source_snapshot = None
+    if kind == WorkspaceStorageJob.Kind.RESTORE:
+        source_snapshot = WorkspaceSnapshot.objects.get(public_id=str(snapshot_id), task=task)
+    now = timezone.now()
+    job = WorkspaceStorageJob.objects.create(
+        kind=kind,
+        task=task,
+        session=session,
+        instance=session.instance,
+        source_snapshot=source_snapshot,
+        status=WorkspaceStorageJob.Status.QUEUED,
+        client_seq=client_seq,
+        base_version=base_version,
+        idempotency_key=idempotency_key,
+        request_digest=payload_digest,
+        trace_id=_trace(context),
+        queued_at=now,
+    )
+    changed = compare_and_swap(
+        WorkspaceSession,
+        pk=session.pk,
+        expected_version=session.row_version,
+        changes={"last_seen_at": now},
+    )
+    _audit(
+        context=context,
+        actor=actor,
+        action="workspace.storage.capture.requested"
+        if kind == WorkspaceStorageJob.Kind.CAPTURE
+        else "workspace.storage.restore.requested",
+        target_type="workspace_storage_job",
+        target_ref=job.public_id,
+        course_ref=task.course.public_id,
+        after={"kind": kind, "status": job.status},
+    )
+    _emit(
+        event_type="workspace.storage.job.requested",
+        session=changed,
+        payload={"storage_job_id": job.public_id, "kind": kind, "status": job.status},
+        context=context,
+    )
+    from .storage import enqueue_storage_job
+
+    enqueue_storage_job(job)
+    return changed, job
+
+
+@transaction.atomic
+def transition_storage_job(
+    *,
+    job_id: str,
+    expected_version: int,
+    to_status: str,
+    context: Any = None,
+    result_snapshot: WorkspaceSnapshot | None = None,
+    failure_record: FailureRecord | None = None,
+) -> WorkspaceStorageJob:
+    """Advance a storage job through its explicit, terminal state machine."""
+
+    try:
+        job = (
+            WorkspaceStorageJob.objects.select_for_update()
+            .select_related("task__course", "session")
+            .get(public_id=job_id)
+        )
+    except WorkspaceStorageJob.DoesNotExist as exc:
+        raise ResourceNotFound() from exc
+    if to_status not in WorkspaceStorageJob.Status.values:
+        raise StateConflict(detail={"status": to_status})
+    if to_status not in _STORAGE_JOB_TRANSITIONS.get(job.status, set()):
+        raise StateConflict(
+            detail={"job_id": job.public_id, "status": job.status, "to_status": to_status}
+        )
+    if to_status == WorkspaceStorageJob.Status.PASSED:
+        if result_snapshot is None:
+            raise StateConflict(detail={"result_snapshot": "required"})
+        if job.kind == WorkspaceStorageJob.Kind.RESTORE and job.source_snapshot_id is None:
+            raise StateConflict(detail={"source_snapshot": "required"})
+    now = timezone.now()
+    changes: dict[str, Any] = {"status": to_status}
+    if to_status == WorkspaceStorageJob.Status.RUNNING:
+        changes["started_at"] = now
+    if to_status in {
+        WorkspaceStorageJob.Status.PASSED,
+        WorkspaceStorageJob.Status.FAILED,
+        WorkspaceStorageJob.Status.CANCELLED,
+    }:
+        changes["completed_at"] = now
+    if result_snapshot is not None:
+        changes["result_snapshot"] = result_snapshot
+    if failure_record is not None:
+        changes["failure_record"] = failure_record
+    changed = compare_and_swap(
+        WorkspaceStorageJob,
+        pk=job.pk,
+        expected_version=expected_version,
+        changes=changes,
+    )
+    changed = WorkspaceStorageJob.objects.select_related(
+        "task", "session", "source_snapshot", "result_snapshot", "failure_record"
+    ).get(pk=changed.pk)
+    successful_actions = {
+        WorkspaceStorageJob.Kind.INITIALIZE: "workspace.volume.initialized",
+        WorkspaceStorageJob.Kind.CAPTURE: "workspace.storage.capture.completed",
+        WorkspaceStorageJob.Kind.RESTORE: "workspace.storage.restore.completed",
+        WorkspaceStorageJob.Kind.FINALIZE: "workspace.runtime.finalized",
+    }
+    action = (
+        successful_actions[job.kind]
+        if to_status == WorkspaceStorageJob.Status.PASSED
+        else f"workspace.storage.{job.kind.lower()}.{to_status.lower()}"
+    )
+    _audit(
+        context=context,
+        actor=None,
+        action=action,
+        target_type="workspace_storage_job",
+        target_ref=changed.public_id,
+        course_ref=changed.task.course.public_id,
+        before={"status": job.status},
+        after={"status": changed.status},
+        result="FAILED" if to_status == WorkspaceStorageJob.Status.FAILED else "SUCCEEDED",
+        error_code=failure_record.error_code if failure_record is not None else "",
+    )
+    _emit(
+        event_type="workspace.storage.job.updated",
+        session=changed.session,
+        payload={
+            "storage_job_id": changed.public_id,
+            "kind": changed.kind,
+            "status": changed.status,
+        },
+        context=context,
+    )
+    return changed
 
 
 @transaction.atomic
@@ -677,7 +957,8 @@ def restore_checkpoint(
     token: str,
     expected_version: int,
     context: Any,
-) -> tuple[WorkspaceSession, WorkspaceSnapshot]:
+    idempotency_key: str = "",
+) -> tuple[WorkspaceSession, WorkspaceSnapshot | WorkspaceStorageJob]:
     task = _task_for_actor(task_id=task_id, actor=actor)
     session = (
         WorkspaceSession.objects.select_for_update()
@@ -714,6 +995,28 @@ def restore_checkpoint(
         )
     except WorkspaceCheckpoint.DoesNotExist as exc:
         raise ResourceNotFound() from exc
+    driver = task.runtime_adapter_driver or (
+        task.runtime_adapter.driver if task.runtime_adapter_id else "FAKE"
+    )
+    if driver != "FAKE":
+        _changed, job = create_storage_job(
+            task_id=task.public_id,
+            actor=actor,
+            token=token,
+            expected_version=expected_version,
+            kind=WorkspaceStorageJob.Kind.RESTORE,
+            client_seq=None,
+            base_version=None,
+            snapshot_id=checkpoint.snapshot.public_id,
+            idempotency_key=idempotency_key
+            or f"checkpoint-restore:{checkpoint.public_id}:{expected_version}",
+            request_payload={
+                "kind": WorkspaceStorageJob.Kind.RESTORE,
+                "snapshot_id": checkpoint.snapshot.public_id,
+            },
+            context=context,
+        )
+        return _changed, job
     next_seq = (
         WorkspaceAutosaveLog.objects.filter(task=task).aggregate(value=Max("client_seq"))["value"]
         or 0
@@ -784,7 +1087,7 @@ def restore_checkpoint(
 
 ALLOWED_OPERATIONS = {
     "OPEN_PREVIEW": "preview",
-    "RUN_CHECK": "terminal",
+    "RUN_CHECK": "snapshot",
     "STOP_PROCESS": "terminal",
     "FORMAT_DOCUMENT": "webide",
     "RESET_WORKSPACE": "webide",
@@ -1039,6 +1342,7 @@ def execute_execution_run(*, execution_run_id: str, trace_id: str = "") -> Works
     """Run one queued execution and atomically publish its terminal result."""
 
     with transaction.atomic():
+        # Keep the read-only snapshot outside this locking query; it is loaded after the run lock.
         run = (
             WorkspaceExecutionRun.objects.select_for_update()
             .select_related(
@@ -1049,7 +1353,6 @@ def execute_execution_run(*, execution_run_id: str, trace_id: str = "") -> Works
                 "task__image",
                 "task__resource_profile",
                 "session",
-                "snapshot__asset",
             )
             .get(public_id=execution_run_id)
         )

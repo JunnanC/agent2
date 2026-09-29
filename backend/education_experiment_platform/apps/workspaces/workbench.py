@@ -12,8 +12,9 @@ from apps.labtemplates.models import AutoCheckRule, TemplateVersion
 from apps.provisioning.models import ProvisioningJob, ProvisioningStageEvent
 from apps.reports.models import ReportDraft
 
-from .models import WorkspaceExecutionRun, WorkspaceSnapshot
-from .selectors import workbench_task_for_user
+from .models import WorkspaceExecutionRun, WorkspaceSession, WorkspaceSnapshot
+from .selectors import active_storage_job_for_user, workbench_task_for_user
+from .serializers import storage_job_data
 
 PUBLIC_STAGES = tuple(ProvisioningJob.Stage.values)
 _ACTIVE_TASK_STATUSES = {
@@ -330,6 +331,36 @@ def workbench_data(*, actor: User, task_id: str) -> dict[str, Any]:
     if task.status in _ACTIVE_TASK_STATUSES:
         operations = ["SAVE_SNAPSHOT", "RUN_TEST"]
         operations.append("SUBMIT_REPORT" if task.publication.report_required else "COMPLETE")
+    driver = task.runtime_adapter_driver or (
+        task.runtime_adapter.driver if task.runtime_adapter_id else "FAKE"
+    )
+    capabilities = task.template_version.workspace_capabilities or {}
+    real_runtime = driver != "FAKE" and bool(capabilities.get("webide"))
+    active_job = active_storage_job_for_user(actor=actor, task_id=task_id)
+    active_session = (
+        WorkspaceSession.objects.select_related("latest_snapshot")
+        .filter(
+            task=task, student=actor, status=WorkspaceSession.Status.ACTIVE
+        )
+        .order_by("-created_at")
+        .first()
+    )
+    current_version = active_session.current_version if active_session is not None else 0
+    last_snapshot_id = (
+        active_session.latest_snapshot.public_id
+        if active_session is not None and active_session.latest_snapshot_id
+        else None
+    )
+    workspace_mode = (
+        "RUNTIME_IDE"
+        if real_runtime and task.status in _ACTIVE_TASK_STATUSES
+        else "READ_ONLY"
+        if task.status not in _ACTIVE_TASK_STATUSES
+        else "LEGACY_DRAFT"
+    )
+    capture_supported = workspace_mode == "RUNTIME_IDE" and bool(
+        capabilities.get("snapshot")
+    )
     return {
         "task": {
             "public_id": task.public_id,
@@ -352,5 +383,13 @@ def workbench_data(*, actor: User, task_id: str) -> dict[str, Any]:
         "template": _template_data(task.template_version),
         "tests": _tests_data(task),
         "provisioning": _provisioning_data(task),
+        "workspace": {
+            "mode": workspace_mode,
+            "entrypoint": "main.py",
+            "capture_supported": capture_supported,
+            "last_synchronized_version": current_version,
+            "last_synchronized_snapshot_id": last_snapshot_id,
+            "active_storage_job": storage_job_data(active_job) if active_job else None,
+        },
         "submission": _submission_data(task, blockers=blockers),
     }

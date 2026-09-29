@@ -44,6 +44,7 @@ from apps.workspaces.models import (
     WorkspaceCheckpoint,
     WorkspaceSession,
     WorkspaceSnapshot,
+    WorkspaceStorageJob,
 )
 from apps.workspaces.services import revoke_task_sessions
 
@@ -662,11 +663,6 @@ def _record_archive_failure(job: ArchiveJob, exc: Exception, context: Any) -> Ar
 
 def _finish_task_cleanup(job: ArchiveJob, context: Any, *, archive_verified: bool) -> None:
     task = ExperimentTask.objects.select_related("course").get(pk=job.task_id)
-    revoke_task_sessions(
-        task_id=task.public_id,
-        reason="archive terminal cleanup",
-        context=context,
-    )
     if archive_verified:
         task.refresh_from_db()
         if task.status == ExperimentTask.Status.FAILED:
@@ -697,6 +693,14 @@ def _finish_task_cleanup(job: ArchiveJob, context: Any, *, archive_verified: boo
             )
         elif task.status != ExperimentTask.Status.DESTROYING:
             raise ArchiveStateConflict(detail={"task_status": task.status})
+    from apps.workspaces.storage import finalize_workspace_before_destroy
+
+    finalize_workspace_before_destroy(task_id=task.public_id, context=context)
+    revoke_task_sessions(
+        task_id=task.public_id,
+        reason="archive terminal cleanup",
+        context=context,
+    )
     destroy_task_instance(
         task_id=task.public_id,
         idempotency_key=f"archive-destroy:{job.public_id}",
@@ -1883,6 +1887,30 @@ def purge_expired_runtime_resources(*, trace_id: str = "") -> dict[str, int]:
         if kind != "volume" or not expired:
             skipped += 1
             continue
+        task_id = str(item.metadata.get("task_id", ""))
+        if task_id:
+            instance = (
+                ProvisioningInstance.objects.filter(task__public_id=task_id)
+                .only("pk", "status")
+                .first()
+            )
+            if instance is not None and instance.status != ProvisioningInstance.Status.DESTROYED:
+                skipped += 1
+                continue
+            if instance is not None:
+                initialized = WorkspaceStorageJob.objects.filter(
+                    instance=instance,
+                    kind=WorkspaceStorageJob.Kind.INITIALIZE,
+                    status=WorkspaceStorageJob.Status.PASSED,
+                ).exists()
+                finalized = WorkspaceStorageJob.objects.filter(
+                    instance=instance,
+                    kind=WorkspaceStorageJob.Kind.FINALIZE,
+                    status=WorkspaceStorageJob.Status.PASSED,
+                ).exists()
+                if initialized and not finalized:
+                    skipped += 1
+                    continue
         driver = str(item.metadata.get("driver") or "DOCKER_LOCAL")
         config_ref = str(item.metadata.get("config_ref") or "")
         try:
@@ -1923,6 +1951,7 @@ def purge_expired_runtime_resources(*, trace_id: str = "") -> dict[str, int]:
                         "external_id": item.external_id,
                         "driver": driver,
                         "config_ref": config_ref,
+                        "task_id": task_id,
                     },
                     trace_id=trace_id,
                     max_attempts=max(
@@ -1934,6 +1963,11 @@ def purge_expired_runtime_resources(*, trace_id: str = "") -> dict[str, int]:
 
 def retry_runtime_resource_destroy_compensation(task: CompensationTask) -> None:
     payload = dict(task.payload_masked or {})
+    task_id = str(payload.get("task_id") or "")
+    if task_id and ProvisioningInstance.objects.filter(task__public_id=task_id).exclude(
+        status=ProvisioningInstance.Status.DESTROYED
+    ).exists():
+        return
     adapter = runtime_for_driver(
         str(payload.get("driver") or "DOCKER_LOCAL"),
         config_ref=str(payload.get("config_ref") or ""),

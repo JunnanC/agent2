@@ -14,6 +14,10 @@ x-app-environment: &app-environment
   API_HOST: ${API_HOST}
   WORKSPACE_COOKIE_NAME: workspace_ticket
   WORKSPACE_AUTHORITY_URL: http://django:8000
+  WORKSPACE_STORAGE_STALE_AFTER_SECONDS: ${WORKSPACE_STORAGE_STALE_AFTER_SECONDS:-900}
+  WORKSPACE_STORAGE_REDISPATCH_SECONDS: ${WORKSPACE_STORAGE_REDISPATCH_SECONDS:-300}
+  WORKSPACE_FINALIZE_TIMEOUT_SECONDS: ${WORKSPACE_FINALIZE_TIMEOUT_SECONDS:-1200}
+  WORKSPACE_VOLUME_RETENTION_SECONDS: ${WORKSPACE_VOLUME_RETENTION_SECONDS:-900}
   SWARM_DOCKER_HOST: ${SWARM_DOCKER_HOST}
   SWARM_DOCKER_TLS_VERIFY: "true"
   SWARM_DOCKER_CA_PATH: /run/secrets/swarm_docker_ca
@@ -113,8 +117,9 @@ services:
       IDENTITY_HMAC_KEY_FILE: /run/secrets/identity_hmac_key
       COURSE_INVITATION_HMAC_KEY_FILE: /run/secrets/course_invitation_hmac_key
       WORKSPACE_INTERNAL_KEY_FILE: /run/secrets/workspace_internal_key
+      WORKSPACE_UPSTREAM_HMAC_KEY_FILE: /run/secrets/workspace_upstream_hmac_key
       MYSQL_PASSWORD_FILE: /run/secrets/mysql_app_password
-    secrets: [django_secret_key, identity_hmac_key, course_invitation_hmac_key, workspace_internal_key, mysql_app_password, minio_app_access_key, minio_app_secret_key]
+    secrets: [django_secret_key, identity_hmac_key, course_invitation_hmac_key, workspace_internal_key, workspace_upstream_hmac_key, mysql_app_password, minio_app_access_key, minio_app_secret_key]
     networks: [app, data]
     logging: *fluentd-logging
     healthcheck:
@@ -161,8 +166,9 @@ services:
       DJANGO_SECRET_KEY_FILE: /run/secrets/django_secret_key
       IDENTITY_HMAC_KEY_FILE: /run/secrets/identity_hmac_key
       COURSE_INVITATION_HMAC_KEY_FILE: /run/secrets/course_invitation_hmac_key
+      WORKSPACE_UPSTREAM_HMAC_KEY_FILE: /run/secrets/workspace_upstream_hmac_key
       MYSQL_PASSWORD_FILE: /run/secrets/mysql_app_password
-    secrets: [django_secret_key, identity_hmac_key, course_invitation_hmac_key, mysql_app_password, minio_app_access_key, minio_app_secret_key, swarm_docker_ca, swarm_docker_cert, swarm_docker_key]
+    secrets: [django_secret_key, identity_hmac_key, course_invitation_hmac_key, workspace_upstream_hmac_key, mysql_app_password, minio_app_access_key, minio_app_secret_key, swarm_docker_ca, swarm_docker_cert, swarm_docker_key]
     networks: [app, data, runtime]
     deploy:
       replicas: 2
@@ -170,6 +176,27 @@ services:
         constraints: [node.labels.edu.role.runtime == true]
       resources:
         reservations: { cpus: "0.25", memory: 256M }
+        limits: { cpus: "1.00", memory: 768M }
+      update_config: { parallelism: 1, order: stop-first, failure_action: rollback }
+
+  workspace-storage-worker:
+    image: ${REGISTRY}/edu-platform-backend:${IMAGE_TAG}
+    command: ["celery", "-A", "education_experiment_platform", "worker", "--loglevel=INFO", "--concurrency=${WORKSPACE_STORAGE_WORKER_CONCURRENCY:-2}", "--queues=q_workspace_storage"]
+    environment:
+      <<: *app-environment
+      DJANGO_SECRET_KEY_FILE: /run/secrets/django_secret_key
+      IDENTITY_HMAC_KEY_FILE: /run/secrets/identity_hmac_key
+      COURSE_INVITATION_HMAC_KEY_FILE: /run/secrets/course_invitation_hmac_key
+      WORKSPACE_UPSTREAM_HMAC_KEY_FILE: /run/secrets/workspace_upstream_hmac_key
+      MYSQL_PASSWORD_FILE: /run/secrets/mysql_app_password
+    secrets: [django_secret_key, identity_hmac_key, course_invitation_hmac_key, workspace_upstream_hmac_key, mysql_app_password, minio_app_access_key, minio_app_secret_key, swarm_docker_ca, swarm_docker_cert, swarm_docker_key]
+    networks: [app, data, runtime]
+    deploy:
+      replicas: 1
+      placement:
+        constraints: [node.labels.edu.role.runtime == true]
+      resources:
+        reservations: { cpus: "0.10", memory: 256M }
         limits: { cpus: "1.00", memory: 768M }
       update_config: { parallelism: 1, order: stop-first, failure_action: rollback }
 
@@ -182,8 +209,9 @@ services:
       IDENTITY_HMAC_KEY_FILE: /run/secrets/identity_hmac_key
       COURSE_INVITATION_HMAC_KEY_FILE: /run/secrets/course_invitation_hmac_key
       WORKSPACE_INTERNAL_KEY_FILE: /run/secrets/workspace_internal_key
+      WORKSPACE_UPSTREAM_HMAC_KEY_FILE: /run/secrets/workspace_upstream_hmac_key
       MYSQL_PASSWORD_FILE: /run/secrets/mysql_app_password
-    secrets: [django_secret_key, identity_hmac_key, course_invitation_hmac_key, workspace_internal_key, mysql_app_password]
+    secrets: [django_secret_key, identity_hmac_key, course_invitation_hmac_key, workspace_internal_key, workspace_upstream_hmac_key, mysql_app_password]
     networks: [app, runtime]
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/healthz"]
@@ -303,6 +331,8 @@ secrets:
   minio_app_secret_key:
     external: true
   workspace_internal_key:
+    external: true
+  workspace_upstream_hmac_key:
     external: true
   swarm_docker_ca:
     external: true

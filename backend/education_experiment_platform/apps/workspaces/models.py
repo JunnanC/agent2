@@ -2,7 +2,7 @@ from django.db import models
 
 from apps.accounts.models import User
 from apps.core.identifiers import new_ulid
-from apps.core.models import AppendOnlyModel, ObjectAsset, VersionedModel
+from apps.core.models import AppendOnlyModel, FailureRecord, ObjectAsset, VersionedModel
 from apps.courses.models import Course
 from apps.experiments.models import ExperimentTask
 from apps.provisioning.models import ProvisioningInstance
@@ -159,6 +159,114 @@ class WorkspaceAutosaveLog(AppendOnlyModel):
         indexes = [
             models.Index(fields=("task", "created_at"), name="workspace_autosave_task_idx"),
             models.Index(fields=("session", "client_seq"), name="workspace_autosave_session_idx"),
+        ]
+
+
+class WorkspaceStorageJob(VersionedModel):
+    """Durable contract for asynchronous workspace volume operations.
+
+    The row is the public state machine boundary.  Runtime and storage workers
+    may advance it through CAS, while browser requests only create QUEUED rows
+    and read a sanitized projection.
+    """
+
+    class Kind(models.TextChoices):
+        INITIALIZE = "INITIALIZE"
+        CAPTURE = "CAPTURE"
+        RESTORE = "RESTORE"
+        FINALIZE = "FINALIZE"
+
+    class Status(models.TextChoices):
+        QUEUED = "QUEUED"
+        RUNNING = "RUNNING"
+        PASSED = "PASSED"
+        FAILED = "FAILED"
+        CANCELLED = "CANCELLED"
+
+    TERMINAL_STATUSES = frozenset({Status.PASSED, Status.FAILED, Status.CANCELLED})
+
+    public_id = public_id_field()
+    kind = models.CharField(max_length=16, choices=Kind.choices)
+    task = models.ForeignKey(
+        ExperimentTask, on_delete=models.PROTECT, related_name="workspace_storage_jobs"
+    )
+    session = models.ForeignKey(
+        WorkspaceSession, on_delete=models.PROTECT, related_name="storage_jobs"
+    )
+    instance = models.ForeignKey(
+        ProvisioningInstance, on_delete=models.PROTECT, related_name="workspace_storage_jobs"
+    )
+    source_snapshot = models.ForeignKey(
+        "WorkspaceSnapshot",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="restore_storage_jobs",
+    )
+    result_snapshot = models.ForeignKey(
+        "WorkspaceSnapshot",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="capture_storage_jobs",
+    )
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.QUEUED)
+    client_seq = models.PositiveBigIntegerField(null=True, blank=True)
+    base_version = models.PositiveIntegerField(null=True, blank=True)
+    idempotency_key = models.CharField(max_length=128, db_collation="ascii_bin")
+    request_digest = models.CharField(max_length=64, db_collation="ascii_bin")
+    failure_record = models.ForeignKey(
+        FailureRecord,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="workspace_storage_jobs",
+    )
+    trace_id = models.CharField(max_length=32)
+    queued_at = models.DateTimeField(auto_now_add=True)
+    last_dispatched_at = models.DateTimeField(null=True, blank=True)
+    started_at = models.DateTimeField(null=True, blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = "workspaces_workspace_storage_job"
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(
+                    kind__in=("INITIALIZE", "CAPTURE", "RESTORE", "FINALIZE")
+                ),
+                name="workspace_storage_kind_ck",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(
+                    status__in=("QUEUED", "RUNNING", "PASSED", "FAILED", "CANCELLED")
+                ),
+                name="workspace_storage_status_ck",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(client_seq__isnull=True) | models.Q(client_seq__gt=0),
+                name="workspace_storage_client_seq_ck",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(base_version__isnull=True) | models.Q(base_version__gte=0),
+                name="workspace_storage_base_version_ck",
+            ),
+            models.UniqueConstraint(
+                fields=("task", "client_seq"),
+                name="workspace_storage_capture_seq_uniq",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=("task", "created_at"), name="workspace_storage_task_idx"),
+            models.Index(
+                fields=("session", "status", "created_at"),
+                name="workspace_storage_session_idx",
+            ),
+            models.Index(fields=("status", "queued_at"), name="workspace_storage_queue_idx"),
+            models.Index(
+                fields=("status", "last_dispatched_at"),
+                name="workspace_storage_dispatch_idx",
+            ),
         ]
 
 

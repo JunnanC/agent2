@@ -1,9 +1,10 @@
 import io
 import tarfile
+import time
 from typing import Any
 from unittest.mock import patch
 
-from django.test import SimpleTestCase
+from django.test import SimpleTestCase, override_settings
 
 from ..adapters import (
     DockerLocalAdapter,
@@ -235,6 +236,12 @@ class FakeDockerEngine:
             raise RuntimeError("not found")
         return self.volumes_state[name]
 
+    def update_volume(self, name: str, labels: dict[str, str]) -> None:
+        self.calls.append(("update_volume", {"name": name, "labels": labels}))
+        if name not in self.volumes_state:
+            raise RuntimeError("not found")
+        self.volumes_state[name]["Labels"] = dict(labels)
+
     def remove_volume(self, name: str, force: bool = False) -> None:
         del force
         self.volumes_state.pop(name, None)
@@ -329,6 +336,7 @@ class DockerLocalAdapterTests(SimpleTestCase):
 
         self.assertEqual(raised.exception.code, "RUNTIME_CLIENT_UNAVAILABLE")
 
+    @override_settings(WORKSPACE_VOLUME_RETENTION_SECONDS=600)
     def test_workspace_applies_managed_security_resources_and_is_idempotent(self) -> None:
         client = FakeDockerEngine()
         adapter = DockerLocalAdapter(
@@ -354,11 +362,39 @@ class DockerLocalAdapterTests(SimpleTestCase):
         labels = client.containers_state[created.external_id]["Labels"]
         self.assertEqual(labels["edu.platform.managed"], "true")
         self.assertEqual(client.networks_state[0]["driver"], "bridge")
+        container_config = client.containers_state[created.external_id]["_kwargs"]
+        self.assertEqual(
+            container_config["healthcheck"]["Test"],
+            ["CMD", "/usr/local/bin/workspace-router", "healthcheck"],
+        )
+        with tarfile.open(fileobj=io.BytesIO(client.archives[0]), mode="r") as archive:
+            secret = archive.getmember("workspace_upstream_token")
+        self.assertEqual((secret.uid, secret.gid, secret.mode), (10001, 10001, 0o600))
 
         adapter.destroy(created.external_id, "destroy:local-1")
         adapter.destroy(created.external_id, "destroy:local-1")
         self.assertEqual(client.containers_state, {})
+        self.assertEqual(len(client.volumes_state), 1)
+        workspace_volume = next(iter(client.volumes_state.values()))
+        self.assertGreater(
+            int(workspace_volume["Labels"]["edu.platform.expires_at"]),
+            int(time.time()),
+        )
+        adapter.destroy_resource(workspace_volume["Name"], "resource-destroy:local-1")
         self.assertEqual(client.volumes_state, {})
+
+    def test_destroy_retains_creation_expiry_when_volume_updates_are_unavailable(self) -> None:
+        client = FakeDockerEngine()
+        setattr(client, "update_volume", None)
+        adapter = DockerLocalAdapter(client=client)
+        created = adapter.create(runtime_spec(), "provisioning:local-no-volume-update")
+
+        adapter.destroy(created.external_id, "destroy:local-no-volume-update")
+
+        self.assertEqual(client.containers_state, {})
+        self.assertEqual(len(client.volumes_state), 1)
+        volume = next(iter(client.volumes_state.values()))
+        self.assertGreater(int(volume["Labels"]["edu.platform.expires_at"]), int(time.time()))
 
     def test_judge_rejects_non_whitelisted_command_and_network(self) -> None:
         adapter = DockerLocalAdapter(client=FakeDockerEngine())

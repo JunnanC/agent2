@@ -123,6 +123,7 @@ GRANT SELECT, INSERT ON \`${MYSQL_DATABASE}\`.workspaces_workspace_autosave_log 
 GRANT SELECT, INSERT ON \`${MYSQL_DATABASE}\`.workspaces_workspace_checkpoint TO '${MYSQL_APP_USER}'@'%';
 GRANT SELECT, INSERT ON \`${MYSQL_DATABASE}\`.workspaces_operation_event TO '${MYSQL_APP_USER}'@'%';
 GRANT SELECT, INSERT, UPDATE ON \`${MYSQL_DATABASE}\`.workspaces_execution_run TO '${MYSQL_APP_USER}'@'%';
+GRANT SELECT, INSERT, UPDATE ON \`${MYSQL_DATABASE}\`.workspaces_workspace_storage_job TO '${MYSQL_APP_USER}'@'%';
 GRANT SELECT, INSERT, UPDATE ON \`${MYSQL_DATABASE}\`.reports_report_draft TO '${MYSQL_APP_USER}'@'%';
 GRANT SELECT, INSERT ON \`${MYSQL_DATABASE}\`.reports_report_attachment TO '${MYSQL_APP_USER}'@'%';
 GRANT SELECT, INSERT ON \`${MYSQL_DATABASE}\`.reports_report_version TO '${MYSQL_APP_USER}'@'%';

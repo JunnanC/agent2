@@ -79,7 +79,7 @@ def _workspace_path(path: str) -> tuple[str, str | None, str]:
 
 async def _authorize(
     *, session_id: str, token: str, capability: str | None, portal_session_key: str
-) -> str:
+) -> tuple[str, str]:
     headers = {
         "X-Workspace-Internal-Key": settings.WORKSPACE_INTERNAL_KEY,
         "X-Workspace-Session": session_id,
@@ -105,11 +105,16 @@ async def _authorize(
         raise GatewayDenied(
             str(error.get("code", "WORKSPACE_SESSION_INVALID")), response.status_code
         )
-    endpoint = str(payload.get("data", {}).get("endpoint", ""))
+    data = payload.get("data", {})
+    data = data if isinstance(data, dict) else {}
+    endpoint = str(data.get("endpoint", ""))
+    upstream_token = str(data.get("upstream_token", ""))
     parsed = urlsplit(endpoint)
     if parsed.scheme != "http" or not parsed.hostname or parsed.username or parsed.password:
         raise GatewayDenied("WORKSPACE_UPSTREAM_INVALID", 503)
-    return endpoint.rstrip("/")
+    if upstream_token and (len(upstream_token) < 32 or len(upstream_token) > 4096):
+        raise GatewayDenied("WORKSPACE_UPSTREAM_TOKEN_UNAVAILABLE", 503)
+    return endpoint.rstrip("/"), upstream_token
 
 
 async def _send_error(
@@ -145,6 +150,7 @@ async def _proxy_http(
     send: Callable[[dict[str, Any]], Awaitable[None]],
     *,
     upstream: str,
+    upstream_token: str,
     capability: str,
     tail: str,
 ) -> None:
@@ -163,6 +169,8 @@ async def _proxy_http(
             f"/workspace/{scope['workspace_session']}/{capability}",
         )
     )
+    if upstream_token:
+        request_headers.append(("x-workspace-upstream-token", upstream_token))
     timeout = float(settings.WORKSPACE_UPSTREAM_TIMEOUT_SECONDS)
     async with (
         httpx.AsyncClient(timeout=timeout, follow_redirects=False) as client,
@@ -196,6 +204,7 @@ async def _proxy_websocket(
     send: Callable[[dict[str, Any]], Awaitable[None]],
     *,
     upstream: str,
+    upstream_token: str,
     capability: str,
     tail: str,
 ) -> None:
@@ -212,6 +221,9 @@ async def _proxy_websocket(
         async with connect(
             target,
             subprotocols=scope.get("subprotocols") or None,
+            additional_headers=(
+                {"X-Workspace-Upstream-Token": upstream_token} if upstream_token else None
+            ),
             open_timeout=float(settings.WORKSPACE_UPSTREAM_TIMEOUT_SECONDS),
         ) as websocket:
             await send({"type": "websocket.accept", "subprotocol": websocket.subprotocol})
@@ -316,7 +328,7 @@ async def application(
             b"x-workspace-token", b""
         ).decode("latin-1")
         portal_key = _cookie(headers, settings.SESSION_COOKIE_NAME)
-        upstream = await _authorize(
+        upstream, upstream_token = await _authorize(
             session_id=session_id,
             token=token,
             capability=capability if capability in WORKSPACE_CAPABILITIES else None,
@@ -332,11 +344,23 @@ async def application(
             raise GatewayDenied("WORKSPACE_PATH_INVALID", 404)
         if scope["type"] == "websocket":
             await _proxy_websocket(
-                scope, receive, send, upstream=upstream, capability=capability, tail=tail
+                scope,
+                receive,
+                send,
+                upstream=upstream,
+                upstream_token=upstream_token,
+                capability=capability,
+                tail=tail,
             )
         else:
             await _proxy_http(
-                scope, receive, send, upstream=upstream, capability=capability, tail=tail
+                scope,
+                receive,
+                send,
+                upstream=upstream,
+                upstream_token=upstream_token,
+                capability=capability,
+                tail=tail,
             )
     except GatewayDenied as exc:
         if scope["type"] == "websocket":

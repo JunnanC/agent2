@@ -2,7 +2,7 @@
     "openapi": "3.0.3",
     "info": {
         "title": "Education Agent Platform API",
-        "version": "v2-p15",
+        "version": "v2-p14",
         "description": "P15 student experiment workbench and platform operations."
     },
     "paths": {
@@ -7553,6 +7553,98 @@
                             }
                         },
                         "description": ""
+                    },
+                    "202": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/WorkspaceStorageJob"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                },
+                "x-portals": [
+                    "USER"
+                ]
+            }
+        },
+        "/api/v2/tasks/{task_id}/workspace-storage-jobs": {
+            "post": {
+                "operationId": "tasks_workspace_storage_jobs_create",
+                "parameters": [
+                    {
+                        "in": "header",
+                        "name": "Idempotency-Key",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "header",
+                        "name": "If-Match",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "header",
+                        "name": "X-Workspace-Token",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "task_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "workspaces"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/WorkspaceStorageJobWrite"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/WorkspaceStorageJobWrite"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/WorkspaceStorageJobWrite"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/WorkspaceStorageJob"
+                                }
+                            }
+                        },
+                        "description": ""
                     }
                 },
                 "x-portals": [
@@ -14716,6 +14808,44 @@
                 ]
             }
         },
+        "/api/v2/workspace-storage-jobs/{job_id}": {
+            "get": {
+                "operationId": "workspace_storage_jobs_retrieve",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "job_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "workspaces"
+                ],
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/WorkspaceStorageJob"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                },
+                "x-portals": [
+                    "USER"
+                ]
+            }
+        },
         "/files/{token}": {
             "get": {
                 "operationId": "files_download",
@@ -17677,7 +17807,7 @@
                     "body"
                 ]
             },
-            "ModeEnum": {
+            "Mode1c3Enum": {
                 "enum": [
                     "KNOWLEDGE_QA",
                     "SOCRATIC_HINT",
@@ -20927,7 +21057,7 @@
                 "type": "object",
                 "properties": {
                     "mode": {
-                        "$ref": "#/components/schemas/ModeEnum"
+                        "$ref": "#/components/schemas/Mode1c3Enum"
                     }
                 },
                 "required": [
@@ -22635,6 +22765,9 @@
                     "provisioning": {
                         "$ref": "#/components/schemas/WorkbenchProvisioning"
                     },
+                    "workspace": {
+                        "$ref": "#/components/schemas/WorkbenchWorkspace"
+                    },
                     "submission": {
                         "$ref": "#/components/schemas/WorkbenchSubmission"
                     }
@@ -22645,7 +22778,8 @@
                     "submission",
                     "task",
                     "template",
-                    "tests"
+                    "tests",
+                    "workspace"
                 ]
             },
             "WorkbenchContent": {
@@ -23000,6 +23134,52 @@
                     "summary"
                 ]
             },
+            "WorkbenchWorkspace": {
+                "type": "object",
+                "properties": {
+                    "mode": {
+                        "$ref": "#/components/schemas/WorkbenchWorkspaceModeEnum"
+                    },
+                    "entrypoint": {
+                        "type": "string"
+                    },
+                    "capture_supported": {
+                        "type": "boolean"
+                    },
+                    "last_synchronized_version": {
+                        "type": "integer"
+                    },
+                    "last_synchronized_snapshot_id": {
+                        "type": "string",
+                        "nullable": true
+                    },
+                    "active_storage_job": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/WorkspaceStorageJob"
+                            }
+                        ],
+                        "nullable": true
+                    }
+                },
+                "required": [
+                    "active_storage_job",
+                    "capture_supported",
+                    "entrypoint",
+                    "last_synchronized_snapshot_id",
+                    "last_synchronized_version",
+                    "mode"
+                ]
+            },
+            "WorkbenchWorkspaceModeEnum": {
+                "enum": [
+                    "LEGACY_DRAFT",
+                    "RUNTIME_IDE",
+                    "READ_ONLY"
+                ],
+                "type": "string",
+                "description": "* `LEGACY_DRAFT` - LEGACY_DRAFT\n* `RUNTIME_IDE` - RUNTIME_IDE\n* `READ_ONLY` - READ_ONLY"
+            },
             "WorkspaceCheckpoint": {
                 "type": "object",
                 "properties": {
@@ -23286,6 +23466,131 @@
                     "task_id",
                     "version_no"
                 ]
+            },
+            "WorkspaceStorageJob": {
+                "type": "object",
+                "properties": {
+                    "public_id": {
+                        "type": "string"
+                    },
+                    "task_id": {
+                        "type": "string"
+                    },
+                    "session_id": {
+                        "type": "string"
+                    },
+                    "kind": {
+                        "$ref": "#/components/schemas/WorkspaceStorageJobKindEnum"
+                    },
+                    "status": {
+                        "$ref": "#/components/schemas/WorkspaceStorageJobStatusEnum"
+                    },
+                    "client_seq": {
+                        "type": "integer",
+                        "nullable": true
+                    },
+                    "base_version": {
+                        "type": "integer",
+                        "nullable": true
+                    },
+                    "source_snapshot_id": {
+                        "type": "string",
+                        "nullable": true
+                    },
+                    "result_snapshot_id": {
+                        "type": "string",
+                        "nullable": true
+                    },
+                    "failure": {
+                        "type": "object",
+                        "additionalProperties": {},
+                        "nullable": true
+                    },
+                    "queued_at": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "started_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "nullable": true
+                    },
+                    "completed_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "nullable": true
+                    },
+                    "row_version": {
+                        "type": "integer"
+                    }
+                },
+                "required": [
+                    "base_version",
+                    "client_seq",
+                    "completed_at",
+                    "failure",
+                    "kind",
+                    "public_id",
+                    "queued_at",
+                    "result_snapshot_id",
+                    "row_version",
+                    "session_id",
+                    "source_snapshot_id",
+                    "started_at",
+                    "status",
+                    "task_id"
+                ]
+            },
+            "WorkspaceStorageJobKindEnum": {
+                "enum": [
+                    "INITIALIZE",
+                    "CAPTURE",
+                    "RESTORE",
+                    "FINALIZE"
+                ],
+                "type": "string",
+                "description": "* `INITIALIZE` - Initialize\n* `CAPTURE` - Capture\n* `RESTORE` - Restore\n* `FINALIZE` - Finalize"
+            },
+            "WorkspaceStorageJobStatusEnum": {
+                "enum": [
+                    "QUEUED",
+                    "RUNNING",
+                    "PASSED",
+                    "FAILED",
+                    "CANCELLED"
+                ],
+                "type": "string",
+                "description": "* `QUEUED` - Queued\n* `RUNNING` - Running\n* `PASSED` - Passed\n* `FAILED` - Failed\n* `CANCELLED` - Cancelled"
+            },
+            "WorkspaceStorageJobWrite": {
+                "type": "object",
+                "properties": {
+                    "kind": {
+                        "$ref": "#/components/schemas/WorkspaceStorageJobWriteKindEnum"
+                    },
+                    "client_seq": {
+                        "type": "integer",
+                        "minimum": 1
+                    },
+                    "base_version": {
+                        "type": "integer",
+                        "minimum": 0
+                    },
+                    "snapshot_id": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "kind"
+                ]
+            },
+            "WorkspaceStorageJobWriteKindEnum": {
+                "enum": [
+                    "CAPTURE",
+                    "RESTORE"
+                ],
+                "type": "string",
+                "description": "* `CAPTURE` - CAPTURE\n* `RESTORE` - RESTORE"
             }
         },
         "securitySchemes": {

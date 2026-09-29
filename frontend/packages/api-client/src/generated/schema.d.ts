@@ -2295,6 +2295,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v2/tasks/{task_id}/workspace-storage-jobs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["tasks_workspace_storage_jobs_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v2/teaching/courses": {
         parameters: {
             query?: never;
@@ -3927,6 +3943,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v2/workspace-storage-jobs/{job_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["workspace_storage_jobs_retrieve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/files/{token}": {
         parameters: {
             query?: never;
@@ -4879,7 +4911,7 @@ export interface components {
          *     * `WORKSPACE_ASSIST` - WORKSPACE_ASSIST
          * @enum {string}
          */
-        ModeEnum: "KNOWLEDGE_QA" | "SOCRATIC_HINT" | "DEBUG_ASSIST" | "REPORT_COACH" | "WORKSPACE_ASSIST";
+        Mode1c3Enum: "KNOWLEDGE_QA" | "SOCRATIC_HINT" | "DEBUG_ASSIST" | "REPORT_COACH" | "WORKSPACE_ASSIST";
         ModelRouteWrite: {
             key: string;
             provider: string;
@@ -5891,7 +5923,7 @@ export interface components {
          */
         ScanStatusEnum: "PENDING" | "CLEAN" | "INFECTED" | "FAILED";
         SessionWrite: {
-            mode: components["schemas"]["ModeEnum"];
+            mode: components["schemas"]["Mode1c3Enum"];
         };
         SimilarityMatchData: {
             public_id: string;
@@ -6502,6 +6534,7 @@ export interface components {
             template: components["schemas"]["WorkbenchTemplate"];
             tests: components["schemas"]["WorkbenchTests"];
             provisioning: components["schemas"]["WorkbenchProvisioning"];
+            workspace: components["schemas"]["WorkbenchWorkspace"];
             submission: components["schemas"]["WorkbenchSubmission"];
         };
         WorkbenchContent: {
@@ -6600,6 +6633,21 @@ export interface components {
             }[];
             recent_execution: components["schemas"]["WorkbenchRecentExecution"] | null;
         };
+        WorkbenchWorkspace: {
+            mode: components["schemas"]["WorkbenchWorkspaceModeEnum"];
+            entrypoint: string;
+            capture_supported: boolean;
+            last_synchronized_version: number;
+            last_synchronized_snapshot_id: string | null;
+            active_storage_job: components["schemas"]["WorkspaceStorageJob"] | null;
+        };
+        /**
+         * @description * `LEGACY_DRAFT` - LEGACY_DRAFT
+         *     * `RUNTIME_IDE` - RUNTIME_IDE
+         *     * `READ_ONLY` - READ_ONLY
+         * @enum {string}
+         */
+        WorkbenchWorkspaceModeEnum: "LEGACY_DRAFT" | "RUNTIME_IDE" | "READ_ONLY";
         WorkspaceCheckpoint: {
             public_id: string;
             task_id: string;
@@ -6685,6 +6733,56 @@ export interface components {
             /** Format: date-time */
             saved_at: string;
         };
+        WorkspaceStorageJob: {
+            public_id: string;
+            task_id: string;
+            session_id: string;
+            kind: components["schemas"]["WorkspaceStorageJobKindEnum"];
+            status: components["schemas"]["WorkspaceStorageJobStatusEnum"];
+            client_seq: number | null;
+            base_version: number | null;
+            source_snapshot_id: string | null;
+            result_snapshot_id: string | null;
+            failure: {
+                [key: string]: unknown;
+            } | null;
+            /** Format: date-time */
+            queued_at: string;
+            /** Format: date-time */
+            started_at: string | null;
+            /** Format: date-time */
+            completed_at: string | null;
+            row_version: number;
+        };
+        /**
+         * @description * `INITIALIZE` - Initialize
+         *     * `CAPTURE` - Capture
+         *     * `RESTORE` - Restore
+         *     * `FINALIZE` - Finalize
+         * @enum {string}
+         */
+        WorkspaceStorageJobKindEnum: "INITIALIZE" | "CAPTURE" | "RESTORE" | "FINALIZE";
+        /**
+         * @description * `QUEUED` - Queued
+         *     * `RUNNING` - Running
+         *     * `PASSED` - Passed
+         *     * `FAILED` - Failed
+         *     * `CANCELLED` - Cancelled
+         * @enum {string}
+         */
+        WorkspaceStorageJobStatusEnum: "QUEUED" | "RUNNING" | "PASSED" | "FAILED" | "CANCELLED";
+        WorkspaceStorageJobWrite: {
+            kind: components["schemas"]["WorkspaceStorageJobWriteKindEnum"];
+            client_seq?: number;
+            base_version?: number;
+            snapshot_id?: string;
+        };
+        /**
+         * @description * `CAPTURE` - CAPTURE
+         *     * `RESTORE` - RESTORE
+         * @enum {string}
+         */
+        WorkspaceStorageJobWriteKindEnum: "CAPTURE" | "RESTORE";
     };
     responses: never;
     parameters: never;
@@ -10816,6 +10914,45 @@ export interface operations {
                     "application/json": components["schemas"]["WorkspaceSnapshot"];
                 };
             };
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkspaceStorageJob"];
+                };
+            };
+        };
+    };
+    tasks_workspace_storage_jobs_create: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+                "If-Match": string;
+                "X-Workspace-Token": string;
+            };
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WorkspaceStorageJobWrite"];
+                "application/x-www-form-urlencoded": components["schemas"]["WorkspaceStorageJobWrite"];
+                "multipart/form-data": components["schemas"]["WorkspaceStorageJobWrite"];
+            };
+        };
+        responses: {
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkspaceStorageJob"];
+                };
+            };
         };
     };
     teaching_courses_list: {
@@ -14136,6 +14273,27 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["WorkspaceSession"];
+                };
+            };
+        };
+    };
+    workspace_storage_jobs_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkspaceStorageJob"];
                 };
             };
         };

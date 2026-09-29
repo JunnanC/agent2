@@ -22,6 +22,7 @@ class RuntimeSpec:
     workspace_port: int = 8080
     healthcheck_path: str = "/healthz"
     trace_id: str = ""
+    instance_public_id: str = ""
 
     @property
     def image_ref(self) -> str:
@@ -57,6 +58,15 @@ class RuntimeExecutionResult:
     duration_ms: int | None = None
 
 
+@dataclass(frozen=True)
+class RuntimeWorkspaceArtifact:
+    content: bytes
+    size: int
+    digest: str
+    media_type: str
+    relative_path: str
+
+
 class RuntimeAdapter(Protocol):
     def preflight(self, spec: RuntimeSpec) -> RuntimeResult: ...
 
@@ -71,6 +81,23 @@ class RuntimeAdapter(Protocol):
     def endpoint(self, external_id: str) -> str: ...
 
     def snapshot(self, external_id: str) -> str: ...
+
+    def capture_workspace(
+        self,
+        *,
+        external_id: str,
+        relative_path: str,
+        max_bytes: int,
+    ) -> RuntimeWorkspaceArtifact: ...
+
+    def restore_workspace(
+        self,
+        *,
+        external_id: str,
+        relative_path: str,
+        content: bytes,
+        expected_digest: str,
+    ) -> None: ...
 
     def destroy(self, external_id: str, idempotency_key: str) -> None: ...
 

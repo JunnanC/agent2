@@ -80,6 +80,7 @@ export const workspaceKeys = {
   workbench: (taskId: string) => [...workspaceKeys.all, 'workbench', taskId] as const,
   session: (taskId: string) => [...workspaceKeys.all, 'session', taskId] as const,
   snapshot: (taskId: string) => [...workspaceKeys.all, 'snapshot', taskId] as const,
+  storageJob: (jobId: string) => [...workspaceKeys.all, 'storage-job', jobId] as const,
   checkpoints: (taskId: string) => [...workspaceKeys.all, 'checkpoints', taskId] as const,
   replay: (taskId: string, scope = 'user') => [...workspaceKeys.all, 'replay', scope, taskId] as const,
   executions: (taskId: string) => [...workspaceKeys.all, 'executions', taskId] as const,

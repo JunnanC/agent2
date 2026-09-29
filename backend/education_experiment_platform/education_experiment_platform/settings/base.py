@@ -159,6 +159,9 @@ CELERY_TASK_ROUTES = {
     "apps.integrations.*": {"queue": "q_integrations"},
     "apps.notifications.*": {"queue": "q_default"},
     "apps.experiments.*": {"queue": "q_default"},
+    "apps.workspaces.execute_workspace_storage_job": {"queue": "q_workspace_storage"},
+    "apps.workspaces.execute_workspace_execution_run": {"queue": "q_provision"},
+    "apps.workspaces.reconcile_workspace_storage_jobs": {"queue": "q_default"},
     "apps.workspaces.*": {"queue": "q_default"},
     "apps.reports.*": {"queue": "q_provision"},
     "apps.reviews.run_auto_check": {"queue": "q_provision"},
@@ -181,6 +184,10 @@ CELERY_BEAT_SCHEDULE = {
     "p14-purge-archive-retention": {
         "task": "apps.archives.purge_retention",
         "schedule": 3600.0,
+    },
+    "p16-reconcile-workspace-storage": {
+        "task": "apps.workspaces.reconcile_workspace_storage_jobs",
+        "schedule": 30.0,
     },
     "p13-refresh-analytics": {
         "task": "apps.analytics.refresh_projection",
@@ -211,8 +218,21 @@ WORKSPACE_COOKIE_NAME = env("WORKSPACE_COOKIE_NAME", "workspace_ticket")
 WORKSPACE_ALLOWED_ORIGINS = csv_env("WORKSPACE_ALLOWED_ORIGINS", ",".join(CSRF_TRUSTED_ORIGINS))
 WORKSPACE_UPSTREAM_TIMEOUT_SECONDS = int(env("WORKSPACE_UPSTREAM_TIMEOUT_SECONDS", "60"))
 WORKSPACE_INTERNAL_KEY = env("WORKSPACE_INTERNAL_KEY", SECRET_KEY)
+WORKSPACE_UPSTREAM_HMAC_KEY = env("WORKSPACE_UPSTREAM_HMAC_KEY", SECRET_KEY)
 WORKSPACE_AUTHORITY_URL = env("WORKSPACE_AUTHORITY_URL", "http://django:8000")
 WORKSPACE_SNAPSHOT_MAX_BYTES = int(env("WORKSPACE_SNAPSHOT_MAX_BYTES", str(20 * 1024 * 1024)))
+WORKSPACE_STORAGE_STALE_AFTER_SECONDS = max(
+    60, int(env("WORKSPACE_STORAGE_STALE_AFTER_SECONDS", "900"))
+)
+WORKSPACE_STORAGE_REDISPATCH_SECONDS = max(
+    30, int(env("WORKSPACE_STORAGE_REDISPATCH_SECONDS", "300"))
+)
+WORKSPACE_FINALIZE_TIMEOUT_SECONDS = max(
+    1, int(env("WORKSPACE_FINALIZE_TIMEOUT_SECONDS", "1200"))
+)
+WORKSPACE_VOLUME_RETENTION_SECONDS = max(
+    60, int(env("WORKSPACE_VOLUME_RETENTION_SECONDS", "900"))
+)
 WORKSPACE_SNAPSHOT_ALLOWED_MIME_TYPES = set(
     csv_env(
         "WORKSPACE_SNAPSHOT_ALLOWED_MIME_TYPES",

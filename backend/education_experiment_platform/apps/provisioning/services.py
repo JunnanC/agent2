@@ -129,7 +129,9 @@ def _task_runtime_snapshot(task: ExperimentTask) -> tuple[Any, Any, Any, dict[st
     return adapter, image, profile, profile_snapshot
 
 
-def _runtime_spec(task: ExperimentTask, *, trace_id: str = "") -> RuntimeSpec:
+def _runtime_spec(
+    task: ExperimentTask, *, trace_id: str = "", instance_public_id: str = ""
+) -> RuntimeSpec:
     template = task.template_version
     _, image, profile, profile_snapshot = _task_runtime_snapshot(task)
     deadline = task.effective_deadline or task.publication.window_end
@@ -168,6 +170,7 @@ def _runtime_spec(task: ExperimentTask, *, trace_id: str = "") -> RuntimeSpec:
         workspace_port=int(getattr(settings, "RUNTIME_WORKSPACE_PORT", 8080)),
         healthcheck_path=str(getattr(settings, "RUNTIME_HEALTHCHECK_PATH", "/healthz")),
         trace_id=trace_id,
+        instance_public_id=instance_public_id,
     )
 
 
@@ -698,7 +701,9 @@ def execute_provisioning_job(*, job_id: str, trace_id: str = "") -> Provisioning
         instance = ProvisioningInstance.objects.select_for_update().get(task=job.task)
 
     context = _job_context(job)
-    spec = _runtime_spec(job.task, trace_id=job.trace_id)
+    spec = _runtime_spec(
+        job.task, trace_id=job.trace_id, instance_public_id=instance.public_id
+    )
     try:
         adapter_row, image, _, _ = _task_runtime_snapshot(job.task)
         adapter_driver = job.task.runtime_adapter_driver or adapter_row.driver
@@ -1234,6 +1239,11 @@ def destroy_task_instance(
 
     adapter = runtime_for_driver(driver, config_ref=instance.runtime_adapter.config_ref)
     if external_id:
+        # Capture the task-owned Volume before the adapter removes the
+        # container and its managed Volume.  FakeRuntime has no storage job.
+        from apps.workspaces.storage import finalize_workspace_before_destroy
+
+        finalize_workspace_before_destroy(task_id=task_id, context=context)
         adapter.destroy(external_id, idempotency_key)
         if adapter.status(external_id) != "ABSENT":
             raise RuntimeError("RUNTIME_DESTROY_NOT_CONFIRMED")

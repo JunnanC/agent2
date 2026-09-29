@@ -142,6 +142,28 @@ export type WorkspaceSnapshotData = {
   media_type: string
   saved_at: string
 }
+export type WorkspaceStorageJobData = {
+  public_id: string
+  task_id: string
+  session_id: string
+  kind: 'INITIALIZE' | 'CAPTURE' | 'RESTORE' | 'FINALIZE'
+  status: 'QUEUED' | 'RUNNING' | 'PASSED' | 'FAILED' | 'CANCELLED'
+  client_seq: number | null
+  base_version: number | null
+  source_snapshot_id: string | null
+  result_snapshot_id: string | null
+  failure: { code: string; message: string; retryable: boolean; trace_id: string } | null
+  queued_at: string
+  started_at: string | null
+  completed_at: string | null
+  row_version: number
+}
+export type WorkspaceStorageJobInput = {
+  kind: 'CAPTURE' | 'RESTORE'
+  client_seq?: number
+  base_version?: number
+  snapshot_id?: string
+}
 export type WorkspaceCheckpointData = {
   public_id: string
   task_id: string
@@ -466,6 +488,32 @@ export async function saveWorkspaceSnapshot(taskId: string, input: { clientSeq: 
   return apiRequestWithMetadata<WorkspaceEnvelope<{ snapshot: WorkspaceSnapshotData; confirmed_seq: number; result: string }>>(`/api/v2/tasks/${encodeURIComponent(taskId)}/workspace-snapshot`, { method: 'PUT', body, workspaceToken: token })
 }
 
+export function createWorkspaceStorageJob(
+  taskId: string,
+  input: WorkspaceStorageJobInput,
+  rowVersion: number,
+  token?: string,
+  intent = new RequestIntent(),
+): Promise<ApiResult<WorkspaceEnvelope<WorkspaceStorageJobData>>> {
+  return apiRequestWithMetadata<WorkspaceEnvelope<WorkspaceStorageJobData>>(
+    `/api/v2/tasks/${encodeURIComponent(taskId)}/workspace-storage-jobs`,
+    {
+      method: 'POST',
+      body: JSON.stringify(input),
+      headers: { 'Content-Type': 'application/json' },
+      ifMatch: `"${rowVersion}"`,
+      workspaceToken: token,
+      intent,
+    },
+  )
+}
+
+export function getWorkspaceStorageJob(jobId: string): Promise<ApiResult<WorkspaceEnvelope<WorkspaceStorageJobData>>> {
+  return apiRequestWithMetadata<WorkspaceEnvelope<WorkspaceStorageJobData>>(
+    `/api/v2/workspace-storage-jobs/${encodeURIComponent(jobId)}`,
+  )
+}
+
 export function getWorkspaceCheckpoints(taskId: string): Promise<ApiResult<WorkspaceEnvelope<WorkspaceCheckpointListData>>> {
   return apiRequestWithMetadata<WorkspaceEnvelope<WorkspaceCheckpointListData>>(`/api/v2/tasks/${encodeURIComponent(taskId)}/checkpoints`)
 }
@@ -474,8 +522,8 @@ export function createWorkspaceCheckpoint(taskId: string, name: string, token?: 
   return apiRequestWithMetadata<WorkspaceEnvelope<WorkspaceCheckpointData>>(`/api/v2/tasks/${encodeURIComponent(taskId)}/checkpoints`, { method: 'POST', body: JSON.stringify({ name }), headers: { 'Content-Type': 'application/json' }, workspaceToken: token, intent })
 }
 
-export function restoreWorkspaceCheckpoint(taskId: string, checkpointId: string, rowVersion: number, token?: string, intent = new RequestIntent()): Promise<ApiResult<WorkspaceEnvelope<WorkspaceSnapshotData>>> {
-  return apiRequestWithMetadata<WorkspaceEnvelope<WorkspaceSnapshotData>>(`/api/v2/tasks/${encodeURIComponent(taskId)}/checkpoints/${encodeURIComponent(checkpointId)}/restore`, { method: 'POST', body: '{}', headers: { 'Content-Type': 'application/json' }, ifMatch: `"${rowVersion}"`, workspaceToken: token, intent })
+export function restoreWorkspaceCheckpoint(taskId: string, checkpointId: string, rowVersion: number, token?: string, intent = new RequestIntent()): Promise<ApiResult<WorkspaceEnvelope<WorkspaceSnapshotData | WorkspaceStorageJobData>>> {
+  return apiRequestWithMetadata<WorkspaceEnvelope<WorkspaceSnapshotData | WorkspaceStorageJobData>>(`/api/v2/tasks/${encodeURIComponent(taskId)}/checkpoints/${encodeURIComponent(checkpointId)}/restore`, { method: 'POST', body: '{}', headers: { 'Content-Type': 'application/json' }, ifMatch: `"${rowVersion}"`, workspaceToken: token, intent })
 }
 
 export function getWorkspaceExecutionRuns(taskId: string, token?: string): Promise<ApiResult<WorkspaceEnvelope<WorkspaceExecutionRunListData>>> {

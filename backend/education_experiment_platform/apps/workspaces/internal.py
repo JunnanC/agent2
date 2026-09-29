@@ -15,6 +15,7 @@ from apps.accounts.authentication import (
     SESSION_USER_ID,
 )
 from apps.accounts.models import User
+from apps.core.workspace_tokens import workspace_upstream_token
 
 from .permissions import require_workspace_session
 from .selectors import session_by_public_id
@@ -66,12 +67,24 @@ def authorize_workspace(request):  # type: ignore[no-untyped-def]
             or parsed.port != expected_port
         ):
             return JsonResponse({"error": {"code": "WORKSPACE_UPSTREAM_INVALID"}}, status=503)
+        upstream_token = workspace_upstream_token(
+            instance_id=session.instance.public_id,
+            task_id=session.task.public_id,
+            spec_digest=str(metadata.get("spec_digest") or ""),
+        )
+        if metadata.get("spec_digest") and not upstream_token:
+            return JsonResponse(
+                {"error": {"code": "WORKSPACE_UPSTREAM_TOKEN_UNAVAILABLE"}}, status=503
+            )
         return JsonResponse(
             {
                 "data": {
                     "endpoint": endpoint.rstrip("/"),
                     "service_name": service_name,
                     "workspace_port": expected_port,
+                    # This endpoint is reachable only from workspace-gateway;
+                    # never include this field in a browser-facing serializer.
+                    "upstream_token": upstream_token,
                 }
             }
         )

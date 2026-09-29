@@ -397,3 +397,101 @@ describe('P15-D test results and submission footer', () => {
     expect(fetchMock.mock.calls.some(([input]) => String(input).endsWith('/tasks/task-1/complete'))).toBe(false)
   })
 })
+
+describe('P16-E runtime workspace', () => {
+  const runtimeWorkbench = {
+    ...workbench,
+    workspace: { mode: 'RUNTIME_IDE', entrypoint: 'main.py', capture_supported: true, last_synchronized_version: 0, last_synchronized_snapshot_id: null, active_storage_job: null },
+  }
+  const runtimeSession = { ...session, capabilities: { webide: true, snapshot: true, checkpoint: true }, workspace_urls: { webide: '/workspace/session-1/webide' } }
+  const storageJob = {
+    public_id: 'storage-1', task_id: 'task-1', session_id: 'session-1', kind: 'CAPTURE', status: 'QUEUED',
+    client_seq: 1, base_version: 0, source_snapshot_id: null, result_snapshot_id: null, failure: null,
+    queued_at: '2026-09-28T00:00:00Z', started_at: null, completed_at: null, row_version: 1,
+  }
+
+  it('refreshes a stale read-only projection after provisioning reaches a runnable task state', async () => {
+    let workbenchRequests = 0
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url.endsWith('/workbench')) {
+        workbenchRequests += 1
+        return response(workbenchRequests === 1
+          ? { ...runtimeWorkbench, workspace: { ...runtimeWorkbench.workspace, mode: 'READ_ONLY', capture_supported: false } }
+          : runtimeWorkbench)
+      }
+      if (url.endsWith('/provisioning-job')) return response(provisioningJob)
+      if (url.endsWith('/workspace-sessions') && init?.method === 'POST') return response(runtimeSession)
+      if (url.endsWith('/tasks/task-1')) return response({ ...baseTask, status: 'IN_PROGRESS', row_version: 2 })
+      throw new Error(`unexpected request: ${url}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    renderPage()
+
+    expect(await screen.findByRole('button', { name: '同步并保存' })).toBeTruthy()
+    expect(workbenchRequests).toBe(2)
+  })
+
+  it('captures the IDE file, gates actions, and binds RUN_CHECK to the completed snapshot', async () => {
+    let completed = false
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url.endsWith('/workbench')) return response(completed ? { ...runtimeWorkbench, workspace: { ...runtimeWorkbench.workspace, last_synchronized_version: 1, last_synchronized_snapshot_id: 'snapshot-1' } } : runtimeWorkbench)
+      if (url.endsWith('/provisioning-job')) return response(provisioningJob)
+      if (url.endsWith('/workspace-sessions') && init?.method === 'POST') return response(runtimeSession)
+      if (url.endsWith('/workspace-sessions/session-1/renew')) return response({ ...runtimeSession, current_version: 1, latest_client_seq: 1, row_version: 3 })
+      if (url.endsWith('/tasks/task-1')) return response({ ...baseTask, status: 'IN_PROGRESS', row_version: 2 })
+      if (url.endsWith('/workspace-storage-jobs') && init?.method === 'POST') {
+        const headers = new Headers(init.headers)
+        expect(headers.get('If-Match')).toBe('"1"')
+        expect(headers.get('Idempotency-Key')).toBeTruthy()
+        expect(JSON.parse(String(init.body))).toEqual({ kind: 'CAPTURE', client_seq: 1, base_version: 0 })
+        return response(storageJob, 202)
+      }
+      if (url.endsWith('/workspace-storage-jobs/storage-1')) return response(completed ? { ...storageJob, status: 'PASSED', result_snapshot_id: 'snapshot-1' } : storageJob)
+      if (url.endsWith('/workspace/session-1/operations') && init?.method === 'POST') {
+        expect(JSON.parse(String(init.body)).arguments.snapshot_id).toBe('snapshot-1')
+        return response({ public_id: 'operation-1', payload: { execution_run_id: 'execution-1' }, result_summary: '测试已进入队列', execution_run_id: 'execution-1' }, 201)
+      }
+      if (url.endsWith('/execution-runs/execution-1')) return response({ public_id: 'execution-1', status: 'PASSED', snapshot_id: 'snapshot-1', result_summary: '通过' })
+      throw new Error(`unexpected request: ${url}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    renderPage()
+
+    const saveButton = await screen.findByRole('button', { name: '同步并保存' })
+    expect(screen.queryByRole('textbox', { name: '实验内容' })).toBeNull()
+    expect(screen.getByText('尚未同步')).toBeTruthy()
+    expect((screen.getByRole('button', { name: '运行测试' }) as HTMLButtonElement).disabled).toBe(true)
+    fireEvent.click(saveButton)
+    await waitFor(() => expect(screen.getByText('正在同步')).toBeTruthy())
+    expect((screen.getByRole('button', { name: '检查点' }) as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getByRole('button', { name: '提交实验' }) as HTMLButtonElement).disabled).toBe(true)
+    expect(fetchMock.mock.calls.some(([input]) => String(input).endsWith('/workspace-snapshot'))).toBe(false)
+
+    completed = true
+    await waitFor(() => expect(screen.getAllByText('已同步 v1').length).toBeGreaterThan(0), { timeout: 4000 })
+    fireEvent.click(screen.getByRole('button', { name: '运行测试' }))
+    await waitFor(() => expect(fetchMock.mock.calls.some(([input]) => String(input).endsWith('/workspace/session-1/operations'))).toBe(true))
+  })
+
+  it('shows a failed capture trace and does not unlock testing', async () => {
+    const failedJob = { ...storageJob, status: 'FAILED', failure: { code: 'WORKSPACE_FILE_MISSING', message: '入口文件不存在', retryable: false, trace_id: 'trace-storage' } }
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url.endsWith('/workbench')) return response({ ...runtimeWorkbench, workspace: { ...runtimeWorkbench.workspace, active_storage_job: storageJob } })
+      if (url.endsWith('/provisioning-job')) return response(provisioningJob)
+      if (url.endsWith('/workspace-sessions') && init?.method === 'POST') return response(runtimeSession)
+      if (url.endsWith('/tasks/task-1')) return response({ ...baseTask, status: 'IN_PROGRESS', row_version: 2 })
+      if (url.endsWith('/workspace-storage-jobs/storage-1')) return response(failedJob)
+      throw new Error(`unexpected request: ${url}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    renderPage()
+
+    expect(await screen.findByText(/trace-storage/)).toBeTruthy()
+    expect(screen.getByText('同步失败')).toBeTruthy()
+    expect((screen.getByRole('button', { name: '运行测试' }) as HTMLButtonElement).disabled).toBe(true)
+  })
+})

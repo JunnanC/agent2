@@ -13,6 +13,8 @@ from .views import (
     UserTaskWorkbenchView,
     UserWorkspaceSessionCreateView,
     UserWorkspaceSnapshotView,
+    UserWorkspaceStorageJobCreateView,
+    UserWorkspaceStorageJobDetailView,
     WorkspaceSessionRenewView,
     WorkspaceSessionRevokeView,
 )
@@ -43,6 +45,16 @@ urlpatterns = [
         "tasks/<str:task_id>/workspace-snapshot",
         UserWorkspaceSnapshotView.as_view(),
         name="workspace-snapshot",
+    ),
+    path(
+        "tasks/<str:task_id>/workspace-storage-jobs",
+        UserWorkspaceStorageJobCreateView.as_view(),
+        name="workspace-storage-job-create",
+    ),
+    path(
+        "workspace-storage-jobs/<str:job_id>",
+        UserWorkspaceStorageJobDetailView.as_view(),
+        name="workspace-storage-job-detail",
     ),
     path(
         "tasks/<str:task_id>/checkpoints",

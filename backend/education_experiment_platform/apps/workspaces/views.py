@@ -18,7 +18,7 @@ from apps.courses.services import ActorContext
 from apps.experiments.serializers import task_data
 from apps.experiments.services import allowed_actions
 
-from .models import WorkspaceSession
+from .models import WorkspaceSession, WorkspaceStorageJob
 from .permissions import require_workspace_session
 from .selectors import (
     active_session_for_user,
@@ -29,6 +29,7 @@ from .selectors import (
     replay_for_user,
     sessions_for_platform,
     snapshots_for_teaching,
+    storage_job_for_user,
     task_for_teaching,
     task_for_user,
 )
@@ -43,14 +44,18 @@ from .serializers import (
     WorkspaceExecutionRunSerializer,
     WorkspaceSessionSerializer,
     WorkspaceSnapshotSerializer,
+    WorkspaceStorageJobSerializer,
+    WorkspaceStorageJobWriteSerializer,
     checkpoint_data,
     execution_run_data,
     operation_data,
     session_data,
     snapshot_data,
+    storage_job_data,
 )
 from .services import (
     create_checkpoint,
+    create_storage_job,
     enter_task,
     issue_session,
     renew_session,
@@ -148,6 +153,64 @@ class UserTaskWorkbenchView(APIView):
     )
     def get(self, request: HttpRequest, task_id: str) -> Response:
         return _response(request, workbench_data(actor=request.user, task_id=task_id))
+
+
+class UserWorkspaceStorageJobCreateView(APIView):
+    permission_classes = [IsUserPortal]
+
+    @extend_schema(
+        operation_id="tasks_workspace_storage_jobs_create",
+        parameters=[IF_MATCH, IDEMPOTENCY_KEY, WORKSPACE_TOKEN],
+        request=WorkspaceStorageJobWriteSerializer,
+        responses={202: WorkspaceStorageJobSerializer},
+        tags=["workspaces"],
+        extensions={"x-portals": ["USER"]},
+    )
+    def post(self, request: HttpRequest, task_id: str) -> Response:
+        serializer = WorkspaceStorageJobWriteSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        expected = parse_if_match(request.headers.get("If-Match"))
+        values = dict(serializer.validated_data)
+        key = str(getattr(request, "idempotency_key", ""))
+
+        def operation() -> StoredResponse:
+            session, job = create_storage_job(
+                task_id=task_id,
+                actor=request.user,
+                token=_workspace_token(request),
+                expected_version=expected,
+                kind=str(values["kind"]),
+                client_seq=values.get("client_seq"),
+                base_version=values.get("base_version"),
+                snapshot_id=values.get("snapshot_id"),
+                idempotency_key=key,
+                request_payload=values,
+                context=_context(request),
+            )
+            return StoredResponse(
+                202,
+                _body(request, storage_job_data(job)),
+                {
+                    "ETag": etag_for_version(session.row_version),
+                    "Location": f"/api/v2/workspace-storage-jobs/{job.public_id}",
+                },
+            )
+
+        return _idempotent(request, payload=values, operation=operation)
+
+
+class UserWorkspaceStorageJobDetailView(APIView):
+    permission_classes = [IsUserPortal]
+
+    @extend_schema(
+        operation_id="workspace_storage_jobs_retrieve",
+        responses=WorkspaceStorageJobSerializer,
+        tags=["workspaces"],
+        extensions={"x-portals": ["USER"]},
+    )
+    def get(self, request: HttpRequest, job_id: str) -> Response:
+        job = storage_job_for_user(actor=request.user, job_id=job_id)
+        return _response(request, storage_job_data(job), etag=job.row_version)
 
 
 class UserTaskEnterView(APIView):
@@ -320,7 +383,7 @@ class UserWorkspaceSnapshotView(APIView):
         operation_id="tasks_execution_runs_list",
         parameters=[WORKSPACE_TOKEN],
         tags=["workspaces"],
-        responses={200: WorkspaceSnapshotSerializer},
+        responses={200: WorkspaceSnapshotSerializer, 202: WorkspaceStorageJobSerializer},
         extensions={"x-portals": ["USER"]},
     )
     def put(self, request: HttpRequest, task_id: str) -> Response:
@@ -433,7 +496,17 @@ class UserCheckpointRestoreView(APIView):
                 token=_workspace_token(request),
                 expected_version=expected,
                 context=_context(request),
+                idempotency_key=str(getattr(request, "idempotency_key", "")),
             )
+            if isinstance(snapshot, WorkspaceStorageJob):
+                return StoredResponse(
+                    202,
+                    _body(request, storage_job_data(snapshot)),
+                    {
+                        "ETag": etag_for_version(session.row_version),
+                        "Location": f"/api/v2/workspace-storage-jobs/{snapshot.public_id}",
+                    },
+                )
             return StoredResponse(
                 200,
                 _body(request, snapshot_data(snapshot)),

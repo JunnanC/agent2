@@ -127,6 +127,17 @@ class WorkbenchReadOnlyApiTests(TestCase):
         payload = response.json()["data"]
         self.assertEqual(payload["task"]["public_id"], self.task.public_id)
         self.assertIn("provisioning", payload)
+        self.assertEqual(
+            payload["workspace"],
+            {
+                "mode": "READ_ONLY",
+                "entrypoint": "main.py",
+                "capture_supported": False,
+                "last_synchronized_version": 0,
+                "last_synchronized_snapshot_id": None,
+                "active_storage_job": None,
+            },
+        )
         self.assertIn("submission", payload)
         serialized = response.content.decode()
         for forbidden in ("execution_spec", "workspace_token", "object_key", "container_id"):
