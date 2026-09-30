@@ -10,7 +10,7 @@ services:
     retries: 0
     routes:
       - name: user-browser-api
-        hosts: [user.localhost, user.example.edu]
+        hosts: [user.localhost, user.example.edu, 47.114.40.7]
         paths: [/api/v2]
         strip_path: false
         preserve_host: true
@@ -24,7 +24,7 @@ services:
           - name: rate-limiting
             config: { minute: 600, policy: local, fault_tolerant: true }
       - name: teacher-browser-api
-        hosts: [teacher.localhost, teacher.example.edu]
+        hosts: [teacher.localhost, teacher.example.edu, 47.114.40.7]
         paths: [/api/v2]
         strip_path: false
         preserve_host: true
@@ -38,7 +38,7 @@ services:
           - name: rate-limiting
             config: { minute: 300, policy: local, fault_tolerant: true }
       - name: admin-browser-api
-        hosts: [admin.localhost, admin.example.edu]
+        hosts: [admin.localhost, admin.example.edu, 47.114.40.7]
         paths: [/api/v2]
         strip_path: false
         preserve_host: true
@@ -52,7 +52,7 @@ services:
           - name: rate-limiting
             config: { minute: 180, policy: local, fault_tolerant: true }
       - name: integration-token
-        hosts: [api.localhost, api.example.edu]
+        hosts: [api.localhost, api.example.edu, 47.114.40.7]
         paths: [/api/v2/integrations/oauth/token]
         strip_path: false
         preserve_host: true
@@ -66,7 +66,7 @@ services:
           - name: rate-limiting
             config: { minute: 30, policy: local, fault_tolerant: false }
       - name: integration-open-api
-        hosts: [api.localhost, api.example.edu]
+        hosts: [api.localhost, api.example.edu, 47.114.40.7]
         paths: [/api/v2/integrations/open]
         strip_path: false
         preserve_host: true
@@ -88,7 +88,7 @@ services:
     retries: 0
     routes:
       - name: user-events
-        hosts: [user.localhost, user.example.edu]
+        hosts: [user.localhost, user.example.edu, 47.114.40.7]
         paths: [/api/v2/events/stream]
         strip_path: false
         preserve_host: true
@@ -98,7 +98,7 @@ services:
               remove: { headers: [X-Portal, X-Auth-Context, X-Client-Id, X-Scopes, X-Proxy-Context] }
               add: { headers: ["X-Portal:USER", "X-Proxy-Context:ingress-v1"] }
       - name: teacher-events
-        hosts: [teacher.localhost, teacher.example.edu]
+        hosts: [teacher.localhost, teacher.example.edu, 47.114.40.7]
         paths: [/api/v2/events/stream]
         strip_path: false
         preserve_host: true
@@ -108,7 +108,7 @@ services:
               remove: { headers: [X-Portal, X-Auth-Context, X-Client-Id, X-Scopes, X-Proxy-Context] }
               add: { headers: ["X-Portal:TEACHING", "X-Proxy-Context:ingress-v1"] }
       - name: admin-events
-        hosts: [admin.localhost, admin.example.edu]
+        hosts: [admin.localhost, admin.example.edu, 47.114.40.7]
         paths: [/api/v2/events/stream]
         strip_path: false
         preserve_host: true
@@ -128,7 +128,7 @@ services:
     retries: 0
     routes:
       - name: user-workspace
-        hosts: [user.localhost, user.example.edu]
+        hosts: [user.localhost, user.example.edu, 47.114.40.7]
         paths: [/workspace]
         strip_path: false
         preserve_host: true
@@ -145,7 +145,7 @@ services:
     retries: 0
     routes:
       - name: user-files
-        hosts: [user.localhost, user.example.edu]
+        hosts: [user.localhost, user.example.edu, 47.114.40.7]
         paths: [/files]
         strip_path: false
         preserve_host: true
@@ -155,7 +155,7 @@ services:
               remove: { headers: [X-Portal, X-Auth-Context, X-Client-Id, X-Scopes, X-Proxy-Context] }
               add: { headers: ["X-Portal:USER", "X-Proxy-Context:ingress-v1"] }
       - name: teacher-files
-        hosts: [teacher.localhost, teacher.example.edu]
+        hosts: [teacher.localhost, teacher.example.edu, 47.114.40.7]
         paths: [/files]
         strip_path: false
         preserve_host: true
@@ -165,7 +165,7 @@ services:
               remove: { headers: [X-Portal, X-Auth-Context, X-Client-Id, X-Scopes, X-Proxy-Context] }
               add: { headers: ["X-Portal:TEACHING", "X-Proxy-Context:ingress-v1"] }
       - name: admin-files
-        hosts: [admin.localhost, admin.example.edu]
+        hosts: [admin.localhost, admin.example.edu, 47.114.40.7]
         paths: [/files]
         strip_path: false
         preserve_host: true

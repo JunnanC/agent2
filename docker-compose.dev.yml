@@ -20,8 +20,8 @@ x-app-environment: &app-environment
   DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-unsafe-compose-key-change-me}
   IDENTITY_HMAC_KEY: ${IDENTITY_HMAC_KEY:-unsafe-local-identity-hmac-key-change-me}
   COURSE_INVITATION_HMAC_KEY: ${COURSE_INVITATION_HMAC_KEY:-unsafe-local-course-invitation-hmac-key-change-me}
-  DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1,django,user.localhost,teacher.localhost,admin.localhost,api.localhost,user.example.edu,teacher.example.edu,admin.example.edu,api.example.edu
-  DJANGO_TRUSTED_ORIGINS: http://user.localhost:${ENTRY_PORT:-8080},http://teacher.localhost:${ENTRY_PORT:-8080},http://admin.localhost:${ENTRY_PORT:-8080}
+  DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1,django,47.114.40.7,user.localhost,teacher.localhost,admin.localhost,api.localhost,user.example.edu,teacher.example.edu,admin.example.edu,api.example.edu
+  DJANGO_TRUSTED_ORIGINS: http://user.localhost:${ENTRY_PORT:-8080},http://teacher.localhost:${ENTRY_PORT:-8080},http://admin.localhost:${ENTRY_PORT:-8080},http://47.114.40.7:8080,http://47.114.40.7:8081,http://47.114.40.7:8082
   WORKSPACE_ALLOWED_ORIGINS: http://user.localhost:${ENTRY_PORT:-8080}
   WORKSPACE_INTERNAL_KEY: ${WORKSPACE_INTERNAL_KEY:-unsafe-local-workspace-internal-key}
   WORKSPACE_UPSTREAM_HMAC_KEY: ${WORKSPACE_UPSTREAM_HMAC_KEY:-unsafe-local-workspace-upstream-hmac-key}
@@ -518,7 +518,7 @@ services:
     read_only: true
     tmpfs: [/tmp, /var/cache/nginx]
     networks: [edge]
-    ports: ["${ENTRY_PORT:-8080}:8080"]
+    ports: ["${ENTRY_PORT:-8080}:8080", "8081:8081", "8082:8082"]
     depends_on:
       kong: { condition: service_healthy }
       fluent-bit: { condition: service_started }
