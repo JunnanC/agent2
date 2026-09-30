@@ -9,13 +9,28 @@ import {
   type ExtensionData,
   type ListEnvelope,
   type ProvisioningJob,
+  type ProvisioningStageEvent,
   type TaskData,
   type TransitionData,
 } from '@edu/api-client'
+import { PortalEventClient } from '@edu/event-client'
 import { experimentKeys } from '@edu/query-keys'
 import { PageHeader, RequestStateView, StatusBadge, TextField } from '@edu/ui'
 
 type Envelope<T> = { data: T; meta: Record<string, unknown> }
+
+const provisioningStageLabels: Record<string, string> = {
+  QUOTA_CHECK: '配额检查',
+  IMAGE_PREPARE: '准备镜像',
+  CREATE: '创建环境',
+  NETWORK_ATTACH: '连接网络',
+  BOOT_PROBE: '启动探测',
+  WORKSPACE_READY: '工作区就绪',
+}
+
+function latestProvisioningStages(stages: ProvisioningStageEvent[]): ProvisioningStageEvent[] {
+  return Array.from(new Map(stages.map((stage) => [stage.stage, stage])).values())
+}
 
 function messageFor(error: unknown): string {
   if (!(error instanceof ApiError)) return '请求未完成，请稍后重试。'
@@ -23,6 +38,8 @@ function messageFor(error: unknown): string {
   if (error.status === 409) return '任务状态已变化，或当前条件不允许此操作。'
   if (error.status === 412) return '任务已在其他页面更新，请刷新后重试。'
   if (error.status === 429) return '资源配额暂时不足，请稍后重试。'
+  if (error.status === 503) return '环境运行时暂时不可用，请稍后重试。'
+  if (error.status === 401) return '当前登录会话已失效，请重新登录。'
   return error.payload.error.message
 }
 
@@ -50,28 +67,48 @@ export function ExperimentTaskListPage() {
 
 export function ExperimentTaskDetailPage() {
   const { taskId = '' } = useParams(); const queryClient = useQueryClient(); const [busy, setBusy] = useState(false); const [error, setError] = useState(''); const [notice, setNotice] = useState('')
-  const task = useQuery({ queryKey: experimentKeys.task(taskId), queryFn: () => apiRequestWithMetadata<Envelope<TaskData>>(`/api/v2/tasks/${taskId}`) })
+  const [streamState, setStreamState] = useState<'live' | 'polling'>('polling')
+  const task = useQuery({
+    queryKey: experimentKeys.task(taskId),
+    queryFn: () => apiRequestWithMetadata<Envelope<TaskData>>(`/api/v2/tasks/${taskId}`),
+    refetchInterval: (query) => {
+      const status = query.state.data?.payload.data.status
+      return streamState === 'polling' && status === 'PROVISIONING' ? 3000 : false
+    },
+  })
   const provisioning = useQuery({
     queryKey: experimentKeys.provisioningJob(taskId),
     queryFn: () => apiRequestWithMetadata<Envelope<ProvisioningJob>>(`/api/v2/tasks/${taskId}/provisioning-job`),
     refetchInterval: (query) => {
+      if (streamState !== 'polling') return false
       const status = query.state.data?.payload.data.status
       return status === 'QUEUED' || status === 'RUNNING' || status === 'RETRY' ? 3000 : false
     },
   })
-  const refetchProvisioning = provisioning.refetch
-  const refetchTask = task.refetch
   const transitions = useQuery({ queryKey: experimentKeys.transitions(taskId), queryFn: () => apiRequestWithMetadata<Envelope<TransitionData[]>>(`/api/v2/tasks/${taskId}/transitions`) })
   const extensions = useQuery({ queryKey: experimentKeys.extensions(taskId), queryFn: () => apiRequestWithMetadata<Envelope<ExtensionData[]>>(`/api/v2/tasks/${taskId}/extensions`) })
-  const [streamState, setStreamState] = useState<'live' | 'polling'>('polling')
   useEffect(() => {
     if (!taskId) return undefined
-    const source = new EventSource(`/api/v2/events/stream?channel=task:${encodeURIComponent(taskId)}`)
-    source.onopen = () => setStreamState('live')
-    source.onmessage = () => { void refetchProvisioning(); void refetchTask() }
-    source.onerror = () => setStreamState('polling')
-    return () => source.close()
-  }, [taskId, refetchProvisioning, refetchTask])
+    const client = new PortalEventClient({
+      url: `/api/v2/events/stream?channel=task:${encodeURIComponent(taskId)}`,
+      onEvent: () => {
+        void queryClient.invalidateQueries({ queryKey: experimentKeys.task(taskId) })
+        void queryClient.invalidateQueries({ queryKey: experimentKeys.provisioningJob(taskId) })
+        void queryClient.invalidateQueries({ queryKey: experimentKeys.transitions(taskId) })
+      },
+      onStateChange: (state) => setStreamState(state === 'live' ? 'live' : 'polling'),
+      poll: async () => {
+        await Promise.all([
+          queryClient.refetchQueries({ queryKey: experimentKeys.task(taskId), type: 'active' }),
+          queryClient.refetchQueries({ queryKey: experimentKeys.provisioningJob(taskId), type: 'active' }),
+          queryClient.refetchQueries({ queryKey: experimentKeys.transitions(taskId), type: 'active' }),
+        ])
+        return []
+      },
+    })
+    client.start()
+    return () => client.stop()
+  }, [queryClient, taskId])
   const item = task.data?.payload.data
   const start = async () => {
     if (!item) return; setBusy(true); setError(''); setNotice('')
@@ -117,8 +154,8 @@ export function ExperimentTaskDetailPage() {
     {notice ? <p className="notice" role="status">{notice}</p> : null}{error ? <p className="form-error" role="alert">{error}</p> : null}
     <div className="summary-grid"><div className="summary-item"><span>任务状态</span><strong><StatusBadge status={item.status} /></strong></div><div className="summary-item"><span>有效窗口</span><strong>{new Date(item.window_start).toLocaleString()}</strong><small>至 {item.effective_deadline ? new Date(item.effective_deadline).toLocaleString() : new Date(item.window_end).toLocaleString()}</small></div><div className="summary-item"><span>冻结版本</span><strong>{item.template_version_id}</strong><small className="digest">{item.template_spec_digest ?? '-'}</small></div></div>
     {blockers.length ? <section className="section-block"><h2>先修阻断</h2><div className="constraint-strip">{blockers.map((blocker, index) => <span key={index}>{String(blocker.type)} · {String(blocker.reason)}</span>)}</div></section> : null}
-    <section className="section-block"><h2>可执行操作</h2><div className="toolbar">{item.allowed_actions.includes('START') ? <button className="primary-button" disabled={busy || blockers.length > 0} onClick={() => void start()}>开始装载</button> : null}{job?.status === 'QUEUED' ? <button className="text-button text-button--danger" disabled={busy} onClick={() => void jobAction('cancel')}>取消排队</button> : null}{item.status === 'FAILED' && job?.retryable ? <button className="primary-button" disabled={busy} onClick={() => void jobAction('retry')}>重试装载</button> : null}{item.status === 'READY' || item.status === 'IN_PROGRESS' || item.status === 'REPORT_DRAFT' ? <a className="primary-button" href={`/tasks/${taskId}/lab`}>进入工作区</a> : null}{item.report_required && ['IN_PROGRESS', 'REPORT_DRAFT'].includes(item.status) ? <a className="text-button" href={`/tasks/${taskId}/report`}>编辑报告</a> : null}{!item.report_required && item.status === 'IN_PROGRESS' ? <button className="primary-button" disabled={busy} onClick={() => void completeNonReport()}>提交工作区成果</button> : null}{!item.allowed_actions.length && !job && !['IN_PROGRESS', 'REPORT_DRAFT'].includes(item.status) ? <span>当前无可执行操作</span> : null}</div></section>
-    <section className="section-block"><h2>装载作业</h2>{provisioning.isPending ? <RequestStateView state="loading" /> : provisioning.isError && !(provisioning.error instanceof ApiError && provisioning.error.status === 404) ? <RequestStateView state={provisioning.error instanceof ApiError && provisioning.error.status === 403 ? 'forbidden' : 'error'} message={messageFor(provisioning.error)} onRetry={() => void provisioning.refetch()} /> : job ? <><div className="summary-grid"><div className="summary-item"><span>作业状态</span><strong><StatusBadge status={job.status} /></strong></div><div className="summary-item"><span>当前阶段</span><strong>{job.current_stage || '-'}</strong><small>{streamState === 'live' ? 'SSE 实时' : '轮询降级'}</small></div><div className="summary-item"><span>Trace</span><strong>{job.trace_id}</strong><button className="text-button" onClick={() => void navigator.clipboard?.writeText(job.trace_id)}>复制</button></div></div>{job.failure ? <p className="form-error">{String(job.failure.error_code ?? 'PROVISIONING_FAILED')} · 可重试：{String(job.retryable)}</p> : null}<div className="data-table-wrap"><table className="data-table"><thead><tr><th>阶段</th><th>状态</th><th>尝试</th><th>错误</th></tr></thead><tbody>{job.stages.map((stage) => <tr key={stage.public_id}><td>{stage.stage}</td><td><StatusBadge status={stage.status} /></td><td>{stage.attempt_no}</td><td>{stage.error_code || '-'}</td></tr>)}</tbody></table></div></> : <RequestStateView state="empty" />}</section>
+    <section className="section-block"><h2>可执行操作</h2><div className="toolbar">{item.allowed_actions.includes('START') ? <button className="primary-button" disabled={busy || blockers.length > 0} onClick={() => void start()}>开始装载</button> : null}{job?.status === 'QUEUED' ? <button className="text-button text-button--danger" disabled={busy} onClick={() => void jobAction('cancel')}>取消排队</button> : null}{item.status === 'FAILED' && job?.retryable ? <button className="primary-button" disabled={busy} onClick={() => void jobAction('retry')}>重试装载</button> : null}{item.status === 'READY' || item.status === 'IN_PROGRESS' || item.status === 'REPORT_DRAFT' ? <a className="primary-button" href={`/tasks/${taskId}/lab`}>进入工作区</a> : null}{item.status === 'READY' || item.status === 'IN_PROGRESS' || item.status === 'REPORT_DRAFT' ? <a className="text-button" href={`/tasks/${taskId}/agent`}>任务 Agent</a> : null}{item.report_required && ['IN_PROGRESS', 'REPORT_DRAFT'].includes(item.status) ? <a className="text-button" href={`/tasks/${taskId}/report`}>编辑报告</a> : null}{!item.report_required && item.status === 'IN_PROGRESS' ? <button className="primary-button" disabled={busy} onClick={() => void completeNonReport()}>提交工作区成果</button> : null}{!item.allowed_actions.length && !job && !['IN_PROGRESS', 'REPORT_DRAFT'].includes(item.status) ? <span>当前无可执行操作</span> : null}</div></section>
+    <section className="section-block"><h2>装载作业</h2>{provisioning.isPending ? <RequestStateView state="loading" /> : provisioning.isError && !(provisioning.error instanceof ApiError && provisioning.error.status === 404) ? <RequestStateView state={provisioning.error instanceof ApiError && provisioning.error.status === 403 ? 'forbidden' : 'error'} message={messageFor(provisioning.error)} onRetry={() => void provisioning.refetch()} /> : job ? <><div className="summary-grid"><div className="summary-item"><span>作业状态</span><strong><StatusBadge status={job.status} /></strong></div><div className="summary-item"><span>当前阶段</span><strong>{(provisioningStageLabels[job.current_stage] ?? job.current_stage) || '-'}</strong><small>{latestProvisioningStages(job.stages).filter((stage) => stage.status === 'PASSED' || stage.status === 'SKIPPED').length} / {Object.keys(provisioningStageLabels).length} 阶段 · {streamState === 'live' ? 'SSE 实时' : '轮询降级'}</small></div><div className="summary-item"><span>Trace</span><strong>{job.trace_id}</strong><button className="text-button" onClick={() => void navigator.clipboard?.writeText(job.trace_id)}>复制</button></div></div>{job.failure ? <p className="form-error">{String(job.failure.error_code ?? 'PROVISIONING_FAILED')} · 可重试：{String(job.retryable)}</p> : null}<div className="data-table-wrap"><table className="data-table"><thead><tr><th>阶段</th><th>状态</th><th>尝试</th><th>错误</th></tr></thead><tbody>{latestProvisioningStages(job.stages).map((stage) => <tr key={stage.public_id}><td>{provisioningStageLabels[stage.stage] ?? stage.stage}</td><td><StatusBadge status={stage.status} /></td><td>{stage.attempt_no}</td><td>{stage.error_code || '-'}</td></tr>)}</tbody></table></div></> : <RequestStateView state="empty" />}</section>
     {item.allowed_actions.includes('REQUEST_EXTENSION') ? <section className="section-block"><h2>申请延期或补交</h2><form className="form-grid" onSubmit={requestExtension}><TextField label="申请截止时间" name="requested_deadline" type="datetime-local" required /><TextField label="申请原因" name="reason" required /><div className="form-actions"><button className="primary-button" disabled={busy}>提交申请</button></div></form></section> : null}
     <section className="section-block"><h2>延期记录</h2>{extensions.isPending ? <RequestStateView state="loading" /> : extensions.isError ? <RequestStateView state="error" onRetry={() => void extensions.refetch()} /> : extensionItems.length ? <div className="data-table-wrap"><table className="data-table"><thead><tr><th>申请时间窗</th><th>原因</th><th>状态</th><th>决定历史</th></tr></thead><tbody>{extensionItems.map((extension) => <tr key={extension.public_id}><td>{new Date(extension.requested_deadline).toLocaleString()}</td><td data-wrap>{extension.reason}</td><td><StatusBadge status={extension.status} /></td><td>{extension.decisions.length}</td></tr>)}</tbody></table></div> : <RequestStateView state="empty" />}</section>
     <section className="section-block"><h2>状态流水</h2>{transitions.isPending ? <RequestStateView state="loading" /> : transitions.isError ? <RequestStateView state="error" onRetry={() => void transitions.refetch()} /> : history.length ? <div className="data-table-wrap"><table className="data-table"><thead><tr><th>时间</th><th>状态变化</th><th>触发方式</th><th>原因</th></tr></thead><tbody>{history.map((row) => <tr key={row.public_id}><td>{new Date(row.created_at).toLocaleString()}</td><td>{row.from_status || '-'} → {row.to_status}</td><td>{row.trigger}</td><td data-wrap>{row.reason}</td></tr>)}</tbody></table></div> : <RequestStateView state="empty" />}</section>

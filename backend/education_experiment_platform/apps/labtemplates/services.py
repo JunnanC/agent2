@@ -1,6 +1,7 @@
 import hashlib
 import json
-from collections.abc import Callable
+import re
+from collections.abc import Callable, Mapping
 from typing import Any
 
 from django.conf import settings
@@ -39,6 +40,7 @@ VERSION_FIELDS = {
     "image_id",
     "resource_profile_id",
     "dependencies",
+    "execution_spec",
     "network_policy",
     "workspace_capabilities",
     "material_version_ids",
@@ -47,6 +49,81 @@ VERSION_FIELDS = {
     "retention_days",
 }
 ASSET_FIELDS = ("manual_asset", "starter_asset", "report_template_asset")
+EXECUTION_SPEC_KEYS = frozenset(
+    {
+        "language",
+        "entrypoint",
+        "timeout_seconds",
+        "memory_mb",
+        "cpu_millicores",
+        "comparator",
+        "tests_asset",
+        "network_mode",
+    }
+)
+_PYTHON_ENTRYPOINT = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,126}\.py$")
+
+
+def _normalize_execution_spec(value: Any) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        raise TemplateValidationError(detail={"execution_spec": "object_required"})
+    unknown = sorted(set(value) - EXECUTION_SPEC_KEYS)
+    missing = sorted(EXECUTION_SPEC_KEYS - set(value))
+    if unknown:
+        raise TemplateValidationError(detail={"execution_spec": {"unknown": unknown}})
+    if missing:
+        raise TemplateValidationError(detail={"execution_spec": {"required": missing}})
+    language = value.get("language")
+    entrypoint = value.get("entrypoint")
+    comparator = value.get("comparator")
+    network_mode = value.get("network_mode")
+    tests_asset = value.get("tests_asset")
+    if language != "python":
+        raise TemplateValidationError(detail={"execution_spec": {"language": "unsupported"}})
+    if not isinstance(entrypoint, str) or not _PYTHON_ENTRYPOINT.fullmatch(entrypoint):
+        raise TemplateValidationError(
+            detail={"execution_spec": {"entrypoint": "single_python_file_required"}}
+        )
+    if comparator != "token":
+        raise TemplateValidationError(detail={"execution_spec": {"comparator": "unsupported"}})
+    if network_mode != "DENY_ALL":
+        raise TemplateValidationError(
+            detail={"execution_spec": {"network_mode": "must_be_DENY_ALL"}}
+        )
+    if not isinstance(tests_asset, str) or not re.fullmatch(r"[0-9A-Za-z]{26}", tests_asset):
+        raise TemplateValidationError(
+            detail={"execution_spec": {"tests_asset": "invalid_public_id"}}
+        )
+    numeric = ("timeout_seconds", "memory_mb", "cpu_millicores")
+    if any(
+        isinstance(value.get(name), bool)
+        or not isinstance(value.get(name), int)
+        or value.get(name, 0) < 1
+        for name in numeric
+    ):
+        raise TemplateValidationError(
+            detail={"execution_spec": {"resources": "positive_integers_required"}}
+        )
+    if value["timeout_seconds"] > settings.TEMPLATE_CHECK_TIMEOUT_MAX_SECONDS:
+        raise TemplateValidationError(
+            detail={"execution_spec": {"timeout_seconds": "too_large"}}
+        )
+    return {
+        "language": language,
+        "entrypoint": entrypoint,
+        "timeout_seconds": int(value["timeout_seconds"]),
+        "memory_mb": int(value["memory_mb"]),
+        "cpu_millicores": int(value["cpu_millicores"]),
+        "comparator": comparator,
+        "tests_asset": tests_asset,
+        "network_mode": network_mode,
+    }
+
+
+def build_execution_command(execution_spec: Mapping[str, Any]) -> list[str]:
+    """Return the only command supported by the first Python algorithm runtime."""
+    normalized = _normalize_execution_spec(dict(execution_spec))
+    return ["python", normalized["entrypoint"]]
 
 
 def _course(course_id: str, actor: User, capability: str) -> Course:
@@ -138,6 +215,8 @@ def _material_refs(course: Course, ids: list[str]) -> list[dict[str, str]]:
 
 def _version_changes(course: Course, data: dict[str, Any]) -> dict[str, Any]:
     clean = {key: value for key, value in data.items() if key in VERSION_FIELDS}
+    if "execution_spec" in clean:
+        clean["execution_spec"] = _normalize_execution_spec(clean["execution_spec"])
     if "material_version_ids" in clean:
         clean["material_refs"] = _material_refs(course, list(clean.pop("material_version_ids")))
     resource_lookups = (
@@ -319,7 +398,7 @@ def update_version(
     except TemplateVersion.DoesNotExist as exc:
         raise ResourceNotFound() from exc
     _expected(version.row_version, expected_version)
-    if version.status != TemplateVersion.Status.DRAFT:
+    if version.status not in {TemplateVersion.Status.DRAFT, TemplateVersion.Status.PRECHECK_FAILED}:
         raise TemplateStateConflict(detail={"status": version.status})
     clean = _version_changes(course, changes)
     changed = compare_and_swap(
@@ -383,7 +462,7 @@ def replace_rules(
     except TemplateVersion.DoesNotExist as exc:
         raise ResourceNotFound() from exc
     _expected(version.row_version, expected_version)
-    if version.status != TemplateVersion.Status.DRAFT:
+    if version.status not in {TemplateVersion.Status.DRAFT, TemplateVersion.Status.PRECHECK_FAILED}:
         raise TemplateStateConflict(detail={"status": version.status})
     payloads = [_rule_payload(item) for item in rules]
     positions = [int(item["position"]) for item in payloads]
@@ -459,6 +538,8 @@ def _validated_snapshot(
     assets = {field: _asset_snapshot(getattr(version, field)) for field in ASSET_FIELDS}
     report("ASSETS", "PASSED")
 
+    execution_spec = _normalize_execution_spec(version.execution_spec)
+
     report("GOVERNANCE", "RUNNING")
     governance = template_governance_snapshot(
         course=course,
@@ -473,6 +554,34 @@ def _validated_snapshot(
     profile: ResourceProfile = governance["profile"]
     if adapter.runtime_type != version.runtime_type or profile.runtime_type != version.runtime_type:
         raise TemplateValidationError(detail={"runtime_type": "resource_mismatch"})
+    if version.runtime_type != RuntimeAdapter.RuntimeType.CONTAINER:
+        raise TemplateValidationError(
+            detail={"execution_spec": {"runtime_type": "container_required"}}
+        )
+    if execution_spec["timeout_seconds"] > settings.TEMPLATE_CHECK_TIMEOUT_MAX_SECONDS:
+        raise TemplateValidationError(detail={"execution_spec": {"timeout_seconds": "too_large"}})
+    if execution_spec["memory_mb"] > profile.memory_mb:
+        raise TemplateValidationError(detail={"execution_spec": {"memory_mb": "exceeds_profile"}})
+    if execution_spec["cpu_millicores"] > profile.cpu_millicores:
+        raise TemplateValidationError(
+            detail={"execution_spec": {"cpu_millicores": "exceeds_profile"}}
+        )
+    try:
+        tests_asset = ObjectAsset.objects.get(
+            public_id=execution_spec["tests_asset"],
+            owner_type="TEMPLATE_VERSION",
+            owner_ref=version.public_id,
+            purpose="TESTS",
+        )
+    except ObjectAsset.DoesNotExist as exc:
+        raise TemplateValidationError(
+            detail={"execution_spec": {"tests_asset": "not_found_or_cross_version"}}
+        ) from exc
+    if (
+        tests_asset.status != ObjectAsset.Status.ACTIVE
+        or tests_asset.scan_status != ObjectAsset.ScanStatus.CLEAN
+    ):
+        raise TemplateAssetNotReady(detail={"tests_asset": tests_asset.public_id})
     report("GOVERNANCE", "PASSED")
 
     mode = version.network_policy.get("mode", "DENY_ALL")
@@ -538,6 +647,27 @@ def _validated_snapshot(
         raise TemplateValidationError(detail={"network_policy": "target_not_approved"})
     if version.workspace_capabilities.get("require_gateway", True) is not True:
         raise TemplateValidationError(detail={"workspace_capabilities": "gateway_required"})
+    capability_names = {
+        "webide",
+        "notebook",
+        "terminal",
+        "preview",
+        "snapshot",
+        "checkpoint",
+    }
+    declared_capabilities = {
+        key: value
+        for key, value in version.workspace_capabilities.items()
+        if key != "require_gateway"
+    }
+    if set(declared_capabilities) - capability_names or any(
+        not isinstance(value, bool) for value in declared_capabilities.values()
+    ):
+        raise TemplateValidationError(detail={"workspace_capabilities": "invalid_contract"})
+    if not any(
+        declared_capabilities.get(name) for name in ("webide", "notebook", "terminal", "preview")
+    ):
+        raise TemplateValidationError(detail={"workspace_capabilities": "interactive_required"})
     report("POLICY", "PASSED")
 
     return {
@@ -552,6 +682,13 @@ def _validated_snapshot(
             "network_mode": profile.network_mode,
         },
         "dependencies": version.dependencies,
+        "execution_spec": execution_spec,
+        "execution_command": list(build_execution_command(execution_spec)),
+        "execution_tests_asset": {
+            "public_id": tests_asset.public_id,
+            "digest_sha256": tests_asset.digest_sha256,
+            "object_version": tests_asset.object_version,
+        },
         "network_policy": version.network_policy,
         "workspace_capabilities": version.workspace_capabilities,
         "material_refs": _material_digest_refs(version.material_refs),
@@ -841,7 +978,8 @@ def publish_version(
     _expected(version.row_version, expected_version)
     if version.status != TemplateVersion.Status.PRECHECK_PASSED or not version.spec_digest:
         raise TemplateStateConflict(detail={"status": version.status})
-    if compute_spec_digest(version) != version.spec_digest:
+    publish_snapshot = _validated_snapshot(version)
+    if _digest(publish_snapshot) != version.spec_digest:
         raise TemplateDigestMismatch()
     now = timezone.now()
     changed = compare_and_swap(
@@ -872,7 +1010,14 @@ def publish_version(
         event_type=events.VERSION_PUBLISHED,
         aggregate_type="labtemplate_version",
         aggregate_ref=version.public_id,
-        payload={"course_id": course.public_id, "version_id": version.public_id},
+        payload={
+            "course_id": course.public_id,
+            "version_id": version.public_id,
+            "spec_digest": version.spec_digest,
+            "execution_spec": publish_snapshot["execution_spec"],
+            "execution_command": publish_snapshot["execution_command"],
+            "execution_tests_asset": publish_snapshot["execution_tests_asset"],
+        },
     )
     return changed  # type: ignore[return-value]
 
@@ -964,6 +1109,9 @@ def clone_version(
         image=source.image,
         resource_profile=source.resource_profile,
         dependencies=source.dependencies,
+        # TESTS assets are owned by the source version and cannot be reused by
+        # a new mutable version; the clone must choose a new scanned asset.
+        execution_spec={},
         network_policy=source.network_policy,
         workspace_capabilities=source.workspace_capabilities,
         material_refs=source.material_refs,
@@ -1050,6 +1198,9 @@ def copy_templates(
             image=current.image,
             resource_profile=current.resource_profile,
             dependencies=current.dependencies,
+            # Course-copy does not copy object storage bytes.  Do not retain a
+            # cross-course tests_asset reference in the new draft.
+            execution_spec={},
             network_policy=current.network_policy,
             workspace_capabilities=current.workspace_capabilities,
             material_refs=refs,

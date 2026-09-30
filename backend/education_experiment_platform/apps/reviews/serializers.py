@@ -254,12 +254,15 @@ class AutoCheckDataSerializer(serializers.Serializer):
     checker_type = serializers.CharField()
     rule_digest = serializers.CharField()
     artifact_digest = serializers.CharField()
+    execution_rule_summary = serializers.DictField()
+    execution_rule_digest = serializers.CharField()
     status = serializers.ChoiceField(choices=AutoCheckRun.Status.choices)
     attempt_count = serializers.IntegerField()
     result_summary = serializers.DictField()
     evidence = serializers.ListField(child=serializers.DictField())
     error_code = serializers.CharField()
     trace_id = serializers.CharField()
+    duration_ms = serializers.IntegerField(allow_null=True)
     completed_at = serializers.DateTimeField(allow_null=True)
 
 
@@ -467,12 +470,15 @@ def auto_check_data(item: AutoCheckRun) -> dict[str, Any]:
         "checker_type": item.checker_type,
         "rule_digest": item.rule_digest,
         "artifact_digest": item.artifact_digest,
+        "execution_rule_summary": item.execution_rule_summary,
+        "execution_rule_digest": item.execution_rule_digest,
         "status": item.status,
         "attempt_count": item.attempt_count,
         "result_summary": item.result_summary,
         "evidence": item.evidence,
         "error_code": item.error_code,
         "trace_id": item.trace_id,
+        "duration_ms": item.duration_ms,
         "completed_at": item.completed_at,
     }
 

@@ -35,9 +35,6 @@ class PublicationWriteSerializer(serializers.Serializer):
     title = serializers.CharField(max_length=180)
     description = serializers.CharField(required=False, allow_blank=True)
     audience_mode = serializers.ChoiceField(choices=TaskPublication.AudienceMode.choices)
-    selected_enrollment_ids = serializers.ListField(
-        child=serializers.CharField(max_length=26), required=False, allow_empty=True
-    )
     late_enrollment_policy = serializers.ChoiceField(
         choices=TaskPublication.LateEnrollmentPolicy.choices, required=False
     )
@@ -56,16 +53,6 @@ class PublicationWriteSerializer(serializers.Serializer):
         deadline = cast(datetime | None, attrs.get("assignment_deadline"))
         if deadline is not None and deadline > window_end:
             raise serializers.ValidationError({"assignment_deadline": "不能晚于 window_end"})
-        if attrs["audience_mode"] == TaskPublication.AudienceMode.SELECTED and not attrs.get(
-            "selected_enrollment_ids"
-        ):
-            raise serializers.ValidationError({"selected_enrollment_ids": "SELECTED 必须提供受众"})
-        if attrs["audience_mode"] == TaskPublication.AudienceMode.ALL_ACTIVE and attrs.get(
-            "selected_enrollment_ids"
-        ):
-            raise serializers.ValidationError({
-                "selected_enrollment_ids": "ALL_ACTIVE 不能指定受众"
-            })
         return attrs
 
 
@@ -90,6 +77,12 @@ class PublicationPatchSerializer(serializers.Serializer):
     prerequisites = PrerequisiteWriteSerializer(many=True, required=False)
 
 
+class PublicationPublishSerializer(serializers.Serializer):
+    selected_enrollment_ids = serializers.ListField(
+        child=serializers.CharField(max_length=26), required=False, allow_empty=True
+    )
+
+
 class TaskExtensionWriteSerializer(serializers.Serializer):
     requested_deadline = serializers.DateTimeField()
     reason = serializers.CharField(max_length=2000)
@@ -105,6 +98,15 @@ class PublicationDataSerializer(serializers.Serializer):
     course_id = serializers.CharField()
     template_version_id = serializers.CharField()
     rubric_version_id = serializers.CharField()
+    template_spec_digest = serializers.CharField(allow_null=True)
+    execution_spec = serializers.DictField()
+    runtime_adapter_id = serializers.CharField(allow_null=True)
+    runtime_adapter_driver = serializers.CharField()
+    runtime_adapter_config_ref = serializers.CharField()
+    image_id = serializers.CharField(allow_null=True)
+    image_digest = serializers.CharField()
+    resource_profile_id = serializers.CharField(allow_null=True)
+    resource_profile_snapshot = serializers.DictField()
     title = serializers.CharField()
     description = serializers.CharField()
     audience_mode = serializers.ChoiceField(choices=TaskPublication.AudienceMode.choices)
@@ -135,6 +137,14 @@ class TaskDataSerializer(serializers.Serializer):
     template_name = serializers.CharField()
     template_spec_digest = serializers.CharField(allow_null=True)
     runtime_type = serializers.CharField()
+    execution_spec = serializers.DictField()
+    runtime_adapter_id = serializers.CharField(allow_null=True)
+    runtime_adapter_driver = serializers.CharField()
+    runtime_adapter_config_ref = serializers.CharField()
+    image_id = serializers.CharField(allow_null=True)
+    image_digest = serializers.CharField()
+    resource_profile_id = serializers.CharField(allow_null=True)
+    resource_profile_snapshot = serializers.DictField()
     report_required = serializers.BooleanField()
     status = serializers.ChoiceField(choices=ExperimentTask.Status.choices)
     terminal_target = serializers.CharField(allow_null=True)
@@ -184,11 +194,45 @@ class GenericResponseSerializer(serializers.Serializer):
 
 
 def publication_data(item: TaskPublication) -> dict[str, object]:
+    template = item.template_version
+    template_spec_digest = item.template_spec_digest
+    execution_spec = dict(item.execution_spec or {})
+    adapter = item.runtime_adapter
+    image = item.image
+    profile = item.resource_profile
+    if adapter is None:
+        adapter = template.runtime_adapter
+        image = template.image
+        profile = template.resource_profile
+        template_spec_digest = template.spec_digest
+        execution_spec = dict(template.execution_spec or {})
+    profile_snapshot = dict(item.resource_profile_snapshot or {})
+    if not profile_snapshot and profile is not None:
+        profile_snapshot = {
+            "public_id": profile.public_id,
+            "code": profile.code,
+            "runtime_type": profile.runtime_type,
+            "cpu_millicores": profile.cpu_millicores,
+            "memory_mb": profile.memory_mb,
+            "disk_gb": profile.disk_gb,
+            "network_mode": profile.network_mode,
+        }
     return {
         "public_id": item.public_id,
         "course_id": item.course.public_id,
         "template_version_id": item.template_version.public_id,
         "rubric_version_id": item.rubric_version.public_id,
+        "template_spec_digest": template_spec_digest,
+        "execution_spec": execution_spec,
+        "runtime_adapter_id": adapter.public_id if adapter else None,
+        "runtime_adapter_driver": item.runtime_adapter_driver
+        or (adapter.driver if adapter else ""),
+        "runtime_adapter_config_ref": item.runtime_adapter_config_ref
+        or (adapter.config_ref if adapter else ""),
+        "image_id": image.public_id if image else None,
+        "image_digest": item.image_digest or (image.digest if image else ""),
+        "resource_profile_id": profile.public_id if profile else None,
+        "resource_profile_snapshot": profile_snapshot,
         "title": item.title,
         "description": item.description,
         "audience_mode": item.audience_mode,
@@ -228,6 +272,21 @@ def task_data(
     blockers: list[dict[str, object]] | None = None,
     actions: list[str] | None = None,
 ) -> dict[str, object]:
+    template = item.template_version
+    adapter = item.runtime_adapter or template.runtime_adapter
+    image = item.image or template.image
+    profile = item.resource_profile or template.resource_profile
+    profile_snapshot = dict(item.resource_profile_snapshot or {})
+    if not profile_snapshot and profile is not None:
+        profile_snapshot = {
+            "public_id": profile.public_id,
+            "code": profile.code,
+            "runtime_type": profile.runtime_type,
+            "cpu_millicores": profile.cpu_millicores,
+            "memory_mb": profile.memory_mb,
+            "disk_gb": profile.disk_gb,
+            "network_mode": profile.network_mode,
+        }
     provisioning = None
     try:
         from apps.provisioning.models import ProvisioningJob
@@ -261,9 +320,19 @@ def task_data(
         "student_name": item.student.display_name,
         "title": item.publication.title,
         "template_version_id": item.template_version.public_id,
-        "template_name": item.template_version.template.name,
-        "template_spec_digest": item.template_version.spec_digest,
+        "template_name": template.template.name,
+        "template_spec_digest": item.template_spec_digest or template.spec_digest,
         "runtime_type": item.runtime_type,
+        "execution_spec": dict(item.execution_spec or template.execution_spec or {}),
+        "runtime_adapter_id": adapter.public_id if adapter else None,
+        "runtime_adapter_driver": item.runtime_adapter_driver
+        or (adapter.driver if adapter else ""),
+        "runtime_adapter_config_ref": item.runtime_adapter_config_ref
+        or (adapter.config_ref if adapter else ""),
+        "image_id": image.public_id if image else None,
+        "image_digest": item.image_digest or (image.digest if image else ""),
+        "resource_profile_id": profile.public_id if profile else None,
+        "resource_profile_snapshot": profile_snapshot,
         "report_required": item.publication.report_required,
         "status": item.status,
         "terminal_target": item.terminal_target,

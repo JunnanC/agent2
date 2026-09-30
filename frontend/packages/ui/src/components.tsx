@@ -33,6 +33,7 @@ export function PortalLayout({
   children,
   nav,
   actions,
+  variant = 'default',
 }: {
   title: string
   tone: PortalTone
@@ -40,9 +41,10 @@ export function PortalLayout({
   children: ReactNode
   nav?: Array<{ href: string; label: string }>
   actions?: ReactNode
+  variant?: 'default' | 'workbench' | 'immersive'
 }) {
   return (
-    <div className={`portal portal--${tone}`}>
+    <div className={`portal portal--${tone} portal--${variant}`}>
       <header className="portal__header">
         <a className="brand" href="/health" aria-label={`${title}首页`}>
           <span className="brand__mark"><BookOpen size={19} aria-hidden="true" /></span>

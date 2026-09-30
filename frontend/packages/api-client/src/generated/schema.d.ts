@@ -4,6 +4,118 @@
  */
 
 export interface paths {
+    "/api/v2/agent-messages/{message_id}/feedback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["user_agent_feedback_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/agent-sessions/{session_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["user_agent_session_retrieve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/agent-sessions/{session_id}/messages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["user_agent_messages_list"];
+        put?: never;
+        post: operations["user_agent_message_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/agent-sessions/{session_id}/tool-calls": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["user_agent_tool_request"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/agent-tool-calls/{call_id}/decide": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["user_agent_tool_decide"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/analytics/recommendations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["api_v2_analytics_recommendations_retrieve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/analytics/risk-signals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["api_v2_analytics_risk_signals_retrieve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v2/auth/csrf": {
         parameters: {
             query?: never;
@@ -68,6 +180,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v2/auth/oidc/{provider_key}/callback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["api_v2_auth_oidc_callback_retrieve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/auth/oidc/{provider_key}/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["api_v2_auth_oidc_start_retrieve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v2/courses": {
         parameters: {
             query?: never;
@@ -110,6 +254,38 @@ export interface paths {
         get: operations["user_course_content_list"];
         put?: never;
         post: operations["user_course_content_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/courses/{course_id}/agent-profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["user_agent_profile"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/courses/{course_id}/agent-sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["user_agent_course_session_create"];
         delete?: never;
         options?: never;
         head?: never;
@@ -223,6 +399,70 @@ export interface paths {
         };
         /** MySQL readiness */
         get: operations["api_v2_health_ready_retrieve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/integrations/oauth/token": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["api_v2_integrations_oauth_token_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/integrations/open/courses": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["api_v2_integrations_open_courses_retrieve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/integrations/open/courses/{course_id}/experiments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["api_v2_integrations_open_courses_experiments_retrieve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/integrations/open/courses/{course_id}/progress": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["api_v2_integrations_open_courses_progress_retrieve"];
         put?: never;
         post?: never;
         delete?: never;
@@ -359,6 +599,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v2/me/oidc-identities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["api_v2_me_oidc_identities_retrieve"];
+        put?: never;
+        post: operations["api_v2_me_oidc_identities_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/me/oidc-identities/{identity_id}/unlink": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["api_v2_me_oidc_identities_unlink_retrieve"];
+        put?: never;
+        post: operations["api_v2_me_oidc_identities_unlink_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v2/me/password": {
         parameters: {
             query?: never;
@@ -385,6 +657,54 @@ export interface paths {
         get: operations["api_v2_me_verification_retrieve"];
         put: operations["api_v2_me_verification_update"];
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/notification-preferences": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["api_v2_notification_preferences_retrieve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch: operations["api_v2_notification_preferences_partial_update"];
+        trace?: never;
+    };
+    "/api/v2/notifications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["api_v2_notifications_retrieve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/notifications/{notification_id}/read": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["api_v2_notifications_read_create"];
         delete?: never;
         options?: never;
         head?: never;
@@ -421,6 +741,214 @@ export interface paths {
         options?: never;
         head?: never;
         patch: operations["api_v2_platform_admin_assignments_partial_update"];
+        trace?: never;
+    };
+    "/api/v2/platform/agent/eval-runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["api_v2_platform_agent_eval_runs_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/platform/agent/eval-runs/{run_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["api_v2_platform_agent_eval_runs_retrieve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/platform/agent/eval-suites": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["api_v2_platform_agent_eval_suites_retrieve"];
+        put?: never;
+        post: operations["api_v2_platform_agent_eval_suites_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/platform/agent/eval-suites/{suite_id}/cases": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["api_v2_platform_agent_eval_suites_cases_retrieve"];
+        put?: never;
+        post: operations["api_v2_platform_agent_eval_suites_cases_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/platform/agent/model-routes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["api_v2_platform_agent_model_routes_retrieve"];
+        put?: never;
+        post: operations["api_v2_platform_agent_model_routes_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/platform/agent/model-routes/{route_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch: operations["api_v2_platform_agent_model_routes_partial_update"];
+        trace?: never;
+    };
+    "/api/v2/platform/agent/tool-policies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["api_v2_platform_agent_tool_policies_retrieve"];
+        put?: never;
+        post: operations["api_v2_platform_agent_tool_policies_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/platform/agent/tool-policies/{policy_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch: operations["api_v2_platform_agent_tool_policies_partial_update"];
+        trace?: never;
+    };
+    "/api/v2/platform/agent/usage-costs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["api_v2_platform_agent_usage_costs_retrieve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/platform/analytics/projection-jobs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["api_v2_platform_analytics_projection_jobs_retrieve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/platform/analytics/quality": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["api_v2_platform_analytics_quality_retrieve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/platform/analytics/resource-costs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["api_v2_platform_analytics_resource_costs_retrieve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/platform/compensations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["platform_compensations_list"];
+        put?: never;
+        post: operations["platform_compensations_retry"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v2/platform/courses": {
@@ -567,6 +1095,278 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v2/platform/instances": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["platform_instances_list"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/platform/instances/{instance_id}/destroy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["platform_instances_destroy"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/platform/integrations/api-clients": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["platform_integrations_api_clients_list"];
+        put?: never;
+        post: operations["platform_integrations_api_clients_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/platform/integrations/api-clients/{client_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["platform_integrations_api_clients_detail"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch: operations["api_v2_platform_integrations_api_clients_partial_update"];
+        trace?: never;
+    };
+    "/api/v2/platform/integrations/api-clients/{client_id}/grants": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["platform_integrations_api_client_grants_list"];
+        put?: never;
+        post: operations["platform_integrations_api_client_grants_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/platform/integrations/api-clients/{client_id}/rotate-secret": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["api_v2_platform_integrations_api_clients_rotate_secret_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/platform/integrations/oidc-identities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["api_v2_platform_integrations_oidc_identities_retrieve"];
+        put?: never;
+        post: operations["api_v2_platform_integrations_oidc_identities_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/platform/integrations/oidc-identities/{identity_id}/unlink": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["api_v2_platform_integrations_oidc_identities_unlink_retrieve"];
+        put?: never;
+        post: operations["api_v2_platform_integrations_oidc_identities_unlink_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/platform/integrations/oidc-providers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["platform_integrations_oidc_providers_list"];
+        put?: never;
+        post: operations["api_v2_platform_integrations_oidc_providers_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/platform/integrations/oidc-providers/{provider_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["platform_integrations_oidc_providers_detail"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch: operations["api_v2_platform_integrations_oidc_providers_partial_update"];
+        trace?: never;
+    };
+    "/api/v2/platform/integrations/oidc-providers/{provider_id}/rotate-secret": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["api_v2_platform_integrations_oidc_providers_rotate_secret_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/platform/integrations/webhook-deliveries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["api_v2_platform_integrations_webhook_deliveries_retrieve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/platform/integrations/webhook-deliveries/{delivery_id}/attempts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["api_v2_platform_integrations_webhook_deliveries_attempts_retrieve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/platform/integrations/webhook-deliveries/{delivery_id}/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["api_v2_platform_integrations_webhook_deliveries_retry_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/platform/integrations/webhook-endpoints": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["platform_integrations_webhook_endpoints_list"];
+        put?: never;
+        post: operations["api_v2_platform_integrations_webhook_endpoints_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/platform/integrations/webhook-endpoints/{endpoint_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["platform_integrations_webhook_endpoints_detail"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch: operations["api_v2_platform_integrations_webhook_endpoints_partial_update"];
+        trace?: never;
+    };
+    "/api/v2/platform/integrations/webhook-endpoints/{endpoint_id}/rotate-secret": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["api_v2_platform_integrations_webhook_endpoints_rotate_secret_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v2/platform/network-allowlists": {
         parameters: {
             query?: never;
@@ -609,6 +1409,38 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["platform_network_allowlists_revoke"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/platform/operations/logs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["api_v2_platform_operations_logs_retrieve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/platform/operations/overview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["api_v2_platform_operations_overview_retrieve"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1047,6 +1879,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v2/tasks/{task_id}/agent-sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["user_agent_task_session_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/tasks/{task_id}/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["tasks_archive_retrieve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v2/tasks/{task_id}/attachments": {
         parameters: {
             query?: never;
@@ -1153,6 +2017,38 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["api_v2_tasks_enter_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/tasks/{task_id}/execution-runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["tasks_execution_run_retrieve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/tasks/{task_id}/execution-runs/{execution_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["api_v2_tasks_execution_runs_retrieve"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1351,6 +2247,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v2/tasks/{task_id}/workbench": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["tasks_workbench_retrieve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v2/tasks/{task_id}/workspace-sessions": {
         parameters: {
             query?: never;
@@ -1375,8 +2287,24 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        put: operations["api_v2_tasks_workspace_snapshot_update"];
+        put: operations["tasks_execution_runs_list"];
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/tasks/{task_id}/workspace-storage-jobs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["tasks_workspace_storage_jobs_create"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1431,6 +2359,390 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v2/teaching/courses/{course_id}/agent-analytics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["api_v2_teaching_courses_agent_analytics_retrieve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/teaching/courses/{course_id}/agent-eval-runs/{run_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["api_v2_teaching_courses_agent_eval_runs_retrieve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/teaching/courses/{course_id}/agent-eval-suites": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["api_v2_teaching_courses_agent_eval_suites_retrieve"];
+        put?: never;
+        post: operations["api_v2_teaching_courses_agent_eval_suites_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/teaching/courses/{course_id}/agent-eval-suites/{suite_id}/cases": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["api_v2_teaching_courses_agent_eval_suites_cases_retrieve"];
+        put?: never;
+        post: operations["api_v2_teaching_courses_agent_eval_suites_cases_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/teaching/courses/{course_id}/agent-feedback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["api_v2_teaching_courses_agent_feedback_retrieve"];
+        put?: never;
+        post: operations["api_v2_teaching_courses_agent_feedback_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/teaching/courses/{course_id}/agent-feedback/{feedback_id}/triage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["api_v2_teaching_courses_agent_feedback_triage_retrieve"];
+        put?: never;
+        post: operations["api_v2_teaching_courses_agent_feedback_triage_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/teaching/courses/{course_id}/agent-ingestion-runs/{run_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["api_v2_teaching_courses_agent_ingestion_runs_retrieve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/teaching/courses/{course_id}/agent-knowledge-bases": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["teaching_agent_knowledge_bases_list"];
+        put?: never;
+        post: operations["teaching_agent_knowledge_base_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/teaching/courses/{course_id}/agent-knowledge-bases/{knowledge_base_id}/sources": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["teaching_agent_source_list"];
+        put?: never;
+        post: operations["teaching_agent_source_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/teaching/courses/{course_id}/agent-options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["api_v2_teaching_courses_agent_options_retrieve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/teaching/courses/{course_id}/agent-profiles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["teaching_agent_profiles_list"];
+        put?: never;
+        post: operations["teaching_agent_profile_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/teaching/courses/{course_id}/agent-profiles/{profile_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["teaching_agent_profile_retrieve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch: operations["teaching_agent_profile_update"];
+        trace?: never;
+    };
+    "/api/v2/teaching/courses/{course_id}/agent-profiles/{profile_id}/{action}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["teaching_agent_profile_action"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/teaching/courses/{course_id}/agent-prompt-templates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["api_v2_teaching_courses_agent_prompt_templates_retrieve"];
+        put?: never;
+        post: operations["api_v2_teaching_courses_agent_prompt_templates_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/teaching/courses/{course_id}/agent-prompt-templates/{template_id}/versions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["api_v2_teaching_courses_agent_prompt_templates_versions_retrieve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/teaching/courses/{course_id}/agent-source-assets/{asset_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["api_v2_teaching_courses_agent_source_assets_retrieve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/teaching/courses/{course_id}/agent-sources/{source_id}/assets/{asset_id}/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["api_v2_teaching_courses_agent_sources_assets_complete_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/teaching/courses/{course_id}/agent-sources/{source_id}/uploads": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["api_v2_teaching_courses_agent_sources_uploads_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/teaching/courses/{course_id}/agent-sources/{source_id}/versions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["teaching_agent_source_version_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/teaching/courses/{course_id}/analytics/overview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["api_v2_teaching_courses_analytics_overview_retrieve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/teaching/courses/{course_id}/analytics/quality": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["api_v2_teaching_courses_analytics_quality_retrieve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/teaching/courses/{course_id}/analytics/resource-costs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["api_v2_teaching_courses_analytics_resource_costs_retrieve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/teaching/courses/{course_id}/analytics/risk-signals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["api_v2_teaching_courses_analytics_risk_signals_retrieve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/teaching/courses/{course_id}/analytics/risk-signals/{signal_id}/resolve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["api_v2_teaching_courses_analytics_risk_signals_resolve_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v2/teaching/courses/{course_id}/announcements/{announcement_id}/publish": {
         parameters: {
             query?: never;
@@ -1473,6 +2785,54 @@ export interface paths {
         get: operations["api_v2_teaching_courses_archive_check_retrieve"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/teaching/courses/{course_id}/archives": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["teaching_archives_list"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/teaching/courses/{course_id}/archives/{archive_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["teaching_archives_retrieve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/teaching/courses/{course_id}/archives/{archive_id}/exports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["teaching_archives_exports_create"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1728,7 +3088,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        post: operations["api_v2_teaching_courses_experiments_close_create"];
+        post: operations["teaching_experiments_close"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1744,7 +3104,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        post: operations["api_v2_teaching_courses_experiments_publish_create"];
+        post: operations["teaching_experiments_publish"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1776,7 +3136,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        post: operations["api_v2_teaching_courses_experiments_withdraw_create"];
+        post: operations["teaching_experiments_withdraw"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2583,6 +3943,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v2/workspace-storage-jobs/{job_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["workspace_storage_jobs_retrieve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/files/{token}": {
         parameters: {
             query?: never;
@@ -2603,6 +3979,19 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        APIClient: {
+            name: string;
+            scopes?: string[];
+            rate_limit_per_minute?: number;
+            status?: components["schemas"]["StatusE1dEnum"];
+        };
+        APIClientGrant: {
+            scope: string;
+            /** @default PLATFORM */
+            resource_scope: components["schemas"]["ResourceScopeEnum"];
+            course_id?: string;
+            status?: components["schemas"]["StatusE1dEnum"];
+        };
         AccountPageMeta: {
             trace_id: string;
             page: number;
@@ -2649,6 +4038,13 @@ export interface components {
          * @enum {string}
          */
         AdminAssignmentUpdateStatusEnum: "REVOKED";
+        AgentEnvelope: {
+            data: unknown;
+            meta: components["schemas"]["AgentResponseMeta"];
+        };
+        AgentResponseMeta: {
+            trace_id: string;
+        };
         AlertData: {
             severity: string;
             code: string;
@@ -2752,6 +4148,59 @@ export interface components {
         AnswerWrite: {
             body: string;
         };
+        ArchiveData: {
+            public_id: string;
+            task_id: string;
+            course_id: string;
+            student_id: string;
+            student_name: string;
+            status: string;
+            terminal_target: string;
+            task_status: string;
+            /** Format: date-time */
+            safe_recycle_at: string;
+            attempt_count: number;
+            max_attempts: number;
+            row_version: number;
+            failure: {
+                [key: string]: unknown;
+            } | null;
+            compensation: {
+                [key: string]: unknown;
+            } | null;
+            manifest: {
+                [key: string]: unknown;
+            } | null;
+            verifications: {
+                [key: string]: unknown;
+            }[];
+            recycle: {
+                [key: string]: unknown;
+            };
+        };
+        ArchiveDestroyReason: {
+            reason: string;
+        };
+        ArchiveExportResponse: {
+            data: {
+                [key: string]: unknown;
+            };
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        ArchiveListResponse: {
+            data: components["schemas"]["ArchiveData"][];
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        ArchiveResponse: {
+            data: components["schemas"]["ArchiveData"];
+            meta: {
+                [key: string]: unknown;
+            };
+        };
         /**
          * @description * `ALL_ACTIVE` - All Active
          *     * `SELECTED` - Selected
@@ -2763,7 +4212,11 @@ export interface components {
             checker_type: string;
             rule_digest: string;
             artifact_digest: string;
-            status: components["schemas"]["AutoCheckDataStatusEnum"];
+            execution_rule_summary: {
+                [key: string]: unknown;
+            };
+            execution_rule_digest: string;
+            status: components["schemas"]["StatusA0dEnum"];
             attempt_count: number;
             result_summary: {
                 [key: string]: unknown;
@@ -2773,17 +4226,10 @@ export interface components {
             }[];
             error_code: string;
             trace_id: string;
+            duration_ms: number | null;
             /** Format: date-time */
             completed_at: string | null;
         };
-        /**
-         * @description * `QUEUED` - Queued
-         *     * `RUNNING` - Running
-         *     * `PASSED` - Passed
-         *     * `FAILED` - Failed
-         * @enum {string}
-         */
-        AutoCheckDataStatusEnum: "QUEUED" | "RUNNING" | "PASSED" | "FAILED";
         AutoCheckRuleData: {
             public_id: string;
             position: number;
@@ -2875,6 +4321,41 @@ export interface components {
         CheckpointWrite: {
             name?: string;
         };
+        /**
+         * @description * `token` - token
+         * @enum {string}
+         */
+        ComparatorEnum: "token";
+        CompensationData: {
+            public_id: string;
+            task_type: string;
+            subject_type: string;
+            subject_ref: string;
+            status: string;
+            attempt_count: number;
+            max_attempts: number;
+            /** Format: date-time */
+            next_attempt_at: string | null;
+            error_code: string;
+            trace_id: string;
+            row_version: number;
+        };
+        CompensationListResponse: {
+            data: components["schemas"]["CompensationData"][];
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        CompensationResponse: {
+            data: components["schemas"]["CompensationData"];
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        CompensationRetry: {
+            reason: string;
+            compensation_id: string;
+        };
         ContentWrite: {
             title?: string;
             summary?: string;
@@ -2904,6 +4385,8 @@ export interface components {
             include_templates: boolean;
             /** @default true */
             include_rubrics: boolean;
+            /** @default true */
+            include_agents: boolean;
         };
         CourseContentListResponse: {
             data: {
@@ -3083,11 +4566,12 @@ export interface components {
         };
         /**
          * @description * `DOCKER_SWARM` - Docker Swarm
+         *     * `DOCKER_LOCAL` - Docker Local
          *     * `LIBVIRT` - Libvirt
          *     * `FAKE` - Fake
          * @enum {string}
          */
-        DriverEnum: "DOCKER_SWARM" | "LIBVIRT" | "FAKE";
+        DriverEnum: "DOCKER_SWARM" | "DOCKER_LOCAL" | "LIBVIRT" | "FAKE";
         EnrollmentApply: {
             application_message?: string;
             invitation_code?: string;
@@ -3155,6 +4639,37 @@ export interface components {
         ErrorEnvelope: {
             error: components["schemas"]["ErrorBody"];
         };
+        EvalCaseWrite: {
+            key: string;
+            category: string;
+            prompt: string;
+            expected?: {
+                [key: string]: unknown;
+            };
+            /** @default false */
+            mandatory: boolean;
+        };
+        EvalSuiteWrite: {
+            name: string;
+            threshold?: {
+                [key: string]: unknown;
+            };
+        };
+        ExecutionSpec: {
+            language: components["schemas"]["LanguageEnum"];
+            entrypoint: string;
+            timeout_seconds: number;
+            memory_mb: number;
+            cpu_millicores: number;
+            comparator: components["schemas"]["ComparatorEnum"];
+            tests_asset: string;
+            network_mode: components["schemas"]["ExecutionSpecNetworkModeEnum"];
+        };
+        /**
+         * @description * `DENY_ALL` - DENY_ALL
+         * @enum {string}
+         */
+        ExecutionSpecNetworkModeEnum: "DENY_ALL";
         ExtensionData: {
             public_id: string;
             task_id: string;
@@ -3180,6 +4695,11 @@ export interface components {
          * @enum {string}
          */
         ExtensionDataStatusEnum: "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED";
+        FeedbackWrite: {
+            rating: components["schemas"]["RatingEnum"];
+            issue_type?: string;
+            note?: string;
+        };
         GenericReportResponse: {
             data: components["schemas"]["ReportScanAnomalySummary"];
             meta: {
@@ -3294,6 +4814,35 @@ export interface components {
             data: components["schemas"]["ImageData"];
             meta: components["schemas"]["GovernanceTraceMeta"];
         };
+        InstanceData: {
+            public_id: string;
+            task_id: string;
+            course_id: string;
+            student_id: string;
+            status: string;
+            external_id: string | null;
+            external_status: string;
+            runtime_driver: string;
+            service_name: string;
+            runtime_task_count: number;
+            runtime_health: string;
+            orphan: boolean;
+            resource_leak: boolean;
+            row_version: number;
+            trace_id: string;
+        };
+        InstanceListResponse: {
+            data: components["schemas"]["InstanceData"][];
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        InstanceResponse: {
+            data: components["schemas"]["InstanceData"];
+            meta: {
+                [key: string]: unknown;
+            };
+        };
         InvitationWrite: {
             max_uses: number;
             /** Format: date-time */
@@ -3305,6 +4854,15 @@ export interface components {
          * @enum {string}
          */
         KindAd6Enum: "REPORT" | "SYSTEM_ARTIFACT";
+        KnowledgeBaseWrite: {
+            name: string;
+            description?: string;
+        };
+        /**
+         * @description * `python` - python
+         * @enum {string}
+         */
+        LanguageEnum: "python";
         /**
          * @description * `ASSIGN_UNTIL_DEADLINE` - Assign Until Deadline
          *     * `DO_NOT_ASSIGN` - Do Not Assign
@@ -3337,11 +4895,55 @@ export interface components {
             meta: components["schemas"]["AccountTraceMeta"];
         };
         /**
+         * @description * `text/markdown` - text/markdown
+         *     * `text/plain` - text/plain
+         * @enum {string}
+         */
+        MediaTypeEnum: "text/markdown" | "text/plain";
+        MessageWrite: {
+            body: string;
+        };
+        /**
+         * @description * `KNOWLEDGE_QA` - KNOWLEDGE_QA
+         *     * `SOCRATIC_HINT` - SOCRATIC_HINT
+         *     * `DEBUG_ASSIST` - DEBUG_ASSIST
+         *     * `REPORT_COACH` - REPORT_COACH
+         *     * `WORKSPACE_ASSIST` - WORKSPACE_ASSIST
+         * @enum {string}
+         */
+        Mode1c3Enum: "KNOWLEDGE_QA" | "SOCRATIC_HINT" | "DEBUG_ASSIST" | "REPORT_COACH" | "WORKSPACE_ASSIST";
+        ModelRouteWrite: {
+            key: string;
+            provider: string;
+            model_name: string;
+            fallback_routes?: string[];
+            regions?: string[];
+            /** @default false */
+            sensitive_data_allowed: boolean;
+            /** @default 30 */
+            timeout_seconds: number;
+            /** @default 4096 */
+            max_tokens: number;
+            /** @default 0 */
+            cost_per_1k_input_minor: number;
+            /** @default 0 */
+            cost_per_1k_output_minor: number;
+        };
+        /**
+         * @description * `KNOWLEDGE_QA` - KNOWLEDGE_QA
+         *     * `SOCRATIC_HINT` - SOCRATIC_HINT
+         *     * `DEBUG_ASSIST` - DEBUG_ASSIST
+         *     * `REPORT_COACH` - REPORT_COACH
+         *     * `WORKSPACE_ASSIST` - WORKSPACE_ASSIST
+         * @enum {string}
+         */
+        ModesEnum: "KNOWLEDGE_QA" | "SOCRATIC_HINT" | "DEBUG_ASSIST" | "REPORT_COACH" | "WORKSPACE_ASSIST";
+        /**
          * @description * `DENY_ALL` - Deny All
          *     * `ALLOWLIST` - Allowlist
          * @enum {string}
          */
-        NetworkModeEnum: "DENY_ALL" | "ALLOWLIST";
+        NetworkMode7ceEnum: "DENY_ALL" | "ALLOWLIST";
         OperationEvent: {
             public_id: string;
             task_id: string;
@@ -3355,6 +4957,8 @@ export interface components {
             /** Format: date-time */
             occurred_at: string;
             trace_id: string;
+            execution_run_id?: string | null;
+            execution_status?: string | null;
         };
         OwnershipTransfer: {
             new_owner_id: string;
@@ -3389,6 +4993,31 @@ export interface components {
             scan_report_ref?: string;
             risk_level?: components["schemas"]["RiskLevelEnum"];
             reason?: string;
+        };
+        PatchedModelRoutePatch: {
+            fallback_routes?: string[];
+            regions?: string[];
+            sensitive_data_allowed?: boolean;
+            timeout_seconds?: number;
+            max_tokens?: number;
+            cost_per_1k_input_minor?: number;
+            cost_per_1k_output_minor?: number;
+            status?: components["schemas"]["StatusB00Enum"];
+        };
+        PatchedPreference: {
+            channels?: unknown;
+            muted_kinds?: string[];
+            digest_enabled?: boolean;
+        };
+        PatchedProfilePatch: {
+            modes?: string[];
+            model_route?: string;
+            budget?: {
+                [key: string]: unknown;
+            };
+            knowledge_base_id?: string;
+            prompt_version_id?: string;
+            tool_policy_id?: string;
         };
         PatchedProfileUpdate: {
             display_name?: string;
@@ -3430,7 +5059,7 @@ export interface components {
             cpu_millicores?: number;
             memory_mb?: number;
             disk_gb?: number;
-            network_mode?: components["schemas"]["NetworkModeEnum"];
+            network_mode?: components["schemas"]["NetworkMode7ceEnum"];
             cost_minor_per_hour?: number;
             currency_code?: string;
             reason?: string;
@@ -3467,6 +5096,7 @@ export interface components {
             dependencies?: {
                 [key: string]: unknown;
             }[];
+            execution_spec?: components["schemas"]["ExecutionSpec"];
             network_policy?: {
                 [key: string]: unknown;
             };
@@ -3482,9 +5112,24 @@ export interface components {
             };
             retention_days?: number;
         };
+        PatchedToolPolicyPatch: {
+            risk?: components["schemas"]["RiskEnum"];
+            schema?: {
+                [key: string]: unknown;
+            };
+            allowlist?: string[];
+            redaction_rules?: string[];
+            timeout_seconds?: number;
+            output_limit?: number;
+            status?: components["schemas"]["StatusB00Enum"];
+        };
         PatchedUserStatusUpdate: {
             account_status?: components["schemas"]["AccountStatusEnum"];
             reason?: string;
+        };
+        PlatformEvalRunWrite: {
+            suite_id: string;
+            profile_id?: string;
         };
         PlatformPrecheckSummaryResponse: {
             data: {
@@ -3572,6 +5217,21 @@ export interface components {
          * @enum {string}
          */
         PrerequisiteWriteKindEnum: "CHAPTER" | "PUBLICATION";
+        ProfileWrite: {
+            modes: components["schemas"]["ModesEnum"][];
+            model_route?: string;
+            budget?: {
+                [key: string]: unknown;
+            };
+            definition_id?: string;
+            knowledge_base_id?: string;
+            prompt_version_id?: string;
+            tool_policy_id?: string;
+        };
+        PromptWrite: {
+            body: string;
+            template_id?: string;
+        };
         /**
          * @description * `TCP` - Tcp
          *     * `UDP` - Udp
@@ -3635,6 +5295,19 @@ export interface components {
             course_id: string;
             template_version_id: string;
             rubric_version_id: string;
+            template_spec_digest: string | null;
+            execution_spec: {
+                [key: string]: unknown;
+            };
+            runtime_adapter_id: string | null;
+            runtime_adapter_driver: string;
+            runtime_adapter_config_ref: string;
+            image_id: string | null;
+            image_digest: string;
+            resource_profile_id: string | null;
+            resource_profile_snapshot: {
+                [key: string]: unknown;
+            };
             title: string;
             description: string;
             audience_mode: components["schemas"]["AudienceModeEnum"];
@@ -3667,13 +5340,15 @@ export interface components {
          * @enum {string}
          */
         PublicationDataStatusEnum: "DRAFT" | "PUBLISHING" | "PUBLISHED" | "PUBLISH_FAILED" | "CLOSED" | "WITHDRAWN";
+        PublicationPublish: {
+            selected_enrollment_ids?: string[];
+        };
         PublicationWrite: {
             template_version_id: string;
             rubric_version_id: string;
             title: string;
             description?: string;
             audience_mode: components["schemas"]["AudienceModeEnum"];
-            selected_enrollment_ids?: string[];
             late_enrollment_policy?: components["schemas"]["LateEnrollmentPolicyEnum"];
             /** Format: date-time */
             assignment_deadline?: string | null;
@@ -3689,9 +5364,10 @@ export interface components {
          * @description * `MANUAL` - MANUAL
          *     * `STARTER` - STARTER
          *     * `REPORT_TEMPLATE` - REPORT_TEMPLATE
+         *     * `TESTS` - TESTS
          * @enum {string}
          */
-        PurposeEnum: "MANUAL" | "STARTER" | "REPORT_TEMPLATE";
+        PurposeEnum: "MANUAL" | "STARTER" | "REPORT_TEMPLATE" | "TESTS";
         QualificationData: {
             public_id: string;
             user_id: string;
@@ -3759,6 +5435,12 @@ export interface components {
             max_agent_requests_per_minute?: number | null;
             reason: string;
         };
+        /**
+         * @description * `USEFUL` - USEFUL
+         *     * `NOT_USEFUL` - NOT_USEFUL
+         * @enum {string}
+         */
+        RatingEnum: "USEFUL" | "NOT_USEFUL";
         ReadinessChecks: {
             mysql: string;
         };
@@ -3872,6 +5554,12 @@ export interface components {
             };
             items: components["schemas"]["ReportScanAnomalyItem"][];
         };
+        /**
+         * @description * `REPORT` - REPORT
+         *     * `COMPLETE` - COMPLETE
+         * @enum {string}
+         */
+        ReportStrategyEnum: "REPORT" | "COMPLETE";
         ReportVersionAttachmentData: {
             public_id: string;
             file_name: string;
@@ -3887,6 +5575,21 @@ export interface components {
             body_markdown: string;
             body_digest: string;
             snapshot_digest: string;
+            execution_run_id: string | null;
+            execution_status: string;
+            execution_result_summary: string;
+            execution_rule_summary: {
+                [key: string]: unknown;
+            };
+            execution_rule_digest: string;
+            execution_snapshot_id: string | null;
+            execution_snapshot_digest: string;
+            stdout_asset_id: string | null;
+            stderr_asset_id: string | null;
+            test_report_asset_id: string | null;
+            execution_evidence: {
+                [key: string]: unknown;
+            } | null;
             /** Format: date-time */
             submitted_at: string;
             submitted_by_id: string;
@@ -3912,7 +5615,7 @@ export interface components {
             cpu_millicores: number;
             memory_mb: number;
             disk_gb: number;
-            network_mode: components["schemas"]["NetworkModeEnum"];
+            network_mode: components["schemas"]["NetworkMode7ceEnum"];
             /** @default 0 */
             cost_minor_per_hour: number;
             /** @default CNY */
@@ -3941,6 +5644,12 @@ export interface components {
             data: components["schemas"]["ResourceProfileData"];
             meta: components["schemas"]["GovernanceTraceMeta"];
         };
+        /**
+         * @description * `PLATFORM` - PLATFORM
+         *     * `COURSE` - COURSE
+         * @enum {string}
+         */
+        ResourceScopeEnum: "PLATFORM" | "COURSE";
         ResourceSummaryData: {
             course_id?: string;
             course_code?: string;
@@ -4062,12 +5771,31 @@ export interface components {
             decision: components["schemas"]["DecisionData"] | null;
         };
         /**
+         * @description * `LOW` - LOW
+         *     * `MEDIUM` - MEDIUM
+         *     * `HIGH` - HIGH
+         *     * `FORBIDDEN` - FORBIDDEN
+         * @enum {string}
+         */
+        RiskEnum: "LOW" | "MEDIUM" | "HIGH" | "FORBIDDEN";
+        /**
          * @description * `LOW` - Low
          *     * `MEDIUM` - Medium
          *     * `HIGH` - High
          * @enum {string}
          */
         RiskLevelEnum: "LOW" | "MEDIUM" | "HIGH";
+        RiskResolve: {
+            status: components["schemas"]["RiskResolveStatusEnum"];
+            reason?: string;
+        };
+        /**
+         * @description * `ACKNOWLEDGED` - ACKNOWLEDGED
+         *     * `IGNORED` - IGNORED
+         *     * `CLOSED` - CLOSED
+         * @enum {string}
+         */
+        RiskResolveStatusEnum: "ACKNOWLEDGED" | "IGNORED" | "CLOSED";
         RubricCriterionData: {
             public_id: string;
             position: number;
@@ -4194,6 +5922,9 @@ export interface components {
          * @enum {string}
          */
         ScanStatusEnum: "PENDING" | "CLEAN" | "INFECTED" | "FAILED";
+        SessionWrite: {
+            mode: components["schemas"]["Mode1c3Enum"];
+        };
         SimilarityMatchData: {
             public_id: string;
             candidate_report_version_id: string;
@@ -4249,6 +5980,28 @@ export interface components {
         SimilarityStart: {
             review_id: string;
         };
+        SourceAssetUpload: {
+            file_name: string;
+            media_type: components["schemas"]["MediaTypeEnum"];
+            size_bytes: number;
+            digest_sha256: string;
+        };
+        /**
+         * @description * `COURSE_MATERIAL` - COURSE_MATERIAL
+         *     * `LAB_MANUAL` - LAB_MANUAL
+         *     * `TEACHER_FAQ` - TEACHER_FAQ
+         *     * `STATIC` - STATIC
+         * @enum {string}
+         */
+        SourceTypeEnum: "COURSE_MATERIAL" | "LAB_MANUAL" | "TEACHER_FAQ" | "STATIC";
+        SourceVersionWrite: {
+            object_asset_id?: string;
+        };
+        SourceWrite: {
+            source_type: components["schemas"]["SourceTypeEnum"];
+            title: string;
+            material_version_id?: string;
+        };
         StaffCreate: {
             user_id: string;
             reason?: string;
@@ -4303,10 +6056,33 @@ export interface components {
          * @enum {string}
          */
         Status9b1Enum: "DRAFT" | "PUBLISHED";
+        /**
+         * @description * `QUEUED` - Queued
+         *     * `RUNNING` - Running
+         *     * `PASSED` - Passed
+         *     * `FAILED` - Failed
+         *     * `TIMEOUT` - Timeout
+         *     * `RESOURCE_EXCEEDED` - Resource Exceeded
+         *     * `REJECTED` - Rejected
+         * @enum {string}
+         */
+        StatusA0dEnum: "QUEUED" | "RUNNING" | "PASSED" | "FAILED" | "TIMEOUT" | "RESOURCE_EXCEEDED" | "REJECTED";
         StatusAction: {
             status: string;
             reason?: string;
         };
+        /**
+         * @description * `ACTIVE` - ACTIVE
+         *     * `RETIRED` - RETIRED
+         * @enum {string}
+         */
+        StatusB00Enum: "ACTIVE" | "RETIRED";
+        /**
+         * @description * `ACTIVE` - ACTIVE
+         *     * `REVOKED` - REVOKED
+         * @enum {string}
+         */
+        StatusE1dEnum: "ACTIVE" | "REVOKED";
         /**
          * @description * `ACTIVE` - Active
          *     * `PURGE_PENDING` - Purge Pending
@@ -4314,6 +6090,12 @@ export interface components {
          * @enum {string}
          */
         StatusFdcEnum: "ACTIVE" | "PURGE_PENDING" | "PURGED";
+        /**
+         * @description * `REPORT` - REPORT
+         *     * `COMPLETE` - COMPLETE
+         * @enum {string}
+         */
+        StrategyEnum: "REPORT" | "COMPLETE";
         SubmissionData: {
             kind: components["schemas"]["KindAd6Enum"];
             version?: components["schemas"]["ReportVersionData"];
@@ -4353,6 +6135,18 @@ export interface components {
             template_name: string;
             template_spec_digest: string | null;
             runtime_type: string;
+            execution_spec: {
+                [key: string]: unknown;
+            };
+            runtime_adapter_id: string | null;
+            runtime_adapter_driver: string;
+            runtime_adapter_config_ref: string;
+            image_id: string | null;
+            image_digest: string;
+            resource_profile_id: string | null;
+            resource_profile_snapshot: {
+                [key: string]: unknown;
+            };
             report_required: boolean;
             status: components["schemas"]["TaskDataStatusEnum"];
             terminal_target: string | null;
@@ -4516,6 +6310,9 @@ export interface components {
             dependencies: {
                 [key: string]: unknown;
             }[];
+            execution_spec: {
+                [key: string]: unknown;
+            };
             network_policy: {
                 [key: string]: unknown;
             };
@@ -4569,6 +6366,7 @@ export interface components {
             dependencies?: {
                 [key: string]: unknown;
             }[];
+            execution_spec?: components["schemas"]["ExecutionSpec"];
             network_policy?: {
                 [key: string]: unknown;
             };
@@ -4595,6 +6393,41 @@ export interface components {
             category?: string;
             description?: string;
         };
+        Token: {
+            client_id: string;
+            client_secret: string;
+            scope?: string;
+        };
+        ToolDecision: {
+            decision: components["schemas"]["ToolDecisionDecisionEnum"];
+            reason?: string;
+        };
+        /**
+         * @description * `APPROVED` - APPROVED
+         *     * `REJECTED` - REJECTED
+         * @enum {string}
+         */
+        ToolDecisionDecisionEnum: "APPROVED" | "REJECTED";
+        ToolPolicyWrite: {
+            key: string;
+            tool_name: string;
+            risk: components["schemas"]["RiskEnum"];
+            schema?: {
+                [key: string]: unknown;
+            };
+            allowlist?: string[];
+            redaction_rules?: string[];
+            /** @default 30 */
+            timeout_seconds: number;
+            /** @default 8192 */
+            output_limit: number;
+        };
+        ToolWrite: {
+            tool_name: string;
+            arguments?: {
+                [key: string]: unknown;
+            };
+        };
         TraceMeta: {
             trace_id: string;
         };
@@ -4611,6 +6444,17 @@ export interface components {
             /** Format: date-time */
             created_at: string;
         };
+        Triage: {
+            status: components["schemas"]["TriageStatusEnum"];
+            note?: string;
+        };
+        /**
+         * @description * `OPEN` - OPEN
+         *     * `TRIAGED` - TRIAGED
+         *     * `CLOSED` - CLOSED
+         * @enum {string}
+         */
+        TriageStatusEnum: "OPEN" | "TRIAGED" | "CLOSED";
         UsageData: {
             reservation: {
                 [key: string]: number;
@@ -4676,6 +6520,134 @@ export interface components {
          * @enum {string}
          */
         VisibilityEnum: "PUBLIC" | "UNLISTED";
+        Webhook: {
+            name: string;
+            /** Format: uri */
+            endpoint_url: string;
+            event_allowlist?: string[];
+            course_id?: string;
+            secret?: string;
+        };
+        Workbench: {
+            task: components["schemas"]["WorkbenchTask"];
+            content: components["schemas"]["WorkbenchContent"];
+            template: components["schemas"]["WorkbenchTemplate"];
+            tests: components["schemas"]["WorkbenchTests"];
+            provisioning: components["schemas"]["WorkbenchProvisioning"];
+            workspace: components["schemas"]["WorkbenchWorkspace"];
+            submission: components["schemas"]["WorkbenchSubmission"];
+        };
+        WorkbenchContent: {
+            description: string;
+            objectives: unknown[];
+            steps: unknown[];
+            constraints: unknown[];
+            deliverables: unknown[];
+            materials: {
+                [key: string]: unknown;
+            }[];
+        };
+        WorkbenchProvisioning: {
+            status: string;
+            job_id: string | null;
+            current_stage: string | null;
+            progress: number;
+            attempt_no?: number;
+            retryable: boolean;
+            failure: {
+                [key: string]: unknown;
+            } | null;
+            stages: components["schemas"]["WorkbenchStage"][];
+            events_channel: string;
+        };
+        WorkbenchRecentExecution: {
+            public_id: string;
+            status: string;
+            result_summary: string;
+            /** Format: date-time */
+            finished_at: string | null;
+            duration_ms: number | null;
+        };
+        WorkbenchStage: {
+            public_id?: string;
+            stage: string;
+            status: string;
+            attempt_no: number | null;
+            error_code?: string;
+            /** Format: date-time */
+            started_at: string | null;
+            /** Format: date-time */
+            completed_at: string | null;
+        };
+        WorkbenchSubmission: {
+            required: boolean;
+            kind: components["schemas"]["KindAd6Enum"];
+            strategy: components["schemas"]["StrategyEnum"];
+            can_submit: boolean;
+            blocked_reason: {
+                [key: string]: unknown;
+            } | null;
+            draft_status: string | null;
+        };
+        WorkbenchTask: {
+            public_id: string;
+            course_id: string;
+            publication_id: string;
+            title: string;
+            description: string;
+            status: string;
+            /** Format: date-time */
+            deadline: string | null;
+            /** Format: date-time */
+            assignment_deadline: string | null;
+            report_required: boolean;
+            report_strategy: components["schemas"]["ReportStrategyEnum"];
+            allowed_actions: string[];
+            allowed_operations: string[];
+            blockers: {
+                [key: string]: unknown;
+            }[];
+            current_failure: {
+                [key: string]: unknown;
+            };
+            row_version: number;
+        };
+        WorkbenchTemplate: {
+            public_id: string;
+            name: string;
+            version_id: string;
+            version_no: number;
+            dependencies: unknown[];
+            workspace_capabilities: {
+                [key: string]: unknown;
+            };
+            manual_asset_id: string | null;
+            starter_asset_id: string | null;
+            report_template_asset_id: string | null;
+        };
+        WorkbenchTests: {
+            public_count: number;
+            count: number;
+            summary: {
+                [key: string]: unknown;
+            }[];
+            recent_execution: components["schemas"]["WorkbenchRecentExecution"] | null;
+        };
+        WorkbenchWorkspace: {
+            mode: components["schemas"]["WorkbenchWorkspaceModeEnum"];
+            entrypoint: string;
+            capture_supported: boolean;
+            last_synchronized_version: number;
+            last_synchronized_snapshot_id: string | null;
+            active_storage_job: components["schemas"]["WorkspaceStorageJob"] | null;
+        };
+        /**
+         * @description * `LEGACY_DRAFT` - LEGACY_DRAFT
+         *     * `RUNTIME_IDE` - RUNTIME_IDE
+         *     * `READ_ONLY` - READ_ONLY
+         * @enum {string}
+         */
+        WorkbenchWorkspaceModeEnum: "LEGACY_DRAFT" | "RUNTIME_IDE" | "READ_ONLY";
         WorkspaceCheckpoint: {
             public_id: string;
             task_id: string;
@@ -4701,6 +6673,24 @@ export interface components {
             };
             session: components["schemas"]["WorkspaceSession"];
         };
+        WorkspaceExecutionRun: {
+            public_id: string;
+            task_id: string;
+            session_id: string;
+            snapshot_id: string | null;
+            status: components["schemas"]["StatusA0dEnum"];
+            error_code: string;
+            result_summary: string;
+            /** Format: date-time */
+            started_at: string | null;
+            /** Format: date-time */
+            finished_at: string | null;
+            duration_ms: number | null;
+            trace_id: string;
+        };
+        WorkspaceExecutionRunList: {
+            items: components["schemas"]["WorkspaceExecutionRun"][];
+        };
         WorkspaceSession: {
             public_id: string;
             task_id: string;
@@ -4710,6 +6700,9 @@ export interface components {
             status: components["schemas"]["WorkspaceSessionStatusEnum"];
             capabilities: {
                 [key: string]: unknown;
+            };
+            workspace_urls: {
+                [key: string]: string;
             };
             /** Format: date-time */
             expires_at: string;
@@ -4740,6 +6733,56 @@ export interface components {
             /** Format: date-time */
             saved_at: string;
         };
+        WorkspaceStorageJob: {
+            public_id: string;
+            task_id: string;
+            session_id: string;
+            kind: components["schemas"]["WorkspaceStorageJobKindEnum"];
+            status: components["schemas"]["WorkspaceStorageJobStatusEnum"];
+            client_seq: number | null;
+            base_version: number | null;
+            source_snapshot_id: string | null;
+            result_snapshot_id: string | null;
+            failure: {
+                [key: string]: unknown;
+            } | null;
+            /** Format: date-time */
+            queued_at: string;
+            /** Format: date-time */
+            started_at: string | null;
+            /** Format: date-time */
+            completed_at: string | null;
+            row_version: number;
+        };
+        /**
+         * @description * `INITIALIZE` - Initialize
+         *     * `CAPTURE` - Capture
+         *     * `RESTORE` - Restore
+         *     * `FINALIZE` - Finalize
+         * @enum {string}
+         */
+        WorkspaceStorageJobKindEnum: "INITIALIZE" | "CAPTURE" | "RESTORE" | "FINALIZE";
+        /**
+         * @description * `QUEUED` - Queued
+         *     * `RUNNING` - Running
+         *     * `PASSED` - Passed
+         *     * `FAILED` - Failed
+         *     * `CANCELLED` - Cancelled
+         * @enum {string}
+         */
+        WorkspaceStorageJobStatusEnum: "QUEUED" | "RUNNING" | "PASSED" | "FAILED" | "CANCELLED";
+        WorkspaceStorageJobWrite: {
+            kind: components["schemas"]["WorkspaceStorageJobWriteKindEnum"];
+            client_seq?: number;
+            base_version?: number;
+            snapshot_id?: string;
+        };
+        /**
+         * @description * `CAPTURE` - CAPTURE
+         *     * `RESTORE` - RESTORE
+         * @enum {string}
+         */
+        WorkspaceStorageJobWriteKindEnum: "CAPTURE" | "RESTORE";
     };
     responses: never;
     parameters: never;
@@ -4749,6 +6792,201 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    user_agent_feedback_create: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                message_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FeedbackWrite"];
+                "application/x-www-form-urlencoded": components["schemas"]["FeedbackWrite"];
+                "multipart/form-data": components["schemas"]["FeedbackWrite"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentEnvelope"];
+                };
+            };
+        };
+    };
+    user_agent_session_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentEnvelope"];
+                };
+            };
+        };
+    };
+    user_agent_messages_list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentEnvelope"];
+                };
+            };
+        };
+    };
+    user_agent_message_create: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MessageWrite"];
+                "application/x-www-form-urlencoded": components["schemas"]["MessageWrite"];
+                "multipart/form-data": components["schemas"]["MessageWrite"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentEnvelope"];
+                };
+            };
+        };
+    };
+    user_agent_tool_request: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ToolWrite"];
+                "application/x-www-form-urlencoded": components["schemas"]["ToolWrite"];
+                "multipart/form-data": components["schemas"]["ToolWrite"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentEnvelope"];
+                };
+            };
+        };
+    };
+    user_agent_tool_decide: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+                "If-Match": string;
+            };
+            path: {
+                call_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ToolDecision"];
+                "application/x-www-form-urlencoded": components["schemas"]["ToolDecision"];
+                "multipart/form-data": components["schemas"]["ToolDecision"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentEnvelope"];
+                };
+            };
+        };
+    };
+    api_v2_analytics_recommendations_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    api_v2_analytics_risk_signals_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     api_v2_auth_csrf_retrieve: {
         parameters: {
             query?: never;
@@ -4822,6 +7060,46 @@ export interface operations {
         responses: {
             /** @description All portal sessions revoked */
             204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    api_v2_auth_oidc_callback_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    api_v2_auth_oidc_start_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -4915,6 +7193,56 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CourseContentResponse"];
+                };
+            };
+        };
+    };
+    user_agent_profile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentEnvelope"];
+                };
+            };
+        };
+    };
+    user_agent_course_session_create: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SessionWrite"];
+                "application/x-www-form-urlencoded": components["schemas"]["SessionWrite"];
+                "multipart/form-data": components["schemas"]["SessionWrite"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentEnvelope"];
                 };
             };
         };
@@ -5081,6 +7409,88 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ErrorEnvelope"];
                 };
+            };
+        };
+    };
+    api_v2_integrations_oauth_token_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Token"];
+                "application/x-www-form-urlencoded": components["schemas"]["Token"];
+                "multipart/form-data": components["schemas"]["Token"];
+            };
+        };
+        responses: {
+            /** @description No response body */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    api_v2_integrations_open_courses_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    api_v2_integrations_open_courses_experiments_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    api_v2_integrations_open_courses_progress_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
@@ -5277,6 +7687,88 @@ export interface operations {
             };
         };
     };
+    api_v2_me_oidc_identities_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    api_v2_me_oidc_identities_create: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+                "If-Match": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    api_v2_me_oidc_identities_unlink_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                identity_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    api_v2_me_oidc_identities_unlink_create: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+                "If-Match": string;
+            };
+            path: {
+                identity_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     api_v2_me_password_create: {
         parameters: {
             query?: never;
@@ -5346,6 +7838,92 @@ export interface operations {
             };
         };
     };
+    api_v2_notification_preferences_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    api_v2_notification_preferences_partial_update: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+                "If-Match": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["PatchedPreference"];
+                "application/x-www-form-urlencoded": components["schemas"]["PatchedPreference"];
+                "multipart/form-data": components["schemas"]["PatchedPreference"];
+            };
+        };
+        responses: {
+            /** @description No response body */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    api_v2_notifications_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    api_v2_notifications_read_create: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+                "If-Match": string;
+            };
+            path: {
+                notification_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     api_v2_platform_admin_assignments_retrieve: {
         parameters: {
             query?: never;
@@ -5388,6 +7966,420 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AdminAssignmentResponse"];
+                };
+            };
+        };
+    };
+    api_v2_platform_agent_eval_runs_create: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlatformEvalRunWrite"];
+                "application/x-www-form-urlencoded": components["schemas"]["PlatformEvalRunWrite"];
+                "multipart/form-data": components["schemas"]["PlatformEvalRunWrite"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentEnvelope"];
+                };
+            };
+        };
+    };
+    api_v2_platform_agent_eval_runs_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentEnvelope"];
+                };
+            };
+        };
+    };
+    api_v2_platform_agent_eval_suites_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentEnvelope"];
+                };
+            };
+        };
+    };
+    api_v2_platform_agent_eval_suites_create: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EvalSuiteWrite"];
+                "application/x-www-form-urlencoded": components["schemas"]["EvalSuiteWrite"];
+                "multipart/form-data": components["schemas"]["EvalSuiteWrite"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentEnvelope"];
+                };
+            };
+        };
+    };
+    api_v2_platform_agent_eval_suites_cases_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                suite_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentEnvelope"];
+                };
+            };
+        };
+    };
+    api_v2_platform_agent_eval_suites_cases_create: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                suite_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EvalCaseWrite"];
+                "application/x-www-form-urlencoded": components["schemas"]["EvalCaseWrite"];
+                "multipart/form-data": components["schemas"]["EvalCaseWrite"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentEnvelope"];
+                };
+            };
+        };
+    };
+    api_v2_platform_agent_model_routes_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentEnvelope"];
+                };
+            };
+        };
+    };
+    api_v2_platform_agent_model_routes_create: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ModelRouteWrite"];
+                "application/x-www-form-urlencoded": components["schemas"]["ModelRouteWrite"];
+                "multipart/form-data": components["schemas"]["ModelRouteWrite"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentEnvelope"];
+                };
+            };
+        };
+    };
+    api_v2_platform_agent_model_routes_partial_update: {
+        parameters: {
+            query?: never;
+            header: {
+                "If-Match": string;
+            };
+            path: {
+                route_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["PatchedModelRoutePatch"];
+                "application/x-www-form-urlencoded": components["schemas"]["PatchedModelRoutePatch"];
+                "multipart/form-data": components["schemas"]["PatchedModelRoutePatch"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentEnvelope"];
+                };
+            };
+        };
+    };
+    api_v2_platform_agent_tool_policies_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentEnvelope"];
+                };
+            };
+        };
+    };
+    api_v2_platform_agent_tool_policies_create: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ToolPolicyWrite"];
+                "application/x-www-form-urlencoded": components["schemas"]["ToolPolicyWrite"];
+                "multipart/form-data": components["schemas"]["ToolPolicyWrite"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentEnvelope"];
+                };
+            };
+        };
+    };
+    api_v2_platform_agent_tool_policies_partial_update: {
+        parameters: {
+            query?: never;
+            header: {
+                "If-Match": string;
+            };
+            path: {
+                policy_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["PatchedToolPolicyPatch"];
+                "application/x-www-form-urlencoded": components["schemas"]["PatchedToolPolicyPatch"];
+                "multipart/form-data": components["schemas"]["PatchedToolPolicyPatch"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentEnvelope"];
+                };
+            };
+        };
+    };
+    api_v2_platform_agent_usage_costs_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentEnvelope"];
+                };
+            };
+        };
+    };
+    api_v2_platform_analytics_projection_jobs_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    api_v2_platform_analytics_quality_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    api_v2_platform_analytics_resource_costs_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    platform_compensations_list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CompensationListResponse"];
+                };
+            };
+        };
+    };
+    platform_compensations_retry: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+                "If-Match": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CompensationRetry"];
+                "application/x-www-form-urlencoded": components["schemas"]["CompensationRetry"];
+                "multipart/form-data": components["schemas"]["CompensationRetry"];
+            };
+        };
+        responses: {
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CompensationResponse"];
                 };
             };
         };
@@ -5652,6 +8644,561 @@ export interface operations {
             };
         };
     };
+    platform_instances_list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InstanceListResponse"];
+                };
+            };
+        };
+    };
+    platform_instances_destroy: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+                "If-Match": string;
+            };
+            path: {
+                instance_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ArchiveDestroyReason"];
+                "application/x-www-form-urlencoded": components["schemas"]["ArchiveDestroyReason"];
+                "multipart/form-data": components["schemas"]["ArchiveDestroyReason"];
+            };
+        };
+        responses: {
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InstanceResponse"];
+                };
+            };
+        };
+    };
+    platform_integrations_api_clients_list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    platform_integrations_api_clients_create: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["APIClient"];
+                "application/x-www-form-urlencoded": components["schemas"]["APIClient"];
+                "multipart/form-data": components["schemas"]["APIClient"];
+            };
+        };
+        responses: {
+            /** @description No response body */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    platform_integrations_api_clients_detail: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                client_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    api_v2_platform_integrations_api_clients_partial_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                client_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    platform_integrations_api_client_grants_list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                client_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    platform_integrations_api_client_grants_create: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                client_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["APIClientGrant"];
+                "application/x-www-form-urlencoded": components["schemas"]["APIClientGrant"];
+                "multipart/form-data": components["schemas"]["APIClientGrant"];
+            };
+        };
+        responses: {
+            /** @description No response body */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    api_v2_platform_integrations_api_clients_rotate_secret_create: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+                "If-Match": string;
+            };
+            path: {
+                client_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    api_v2_platform_integrations_oidc_identities_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    api_v2_platform_integrations_oidc_identities_create: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+                "If-Match": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    api_v2_platform_integrations_oidc_identities_unlink_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                identity_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    api_v2_platform_integrations_oidc_identities_unlink_create: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+                "If-Match": string;
+            };
+            path: {
+                identity_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    platform_integrations_oidc_providers_list: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    api_v2_platform_integrations_oidc_providers_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    platform_integrations_oidc_providers_detail: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    api_v2_platform_integrations_oidc_providers_partial_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    api_v2_platform_integrations_oidc_providers_rotate_secret_create: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+                "If-Match": string;
+            };
+            path: {
+                provider_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    api_v2_platform_integrations_webhook_deliveries_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    api_v2_platform_integrations_webhook_deliveries_attempts_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                delivery_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    api_v2_platform_integrations_webhook_deliveries_retry_create: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+                "If-Match": string;
+            };
+            path: {
+                delivery_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    platform_integrations_webhook_endpoints_list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    api_v2_platform_integrations_webhook_endpoints_create: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Webhook"];
+                "application/x-www-form-urlencoded": components["schemas"]["Webhook"];
+                "multipart/form-data": components["schemas"]["Webhook"];
+            };
+        };
+        responses: {
+            /** @description No response body */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    platform_integrations_webhook_endpoints_detail: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                endpoint_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    api_v2_platform_integrations_webhook_endpoints_partial_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                endpoint_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    api_v2_platform_integrations_webhook_endpoints_rotate_secret_create: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+                "If-Match": string;
+            };
+            path: {
+                endpoint_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     platform_network_allowlists_list: {
         parameters: {
             query?: never;
@@ -5749,6 +9296,42 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["AllowlistResponse"];
                 };
+            };
+        };
+    };
+    api_v2_platform_operations_logs_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    api_v2_platform_operations_overview_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
@@ -6644,6 +10227,56 @@ export interface operations {
             };
         };
     };
+    user_agent_task_session_create: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SessionWrite"];
+                "application/x-www-form-urlencoded": components["schemas"]["SessionWrite"];
+                "multipart/form-data": components["schemas"]["SessionWrite"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentEnvelope"];
+                };
+            };
+        };
+    };
+    tasks_archive_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArchiveResponse"];
+                };
+            };
+        };
+    };
     tasks_report_attachments_create: {
         parameters: {
             query?: never;
@@ -6853,6 +10486,53 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["WorkspaceEnter"];
+                };
+            };
+        };
+    };
+    tasks_execution_run_retrieve: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-Workspace-Token": string;
+            };
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkspaceExecutionRunList"];
+                };
+            };
+        };
+    };
+    api_v2_tasks_execution_runs_retrieve: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-Workspace-Token": string;
+            };
+            path: {
+                execution_id: string;
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkspaceExecutionRun"];
                 };
             };
         };
@@ -7159,6 +10839,27 @@ export interface operations {
             };
         };
     };
+    tasks_workbench_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Workbench"];
+                };
+            };
+        };
+    };
     api_v2_tasks_workspace_sessions_create: {
         parameters: {
             query?: never;
@@ -7188,7 +10889,7 @@ export interface operations {
             };
         };
     };
-    api_v2_tasks_workspace_snapshot_update: {
+    tasks_execution_runs_list: {
         parameters: {
             query?: never;
             header: {
@@ -7211,6 +10912,45 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["WorkspaceSnapshot"];
+                };
+            };
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkspaceStorageJob"];
+                };
+            };
+        };
+    };
+    tasks_workspace_storage_jobs_create: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+                "If-Match": string;
+                "X-Workspace-Token": string;
+            };
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WorkspaceStorageJobWrite"];
+                "application/x-www-form-urlencoded": components["schemas"]["WorkspaceStorageJobWrite"];
+                "multipart/form-data": components["schemas"]["WorkspaceStorageJobWrite"];
+            };
+        };
+        responses: {
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkspaceStorageJob"];
                 };
             };
         };
@@ -7357,6 +11097,824 @@ export interface operations {
             };
         };
     };
+    api_v2_teaching_courses_agent_analytics_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentEnvelope"];
+                };
+            };
+        };
+    };
+    api_v2_teaching_courses_agent_eval_runs_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                course_id: string;
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentEnvelope"];
+                };
+            };
+        };
+    };
+    api_v2_teaching_courses_agent_eval_suites_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentEnvelope"];
+                };
+            };
+        };
+    };
+    api_v2_teaching_courses_agent_eval_suites_create: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EvalSuiteWrite"];
+                "application/x-www-form-urlencoded": components["schemas"]["EvalSuiteWrite"];
+                "multipart/form-data": components["schemas"]["EvalSuiteWrite"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentEnvelope"];
+                };
+            };
+        };
+    };
+    api_v2_teaching_courses_agent_eval_suites_cases_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                course_id: string;
+                suite_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentEnvelope"];
+                };
+            };
+        };
+    };
+    api_v2_teaching_courses_agent_eval_suites_cases_create: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                course_id: string;
+                suite_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EvalCaseWrite"];
+                "application/x-www-form-urlencoded": components["schemas"]["EvalCaseWrite"];
+                "multipart/form-data": components["schemas"]["EvalCaseWrite"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentEnvelope"];
+                };
+            };
+        };
+    };
+    api_v2_teaching_courses_agent_feedback_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentEnvelope"];
+                };
+            };
+        };
+    };
+    api_v2_teaching_courses_agent_feedback_create: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+                "If-Match": string;
+            };
+            path: {
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Triage"];
+                "application/x-www-form-urlencoded": components["schemas"]["Triage"];
+                "multipart/form-data": components["schemas"]["Triage"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentEnvelope"];
+                };
+            };
+        };
+    };
+    api_v2_teaching_courses_agent_feedback_triage_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                course_id: string;
+                feedback_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentEnvelope"];
+                };
+            };
+        };
+    };
+    api_v2_teaching_courses_agent_feedback_triage_create: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+                "If-Match": string;
+            };
+            path: {
+                course_id: string;
+                feedback_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Triage"];
+                "application/x-www-form-urlencoded": components["schemas"]["Triage"];
+                "multipart/form-data": components["schemas"]["Triage"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentEnvelope"];
+                };
+            };
+        };
+    };
+    api_v2_teaching_courses_agent_ingestion_runs_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                course_id: string;
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentEnvelope"];
+                };
+            };
+        };
+    };
+    teaching_agent_knowledge_bases_list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentEnvelope"];
+                };
+            };
+        };
+    };
+    teaching_agent_knowledge_base_create: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["KnowledgeBaseWrite"];
+                "application/x-www-form-urlencoded": components["schemas"]["KnowledgeBaseWrite"];
+                "multipart/form-data": components["schemas"]["KnowledgeBaseWrite"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentEnvelope"];
+                };
+            };
+        };
+    };
+    teaching_agent_source_list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                course_id: string;
+                knowledge_base_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentEnvelope"];
+                };
+            };
+        };
+    };
+    teaching_agent_source_create: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                course_id: string;
+                knowledge_base_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SourceWrite"];
+                "application/x-www-form-urlencoded": components["schemas"]["SourceWrite"];
+                "multipart/form-data": components["schemas"]["SourceWrite"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentEnvelope"];
+                };
+            };
+        };
+    };
+    api_v2_teaching_courses_agent_options_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentEnvelope"];
+                };
+            };
+        };
+    };
+    teaching_agent_profiles_list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentEnvelope"];
+                };
+            };
+        };
+    };
+    teaching_agent_profile_create: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProfileWrite"];
+                "application/x-www-form-urlencoded": components["schemas"]["ProfileWrite"];
+                "multipart/form-data": components["schemas"]["ProfileWrite"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentEnvelope"];
+                };
+            };
+        };
+    };
+    teaching_agent_profile_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                course_id: string;
+                profile_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentEnvelope"];
+                };
+            };
+        };
+    };
+    teaching_agent_profile_update: {
+        parameters: {
+            query?: never;
+            header: {
+                "If-Match": string;
+            };
+            path: {
+                course_id: string;
+                profile_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["PatchedProfilePatch"];
+                "application/x-www-form-urlencoded": components["schemas"]["PatchedProfilePatch"];
+                "multipart/form-data": components["schemas"]["PatchedProfilePatch"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentEnvelope"];
+                };
+            };
+        };
+    };
+    teaching_agent_profile_action: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+                "If-Match": string;
+            };
+            path: {
+                action: string;
+                course_id: string;
+                profile_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentEnvelope"];
+                "application/x-www-form-urlencoded": components["schemas"]["AgentEnvelope"];
+                "multipart/form-data": components["schemas"]["AgentEnvelope"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentEnvelope"];
+                };
+            };
+        };
+    };
+    api_v2_teaching_courses_agent_prompt_templates_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentEnvelope"];
+                };
+            };
+        };
+    };
+    api_v2_teaching_courses_agent_prompt_templates_create: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PromptWrite"];
+                "application/x-www-form-urlencoded": components["schemas"]["PromptWrite"];
+                "multipart/form-data": components["schemas"]["PromptWrite"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentEnvelope"];
+                };
+            };
+        };
+    };
+    api_v2_teaching_courses_agent_prompt_templates_versions_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                course_id: string;
+                template_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentEnvelope"];
+                };
+            };
+        };
+    };
+    api_v2_teaching_courses_agent_source_assets_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                asset_id: string;
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentEnvelope"];
+                };
+            };
+        };
+    };
+    api_v2_teaching_courses_agent_sources_assets_complete_create: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+                "If-Match": string;
+            };
+            path: {
+                asset_id: string;
+                course_id: string;
+                source_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentEnvelope"];
+                };
+            };
+        };
+    };
+    api_v2_teaching_courses_agent_sources_uploads_create: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                course_id: string;
+                source_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SourceAssetUpload"];
+                "application/x-www-form-urlencoded": components["schemas"]["SourceAssetUpload"];
+                "multipart/form-data": components["schemas"]["SourceAssetUpload"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentEnvelope"];
+                };
+            };
+        };
+    };
+    teaching_agent_source_version_create: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                course_id: string;
+                source_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["SourceVersionWrite"];
+                "application/x-www-form-urlencoded": components["schemas"]["SourceVersionWrite"];
+                "multipart/form-data": components["schemas"]["SourceVersionWrite"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentEnvelope"];
+                };
+            };
+        };
+    };
+    api_v2_teaching_courses_analytics_overview_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    api_v2_teaching_courses_analytics_quality_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    api_v2_teaching_courses_analytics_resource_costs_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    api_v2_teaching_courses_analytics_risk_signals_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    api_v2_teaching_courses_analytics_risk_signals_resolve_create: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+                "If-Match": string;
+            };
+            path: {
+                course_id: string;
+                signal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RiskResolve"];
+                "application/x-www-form-urlencoded": components["schemas"]["RiskResolve"];
+                "multipart/form-data": components["schemas"]["RiskResolve"];
+            };
+        };
+        responses: {
+            /** @description No response body */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     teaching_announcement_publish: {
         parameters: {
             query?: never;
@@ -7417,6 +11975,74 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CheckResponse"];
+                };
+            };
+        };
+    };
+    teaching_archives_list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArchiveListResponse"];
+                };
+            };
+        };
+    };
+    teaching_archives_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                archive_id: string;
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArchiveResponse"];
+                };
+            };
+        };
+    };
+    teaching_archives_exports_create: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+                "If-Match": string;
+            };
+            path: {
+                archive_id: string;
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArchiveExportResponse"];
                 };
             };
         };
@@ -7874,7 +12500,7 @@ export interface operations {
             };
         };
     };
-    api_v2_teaching_courses_experiments_close_create: {
+    teaching_experiments_close: {
         parameters: {
             query?: never;
             header: {
@@ -7890,22 +12516,6 @@ export interface operations {
         requestBody?: never;
         responses: {
             200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PublicationData"];
-                };
-            };
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PublicationData"];
-                };
-            };
-            202: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -7915,7 +12525,7 @@ export interface operations {
             };
         };
     };
-    api_v2_teaching_courses_experiments_publish_create: {
+    teaching_experiments_publish: {
         parameters: {
             query?: never;
             header: {
@@ -7928,16 +12538,14 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PublicationData"];
-                };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["PublicationPublish"];
+                "application/x-www-form-urlencoded": components["schemas"]["PublicationPublish"];
+                "multipart/form-data": components["schemas"]["PublicationPublish"];
             };
+        };
+        responses: {
             201: {
                 headers: {
                     [name: string]: unknown;
@@ -7978,7 +12586,7 @@ export interface operations {
             };
         };
     };
-    api_v2_teaching_courses_experiments_withdraw_create: {
+    teaching_experiments_withdraw: {
         parameters: {
             query?: never;
             header: {
@@ -7994,22 +12602,6 @@ export interface operations {
         requestBody?: never;
         responses: {
             200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PublicationData"];
-                };
-            };
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PublicationData"];
-                };
-            };
-            202: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -9681,6 +14273,27 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["WorkspaceSession"];
+                };
+            };
+        };
+    };
+    workspace_storage_jobs_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkspaceStorageJob"];
                 };
             };
         };

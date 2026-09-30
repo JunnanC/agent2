@@ -58,11 +58,18 @@ class Command(BaseCommand):
                 application_message="P10 similarity candidate",
                 context=ActorContext(peer.public_id, "USER", trace_id),
             )
-        peer_task = assign_late_enrollment_task(
-            enrollment_id=enrollment.public_id,
-            publication_id=publication.public_id,
-            context=ActorContext(peer.public_id, "USER", trace_id),
-        ) or ExperimentTask.objects.filter(publication=publication, student=peer).first()
+        # Reuse an existing task before asking the assignment service to create one.
+        # This keeps the disposable seed idempotent even when a previous run already
+        # assigned the late-enrollment candidate.
+        peer_task = ExperimentTask.objects.filter(
+            publication=publication, student=peer
+        ).first()
+        if peer_task is None:
+            peer_task = assign_late_enrollment_task(
+                enrollment_id=enrollment.public_id,
+                publication_id=publication.public_id,
+                context=ActorContext(peer.public_id, "USER", trace_id),
+            )
         if peer_task is None:
             raise CommandError("Could not assign the P10 similarity candidate task")
         peer_review = self._prepare_submission(

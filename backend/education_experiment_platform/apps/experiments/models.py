@@ -4,6 +4,7 @@ from apps.accounts.models import User
 from apps.core.identifiers import new_ulid
 from apps.core.models import AppendOnlyModel, VersionedModel
 from apps.courses.models import Chapter, Course, Enrollment
+from apps.governance.models import ImageAsset, ResourceProfile, RuntimeAdapter
 from apps.labtemplates.models import TemplateVersion
 from apps.reviews.models import RubricVersion
 
@@ -62,6 +63,40 @@ class TaskPublication(VersionedModel):
     template_version = models.ForeignKey(
         TemplateVersion, on_delete=models.PROTECT, related_name="task_publications"
     )
+    # These fields are populated at publish time.  They deliberately duplicate
+    # the template's runtime inputs so later governance/template edits cannot
+    # change an already published task.
+    template_spec_digest = models.CharField(
+        max_length=64, null=True, blank=True, db_collation="ascii_bin"
+    )
+    execution_spec = models.JSONField(default=dict, blank=True)
+    runtime_adapter = models.ForeignKey(
+        RuntimeAdapter,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="experiment_task_publication_snapshots",
+    )
+    runtime_adapter_driver = models.CharField(max_length=32, blank=True, default="")
+    runtime_adapter_config_ref = models.CharField(max_length=128, blank=True, default="")
+    image = models.ForeignKey(
+        ImageAsset,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="experiment_task_publication_snapshots",
+    )
+    image_registry = models.CharField(max_length=255, blank=True, default="")
+    image_repository = models.CharField(max_length=255, blank=True, default="")
+    image_digest = models.CharField(max_length=71, blank=True, default="", db_collation="ascii_bin")
+    resource_profile = models.ForeignKey(
+        ResourceProfile,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="experiment_task_publication_snapshots",
+    )
+    resource_profile_snapshot = models.JSONField(default=dict, blank=True)
     rubric_version = models.ForeignKey(
         RubricVersion, on_delete=models.PROTECT, related_name="task_publications"
     )
@@ -263,6 +298,39 @@ class ExperimentTask(VersionedModel):
         TemplateVersion, on_delete=models.PROTECT, related_name="experiment_tasks"
     )
     runtime_type = models.CharField(max_length=16)
+    # Nullable for P07/P08 historical FakeRuntime rows. New tasks always get
+    # these values from the publication snapshot at assignment time.
+    template_spec_digest = models.CharField(
+        max_length=64, null=True, blank=True, db_collation="ascii_bin"
+    )
+    execution_spec = models.JSONField(default=dict, blank=True)
+    runtime_adapter = models.ForeignKey(
+        RuntimeAdapter,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="experiment_task_runtime_snapshots",
+    )
+    runtime_adapter_driver = models.CharField(max_length=32, blank=True, default="")
+    runtime_adapter_config_ref = models.CharField(max_length=128, blank=True, default="")
+    image = models.ForeignKey(
+        ImageAsset,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="experiment_task_runtime_snapshots",
+    )
+    image_registry = models.CharField(max_length=255, blank=True, default="")
+    image_repository = models.CharField(max_length=255, blank=True, default="")
+    image_digest = models.CharField(max_length=71, blank=True, default="", db_collation="ascii_bin")
+    resource_profile = models.ForeignKey(
+        ResourceProfile,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="experiment_task_runtime_snapshots",
+    )
+    resource_profile_snapshot = models.JSONField(default=dict, blank=True)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.ASSIGNED)
     terminal_target = models.CharField(
         max_length=16, choices=TerminalTarget.choices, null=True, blank=True

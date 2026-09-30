@@ -1,0 +1,8 @@
+ARCHIVE_QUEUED = "archive.queued"
+ARCHIVE_VERIFIED = "archive.verified"
+ARCHIVE_FAILED = "archive.failed"
+ARCHIVE_RECOVERED = "archive.recovered"
+EXPORT_GRANTED = "archive.export_granted"
+INSTANCE_DESTROY_REQUESTED = "runtime.destroy_requested"
+INSTANCE_DESTROYED = "runtime.destroyed"
+RECONCILIATION_FOUND = "archive.reconciliation_found"

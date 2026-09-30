@@ -76,6 +76,17 @@ class ReportVersionDataSerializer(serializers.Serializer):
     body_markdown = serializers.CharField()
     body_digest = serializers.CharField()
     snapshot_digest = serializers.CharField()
+    execution_run_id = serializers.CharField(allow_null=True)
+    execution_status = serializers.CharField(allow_blank=True)
+    execution_result_summary = serializers.CharField(allow_blank=True)
+    execution_rule_summary = serializers.DictField()
+    execution_rule_digest = serializers.CharField(allow_blank=True)
+    execution_snapshot_id = serializers.CharField(allow_null=True)
+    execution_snapshot_digest = serializers.CharField(allow_blank=True)
+    stdout_asset_id = serializers.CharField(allow_null=True)
+    stderr_asset_id = serializers.CharField(allow_null=True)
+    test_report_asset_id = serializers.CharField(allow_null=True)
+    execution_evidence = serializers.DictField(allow_null=True)
     submitted_at = serializers.DateTimeField()
     submitted_by_id = serializers.CharField()
     trace_id = serializers.CharField()
@@ -194,7 +205,39 @@ def report_draft_data(draft: ReportDraft) -> dict[str, object]:
     }
 
 
+def execution_evidence_data(version: ReportVersion) -> dict[str, object] | None:
+    if not version.execution_run_id:
+        return None
+    return {
+        "execution_run_id": version.execution_run.public_id,
+        "status": version.execution_status,
+        "result_summary": version.execution_result_summary,
+        "rule_summary": version.execution_rule_summary,
+        "rule_digest": version.execution_rule_digest,
+        "snapshot_id": (
+            version.execution_snapshot.public_id if version.execution_snapshot_id else None
+        ),
+        "snapshot_digest": version.execution_snapshot_digest,
+        "stdout_asset_id": (
+            version.execution_stdout_asset.public_id
+            if version.execution_stdout_asset_id
+            else None
+        ),
+        "stderr_asset_id": (
+            version.execution_stderr_asset.public_id
+            if version.execution_stderr_asset_id
+            else None
+        ),
+        "test_report_asset_id": (
+            version.execution_test_report_asset.public_id
+            if version.execution_test_report_asset_id
+            else None
+        ),
+    }
+
+
 def report_version_data(version: ReportVersion) -> dict[str, object]:
+    evidence = execution_evidence_data(version)
     return {
         "public_id": version.public_id,
         "task_id": version.task.public_id,
@@ -202,6 +245,31 @@ def report_version_data(version: ReportVersion) -> dict[str, object]:
         "body_markdown": version.body_markdown,
         "body_digest": version.body_digest,
         "snapshot_digest": version.snapshot_digest,
+        "execution_run_id": version.execution_run.public_id if version.execution_run_id else None,
+        "execution_status": version.execution_status,
+        "execution_result_summary": version.execution_result_summary,
+        "execution_rule_summary": version.execution_rule_summary,
+        "execution_rule_digest": version.execution_rule_digest,
+        "execution_snapshot_id": (
+            version.execution_snapshot.public_id if version.execution_snapshot_id else None
+        ),
+        "execution_snapshot_digest": version.execution_snapshot_digest,
+        "stdout_asset_id": (
+            version.execution_stdout_asset.public_id
+            if version.execution_stdout_asset_id
+            else None
+        ),
+        "stderr_asset_id": (
+            version.execution_stderr_asset.public_id
+            if version.execution_stderr_asset_id
+            else None
+        ),
+        "test_report_asset_id": (
+            version.execution_test_report_asset.public_id
+            if version.execution_test_report_asset_id
+            else None
+        ),
+        "execution_evidence": evidence,
         "submitted_at": version.submitted_at,
         "submitted_by_id": version.submitted_by.public_id,
         "trace_id": version.trace_id,

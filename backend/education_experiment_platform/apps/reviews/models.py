@@ -389,6 +389,9 @@ class AutoCheckRun(VersionedModel):
         RUNNING = "RUNNING"
         PASSED = "PASSED"
         FAILED = "FAILED"
+        TIMEOUT = "TIMEOUT"
+        RESOURCE_EXCEEDED = "RESOURCE_EXCEEDED"
+        REJECTED = "REJECTED"
 
     public_id = public_id_field()
     review = models.ForeignKey(Review, on_delete=models.PROTECT, related_name="auto_check_runs")
@@ -401,7 +404,14 @@ class AutoCheckRun(VersionedModel):
     checker_type = models.CharField(max_length=64)
     rule_digest = models.CharField(max_length=64, db_collation="ascii_bin")
     artifact_digest = models.CharField(max_length=64, db_collation="ascii_bin")
-    status = models.CharField(max_length=16, choices=Status.choices, default=Status.QUEUED)
+    # The task execution contract is copied when the review is created.  A
+    # later template edit therefore cannot change what a judge is allowed to
+    # run for this review.
+    execution_rule_summary = models.JSONField(default=dict)
+    execution_rule_digest = models.CharField(
+        max_length=64, blank=True, default="", db_collation="ascii_bin"
+    )
+    status = models.CharField(max_length=24, choices=Status.choices, default=Status.QUEUED)
     attempt_count = models.PositiveIntegerField(default=0)
     result_summary = models.JSONField(default=dict)
     evidence = models.JSONField(default=list)
@@ -410,6 +420,7 @@ class AutoCheckRun(VersionedModel):
     trace_id = models.CharField(max_length=32)
     started_at = models.DateTimeField(null=True, blank=True)
     completed_at = models.DateTimeField(null=True, blank=True)
+    duration_ms = models.PositiveBigIntegerField(null=True, blank=True)
 
     class Meta:
         db_table = "reviews_auto_check_run"
@@ -419,8 +430,22 @@ class AutoCheckRun(VersionedModel):
                 name="reviews_auto_run_input_uniq",
             ),
             models.CheckConstraint(
-                condition=models.Q(status__in=("QUEUED", "RUNNING", "PASSED", "FAILED")),
+                condition=models.Q(
+                    status__in=(
+                        "QUEUED",
+                        "RUNNING",
+                        "PASSED",
+                        "FAILED",
+                        "TIMEOUT",
+                        "RESOURCE_EXCEEDED",
+                        "REJECTED",
+                    )
+                ),
                 name="reviews_auto_run_status_ck",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(duration_ms__isnull=True) | models.Q(duration_ms__gte=0),
+                name="reviews_auto_run_duration_ck",
             ),
         ]
         indexes = [

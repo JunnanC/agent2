@@ -66,3 +66,67 @@ class WorkspaceOperationDenied(CoreError):
     code = "WORKSPACE_OPERATION_DENIED"
     message = "工作区操作不被允许"
     status_code = 403
+
+
+class WorkspaceStorageJobActive(CoreError):
+    code = "WORKSPACE_STORAGE_JOB_ACTIVE"
+    message = "工作区存储作业正在执行"
+    status_code = 409
+    retryable = True
+
+
+class WorkspaceCaptureUnsupported(CoreError):
+    code = "WORKSPACE_CAPTURE_UNSUPPORTED"
+    message = "当前工作区不支持服务端捕获"
+    status_code = 409
+
+
+class WorkspaceFileMissing(CoreError):
+    code = "WORKSPACE_FILE_MISSING"
+    message = "工作区入口文件不存在"
+    status_code = 409
+
+
+class WorkspaceFileTooLarge(CoreError):
+    code = "WORKSPACE_FILE_TOO_LARGE"
+    message = "工作区入口文件超过大小限制"
+    status_code = 413
+
+
+class WorkspaceFileInvalid(CoreError):
+    code = "WORKSPACE_FILE_INVALID"
+    message = "工作区入口文件格式无效"
+    status_code = 422
+
+
+class WorkspaceCaptureConflict(CoreError):
+    code = "WORKSPACE_CAPTURE_CONFLICT"
+    message = "工作区捕获版本冲突"
+    status_code = 412
+
+
+class WorkspaceSnapshotNotReady(CoreError):
+    code = "WORKSPACE_SNAPSHOT_NOT_READY"
+    message = "工作区快照尚未就绪"
+    status_code = 409
+
+
+class WorkspaceCaptureFailed(CoreError):
+    code = "WORKSPACE_CAPTURE_FAILED"
+    message = "工作区捕获失败"
+    status_code = 502
+    retryable = True
+
+
+class WorkspaceRestoreFailed(CoreError):
+    code = "WORKSPACE_RESTORE_FAILED"
+    message = "工作区恢复失败"
+    status_code = 502
+    retryable = True
+
+
+class WorkspaceVolumeUnavailable(CoreError):
+    code = "WORKSPACE_VOLUME_UNAVAILABLE"
+    message = "工作区存储卷暂不可用"
+    status_code = 503
+    retryable = True

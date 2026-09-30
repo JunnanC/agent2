@@ -1,7 +1,7 @@
 import base64
 import hashlib
 import hmac
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from typing import Any
 from urllib.parse import quote
 
@@ -190,7 +190,7 @@ class FileDownloadView(APIView):
             version_id=asset.object_version,
         )
 
-        def stream():
+        def stream() -> Iterator[bytes]:
             try:
                 yield from iter_chunks(stored.body)
             finally:

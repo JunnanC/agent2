@@ -34,6 +34,7 @@ from .ports import (
     Blocker,
     course_archive_blockers,
     enrollment_blockers,
+    run_course_closed_handlers,
     run_enrollment_activation_handlers,
 )
 from .selectors import require_course_capability, require_owner
@@ -348,13 +349,16 @@ def publish_course(**kwargs: Any) -> Course:
 
 @transaction.atomic
 def close_course(**kwargs: Any) -> Course:
-    return _transition_course(
+    changed = _transition_course(
         **kwargs,
         from_status=Course.Status.PUBLISHED,
         to_status=Course.Status.CLOSED,
         timestamp_field="closed_at",
         event_type=events.COURSE_CLOSED,
     )
+    context = kwargs["context"]
+    transaction.on_commit(lambda: run_course_closed_handlers(course=changed, context=context))
+    return changed
 
 
 def archive_check(*, course: Course) -> list[Blocker]:

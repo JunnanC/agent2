@@ -1,3 +1,5 @@
+from unittest.mock import Mock, patch
+
 from django.test import TestCase
 
 from apps.accounts.models import User
@@ -12,15 +14,22 @@ from apps.experiments.tests.helpers import (
 )
 from apps.governance.models import Quota, RuntimeAdapter
 
-from ..adapters import fake_runtime, reset_fake_runtime
+from ..adapters import (
+    docker_local_protocol_stub,
+    fake_runtime,
+    reset_docker_local_protocol_stub,
+    reset_fake_runtime,
+)
 from ..errors import ProvisioningStateConflict
 from ..models import ProvisioningInstance, ProvisioningJob, ProvisioningStageEvent
 from ..selectors import job_for_user
 from ..services import (
     cancel_queued_provisioning,
     compensate_provisioning,
+    enabled_runtime_inventory,
     execute_provisioning_job,
     retry_provisioning,
+    runtime_inventory_snapshot,
     start_provisioning,
 )
 
@@ -95,6 +104,7 @@ class ProvisioningServiceTests(TestCase):
 
     def tearDown(self) -> None:
         reset_fake_runtime()
+        reset_docker_local_protocol_stub()
 
     def _start(self) -> ProvisioningJob:
         _, job = start_provisioning(
@@ -141,6 +151,10 @@ class ProvisioningServiceTests(TestCase):
         instance = ProvisioningInstance.objects.get(task=self.task)
         self.assertEqual(instance.status, ProvisioningInstance.Status.READY)
         self.assertTrue(instance.external_id)
+        self.assertEqual(instance.endpoint, "http://tasks.fake-runtime:8080")
+        self.assertTrue(instance.external_metadata["managed"])
+        self.assertEqual(instance.external_metadata["service_name"], "fake-runtime")
+        self.assertEqual(instance.external_metadata["workspace_port"], 8080)
 
     def test_each_fake_failure_records_failed_stage_and_retryable_failure(self) -> None:
         for index, stage in enumerate(ProvisioningJob.Stage.values):
@@ -230,3 +244,94 @@ class ProvisioningServiceTests(TestCase):
         self.assertEqual(first.public_id, second.public_id)
         self.assertEqual(second.status, ProvisioningJob.Status.PASSED)
         self.assertEqual(calls, fake_runtime().calls)
+
+    def test_docker_local_protocol_stub_uses_the_same_six_stage_service_contract(self) -> None:
+        RuntimeAdapter.objects.filter(pk=self.adapter.pk).update(
+            driver=RuntimeAdapter.Driver.DOCKER_LOCAL,
+            config_ref="runtime/local-algorithm",
+            status=RuntimeAdapter.Status.ENABLED,
+            health_status=RuntimeAdapter.HealthStatus.HEALTHY,
+        )
+        ExperimentTask.objects.filter(pk=self.task.pk).update(
+            runtime_adapter_driver=RuntimeAdapter.Driver.DOCKER_LOCAL,
+            runtime_adapter_config_ref="runtime/local-algorithm",
+        )
+        self.task.refresh_from_db()
+
+        job = self._start()
+        finished = execute_provisioning_job(job_id=job.public_id)
+
+        self.assertEqual(finished.status, ProvisioningJob.Status.PASSED)
+        instance = ProvisioningInstance.objects.get(task=self.task)
+        self.assertEqual(instance.status, ProvisioningInstance.Status.READY)
+        self.assertEqual(instance.endpoint, "http://tasks.docker-local-stub:8080")
+        self.assertEqual(instance.external_metadata["driver"], "DOCKER_LOCAL")
+        self.assertTrue(instance.external_metadata["protocol_stub"])
+        self.assertEqual(
+            ProvisioningStageEvent.objects.filter(job=finished).count(),
+            len(ProvisioningJob.Stage.values) * 2,
+        )
+        self.assertEqual(fake_runtime().calls, [])
+        self.assertEqual(
+            [stage for stage, _ in docker_local_protocol_stub().calls],
+            [
+                "QUOTA_CHECK",
+                "IMAGE_PREPARE",
+                "CREATE",
+                "NETWORK_ATTACH",
+                "BOOT_PROBE",
+                "WORKSPACE_READY",
+            ],
+        )
+
+    def test_runtime_inventory_snapshot_reports_managed_and_orphan_resources(self) -> None:
+        from ..services import _runtime_spec
+
+        RuntimeAdapter.objects.filter(pk=self.adapter.pk).update(
+            driver=RuntimeAdapter.Driver.DOCKER_LOCAL,
+            config_ref="runtime/local-algorithm",
+        )
+        stub = docker_local_protocol_stub("runtime/local-algorithm")
+        created = stub.create(_runtime_spec(self.task, trace_id="inventory-trace"), "inventory-1")
+
+        snapshot = runtime_inventory_snapshot(trace_id="inventory-trace")
+
+        self.assertEqual(snapshot["status"], "HEALTHY")
+        self.assertEqual(snapshot["inventory"], {"runtime": 1, "transient": 1})
+        self.assertEqual(snapshot["orphans"], {"runtime": 1, "judge": 0, "volume": 1})
+        self.assertEqual(created.external_id, stub.inventory()[0].external_id)
+
+    def test_runtime_inventory_snapshot_identifies_engine_outage_by_trace(self) -> None:
+        RuntimeAdapter.objects.filter(pk=self.adapter.pk).update(
+            driver=RuntimeAdapter.Driver.DOCKER_SWARM,
+        )
+        adapter = Mock()
+        adapter.health.return_value = {
+            "status": "UNAVAILABLE",
+            "error_code": "RUNTIME_UNAVAILABLE",
+        }
+
+        with (
+            self.assertLogs("runtime.provisioning", level="ERROR") as logs,
+            patch("apps.provisioning.services.runtime_for_driver", return_value=adapter),
+        ):
+            snapshot = runtime_inventory_snapshot(trace_id="engine-outage-trace")
+
+        self.assertEqual(snapshot["status"], "UNAVAILABLE")
+        self.assertEqual(snapshot["drivers"][0]["status"], "UNAVAILABLE")
+        self.assertEqual(logs.records[0].trace_id, "engine-outage-trace")
+        self.assertEqual(logs.records[0].resource_ref, self.adapter.public_id)
+        adapter.inventory.assert_not_called()
+
+    def test_enabled_runtime_inventory_can_preserve_unavailable_adapter_marker(self) -> None:
+        with patch(
+            "apps.provisioning.services.runtime_inventory",
+            side_effect=RuntimeError("docker socket is unavailable"),
+        ):
+            items = enabled_runtime_inventory(include_unavailable=True)
+
+        self.assertEqual(len(items), 1)
+        self.assertEqual(items[0].external_id, "")
+        self.assertEqual(items[0].status, "UNAVAILABLE")
+        self.assertEqual(items[0].metadata["adapter_id"], self.adapter.public_id)
+        self.assertTrue(items[0].metadata["inventory_unavailable"])

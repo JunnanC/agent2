@@ -17,13 +17,20 @@ from .models import FileDownloadGrant, ObjectAsset
 from .outbox import append_outbox_event, enqueue_relay_after_commit
 
 DownloadAuthorizer = Callable[[ObjectAsset, User, str], str]
+DownloadGrantObserver = Callable[[FileDownloadGrant, User, str, str], None]
 _authorizers: dict[str, DownloadAuthorizer] = {}
+_grant_observers: list[DownloadGrantObserver] = []
 
 
 def register_download_authorizer(owner_type: str, handler: DownloadAuthorizer) -> None:
     if owner_type in _authorizers:
         raise ValueError(f"Download authorizer already registered: {owner_type}")
     _authorizers[owner_type] = handler
+
+
+def register_download_grant_observer(handler: DownloadGrantObserver) -> None:
+    if handler not in _grant_observers:
+        _grant_observers.append(handler)
 
 
 def _course_scope(asset: ObjectAsset, actor: User, portal: str) -> str:
@@ -92,6 +99,8 @@ def create_download_grant(
     token: str | None = None,
     client_ip: str = "",
     user_agent: str = "",
+    ttl_seconds: int | None = None,
+    max_downloads: int = 1,
 ) -> tuple[FileDownloadGrant, str]:
     try:
         asset = ObjectAsset.objects.get(public_id=asset_id, status=ObjectAsset.Status.ACTIVE)
@@ -101,15 +110,25 @@ def create_download_grant(
     if asset.scan_status != ObjectAsset.ScanStatus.CLEAN:
         raise DownloadGrantInvalid(detail={"asset_status": asset.scan_status})
     token = token or secrets.token_urlsafe(32)
-    ttl = max(30, min(int(getattr(settings, "FILE_DOWNLOAD_GRANT_TTL_SECONDS", 300)), 900))
+    configured_ttl = (
+        ttl_seconds
+        if ttl_seconds is not None
+        else int(getattr(settings, "FILE_DOWNLOAD_GRANT_TTL_SECONDS", 300))
+    )
+    ttl = max(1, min(int(configured_ttl), 900))
+    expires_at = timezone.now() + timedelta(seconds=ttl)
+    if asset.retention_until is not None:
+        if asset.retention_until <= timezone.now():
+            raise DownloadGrantInvalid(detail={"asset_status": "RETENTION_EXPIRED"})
+        expires_at = min(expires_at, asset.retention_until)
     grant = FileDownloadGrant.objects.create(
         asset=asset,
         requested_by=actor,
         portal=portal,
         course_ref=course_ref,
         token_hash=hashlib.sha256(token.encode()).hexdigest(),
-        expires_at=timezone.now() + timedelta(seconds=ttl),
-        max_downloads=1,
+        expires_at=expires_at,
+        max_downloads=max(1, min(int(max_downloads), 100)),
     )
     _audit(
         actor=actor,
@@ -123,6 +142,8 @@ def create_download_grant(
         user_agent=user_agent,
     )
     _emit(grant=grant, event_type="file.download_grant.created", trace_id=trace_id)
+    for observer in _grant_observers:
+        observer(grant, actor, portal, trace_id)
     return grant, token
 
 

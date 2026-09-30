@@ -117,6 +117,26 @@ def _reason(value: str) -> str:
     return clean
 
 
+def _validate_runtime_adapter_definition(
+    *, runtime_type: str, driver: str, config_ref: str
+) -> str:
+    """Validate immutable driver facts before they reach the runtime worker."""
+    if (
+        runtime_type not in RuntimeAdapter.RuntimeType.values
+        or driver not in RuntimeAdapter.Driver.values
+    ):
+        raise GovernanceValidationError(detail={"runtime_type": runtime_type, "driver": driver})
+    clean_ref = config_ref.strip()
+    if driver == RuntimeAdapter.Driver.DOCKER_LOCAL:
+        if runtime_type != RuntimeAdapter.RuntimeType.CONTAINER:
+            raise GovernanceValidationError(
+                detail={"driver": driver, "runtime_type": runtime_type}
+            )
+        if not clean_ref:
+            raise GovernanceValidationError(detail={"config_ref": "required_for_docker_local"})
+    return clean_ref
+
+
 def _scope(
     *, scope_type: str, course_id: str | None = None, user_id: str | None = None
 ) -> tuple[str, Course | None, User | None]:
@@ -167,18 +187,16 @@ def create_runtime_adapter(
     reason: str,
     context: ActorContext,
 ) -> RuntimeAdapter:
-    if (
-        runtime_type not in RuntimeAdapter.RuntimeType.values
-        or driver not in RuntimeAdapter.Driver.values
-    ):
-        raise GovernanceValidationError(detail={"runtime_type": runtime_type, "driver": driver})
+    clean_config_ref = _validate_runtime_adapter_definition(
+        runtime_type=runtime_type, driver=driver, config_ref=config_ref
+    )
     try:
         adapter = RuntimeAdapter.objects.create(
             code=code.strip().upper(),
             name=name.strip(),
             runtime_type=runtime_type,
             driver=driver,
-            config_ref=config_ref.strip(),
+            config_ref=clean_config_ref,
             change_reason=_reason(reason),
         )
     except IntegrityError as exc:
@@ -217,6 +235,12 @@ def update_runtime_adapter(
     clean = {key: changes[key] for key in ("name", "config_ref", "status") if key in changes}
     if "status" in clean and clean["status"] not in RuntimeAdapter.Status.values:
         raise GovernanceValidationError(detail={"status": clean["status"]})
+    if "config_ref" in clean:
+        clean["config_ref"] = _validate_runtime_adapter_definition(
+            runtime_type=adapter.runtime_type,
+            driver=adapter.driver,
+            config_ref=str(clean["config_ref"]),
+        )
     clean["change_reason"] = _reason(reason)
     changed = compare_and_swap(
         RuntimeAdapter,

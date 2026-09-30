@@ -75,6 +75,44 @@ export type ChapterData = Record<string, unknown>
 export type MaterialData = Record<string, unknown>
 export type QuestionData = Record<string, unknown>
 
+export type AgentMode = 'KNOWLEDGE_QA' | 'SOCRATIC_HINT' | 'DEBUG_ASSIST' | 'REPORT_COACH' | 'WORKSPACE_ASSIST'
+export type AgentProfileData = { public_id: string; course_id: string; version_no: number; status: string; modes: AgentMode[]; model_route: string; budget: Record<string, unknown>; knowledge_base_id: string | null; prompt_version_id: string | null; tool_policy_id: string | null; last_eval_run_id: string | null; row_version: number }
+export type AgentSessionData = { public_id: string; course_id: string; enrollment_id: string; task_id: string | null; mode: AgentMode; status: string; profile_id: string; profile_version: number; row_version: number; trace_id: string }
+export type AgentCitationData = { public_id: string; source_version_id: string; title: string; snippet: string; score: number; accessible: boolean; asset_id: string | null }
+export type AgentToolCallData = { public_id: string; session_id: string; tool_name: string; risk: string; arguments_digest: string; state: { public_id: string; status: string; output: Record<string, unknown>; error_code: string; row_version: number } | null; trace_id: string }
+export type AgentMessageData = { public_id: string; role: string; body: string; status: string; citation_status: string; token_count: number; created_at: string; trace_id: string; citations: AgentCitationData[]; tool_calls?: AgentToolCallData[] }
+export type AgentProfileResponse = { data: { course_id: string; enrollment_id: string; profile: AgentProfileData; capabilities: { modes: AgentMode[]; tool_risk: string | null } }; meta: { trace_id: string } }
+export type AgentSessionResponse = { data: AgentSessionData; meta: { trace_id: string } }
+export type AgentMessageResponse = { data: AgentMessageData; meta: { trace_id: string } }
+export type AgentMessagesResponse = { data: AgentMessageData[]; meta: { trace_id: string } }
+export type AgentToolResponse = { data: { tool_call: string } | AgentToolCallData; meta: { trace_id: string } }
+export type AgentProfileListResponse = { data: AgentProfileData[]; meta: { trace_id: string } }
+
+export function createAgentSession(courseId: string, mode: AgentMode, intent = new RequestIntent()) {
+  return apiRequestWithMetadata<AgentSessionResponse>(`/api/v2/courses/${encodeURIComponent(courseId)}/agent-sessions`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode }), intent })
+}
+export function createTaskAgentSession(taskId: string, mode: AgentMode, intent = new RequestIntent()) {
+  return apiRequestWithMetadata<AgentSessionResponse>(`/api/v2/tasks/${encodeURIComponent(taskId)}/agent-sessions`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode }), intent })
+}
+export function getAgentSession(sessionId: string, signal?: AbortSignal) {
+  return apiRequestWithMetadata<AgentSessionResponse>(`/api/v2/agent-sessions/${encodeURIComponent(sessionId)}`, { signal })
+}
+export function getAgentMessages(sessionId: string, signal?: AbortSignal) {
+  return apiRequestWithMetadata<AgentMessagesResponse>(`/api/v2/agent-sessions/${encodeURIComponent(sessionId)}/messages`, { signal })
+}
+export function sendAgentMessage(sessionId: string, body: string, intent = new RequestIntent()) {
+  return apiRequestWithMetadata<AgentMessageResponse>(`/api/v2/agent-sessions/${encodeURIComponent(sessionId)}/messages`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ body }), intent })
+}
+export function requestAgentTool(sessionId: string, toolName: string, argumentsValue: Record<string, unknown>, intent = new RequestIntent()) {
+  return apiRequestWithMetadata<AgentToolResponse>(`/api/v2/agent-sessions/${encodeURIComponent(sessionId)}/tool-calls`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tool_name: toolName, arguments: argumentsValue }), intent })
+}
+export function submitAgentFeedback(messageId: string, rating: 'USEFUL' | 'NOT_USEFUL', intent = new RequestIntent()) {
+  return apiRequestWithMetadata<{ data: { public_id: string; status: string }; meta: { trace_id: string } }>(`/api/v2/agent-messages/${encodeURIComponent(messageId)}/feedback`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rating }), intent })
+}
+export function decideAgentToolCall(callId: string, decision: 'APPROVED' | 'REJECTED', rowVersion: number, intent = new RequestIntent()) {
+  return apiRequestWithMetadata<{ data: { public_id: string; status: string; row_version: number }; meta: { trace_id: string } }>(`/api/v2/agent-tool-calls/${encodeURIComponent(callId)}/decide`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ decision, reason: decision === 'APPROVED' ? 'student confirmed' : 'student rejected' }), ifMatch: `"${rowVersion}"`, intent })
+}
+
 export type WorkspaceCapabilities = Record<string, boolean>
 export type WorkspaceSessionData = {
   public_id: string
@@ -84,6 +122,7 @@ export type WorkspaceSessionData = {
   portal: 'USER'
   status: 'ACTIVE' | 'REVOKED' | 'EXPIRED'
   capabilities: WorkspaceCapabilities
+  workspace_urls: Record<string, string>
   expires_at: string
   revoked_at: string | null
   current_version: number
@@ -102,6 +141,28 @@ export type WorkspaceSnapshotData = {
   size_bytes: number
   media_type: string
   saved_at: string
+}
+export type WorkspaceStorageJobData = {
+  public_id: string
+  task_id: string
+  session_id: string
+  kind: 'INITIALIZE' | 'CAPTURE' | 'RESTORE' | 'FINALIZE'
+  status: 'QUEUED' | 'RUNNING' | 'PASSED' | 'FAILED' | 'CANCELLED'
+  client_seq: number | null
+  base_version: number | null
+  source_snapshot_id: string | null
+  result_snapshot_id: string | null
+  failure: { code: string; message: string; retryable: boolean; trace_id: string } | null
+  queued_at: string
+  started_at: string | null
+  completed_at: string | null
+  row_version: number
+}
+export type WorkspaceStorageJobInput = {
+  kind: 'CAPTURE' | 'RESTORE'
+  client_seq?: number
+  base_version?: number
+  snapshot_id?: string
 }
 export type WorkspaceCheckpointData = {
   public_id: string
@@ -130,8 +191,25 @@ export type WorkspaceOperationData = {
   result_summary: string
   occurred_at: string
   trace_id: string
+  execution_run_id?: string | null
+  execution_status?: string | null
 }
+export type WorkspaceExecutionRunData = {
+  public_id: string
+  task_id: string
+  session_id: string
+  snapshot_id: string | null
+  status: 'QUEUED' | 'RUNNING' | 'PASSED' | 'FAILED' | 'TIMEOUT' | 'RESOURCE_EXCEEDED' | 'REJECTED'
+  error_code: string
+  result_summary: string
+  started_at: string | null
+  finished_at: string | null
+  duration_ms: number | null
+  trace_id: string
+}
+export type WorkspaceExecutionRunListData = { items: WorkspaceExecutionRunData[] }
 export type WorkspaceEnvelope<T> = { data: T; meta: { trace_id?: string } }
+export type WorkbenchData = components['schemas']['Workbench']
 export type ReportAttachmentData = components['schemas']['ReportAttachmentData']
 export type ReportAttachmentUploadResponse = components['schemas']['ReportAttachmentUploadResponse']
 export type ReportDraftResponse = components['schemas']['ReportDraftResponse']
@@ -153,6 +231,16 @@ export type ReviewResultResponse = components['schemas']['ReviewResultResponse']
 export type SimilarityRunResponse = components['schemas']['SimilarityRunResponse']
 export type SimilarityMatchListResponse = components['schemas']['SimilarityMatchListResponse']
 export type ReviewMonitorResponse = components['schemas']['ReviewMonitorResponse']
+export type ArchiveData = components['schemas']['ArchiveData']
+export type ArchiveResponse = components['schemas']['ArchiveResponse']
+export type ArchiveListResponse = components['schemas']['ArchiveListResponse']
+export type ArchiveExportResponse = components['schemas']['ArchiveExportResponse']
+export type InstanceData = components['schemas']['InstanceData']
+export type InstanceListResponse = components['schemas']['InstanceListResponse']
+export type InstanceResponse = components['schemas']['InstanceResponse']
+export type CompensationData = components['schemas']['CompensationData']
+export type CompensationListResponse = components['schemas']['CompensationListResponse']
+export type CompensationResponse = components['schemas']['CompensationResponse']
 
 export interface ApiFailure {
   error: {
@@ -320,6 +408,43 @@ export async function apiRequest<T>(path: string, init?: ApiRequestInit): Promis
   return (await apiRequestWithMetadata<T>(path, init)).payload
 }
 
+export async function downloadFileInMemory(
+  path: string,
+  onProgress?: (received: number, total: number | null) => void,
+): Promise<Blob> {
+  if (!path.startsWith('/files/')) throw new TypeError('Download path is invalid')
+  const response = await fetch(path, { credentials: 'include', headers: { Accept: 'application/octet-stream' } })
+  if (!response.ok || !response.body) throw new Error('DOWNLOAD_FAILED')
+  const totalHeader = response.headers.get('Content-Length')
+  const total = totalHeader ? Number(totalHeader) : null
+  const reader = response.body.getReader()
+  const chunks: ArrayBuffer[] = []
+  let received = 0
+  try {
+    while (true) {
+      const result = await reader.read()
+      if (result.done) break
+      const chunk = new Uint8Array(result.value.byteLength)
+      chunk.set(result.value)
+      chunks.push(chunk.buffer)
+      received += result.value.byteLength
+      onProgress?.(received, total)
+    }
+  } finally {
+    reader.releaseLock()
+  }
+  return new Blob(chunks, { type: response.headers.get('Content-Type') ?? 'application/octet-stream' })
+}
+
+export function saveMemoryBlob(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+  anchor.href = url
+  anchor.download = filename
+  anchor.click()
+  window.setTimeout(() => URL.revokeObjectURL(url), 0)
+}
+
 export function getHealth(signal?: AbortSignal): Promise<HealthResponse> {
   return apiRequest<HealthResponse>('/api/v2/health', { signal })
 }
@@ -328,6 +453,19 @@ export async function enterWorkspace(taskId: string, ifMatch: string, intent = n
   const result = await apiRequestWithMetadata<WorkspaceEnvelope<{ task: TaskData; session: WorkspaceSessionData }>>(`/api/v2/tasks/${encodeURIComponent(taskId)}/enter`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, ifMatch, intent, body: '{}' })
   setWorkspaceToken(result.payload.data.session.workspace_token)
   return result
+}
+
+export async function createWorkspaceSession(taskId: string, intent = new RequestIntent()): Promise<ApiResult<WorkspaceEnvelope<WorkspaceSessionData>>> {
+  const result = await apiRequestWithMetadata<WorkspaceEnvelope<WorkspaceSessionData>>(`/api/v2/tasks/${encodeURIComponent(taskId)}/workspace-sessions`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}', intent })
+  setWorkspaceToken(result.payload.data.workspace_token)
+  return result
+}
+
+export function getTaskWorkbench(taskId: string, signal?: AbortSignal): Promise<ApiResult<WorkspaceEnvelope<WorkbenchData>>> {
+  return apiRequestWithMetadata<WorkspaceEnvelope<WorkbenchData>>(
+    `/api/v2/tasks/${encodeURIComponent(taskId)}/workbench`,
+    { signal },
+  )
 }
 
 export async function renewWorkspaceSession(sessionId: string, token?: string, intent = new RequestIntent()): Promise<ApiResult<WorkspaceEnvelope<WorkspaceSessionData>>> {
@@ -350,6 +488,32 @@ export async function saveWorkspaceSnapshot(taskId: string, input: { clientSeq: 
   return apiRequestWithMetadata<WorkspaceEnvelope<{ snapshot: WorkspaceSnapshotData; confirmed_seq: number; result: string }>>(`/api/v2/tasks/${encodeURIComponent(taskId)}/workspace-snapshot`, { method: 'PUT', body, workspaceToken: token })
 }
 
+export function createWorkspaceStorageJob(
+  taskId: string,
+  input: WorkspaceStorageJobInput,
+  rowVersion: number,
+  token?: string,
+  intent = new RequestIntent(),
+): Promise<ApiResult<WorkspaceEnvelope<WorkspaceStorageJobData>>> {
+  return apiRequestWithMetadata<WorkspaceEnvelope<WorkspaceStorageJobData>>(
+    `/api/v2/tasks/${encodeURIComponent(taskId)}/workspace-storage-jobs`,
+    {
+      method: 'POST',
+      body: JSON.stringify(input),
+      headers: { 'Content-Type': 'application/json' },
+      ifMatch: `"${rowVersion}"`,
+      workspaceToken: token,
+      intent,
+    },
+  )
+}
+
+export function getWorkspaceStorageJob(jobId: string): Promise<ApiResult<WorkspaceEnvelope<WorkspaceStorageJobData>>> {
+  return apiRequestWithMetadata<WorkspaceEnvelope<WorkspaceStorageJobData>>(
+    `/api/v2/workspace-storage-jobs/${encodeURIComponent(jobId)}`,
+  )
+}
+
 export function getWorkspaceCheckpoints(taskId: string): Promise<ApiResult<WorkspaceEnvelope<WorkspaceCheckpointListData>>> {
   return apiRequestWithMetadata<WorkspaceEnvelope<WorkspaceCheckpointListData>>(`/api/v2/tasks/${encodeURIComponent(taskId)}/checkpoints`)
 }
@@ -358,6 +522,61 @@ export function createWorkspaceCheckpoint(taskId: string, name: string, token?: 
   return apiRequestWithMetadata<WorkspaceEnvelope<WorkspaceCheckpointData>>(`/api/v2/tasks/${encodeURIComponent(taskId)}/checkpoints`, { method: 'POST', body: JSON.stringify({ name }), headers: { 'Content-Type': 'application/json' }, workspaceToken: token, intent })
 }
 
-export function restoreWorkspaceCheckpoint(taskId: string, checkpointId: string, rowVersion: number, token?: string, intent = new RequestIntent()): Promise<ApiResult<WorkspaceEnvelope<WorkspaceSnapshotData>>> {
-  return apiRequestWithMetadata<WorkspaceEnvelope<WorkspaceSnapshotData>>(`/api/v2/tasks/${encodeURIComponent(taskId)}/checkpoints/${encodeURIComponent(checkpointId)}/restore`, { method: 'POST', body: '{}', headers: { 'Content-Type': 'application/json' }, ifMatch: `"${rowVersion}"`, workspaceToken: token, intent })
+export function restoreWorkspaceCheckpoint(taskId: string, checkpointId: string, rowVersion: number, token?: string, intent = new RequestIntent()): Promise<ApiResult<WorkspaceEnvelope<WorkspaceSnapshotData | WorkspaceStorageJobData>>> {
+  return apiRequestWithMetadata<WorkspaceEnvelope<WorkspaceSnapshotData | WorkspaceStorageJobData>>(`/api/v2/tasks/${encodeURIComponent(taskId)}/checkpoints/${encodeURIComponent(checkpointId)}/restore`, { method: 'POST', body: '{}', headers: { 'Content-Type': 'application/json' }, ifMatch: `"${rowVersion}"`, workspaceToken: token, intent })
+}
+
+export function getWorkspaceExecutionRuns(taskId: string, token?: string): Promise<ApiResult<WorkspaceEnvelope<WorkspaceExecutionRunListData>>> {
+  return apiRequestWithMetadata<WorkspaceEnvelope<WorkspaceExecutionRunListData>>(
+    `/api/v2/tasks/${encodeURIComponent(taskId)}/execution-runs`,
+    { workspaceToken: token },
+  )
+}
+
+export function getWorkspaceExecutionRun(taskId: string, executionId: string, token?: string): Promise<ApiResult<WorkspaceEnvelope<WorkspaceExecutionRunData>>> {
+  return apiRequestWithMetadata<WorkspaceEnvelope<WorkspaceExecutionRunData>>(
+    `/api/v2/tasks/${encodeURIComponent(taskId)}/execution-runs/${encodeURIComponent(executionId)}`,
+    { workspaceToken: token },
+  )
+}
+
+export function runWorkspaceOperation(
+  sessionId: string,
+  operation: string,
+  argumentsValue: Record<string, unknown>,
+  token?: string,
+  intent = new RequestIntent(),
+): Promise<ApiResult<WorkspaceEnvelope<WorkspaceOperationData>>> {
+  return apiRequestWithMetadata<WorkspaceEnvelope<WorkspaceOperationData>>(
+    `/workspace/${encodeURIComponent(sessionId)}/operations`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ operation, arguments: argumentsValue }),
+      workspaceToken: token,
+      intent,
+    },
+  )
+}
+
+export function submitTaskReport(
+  taskId: string,
+  ifMatch: string,
+  intent = new RequestIntent(),
+): Promise<ApiResult<ReportVersionResponse>> {
+  return apiRequestWithMetadata<ReportVersionResponse>(
+    `/api/v2/tasks/${encodeURIComponent(taskId)}/submit-report`,
+    { method: 'POST', ifMatch, intent },
+  )
+}
+
+export function completeTask(
+  taskId: string,
+  ifMatch: string,
+  intent = new RequestIntent(),
+): Promise<ApiResult<ReportCompleteResponse>> {
+  return apiRequestWithMetadata<ReportCompleteResponse>(
+    `/api/v2/tasks/${encodeURIComponent(taskId)}/complete`,
+    { method: 'POST', ifMatch, intent },
+  )
 }

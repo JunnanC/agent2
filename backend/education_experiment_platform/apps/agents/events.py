@@ -1,0 +1,5 @@
+KNOWLEDGE_INDEXED = "agent.knowledge.indexed"
+EVAL_COMPLETED = "agent.eval.completed"
+SESSION_MESSAGE_COMPLETED = "agent.message.completed"
+TOOL_CALL_UPDATED = "agent.tool_call.updated"
+FEEDBACK_SUBMITTED = "agent.feedback.submitted"

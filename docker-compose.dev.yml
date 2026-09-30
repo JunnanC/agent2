@@ -1,13 +1,19 @@
-name: edu-platform-p10
+name: edu-platform-p14
 
 x-app-environment: &app-environment
   APP_ENV: local
-  APP_VERSION: ${APP_VERSION:-0.10.0-p10}
-  OPENAPI_REVISION: ${OPENAPI_REVISION:-v2-p10}
+  APP_VERSION: ${APP_VERSION:-0.15.0-p15}
+  OPENAPI_REVISION: ${OPENAPI_REVISION:-v2-p15}
   SIMILARITY_ALGORITHM_VERSION: ${SIMILARITY_ALGORITHM_VERSION:-char-5gram-jaccard-v1}
   SIMILARITY_THRESHOLD: ${SIMILARITY_THRESHOLD:-0.30}
   SIMILARITY_RETENTION_DAYS: ${SIMILARITY_RETENTION_DAYS:-180}
   P10_AUTO_CHECK_MAX_ATTEMPTS: ${P10_AUTO_CHECK_MAX_ATTEMPTS:-3}
+  ARCHIVE_RETENTION_DAYS: ${ARCHIVE_RETENTION_DAYS:-365}
+  ARCHIVE_SAFE_RECYCLE_SECONDS: ${ARCHIVE_SAFE_RECYCLE_SECONDS:-900}
+  ARCHIVE_EXPORT_TTL_SECONDS: ${ARCHIVE_EXPORT_TTL_SECONDS:-300}
+  ARCHIVE_MAX_ATTEMPTS: ${ARCHIVE_MAX_ATTEMPTS:-5}
+  RUNTIME_EXECUTION_RETENTION_DAYS: ${RUNTIME_EXECUTION_RETENTION_DAYS:-30}
+  RUNTIME_CLEANUP_MAX_ATTEMPTS: ${RUNTIME_CLEANUP_MAX_ATTEMPTS:-10}
   GIT_REVISION: ${GIT_REVISION:-development}
   BUILD_TIME: ${BUILD_TIME:-development}
   DJANGO_SETTINGS_MODULE: education_experiment_platform.settings.integration
@@ -16,6 +22,15 @@ x-app-environment: &app-environment
   COURSE_INVITATION_HMAC_KEY: ${COURSE_INVITATION_HMAC_KEY:-unsafe-local-course-invitation-hmac-key-change-me}
   DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1,django,user.localhost,teacher.localhost,admin.localhost,api.localhost,user.example.edu,teacher.example.edu,admin.example.edu,api.example.edu
   DJANGO_TRUSTED_ORIGINS: http://user.localhost:${ENTRY_PORT:-8080},http://teacher.localhost:${ENTRY_PORT:-8080},http://admin.localhost:${ENTRY_PORT:-8080}
+  WORKSPACE_ALLOWED_ORIGINS: http://user.localhost:${ENTRY_PORT:-8080}
+  WORKSPACE_INTERNAL_KEY: ${WORKSPACE_INTERNAL_KEY:-unsafe-local-workspace-internal-key}
+  WORKSPACE_UPSTREAM_HMAC_KEY: ${WORKSPACE_UPSTREAM_HMAC_KEY:-unsafe-local-workspace-upstream-hmac-key}
+  WORKSPACE_AUTHORITY_URL: ${WORKSPACE_AUTHORITY_URL:-http://django:8000}
+  WORKSPACE_COOKIE_NAME: workspace_ticket
+  WORKSPACE_STORAGE_STALE_AFTER_SECONDS: ${WORKSPACE_STORAGE_STALE_AFTER_SECONDS:-900}
+  WORKSPACE_STORAGE_REDISPATCH_SECONDS: ${WORKSPACE_STORAGE_REDISPATCH_SECONDS:-300}
+  WORKSPACE_FINALIZE_TIMEOUT_SECONDS: ${WORKSPACE_FINALIZE_TIMEOUT_SECONDS:-1200}
+  WORKSPACE_VOLUME_RETENTION_SECONDS: ${WORKSPACE_VOLUME_RETENTION_SECONDS:-900}
   TRUSTED_PROXY_CIDRS: ${APP_NETWORK_SUBNET:-172.29.20.0/24}
   MYSQL_DATABASE: ${MYSQL_DATABASE:-edu_platform}
   MYSQL_USER: ${MYSQL_APP_USER:-edu_platform_app}
@@ -39,6 +54,13 @@ x-app-environment: &app-environment
   CLAMAV_PORT: "3310"
   OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
   LOG_LEVEL: INFO
+  SWARM_DOCKER_HOST: ${SWARM_DOCKER_HOST:-unix:///var/run/docker.sock}
+  SWARM_RUNTIME_NETWORK: ${SWARM_RUNTIME_NETWORK:-edu-runtime}
+  LOCAL_RUNTIME_IMAGE: ${LOCAL_RUNTIME_IMAGE:-edu-platform-algorithm-workspace:local}
+  LOCAL_RUNTIME_NETWORK: ${LOCAL_RUNTIME_NETWORK:-edu-platform-p14_runtime}
+  LOCAL_DOCKER_HOST: ${LOCAL_DOCKER_HOST:-unix:///var/run/docker.sock}
+  LOCAL_RUNTIME_MODE: ${LOCAL_RUNTIME_MODE:-REAL}
+  RUNTIME_ADAPTER_CONFIGS: '${RUNTIME_ADAPTER_CONFIGS:-{"runtime/local-docker":{"runtime_network":"edu-platform-p14_runtime","pids_limit":128}}}'
 
 x-backend-build: &backend-build
   context: backend
@@ -276,7 +298,7 @@ services:
 
   celery:
     build: *backend-build
-    command: ["celery", "-A", "education_experiment_platform", "worker", "--loglevel=INFO", "--concurrency=${CELERY_CONCURRENCY:-4}", "--queues=q_default,q_relay,q_provision,q_archive,q_compensate,q_agent,q_content,q_analytics,q_integrations"]
+    command: ["celery", "-A", "education_experiment_platform", "worker", "--loglevel=INFO", "--concurrency=${CELERY_CONCURRENCY:-4}", "--queues=q_default,q_relay,q_agent,q_content,q_analytics,q_integrations"]
     environment: *app-environment
     networks: [app, data]
     depends_on:
@@ -288,6 +310,114 @@ services:
       resources:
         reservations: { cpus: "0.25", memory: 256M }
         limits: { cpus: "1.00", memory: 768M }
+      update_config: { parallelism: 1, order: stop-first, failure_action: rollback }
+
+  runtime-worker:
+    profiles: ["p14"]
+    build: *backend-build
+    command: ["celery", "-A", "education_experiment_platform", "worker", "--loglevel=INFO", "--concurrency=${RUNTIME_WORKER_CONCURRENCY:-2}", "--queues=q_provision,q_archive,q_compensate"]
+    environment: *app-environment
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    group_add:
+      - "${DOCKER_SOCKET_GID:-0}"
+    networks: [app, data, runtime]
+    depends_on:
+      mysql-grants: { condition: service_completed_successfully }
+      redis: { condition: service_healthy }
+    logging: *fluentd-logging
+    deploy:
+      resources:
+        reservations: { cpus: "0.25", memory: 256M }
+        limits: { cpus: "1.00", memory: 768M }
+      update_config: { parallelism: 1, order: stop-first, failure_action: rollback }
+
+  workspace-storage-worker:
+    profiles: ["p14"]
+    build: *backend-build
+    command: ["celery", "-A", "education_experiment_platform", "worker", "--loglevel=INFO", "--concurrency=${WORKSPACE_STORAGE_WORKER_CONCURRENCY:-2}", "--queues=q_workspace_storage"]
+    environment: *app-environment
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    group_add:
+      - "${DOCKER_SOCKET_GID:-0}"
+    networks: [app, data, runtime]
+    depends_on:
+      mysql-grants: { condition: service_completed_successfully }
+      redis: { condition: service_healthy }
+      clamav: { condition: service_healthy }
+    logging: *fluentd-logging
+    deploy:
+      resources:
+        reservations: { cpus: "0.10", memory: 256M }
+        limits: { cpus: "1.00", memory: 768M }
+      update_config: { parallelism: 1, order: stop-first, failure_action: rollback }
+
+  workspace-gateway:
+    build: *backend-build
+    command: ["uvicorn", "education_experiment_platform.workspace_gateway:application", "--host", "0.0.0.0", "--port", "8080", "--no-proxy-headers"]
+    environment: *app-environment
+    networks: [app, runtime]
+    depends_on:
+      mysql-grants: { condition: service_completed_successfully }
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    logging: *fluentd-logging
+    deploy:
+      replicas: 2
+      resources:
+        reservations: { cpus: "0.10", memory: 128M }
+        limits: { cpus: "0.50", memory: 384M }
+      update_config: { parallelism: 1, order: start-first, failure_action: rollback }
+
+  runtime-reference:
+    profiles: ["p14"]
+    build: ./runtime/reference-workspace
+    networks:
+      runtime:
+        aliases:
+          - tasks.fake-runtime
+    read_only: true
+    tmpfs: [/tmp]
+    deploy:
+      resources:
+        reservations: { cpus: "0.10", memory: 128M }
+        limits: { cpus: "0.50", memory: 512M }
+
+  runtime-algorithm-workspace:
+    profiles: ["p14"]
+    platform: linux/amd64
+    build:
+      context: ./runtime/algorithm-workspace
+      args:
+        GO_BUILDER_IMAGE: m.daocloud.io/docker.io/library/golang:1.25.1-alpine3.22@sha256:546671046d6f9f786c24b83111ba1801b736ee4b01b23db33e4f3eb41d4f8883
+        PYTHON_BASE_IMAGE: m.daocloud.io/docker.io/library/python:3.14.0-slim-bookworm@sha256:9bbb8720ae0a24a6ca8dd678bfdf57818fe70caf54c52a53ec01d8db43405056
+    image: ${LOCAL_RUNTIME_IMAGE:-edu-platform-algorithm-workspace:local}
+    networks: [runtime]
+    read_only: true
+    tmpfs: [/tmp]
+    deploy:
+      resources:
+        reservations: { cpus: "0.10", memory: 256M }
+        limits: { cpus: "1.00", memory: 768M }
+
+  celery-beat:
+    build: *backend-build
+    command: ["celery", "-A", "education_experiment_platform", "beat", "--loglevel=INFO"]
+    environment: *app-environment
+    networks: [app, data]
+    depends_on:
+      mysql-grants: { condition: service_completed_successfully }
+      redis: { condition: service_healthy }
+      fluent-bit: { condition: service_started }
+    logging: *fluentd-logging
+    deploy:
+      resources:
+        reservations: { cpus: "0.10", memory: 128M }
+        limits: { cpus: "0.50", memory: 384M }
       update_config: { parallelism: 1, order: stop-first, failure_action: rollback }
 
   log-ingest:
@@ -381,8 +511,8 @@ services:
       args:
         NODE_BASE_IMAGE: ${NODE_BASE_IMAGE:-public.ecr.aws/docker/library/node:24-alpine}
         NGINX_BASE_IMAGE: ${NGINX_BASE_IMAGE:-m.daocloud.io/docker.io/library/nginx:1.29-alpine}
-        APP_VERSION: ${APP_VERSION:-0.10.0-p10}
-        OPENAPI_REVISION: ${OPENAPI_REVISION:-v2-p10}
+        APP_VERSION: ${APP_VERSION:-0.15.0-p15}
+        OPENAPI_REVISION: ${OPENAPI_REVISION:-v2-p15}
         GIT_REVISION: ${GIT_REVISION:-development}
         BUILD_TIME: ${BUILD_TIME:-development}
     read_only: true
@@ -413,6 +543,8 @@ networks:
     ipam:
       config:
         - subnet: ${APP_NETWORK_SUBNET:-172.29.20.0/24}
+  runtime:
+    internal: true
   data: { internal: true }
   observability: { internal: true }
   log-driver: {}

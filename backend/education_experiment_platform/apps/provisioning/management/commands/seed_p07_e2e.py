@@ -8,8 +8,13 @@ from django.utils import timezone
 from apps.accounts.models import User
 from apps.core.concurrency import compare_and_swap
 from apps.courses.models import Course
+from apps.courses.services import ActorContext
+from apps.experiments.models import TaskPublication
+from apps.experiments.services import create_publication, publish_publication
 from apps.governance.models import Quota, RuntimeAdapter
 from apps.labtemplates.models import TemplateVersion
+from apps.labtemplates.services import create_version
+from apps.reviews.models import RubricVersion
 
 
 class Command(BaseCommand):
@@ -26,23 +31,9 @@ class Command(BaseCommand):
         course = Course.objects.filter(code="P03-DEMO-001").first()
         if teacher is None or student is None or course is None:
             raise CommandError("Run seed_p02_e2e through seed_p06_e2e first")
-        template_version = (
-            TemplateVersion.objects.filter(template__course=course)
-            .select_related("runtime_adapter")
-            .order_by("-version_no")
-            .first()
-        )
-        if template_version is None:
-            raise CommandError("P05/P06 template version is missing")
         trace_id = secrets.token_hex(16)
         fake = self._fake_adapter()
-        if template_version.runtime_adapter_id != fake.pk:
-            compare_and_swap(
-                TemplateVersion,
-                pk=template_version.pk,
-                expected_version=template_version.row_version,
-                changes={"runtime_adapter": fake},
-            )
+        template_version = self._fake_template_version(course, teacher, fake, trace_id)
         self._quota(
             scope_type=Quota.ScopeType.PLATFORM,
             scope_key="PLATFORM",
@@ -64,7 +55,13 @@ class Command(BaseCommand):
             scope_type=Quota.ScopeType.USER,
             scope_key=f"USER:{student.public_id}",
             user=student,
-            values={"max_concurrent_instances": 10, "max_concurrent_starts": 10},
+            values={
+                "max_concurrent_instances": 10,
+                "max_concurrent_starts": 10,
+                "max_cpu_millicores": 20000,
+                "max_memory_mb": 40960,
+                "max_disk_gb": 200,
+            },
         )
         self.stdout.write(
             self.style.SUCCESS(
@@ -73,6 +70,109 @@ class Command(BaseCommand):
                 f"template_version={template_version.public_id} trace={trace_id}"
             )
         )
+
+    @staticmethod
+    def _fake_template_version(
+        course: Course, teacher: User, fake: RuntimeAdapter, trace_id: str
+    ) -> TemplateVersion:
+        existing = (
+            TemplateVersion.objects.filter(
+                template__course=course,
+                runtime_adapter=fake,
+                status=TemplateVersion.Status.PUBLISHED,
+            )
+            .select_related("template")
+            .order_by("-version_no")
+            .first()
+        )
+        if existing is not None:
+            context = ActorContext(teacher.public_id, "TEACHING", trace_id)
+            version = existing
+        else:
+            context = ActorContext(teacher.public_id, "TEACHING", trace_id)
+            source = (
+                TemplateVersion.objects.filter(template__course=course)
+                .exclude(runtime_adapter=fake)
+                .select_related("template", "image", "resource_profile")
+                .order_by("-version_no")
+                .first()
+            )
+            if source is None:
+                raise CommandError("P05/P06 template version is missing")
+            version = create_version(
+                course_id=course.public_id,
+                template_id=source.template.public_id,
+                actor=teacher,
+                data={
+                    "runtime_type": source.runtime_type,
+                    "runtime_adapter_id": fake.public_id,
+                    "image_id": source.image.public_id,
+                    "resource_profile_id": source.resource_profile.public_id,
+                    "dependencies": source.dependencies,
+                    "execution_spec": source.execution_spec,
+                    "network_policy": source.network_policy,
+                    "workspace_capabilities": source.workspace_capabilities,
+                    "material_version_ids": [],
+                    "report_policy": source.report_policy,
+                    "review_policy": source.review_policy,
+                    "retention_days": source.retention_days,
+                },
+                context=context,
+            )
+            TemplateVersion.objects.filter(pk=version.pk).update(
+                status=TemplateVersion.Status.PUBLISHED,
+                spec_digest="f" * 64,
+                published_by=teacher,
+                published_at=timezone.now(),
+            )
+            version.refresh_from_db()
+        rubric = (
+            RubricVersion.objects.filter(
+                rubric__course=course, status=RubricVersion.Status.PUBLISHED
+            )
+            .order_by("-published_at", "-version_no")
+            .first()
+        )
+        student = User.objects.filter(email="student.integration@example.edu").first()
+        if rubric is None or student is None:
+            raise CommandError("P05 rubric and integration student are required")
+        enrollment = course.enrollments.filter(student=student, status="ACTIVE").first()
+        if enrollment is None:
+            raise CommandError("Integration student must be actively enrolled")
+        publication = TaskPublication.objects.filter(
+            course=course, title="P07 FakeRuntime 任务"
+        ).first()
+        if publication is None:
+            now = timezone.now()
+            publication = create_publication(
+                course_id=course.public_id,
+                actor=teacher,
+                data={
+                    "template_version_id": version.public_id,
+                    "rubric_version_id": rubric.public_id,
+                    "title": "P07 FakeRuntime 任务",
+                    "description": "P07 FakeRuntime disposable task; independent from P06.",
+                    "audience_mode": TaskPublication.AudienceMode.SELECTED,
+                    "late_enrollment_policy": TaskPublication.LateEnrollmentPolicy.DO_NOT_ASSIGN,
+                    "window_start": now - timezone.timedelta(hours=1),
+                    "window_end": now + timezone.timedelta(days=7),
+                    "assignment_deadline": now + timezone.timedelta(days=5),
+                    "report_required": True,
+                    "review_mode": TaskPublication.ReviewMode.MANUAL_WITH_AUTO_CHECK,
+                    "prerequisites": [],
+                },
+                context=context,
+            )
+        if publication.status == TaskPublication.Status.DRAFT:
+            publish_publication(
+                course_id=course.public_id,
+                publication_id=publication.public_id,
+                actor=teacher,
+                expected_version=publication.row_version,
+                selected_ids=[enrollment.public_id],
+                context=context,
+            )
+        return version
 
     @staticmethod
     def _fake_adapter() -> RuntimeAdapter:

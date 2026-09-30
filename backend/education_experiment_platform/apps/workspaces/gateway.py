@@ -1,7 +1,11 @@
+import hmac
 import json
 
+from django.conf import settings
 from django.http import JsonResponse
+from django.utils.decorators import method_decorator
 from django.views import View
+from django.views.decorators.csrf import csrf_exempt
 
 from apps.core.errors import CoreError
 
@@ -27,8 +31,14 @@ def _error_response(request, error: CoreError) -> JsonResponse:  # type: ignore[
     )
 
 
+@method_decorator(csrf_exempt, name="dispatch")
 class WorkspaceGatewayView(View):
     def dispatch(self, request, *args, **kwargs):  # type: ignore[no-untyped-def]
+        supplied_key = request.headers.get("X-Workspace-Internal-Key", "")
+        if not hmac.compare_digest(supplied_key, settings.WORKSPACE_INTERNAL_KEY):
+            return JsonResponse(
+                {"error": {"code": "WORKSPACE_INTERNAL_DENIED"}}, status=403
+            )
         if request.headers.get("X-Portal") != "USER":
             return JsonResponse(
                 {"error": {"code": "WORKSPACE_PORTAL_DENIED", "message": "工作区入口仅允许用户端"}},
@@ -102,6 +112,7 @@ class WorkspaceGatewayView(View):
                 actor=session.student,
                 operation=serializer.validated_data["operation"],
                 arguments=serializer.validated_data.get("arguments", {}),
+                request_key=request.headers.get("Idempotency-Key", ""),
                 context=type(
                     "Context",
                     (),

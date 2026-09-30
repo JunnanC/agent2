@@ -3,13 +3,15 @@ from typing import Any
 
 from django.db import models
 from django.http import HttpRequest
-from drf_spectacular.utils import OpenApiParameter, extend_schema
+from django.utils import timezone
+from drf_spectacular.utils import OpenApiParameter, extend_schema, extend_schema_view
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.accounts.models import User
 from apps.accounts.permissions import IsPlatformPortal, IsTeachingPortal, IsUserPortal
 from apps.accounts.security import client_ip
+from apps.archives.models import ArchiveJob
 from apps.core.concurrency import etag_for_version, parse_if_match
 from apps.core.idempotency import PrincipalScope, StoredResponse, execute_idempotent
 from apps.core.models import CompensationTask
@@ -33,6 +35,7 @@ from .serializers import (
     GenericResponseSerializer,
     PublicationDataSerializer,
     PublicationPatchSerializer,
+    PublicationPublishSerializer,
     PublicationWriteSerializer,
     TaskDataSerializer,
     TaskExtensionDecisionSerializer,
@@ -222,23 +225,13 @@ class TeachingPublicationActionView(APIView):
     permission_classes = [IsTeachingPortal]
     action = ""
 
-    @extend_schema(
-        request=None,
-        responses={
-            201: PublicationDataSerializer,
-            202: PublicationDataSerializer,
-            200: PublicationDataSerializer,
-        },
-        parameters=[IF_MATCH, IDEMPOTENCY_KEY],
-        extensions={"x-portals": ["TEACHING"]},
-    )
     def post(self, request: HttpRequest, course_id: str, publication_id: str) -> Response:
         expected = parse_if_match(request.headers.get("If-Match"))
-        selected_ids = (
-            request.data.get("selected_enrollment_ids", [])
-            if isinstance(request.data, dict)
-            else []
-        )
+        selected_ids: list[str] = []
+        if self.action == "publish":
+            serializer = PublicationPublishSerializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
+            selected_ids = list(serializer.validated_data.get("selected_enrollment_ids", []))
 
         def operation() -> StoredResponse:
             context = _context(request)
@@ -283,14 +276,41 @@ class TeachingPublicationActionView(APIView):
         )
 
 
+@extend_schema_view(
+    post=extend_schema(
+        operation_id="teaching_experiments_publish",
+        request=PublicationPublishSerializer,
+        responses={201: PublicationDataSerializer, 202: PublicationDataSerializer},
+        parameters=[IF_MATCH, IDEMPOTENCY_KEY],
+        extensions={"x-portals": ["TEACHING"]},
+    )
+)
 class PublishPublicationView(TeachingPublicationActionView):
     action = "publish"
 
 
+@extend_schema_view(
+    post=extend_schema(
+        operation_id="teaching_experiments_close",
+        request=None,
+        responses={200: PublicationDataSerializer},
+        parameters=[IF_MATCH, IDEMPOTENCY_KEY],
+        extensions={"x-portals": ["TEACHING"]},
+    )
+)
 class ClosePublicationView(TeachingPublicationActionView):
     action = "close"
 
 
+@extend_schema_view(
+    post=extend_schema(
+        operation_id="teaching_experiments_withdraw",
+        request=None,
+        responses={200: PublicationDataSerializer},
+        parameters=[IF_MATCH, IDEMPOTENCY_KEY],
+        extensions={"x-portals": ["TEACHING"]},
+    )
+)
 class WithdrawPublicationView(TeachingPublicationActionView):
     action = "withdraw"
 
@@ -633,6 +653,11 @@ class PlatformTaskAnomalyView(APIView):
             ),
             terminal_target__isnull=False,
         ).exclude(status=models.F("terminal_target"))[:100]
+        archive_failures = (
+            ArchiveJob.objects.filter(status=ArchiveJob.Status.FAILED)
+            .select_related("task", "course", "failure_record", "compensation_task")
+            .order_by("safe_recycle_at", "id")[:100]
+        )
         reconciliation: list[dict[str, object]] = []
         publications = (
             TaskPublication.objects.filter(
@@ -680,6 +705,24 @@ class PlatformTaskAnomalyView(APIView):
                     for item in compensations
                 ],
                 "state_anomalies": [task_data(item) for item in state_anomalies],
+                "archive_failures": [
+                    {
+                        "archive_id": item.public_id,
+                        "task_id": item.task.public_id,
+                        "course_id": item.course.public_id,
+                        "terminal_target": item.terminal_target,
+                        "safe_recycle_at": item.safe_recycle_at,
+                        "safe_recycle_due": item.safe_recycle_at <= timezone.now(),
+                        "error_code": (
+                            item.failure_record.error_code if item.failure_record else ""
+                        ),
+                        "compensation_status": (
+                            item.compensation_task.status if item.compensation_task else ""
+                        ),
+                        "trace_id": item.trace_id,
+                    }
+                    for item in archive_failures
+                ],
                 "reconciliation_anomalies": reconciliation,
             },
         )

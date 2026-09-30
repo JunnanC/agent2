@@ -1,0 +1,9 @@
+{
+  "extensions.autoCheckUpdates": false,
+  "extensions.autoUpdate": false,
+  "python.defaultInterpreterPath": "/usr/local/bin/python",
+  "security.workspace.trust.enabled": false,
+  "telemetry.telemetryLevel": "off",
+  "update.mode": "none",
+  "workbench.startupEditor": "none"
+}

@@ -18,6 +18,7 @@ def register_asset(
     owner_ref: str,
     purpose: str,
     media_type: str = "",
+    original_name: str = "",
     retention_until: datetime | None = None,
 ) -> ObjectAsset:
     if len(digest_sha256) != 64 or any(char not in "0123456789abcdef" for char in digest_sha256):
@@ -32,6 +33,7 @@ def register_asset(
         owner_ref=owner_ref,
         purpose=purpose,
         media_type=media_type,
+        original_name=original_name[:255],
         retention_until=retention_until,
     )
 

@@ -11,8 +11,10 @@ from .models import (
     OperationEvent,
     WorkspaceAutosaveLog,
     WorkspaceCheckpoint,
+    WorkspaceExecutionRun,
     WorkspaceSession,
     WorkspaceSnapshot,
+    WorkspaceStorageJob,
 )
 
 
@@ -21,6 +23,40 @@ def task_for_user(*, actor: User, task_id: str) -> ExperimentTask:
         return ExperimentTask.objects.select_related(
             "course", "publication", "enrollment", "student", "template_version"
         ).get(public_id=task_id, student=actor)
+    except ExperimentTask.DoesNotExist as exc:
+        raise ResourceNotFound() from exc
+
+
+def workbench_task_for_user(*, actor: User, task_id: str) -> ExperimentTask:
+    """Load the read-only projection needed by the student workbench."""
+
+    try:
+        return (
+            ExperimentTask.objects.select_related(
+                "course",
+                "publication",
+                "enrollment",
+                "student",
+                "runtime_adapter",
+                "template_version__template",
+                "template_version__manual_asset",
+                "template_version__starter_asset",
+                "template_version__report_template_asset",
+            )
+            .prefetch_related(
+                "template_version__auto_check_rules",
+                "provisioning_jobs__failure_record",
+                "provisioning_jobs__stage_events",
+                "report_draft__attachments__asset",
+                "workspace_execution_runs",
+            )
+            .get(
+                public_id=task_id,
+                student=actor,
+                enrollment__student=actor,
+                enrollment__status="ACTIVE",
+            )
+        )
     except ExperimentTask.DoesNotExist as exc:
         raise ResourceNotFound() from exc
 
@@ -111,5 +147,73 @@ def autosave_for_seq(*, task_id: int, client_seq: int) -> WorkspaceAutosaveLog |
     return (
         WorkspaceAutosaveLog.objects.select_related("snapshot", "snapshot__asset")
         .filter(task_id=task_id, client_seq=client_seq)
+        .first()
+    )
+
+
+def execution_runs_for_user(*, actor: User, task_id: str) -> QuerySet[WorkspaceExecutionRun]:
+    return (
+        WorkspaceExecutionRun.objects.select_related(
+            "task", "session", "snapshot", "stdout_asset", "stderr_asset", "test_report_asset"
+        )
+        .filter(task__public_id=task_id, task__student=actor)
+        .order_by("-created_at", "-id")
+    )
+
+
+def execution_run_for_user(
+    *, actor: User, task_id: str, execution_id: str
+) -> WorkspaceExecutionRun:
+    try:
+        return (
+            WorkspaceExecutionRun.objects.select_related(
+                "task", "session", "snapshot", "stdout_asset", "stderr_asset", "test_report_asset"
+            )
+            .get(public_id=execution_id, task__public_id=task_id, task__student=actor)
+        )
+    except WorkspaceExecutionRun.DoesNotExist as exc:
+        raise ResourceNotFound() from exc
+
+
+def storage_job_for_user(*, actor: User, job_id: str) -> WorkspaceStorageJob:
+    """Return a storage job only when it belongs to the current student."""
+
+    try:
+        return (
+            WorkspaceStorageJob.objects.select_related(
+                "task",
+                "session",
+                "source_snapshot",
+                "result_snapshot",
+                "failure_record",
+            )
+            .get(public_id=job_id, task__student=actor)
+        )
+    except WorkspaceStorageJob.DoesNotExist as exc:
+        raise ResourceNotFound() from exc
+
+
+def active_storage_job_for_user(*, actor: User, task_id: str) -> WorkspaceStorageJob | None:
+    return (
+        WorkspaceStorageJob.objects.select_related(
+            "task",
+            "session",
+            "source_snapshot",
+            "result_snapshot",
+            "failure_record",
+        )
+        .filter(
+            task__public_id=task_id,
+            task__student=actor,
+            session__status=WorkspaceSession.Status.ACTIVE,
+            kind__in=(
+                WorkspaceStorageJob.Kind.INITIALIZE,
+                WorkspaceStorageJob.Kind.CAPTURE,
+                WorkspaceStorageJob.Kind.RESTORE,
+                WorkspaceStorageJob.Kind.FINALIZE,
+            ),
+            status__in=(WorkspaceStorageJob.Status.QUEUED, WorkspaceStorageJob.Status.RUNNING),
+        )
+        .order_by("queued_at", "id")
         .first()
     )

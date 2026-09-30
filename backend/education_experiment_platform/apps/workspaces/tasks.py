@@ -8,16 +8,68 @@ from apps.core.models import ObjectAsset
 from apps.core.object_storage import object_storage
 
 from .models import WorkspaceSnapshot
-from .services import expire_sessions
+from .services import execute_execution_run, expire_sessions
+from .storage import execute_storage_job, reconcile_storage_jobs
 
 
-@shared_task(bind=True, acks_late=True, queue="q_default")
+@shared_task(
+    bind=True,
+    acks_late=True,
+    queue="q_default",
+    name="apps.workspaces.expire_workspace_sessions",
+)
 def expire_workspace_sessions(_task: Any, *, trace_id: str = "") -> int:
     """Expire ticket rows by id; the worker never receives a token or payload."""
     return expire_sessions(trace_id=trace_id)
 
 
-@shared_task(bind=True, acks_late=True, queue="q_default")
+@shared_task(
+    bind=True,
+    acks_late=True,
+    queue="q_provision",
+    name="apps.workspaces.execute_workspace_execution_run",
+)
+def execute_workspace_execution_run(
+    _task: Any, *, execution_run_id: str, trace_id: str = ""
+) -> str:
+    """Execute a queued RUN_CHECK using only the persisted run identifier."""
+
+    run = execute_execution_run(execution_run_id=execution_run_id, trace_id=trace_id)
+    return run.public_id
+
+
+@shared_task(
+    bind=True,
+    acks_late=True,
+    queue="q_workspace_storage",
+    name="apps.workspaces.execute_workspace_storage_job",
+)
+def execute_workspace_storage_job(
+    _task: Any, *, storage_job_id: str, trace_id: str = ""
+) -> str:
+    """Process one persisted storage job without browser-provided runtime data."""
+
+    return execute_storage_job(storage_job_id=storage_job_id, trace_id=trace_id)
+
+
+@shared_task(
+    bind=True,
+    acks_late=True,
+    queue="q_default",
+    name="apps.workspaces.reconcile_workspace_storage_jobs",
+)
+def reconcile_workspace_storage_jobs(_task: Any) -> int:
+    """Redispatch durable storage jobs that did not reach a worker or lost one."""
+
+    return reconcile_storage_jobs()
+
+
+@shared_task(
+    bind=True,
+    acks_late=True,
+    queue="q_default",
+    name="apps.workspaces.check_workspace_objects",
+)
 def check_workspace_objects(
     _task: Any, *, snapshot_ids: list[str] | None = None, trace_id: str = ""
 ) -> int:
@@ -51,7 +103,12 @@ def check_workspace_objects(
     return checked
 
 
-@shared_task(bind=True, acks_late=True, queue="q_default")
+@shared_task(
+    bind=True,
+    acks_late=True,
+    queue="q_default",
+    name="apps.workspaces.process_workspace_orphans",
+)
 def process_workspace_orphans(
     _task: Any, *, asset_ids: list[str] | None = None, trace_id: str = ""
 ) -> int:

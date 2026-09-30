@@ -1,12 +1,15 @@
 from django.test import TestCase
 
 from apps.core.errors import RowVersionConflict
+from apps.core.models import ObjectAsset
 from apps.governance.models import ResourceProfile
 
 from ..errors import TemplateStateConflict, TemplateValidationError
 from ..models import AutoCheckRule, TemplatePrecheckRun, TemplateVersion
 from ..services import (
+    build_execution_command,
     clone_version,
+    compute_spec_digest,
     execute_precheck,
     publish_version,
     replace_rules,
@@ -17,6 +20,84 @@ from .helpers import add_valid_rule, context, create_template_version
 
 
 class TemplateServiceTests(TestCase):
+    def test_execution_spec_is_in_digest_and_only_generates_python_command(self) -> None:
+        owner, course, _template, version = create_template_version(suffix="execution")
+        version = add_valid_rule(owner=owner, course=course, version=version)
+        self.assertEqual(build_execution_command(version.execution_spec), ["python", "main.py"])
+        digest = compute_spec_digest(version)
+        self.assertEqual(len(digest), 64)
+        changed = dict(version.execution_spec)
+        changed["entrypoint"] = "solution.py"
+        version.execution_spec = changed
+        self.assertNotEqual(compute_spec_digest(version), digest)
+
+    def test_execution_spec_rejects_command_and_unscanned_tests_asset(self) -> None:
+        owner, course, _template, version = create_template_version(suffix="execution-guards")
+        with self.assertRaises(TemplateValidationError):
+            update_version(
+                course_id=course.public_id,
+                version_id=version.public_id,
+                actor=owner,
+                expected_version=version.row_version,
+                changes={
+                    "execution_spec": {
+                        **version.execution_spec,
+                        "command": "python main.py; curl http://example.invalid",
+                    }
+                },
+                context=context(owner),
+            )
+        tests_asset = ObjectAsset.objects.get(
+            public_id=version.execution_spec["tests_asset"]
+        )
+        ObjectAsset.objects.filter(pk=tests_asset.pk).update(scan_status=ObjectAsset.ScanStatus.PENDING)
+        version = TemplateVersion.objects.get(pk=version.pk)
+        run = request_precheck(
+            course_id=course.public_id,
+            version_id=version.public_id,
+            actor=owner,
+            expected_version=version.row_version,
+            context=context(owner, "u"),
+        )
+        completed = execute_precheck(run_id=run.public_id)
+        self.assertEqual(completed.status, TemplatePrecheckRun.Status.FAILED)
+        self.assertEqual(completed.error_code, "TEMPLATE_ASSET_NOT_READY")
+
+    def test_failed_precheck_can_be_repaired_before_retry(self) -> None:
+        owner, course, _template, version = create_template_version(suffix="execution-retry")
+        tests_asset = ObjectAsset.objects.get(public_id=version.execution_spec["tests_asset"])
+        ObjectAsset.objects.filter(pk=tests_asset.pk).update(scan_status=ObjectAsset.ScanStatus.PENDING)
+        run = request_precheck(
+            course_id=course.public_id,
+            version_id=version.public_id,
+            actor=owner,
+            expected_version=version.row_version,
+            context=context(owner, "f"),
+        )
+        execute_precheck(run_id=run.public_id)
+        version.refresh_from_db()
+        ObjectAsset.objects.filter(pk=tests_asset.pk).update(scan_status=ObjectAsset.ScanStatus.CLEAN)
+        repaired = update_version(
+            course_id=course.public_id,
+            version_id=version.public_id,
+            actor=owner,
+            expected_version=version.row_version,
+            changes={"execution_spec": version.execution_spec},
+            context=context(owner, "g"),
+        )
+        self.assertEqual(repaired.status, TemplateVersion.Status.PRECHECK_FAILED)
+        retry = request_precheck(
+            course_id=course.public_id,
+            version_id=version.public_id,
+            actor=owner,
+            expected_version=repaired.row_version,
+            context=context(owner, "h"),
+        )
+        self.assertEqual(
+            execute_precheck(run_id=retry.public_id).status,
+            TemplatePrecheckRun.Status.PASSED,
+        )
+
     def test_precheck_freezes_publish_and_clone_preserves_spec(self) -> None:
         owner, course, _template, version = create_template_version(suffix="freeze")
         version = add_valid_rule(owner=owner, course=course, version=version)

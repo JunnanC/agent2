@@ -1,4 +1,6 @@
+import json
 import os
+import re
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parents[2]
@@ -22,13 +24,24 @@ def csv_env(name: str, default: str = "") -> list[str]:
     return [item.strip() for item in env(name, default).split(",") if item.strip()]
 
 
+def bool_env(name: str, default: bool = False) -> bool:
+    return env(name, "true" if default else "false").casefold() in {"1", "true", "yes", "on"}
+
+
+def json_env(name: str, default: str = "{}") -> dict[str, object]:
+    value = json.loads(env(name, default))
+    if not isinstance(value, dict):
+        raise RuntimeError(f"Environment variable must contain a JSON object: {name}")
+    return value
+
+
 SECRET_KEY = env("DJANGO_SECRET_KEY", "unsafe-local-only-key-change-before-deploy")
 DEBUG = False
 ALLOWED_HOSTS = csv_env("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1,django")
 CSRF_TRUSTED_ORIGINS = csv_env("DJANGO_TRUSTED_ORIGINS")
 
-APP_VERSION = env("APP_VERSION", "0.10.0-p10")
-OPENAPI_REVISION = env("OPENAPI_REVISION", "v2-p10")
+APP_VERSION = env("APP_VERSION", "0.15.0-p15")
+OPENAPI_REVISION = env("OPENAPI_REVISION", "v2-p15")
 GIT_REVISION = env("GIT_REVISION", "development")
 BUILD_TIME = env("BUILD_TIME", "development")
 TRUSTED_PROXY_CIDRS = csv_env(
@@ -103,9 +116,7 @@ REST_FRAMEWORK: dict[str, object] = {
 
 SPECTACULAR_SETTINGS: dict[str, object] = {
     "TITLE": "Education Agent Platform API",
-    "DESCRIPTION": (
-        "P10 teacher reviews, immutable decisions, auto-check evidence, and similarity support."
-    ),
+    "DESCRIPTION": "P15 student experiment workbench and platform operations.",
     "VERSION": OPENAPI_REVISION,
     "SERVE_INCLUDE_SCHEMA": False,
     "OAS_VERSION": "3.0.3",
@@ -148,11 +159,52 @@ CELERY_TASK_ROUTES = {
     "apps.integrations.*": {"queue": "q_integrations"},
     "apps.notifications.*": {"queue": "q_default"},
     "apps.experiments.*": {"queue": "q_default"},
+    "apps.workspaces.execute_workspace_storage_job": {"queue": "q_workspace_storage"},
+    "apps.workspaces.execute_workspace_execution_run": {"queue": "q_provision"},
+    "apps.workspaces.reconcile_workspace_storage_jobs": {"queue": "q_default"},
     "apps.workspaces.*": {"queue": "q_default"},
     "apps.reports.*": {"queue": "q_provision"},
     "apps.reviews.run_auto_check": {"queue": "q_provision"},
     "apps.reviews.run_similarity_check": {"queue": "q_analytics"},
     "apps.reviews.purge_similarity_evidence": {"queue": "q_default"},
+}
+CELERY_BEAT_SCHEDULE = {
+    "p11-scan-task-deadlines": {
+        "task": "apps.archives.scan_due_tasks",
+        "schedule": 60.0,
+    },
+    "p11-reconcile-archives-and-runtime": {
+        "task": "apps.archives.reconcile",
+        "schedule": 60.0,
+    },
+    "p11-run-compensations": {
+        "task": "apps.core.run_compensations",
+        "schedule": 30.0,
+    },
+    "p14-purge-archive-retention": {
+        "task": "apps.archives.purge_retention",
+        "schedule": 3600.0,
+    },
+    "p16-reconcile-workspace-storage": {
+        "task": "apps.workspaces.reconcile_workspace_storage_jobs",
+        "schedule": 30.0,
+    },
+    "p13-refresh-analytics": {
+        "task": "apps.analytics.refresh_projection",
+        "schedule": 300.0,
+    },
+    "p13-consume-notifications": {
+        "task": "apps.notifications.consume_outbox",
+        "schedule": 30.0,
+    },
+    "p13-deliver-webhooks": {
+        "task": "apps.integrations.deliver_due_webhooks",
+        "schedule": 15.0,
+    },
+    "p14-probe-runtime-adapters": {
+        "task": "apps.governance.probe_runtime_adapters",
+        "schedule": 30.0,
+    },
 }
 SIMILARITY_ALGORITHM_VERSION = env(
     "SIMILARITY_ALGORITHM_VERSION", "char-5gram-jaccard-v1"
@@ -162,7 +214,25 @@ SIMILARITY_RETENTION_DAYS = int(env("SIMILARITY_RETENTION_DAYS", "180"))
 P10_AUTO_CHECK_MAX_ATTEMPTS = int(env("P10_AUTO_CHECK_MAX_ATTEMPTS", "3"))
 WORKSPACE_TOKEN_HMAC_KEY = env("WORKSPACE_TOKEN_HMAC_KEY", SECRET_KEY)
 WORKSPACE_SESSION_TTL_SECONDS = int(env("WORKSPACE_SESSION_TTL_SECONDS", "900"))
+WORKSPACE_COOKIE_NAME = env("WORKSPACE_COOKIE_NAME", "workspace_ticket")
+WORKSPACE_ALLOWED_ORIGINS = csv_env("WORKSPACE_ALLOWED_ORIGINS", ",".join(CSRF_TRUSTED_ORIGINS))
+WORKSPACE_UPSTREAM_TIMEOUT_SECONDS = int(env("WORKSPACE_UPSTREAM_TIMEOUT_SECONDS", "60"))
+WORKSPACE_INTERNAL_KEY = env("WORKSPACE_INTERNAL_KEY", SECRET_KEY)
+WORKSPACE_UPSTREAM_HMAC_KEY = env("WORKSPACE_UPSTREAM_HMAC_KEY", SECRET_KEY)
+WORKSPACE_AUTHORITY_URL = env("WORKSPACE_AUTHORITY_URL", "http://django:8000")
 WORKSPACE_SNAPSHOT_MAX_BYTES = int(env("WORKSPACE_SNAPSHOT_MAX_BYTES", str(20 * 1024 * 1024)))
+WORKSPACE_STORAGE_STALE_AFTER_SECONDS = max(
+    60, int(env("WORKSPACE_STORAGE_STALE_AFTER_SECONDS", "900"))
+)
+WORKSPACE_STORAGE_REDISPATCH_SECONDS = max(
+    30, int(env("WORKSPACE_STORAGE_REDISPATCH_SECONDS", "300"))
+)
+WORKSPACE_FINALIZE_TIMEOUT_SECONDS = max(
+    1, int(env("WORKSPACE_FINALIZE_TIMEOUT_SECONDS", "1200"))
+)
+WORKSPACE_VOLUME_RETENTION_SECONDS = max(
+    60, int(env("WORKSPACE_VOLUME_RETENTION_SECONDS", "900"))
+)
 WORKSPACE_SNAPSHOT_ALLOWED_MIME_TYPES = set(
     csv_env(
         "WORKSPACE_SNAPSHOT_ALLOWED_MIME_TYPES",
@@ -191,6 +261,45 @@ TEMPLATE_CHECK_TIMEOUT_MAX_SECONDS = int(env("TEMPLATE_CHECK_TIMEOUT_MAX_SECONDS
 REPORT_ATTACHMENT_MAX_BYTES = int(env("REPORT_ATTACHMENT_MAX_BYTES", str(20 * 1024 * 1024)))
 REPORT_UPLOAD_EXPIRES_SECONDS = int(env("REPORT_UPLOAD_EXPIRES_SECONDS", "900"))
 FILE_DOWNLOAD_GRANT_TTL_SECONDS = int(env("FILE_DOWNLOAD_GRANT_TTL_SECONDS", "300"))
+ARCHIVE_RETENTION_DAYS = int(env("ARCHIVE_RETENTION_DAYS", "365"))
+ARCHIVE_SAFE_RECYCLE_SECONDS = int(env("ARCHIVE_SAFE_RECYCLE_SECONDS", "900"))
+ARCHIVE_EXPORT_TTL_SECONDS = int(env("ARCHIVE_EXPORT_TTL_SECONDS", "300"))
+ARCHIVE_MAX_ATTEMPTS = int(env("ARCHIVE_MAX_ATTEMPTS", "5"))
+RUNTIME_EXECUTION_RETENTION_DAYS = int(env("RUNTIME_EXECUTION_RETENTION_DAYS", "30"))
+RUNTIME_CLEANUP_MAX_ATTEMPTS = int(env("RUNTIME_CLEANUP_MAX_ATTEMPTS", "10"))
+RUNTIME_ADAPTER_CONFIGS = json_env("RUNTIME_ADAPTER_CONFIGS")
+LOCAL_RUNTIME_IMAGE = env("LOCAL_RUNTIME_IMAGE", "edu-platform-algorithm-workspace:local")
+LOCAL_RUNTIME_NETWORK = env("LOCAL_RUNTIME_NETWORK", "edu-platform-p14_runtime")
+LOCAL_DOCKER_HOST = env("LOCAL_DOCKER_HOST", "unix:///var/run/docker.sock")
+LOCAL_RUNTIME_MODE = env("LOCAL_RUNTIME_MODE", "STUB").upper()
+if LOCAL_RUNTIME_MODE not in {"STUB", "REAL"}:
+    raise RuntimeError("LOCAL_RUNTIME_MODE must be STUB or REAL")
+if not LOCAL_RUNTIME_IMAGE.strip() or any(char.isspace() for char in LOCAL_RUNTIME_IMAGE):
+    raise RuntimeError("LOCAL_RUNTIME_IMAGE must be a non-empty image reference")
+if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,62}", LOCAL_RUNTIME_NETWORK):
+    raise RuntimeError("LOCAL_RUNTIME_NETWORK must be a Docker network name")
+if not LOCAL_DOCKER_HOST.startswith(("unix://", "npipe://")):
+    raise RuntimeError("LOCAL_DOCKER_HOST must reference a local Docker Engine socket")
+SWARM_DOCKER_HOST = env("SWARM_DOCKER_HOST", "unix:///var/run/docker.sock")
+SWARM_DOCKER_API_VERSION = env("SWARM_DOCKER_API_VERSION", "auto")
+SWARM_DOCKER_TLS_VERIFY = bool_env("SWARM_DOCKER_TLS_VERIFY")
+SWARM_DOCKER_CA_PATH = env("SWARM_DOCKER_CA_PATH", "/run/secrets/swarm_docker_ca")
+SWARM_DOCKER_CERT_PATH = env("SWARM_DOCKER_CERT_PATH", "/run/secrets/swarm_docker_cert")
+SWARM_DOCKER_KEY_PATH = env("SWARM_DOCKER_KEY_PATH", "/run/secrets/swarm_docker_key")
+SWARM_REQUEST_TIMEOUT_SECONDS = int(env("SWARM_REQUEST_TIMEOUT_SECONDS", "30"))
+SWARM_BOOT_TIMEOUT_SECONDS = int(env("SWARM_BOOT_TIMEOUT_SECONDS", "120"))
+SWARM_POLL_INTERVAL_SECONDS = float(env("SWARM_POLL_INTERVAL_SECONDS", "2"))
+SWARM_RUNTIME_NETWORK = env("SWARM_RUNTIME_NETWORK", "edu-runtime")
+RUNTIME_DEFAULT_TTL_SECONDS = int(env("RUNTIME_DEFAULT_TTL_SECONDS", "14400"))
+RUNTIME_WORKSPACE_PORT = int(env("RUNTIME_WORKSPACE_PORT", "8080"))
+RUNTIME_HEALTHCHECK_PATH = env("RUNTIME_HEALTHCHECK_PATH", "/healthz")
+AGENT_DEFAULT_MAX_TOKENS = int(env("AGENT_DEFAULT_MAX_TOKENS", "2048"))
+AGENT_DEFAULT_DAILY_TOKENS = int(env("AGENT_DEFAULT_DAILY_TOKENS", "100000"))
+AGENT_DEFAULT_REQUESTS_PER_MINUTE = int(env("AGENT_DEFAULT_REQUESTS_PER_MINUTE", "30"))
+AGENT_RETRIEVAL_LIMIT = int(env("AGENT_RETRIEVAL_LIMIT", "5"))
+AGENT_TOOL_APPROVAL_TTL_SECONDS = int(env("AGENT_TOOL_APPROVAL_TTL_SECONDS", "300"))
+AGENT_SOURCE_MAX_BYTES = int(env("AGENT_SOURCE_MAX_BYTES", str(2 * 1024 * 1024)))
+AGENT_SOURCE_UPLOAD_EXPIRES_SECONDS = int(env("AGENT_SOURCE_UPLOAD_EXPIRES_SECONDS", "300"))
 
 LOGGING = {
     "version": 1,

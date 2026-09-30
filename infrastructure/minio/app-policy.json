@@ -24,7 +24,8 @@
       "Resource": [
         "arn:aws:s3:::edu-platform/template-assets/*",
         "arn:aws:s3:::edu-platform/workspaces/*",
-        "arn:aws:s3:::edu-platform/reports/*"
+        "arn:aws:s3:::edu-platform/reports/*",
+        "arn:aws:s3:::edu-platform/archives/*"
       ]
     }
   ]

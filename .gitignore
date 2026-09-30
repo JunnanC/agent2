@@ -2,6 +2,14 @@
 .env.*
 !.env.example
 
+# Local overrides and generated secret/config material
+*.local
+*.secret
+*.secrets
+*.credentials
+*.override
+!.env.example
+
 .venv/
 .uv-cache/
 .tmp-wheels/
@@ -12,7 +20,12 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+.pyright/
+.hypothesis/
+.tox/
+.nox/
 .coverage
+.coverage.*
 htmlcov/
 build/
 *.log
@@ -24,14 +37,22 @@ node_modules/
 dist/
 .vite/
 .turbo/
+.eslintcache
+.parcel-cache/
 coverage/
 playwright-report/
 test-results/
 *.tsbuildinfo
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
 .volumes/
 data/
 docker-compose.override.yml
+docker-compose.*.override.yml
+*.tar
+*.tar.gz
 
 *.pem
 *.key
@@ -48,3 +69,7 @@ Thumbs.db
 
 infrastructure/kong/kong.rendered.yml
 runtime-data/
+
+# P16 Docker/Compose verification output is reproducible local evidence.
+# Curated release notes and stage records live under documents/ and remain tracked.
+evidence/p16/*/

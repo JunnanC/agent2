@@ -1,6 +1,8 @@
 import hashlib
+import os
 from decimal import Decimal
-from unittest.mock import patch
+from unittest import skipUnless
+from unittest.mock import Mock, patch
 
 from django.db import IntegrityError, transaction
 from django.test import Client, TestCase
@@ -19,11 +21,14 @@ from apps.experiments.tests.helpers import (
     create_enrollment,
 )
 from apps.labtemplates.models import AutoCheckRule
+from apps.provisioning.adapters import DockerLocalAdapter
 from apps.provisioning.models import ProvisioningInstance
+from apps.provisioning.ports import RuntimeExecutionResult
 from apps.reports.models import ReportDraft, ReportVersion
 from apps.reports.services import submit_report, update_report_draft
 from apps.workspaces.models import WorkspaceSession, WorkspaceSnapshot
 
+from ..checkers import AutoCheckResult, DockerLocalAutoCheckExecutor
 from ..errors import AutoCheckPending, ReviewStateConflict
 from ..models import (
     AnnotationRevision,
@@ -370,6 +375,213 @@ class P10ReviewServiceTests(TestCase):
         self.assertEqual(completed.status, AutoCheckRun.Status.PASSED)
         self.assertEqual(completed.attempt_count, 2)
         self.assertFalse(ReviewDecision.objects.filter(review=review).exists())
+
+    def test_docker_local_judge_uses_frozen_contract_and_hidden_tests(self) -> None:
+        rule = AutoCheckRule.objects.create(
+            template_version=self.template_version,
+            position=9,
+            position_key="t07-real",
+            checker_type="PYTEST",
+            input_schema={"type": "object"},
+            output_schema={"type": "object"},
+            timeout_seconds=30,
+            resource_limit={"cpu_millicores": 250, "memory_mb": 128},
+            network_policy={"mode": "DENY_ALL"},
+            failure_semantics={"on_failure": "FAIL_CHECK"},
+            rule_digest="e" * 64,
+        )
+        task = self.review.task
+        type(task).objects.filter(pk=task.pk).update(
+            runtime_adapter_driver="DOCKER_LOCAL",
+            runtime_adapter_config_ref="runtime/local-algorithm",
+        )
+        task.refresh_from_db()
+        contract = {
+            "language": "python",
+            "entrypoint": "main.py",
+            "timeout_seconds": 5,
+            "memory_mb": 256,
+            "cpu_millicores": 500,
+            "comparator": "token",
+            "network_mode": "DENY_ALL",
+            "tests_asset": self.template_version.execution_spec["tests_asset"],
+            "command": ["python", "main.py"],
+        }
+        run = AutoCheckRun.objects.create(
+            review=self.review,
+            rule=rule,
+            input_asset=self.review.report_version.workspace_snapshot.asset,
+            checker_type=rule.checker_type,
+            rule_digest=rule.rule_digest,
+            artifact_digest=self.review.report_version.snapshot_digest,
+            execution_rule_summary=contract,
+            execution_rule_digest="",
+            trace_id="j" * 32,
+        )
+        captured: dict[str, object] = {}
+        destroyed: list[tuple[str, str]] = []
+
+        class JudgeAdapter:
+            def execute_judge(self, **kwargs: object) -> RuntimeExecutionResult:
+                captured.update(kwargs)
+                return RuntimeExecutionResult(
+                    status="TIMEOUT",
+                    error_code="JUDGE_TIMEOUT",
+                    result_summary="judge timed out",
+                    duration_ms=5000,
+                )
+
+            def destroy_judge(self, judge_id: str, idempotency_key: str = "") -> None:
+                destroyed.append((judge_id, idempotency_key))
+
+        executor = DockerLocalAutoCheckExecutor(
+            runtime_factory=lambda _driver, config_ref: JudgeAdapter(),
+        )
+        with patch("apps.reviews.checkers._read_asset", side_effect=[b"student", b"hidden"]):
+            result = executor.execute(run)
+        self.assertEqual(result.status, AutoCheckRun.Status.TIMEOUT)
+        self.assertFalse(result.passed)
+        self.assertEqual(captured["source"], b"student")
+        self.assertEqual(captured["tests"], b"hidden")
+        self.assertEqual(captured["network_mode"], "DENY_ALL")
+        self.assertEqual(captured["command"], ["python", "main.py"])
+        self.assertEqual(captured["memory_mb"], 128)
+        self.assertEqual(captured["cpu_millicores"], 250)
+        self.assertEqual(destroyed, [(run.public_id, f"judge-destroy:{run.public_id}")])
+
+    @skipUnless(
+        os.environ.get("T10_DOCKER_INTEGRATION") == "1",
+        "requires the local Docker Engine and T10 workspace image",
+    )
+    def test_t10_real_docker_judge_completes_report_review_flow(self) -> None:
+        rule = AutoCheckRule.objects.create(
+            template_version=self.template_version,
+            position=99,
+            position_key="t10-real-docker",
+            checker_type="PYTHON_IO",
+            input_schema={"type": "object"},
+            output_schema={"type": "object"},
+            timeout_seconds=3,
+            resource_limit={"cpu_millicores": 250, "memory_mb": 64},
+            network_policy={"mode": "DENY_ALL"},
+            failure_semantics={"on_failure": "FAIL_CHECK"},
+            rule_digest="d" * 64,
+        )
+        task = self.review.task
+        type(task).objects.filter(pk=task.pk).update(
+            runtime_adapter_driver="DOCKER_LOCAL",
+            runtime_adapter_config_ref="runtime/local-docker",
+        )
+        task.refresh_from_db()
+        contract = {
+            "language": "python",
+            "entrypoint": "main.py",
+            "timeout_seconds": 3,
+            "memory_mb": 64,
+            "cpu_millicores": 250,
+            "comparator": "token",
+            "network_mode": "DENY_ALL",
+            "tests_asset": self.template_version.execution_spec["tests_asset"],
+            "command": ["python", "main.py"],
+        }
+        run = AutoCheckRun.objects.create(
+            review=self.review,
+            rule=rule,
+            input_asset=self.review.report_version.workspace_snapshot.asset,
+            checker_type=rule.checker_type,
+            rule_digest=rule.rule_digest,
+            artifact_digest=self.review.report_version.snapshot_digest,
+            execution_rule_summary=contract,
+            execution_rule_digest="",
+            trace_id="t" * 32,
+        )
+        adapter = DockerLocalAdapter(
+            config={"image": "edu-platform-algorithm-workspace:local"},
+            config_ref="runtime/local-docker",
+        )
+        executor = DockerLocalAutoCheckExecutor(
+            runtime_factory=lambda _driver, config_ref: adapter,
+        )
+        source = b"value = int(input())\nprint(value * 2)\n"
+        hidden_tests = b'{"cases":[{"input":"3\\n","expected":"6\\n"}]}'
+        with (
+            patch("apps.reviews.checkers._read_asset", side_effect=[source, hidden_tests]),
+            patch("apps.reviews.services.auto_check_executor", return_value=executor),
+        ):
+            completed = execute_auto_check(run_id=run.public_id)
+
+        self.assertEqual(completed.status, AutoCheckRun.Status.PASSED)
+        self.assertEqual(completed.result_summary["executor"], "DOCKER_LOCAL_JUDGE")
+        self.assertEqual(completed.evidence[0]["status"], AutoCheckRun.Status.PASSED)
+        changed = self._score(self.review)
+        decision, _review, _task = decide_review(
+            course_id=self.course.public_id,
+            review_id=self.review.public_id,
+            actor=self.teacher,
+            expected_version=changed.row_version,
+            decision=ReviewDecision.Decision.APPROVE,
+            requested_score=Decimal("90"),
+            feedback="Real local Docker judge passed.",
+            context=self.context(self.teacher),
+        )
+        self.assertEqual(decision.decision, ReviewDecision.Decision.APPROVE)
+        self.assertEqual(adapter.inventory_resources(), [])
+
+    def test_auto_check_result_status_is_audit_fact_and_teacher_can_override(self) -> None:
+        rule = AutoCheckRule.objects.create(
+            template_version=self.template_version,
+            position=10,
+            position_key="t07-timeout",
+            checker_type="PYTEST",
+            input_schema={"type": "object"},
+            output_schema={"type": "object"},
+            timeout_seconds=30,
+            resource_limit={},
+            network_policy={"mode": "DENY_ALL"},
+            failure_semantics={"on_failure": "FAIL_CHECK"},
+            rule_digest="t" * 64,
+        )
+        run = AutoCheckRun.objects.create(
+            review=self.review,
+            rule=rule,
+            input_asset=self.review.report_version.workspace_snapshot.asset,
+            checker_type=rule.checker_type,
+            rule_digest=rule.rule_digest,
+            artifact_digest=self.review.report_version.snapshot_digest,
+            execution_rule_summary={"command": ["python", "main.py"], "network_mode": "DENY_ALL"},
+            execution_rule_digest="q" * 64,
+            trace_id="k" * 32,
+        )
+        with patch(
+            "apps.reviews.services.auto_check_executor",
+            return_value=Mock(
+                execute=Mock(
+                    return_value=AutoCheckResult(
+                        passed=False,
+                        status=AutoCheckRun.Status.TIMEOUT,
+                        error_code="JUDGE_TIMEOUT",
+                        summary={"executor": "DOCKER_LOCAL_JUDGE"},
+                        evidence=[{"rule_digest": rule.rule_digest}],
+                    )
+                )
+            ),
+        ):
+            completed = execute_auto_check(run_id=run.public_id)
+        self.assertEqual(completed.status, AutoCheckRun.Status.TIMEOUT)
+        self.assertEqual(completed.error_code, "JUDGE_TIMEOUT")
+        self.assertEqual(completed.evidence[0]["rule_digest"], rule.rule_digest)
+        changed = self._score(self.review)
+        decision, _review, _task = decide_review(
+            course_id=self.course.public_id,
+            review_id=self.review.public_id,
+            actor=self.teacher,
+            expected_version=changed.row_version,
+            decision=ReviewDecision.Decision.APPROVE,
+            requested_score=Decimal("90"),
+            feedback="Manual override after timeout",
+            context=self.context(self.teacher),
+        )
+        self.assertEqual(decision.decision, ReviewDecision.Decision.APPROVE)
 
     def test_student_result_hides_teacher_drafts_until_decision(self) -> None:
         changed = self._score()

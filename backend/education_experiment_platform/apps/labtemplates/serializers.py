@@ -1,8 +1,40 @@
+from django.conf import settings
 from rest_framework import serializers
 
 from apps.core.models import ObjectAsset
 
 from .models import AutoCheckRule, Template, TemplatePrecheckRun, TemplateVersion
+
+
+class ExecutionSpecSerializer(serializers.Serializer):
+    language = serializers.ChoiceField(choices=("python",))
+    entrypoint = serializers.RegexField(
+        r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,126}\.py$", max_length=128
+    )
+    timeout_seconds = serializers.IntegerField(
+        min_value=1, max_value=settings.TEMPLATE_CHECK_TIMEOUT_MAX_SECONDS
+    )
+    memory_mb = serializers.IntegerField(min_value=1)
+    cpu_millicores = serializers.IntegerField(min_value=1)
+    comparator = serializers.ChoiceField(choices=("token",))
+    tests_asset = serializers.CharField(max_length=26)
+    network_mode = serializers.ChoiceField(choices=("DENY_ALL",))
+
+    def validate(self, attrs: dict[str, object]) -> dict[str, object]:
+        expected = {
+            "language",
+            "entrypoint",
+            "timeout_seconds",
+            "memory_mb",
+            "cpu_millicores",
+            "comparator",
+            "tests_asset",
+            "network_mode",
+        }
+        unknown = set(self.initial_data) - expected
+        if unknown:
+            raise serializers.ValidationError({"unknown": sorted(unknown)})
+        return attrs
 
 
 class TemplateWriteSerializer(serializers.Serializer):
@@ -23,6 +55,7 @@ class TemplateVersionWriteSerializer(serializers.Serializer):
     image_id = serializers.CharField(max_length=26, required=False)
     resource_profile_id = serializers.CharField(max_length=26, required=False)
     dependencies = serializers.ListField(child=serializers.DictField(), required=False)
+    execution_spec = ExecutionSpecSerializer(required=False)
     network_policy = serializers.DictField(required=False)
     workspace_capabilities = serializers.DictField(required=False)
     material_version_ids = serializers.ListField(
@@ -51,7 +84,7 @@ class AutoCheckRulesWriteSerializer(serializers.Serializer):
 
 class TemplateAssetCreateSerializer(serializers.Serializer):
     version_id = serializers.CharField(max_length=26)
-    purpose = serializers.ChoiceField(choices=("MANUAL", "STARTER", "REPORT_TEMPLATE"))
+    purpose = serializers.ChoiceField(choices=("MANUAL", "STARTER", "REPORT_TEMPLATE", "TESTS"))
     file_name = serializers.CharField(max_length=255)
     media_type = serializers.CharField(max_length=255)
     size_bytes = serializers.IntegerField(min_value=1)
@@ -134,6 +167,7 @@ class TemplateVersionDataSerializer(serializers.Serializer):
     image_digest = serializers.CharField()
     resource_profile_id = serializers.CharField()
     dependencies = serializers.ListField(child=serializers.DictField())
+    execution_spec = serializers.DictField()
     network_policy = serializers.DictField()
     workspace_capabilities = serializers.DictField()
     material_refs = serializers.ListField(child=serializers.DictField())
@@ -253,6 +287,7 @@ def version_data(item: TemplateVersion) -> dict[str, object]:
         "image_digest": item.image.digest,
         "resource_profile_id": item.resource_profile.public_id,
         "dependencies": item.dependencies,
+        "execution_spec": item.execution_spec,
         "network_policy": item.network_policy,
         "workspace_capabilities": item.workspace_capabilities,
         "material_refs": item.material_refs,
@@ -297,10 +332,16 @@ def asset_data(item: object, version: TemplateVersion) -> dict[str, object]:
     assert isinstance(item, ObjectAsset)
     if item.purpose == "MANUAL":
         attached_id = version.manual_asset_id
+        attached = attached_id == item.pk
     elif item.purpose == "STARTER":
         attached_id = version.starter_asset_id
-    else:
+        attached = attached_id == item.pk
+    elif item.purpose == "REPORT_TEMPLATE":
         attached_id = version.report_template_asset_id
+        attached = attached_id == item.pk
+    else:
+        spec = version.execution_spec if isinstance(version.execution_spec, dict) else {}
+        attached = spec.get("tests_asset") == item.public_id
     return {
         "public_id": item.public_id,
         "version_id": version.public_id,
@@ -312,6 +353,6 @@ def asset_data(item: object, version: TemplateVersion) -> dict[str, object]:
         "scan_status": item.scan_status,
         "status": item.status,
         "failure_code": item.failure_code,
-        "attached": attached_id == item.pk,
+        "attached": attached,
         "row_version": item.row_version,
     }

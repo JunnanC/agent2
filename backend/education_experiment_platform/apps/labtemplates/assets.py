@@ -32,6 +32,9 @@ PURPOSE_FIELDS = {
     "MANUAL": "manual_asset",
     "STARTER": "starter_asset",
     "REPORT_TEMPLATE": "report_template_asset",
+    # TESTS assets are referenced by execution_spec.tests_asset instead of a
+    # mutable foreign-key slot on the version.
+    "TESTS": None,
 }
 ALLOWED_FILES = {
     "MANUAL": {
@@ -50,6 +53,14 @@ ALLOWED_FILES = {
         ".pdf": "application/pdf",
         ".md": "text/markdown",
         ".txt": "text/plain",
+    },
+    "TESTS": {
+        ".json": "application/json",
+        ".txt": "text/plain",
+        ".zip": "application/zip",
+        ".tar": "application/x-tar",
+        ".gz": "application/gzip",
+        ".tgz": "application/gzip",
     },
 }
 DIGEST_PATTERN = re.compile(r"^[0-9a-f]{64}$")
@@ -109,7 +120,7 @@ def create_asset_upload(
                 "actual_row_version": version.row_version,
             }
         )
-    if version.status != TemplateVersion.Status.DRAFT:
+    if version.status not in {TemplateVersion.Status.DRAFT, TemplateVersion.Status.PRECHECK_FAILED}:
         raise TemplateStateConflict(detail={"status": version.status})
     normalized_purpose = purpose.upper()
     normalized_digest = digest_sha256.casefold()
@@ -396,7 +407,7 @@ def scan_and_attach_asset(*, asset_id: str, trace_id: str) -> ObjectAsset:
         try:
             version = TemplateVersion.objects.select_for_update().get(
                 public_id=asset.owner_ref,
-                status=TemplateVersion.Status.DRAFT,
+                status__in=(TemplateVersion.Status.DRAFT, TemplateVersion.Status.PRECHECK_FAILED),
             )
         except TemplateVersion.DoesNotExist:
             rejected = _mark_asset_failed(asset, code="TEMPLATE_VERSION_NOT_DRAFT", infected=False)
@@ -418,12 +429,14 @@ def scan_and_attach_asset(*, asset_id: str, trace_id: str) -> ObjectAsset:
                     "scan_completed_at": timezone.now(),
                 },
             )
-            compare_and_swap(
-                TemplateVersion,
-                pk=version.pk,
-                expected_version=version.row_version,
-                changes={PURPOSE_FIELDS[asset.purpose] + "_id": asset.pk},
-            )
+            field = PURPOSE_FIELDS[asset.purpose]
+            if field is not None:
+                compare_and_swap(
+                    TemplateVersion,
+                    pk=version.pk,
+                    expected_version=version.row_version,
+                    changes={field + "_id": asset.pk},
+                )
             _record_scan_result(changed, trace_id=trace_id, result=changed.scan_status)
     if rejected is not None:
         _delete_or_compensate(rejected, trace_id=trace_id)

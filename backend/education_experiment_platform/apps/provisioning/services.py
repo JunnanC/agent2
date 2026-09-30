@@ -1,3 +1,4 @@
+import logging
 from contextlib import suppress
 from typing import Any
 
@@ -19,14 +20,23 @@ from apps.experiments.services import (
     transition_task,
 )
 from apps.governance.models import QuotaReservation
+from apps.governance.models import RuntimeAdapter as RuntimeAdapterConfig
 from apps.governance.services import release_reservation, reserve_quota
 
 from . import events
-from .adapters import FakeRuntimeFailure, runtime_for_driver
+from .adapters import RuntimeAdapterFailure, runtime_for_driver
 from .errors import ProvisioningConfigurationError, ProvisioningStateConflict
-from .metrics import PROVISIONING_JOBS_TOTAL, PROVISIONING_STAGE_TOTAL
+from .metrics import (
+    PROVISIONING_DURATION,
+    PROVISIONING_JOBS_TOTAL,
+    PROVISIONING_STAGE_TOTAL,
+    RUNTIME_CONTAINER_CREATE_DURATION,
+    RUNTIME_ENGINE_UNAVAILABLE_TOTAL,
+    RUNTIME_WORKSPACE_START_DURATION,
+    is_engine_unavailable,
+)
 from .models import ProvisioningInstance, ProvisioningJob, ProvisioningStageEvent, public_id_field
-from .ports import RuntimeSpec
+from .ports import RuntimeInventoryItem, RuntimeSpec
 from .selectors import active_job_for_task, jobs_for_task
 
 STAGES: tuple[str, ...] = tuple(ProvisioningJob.Stage.values)
@@ -35,6 +45,8 @@ ACTIVE_JOB_STATUSES = (
     ProvisioningJob.Status.RUNNING,
     ProvisioningJob.Status.RETRY,
 )
+
+logger = logging.getLogger("runtime.provisioning")
 
 
 def _trace(context: Any) -> str:
@@ -96,33 +108,80 @@ def _emit(
     enqueue_relay_after_commit(trace_id=_trace(context))
 
 
-def _runtime_spec(task: ExperimentTask) -> RuntimeSpec:
+def _task_runtime_snapshot(task: ExperimentTask) -> tuple[Any, Any, Any, dict[str, Any]]:
+    """Return task-frozen runtime rows, with a legacy-template fallback."""
+
     template = task.template_version
-    profile = template.resource_profile
-    image = template.image
+    adapter = task.runtime_adapter or template.runtime_adapter
+    image = task.image or template.image
+    profile = task.resource_profile or template.resource_profile
+    profile_snapshot = dict(task.resource_profile_snapshot or {})
+    if not profile_snapshot:
+        profile_snapshot = {
+            "public_id": profile.public_id,
+            "code": profile.code,
+            "runtime_type": profile.runtime_type,
+            "cpu_millicores": profile.cpu_millicores,
+            "memory_mb": profile.memory_mb,
+            "disk_gb": profile.disk_gb,
+            "network_mode": profile.network_mode,
+        }
+    return adapter, image, profile, profile_snapshot
+
+
+def _runtime_spec(
+    task: ExperimentTask, *, trace_id: str = "", instance_public_id: str = ""
+) -> RuntimeSpec:
+    template = task.template_version
+    _, image, profile, profile_snapshot = _task_runtime_snapshot(task)
+    deadline = task.effective_deadline or task.publication.window_end
+    ttl_seconds = max(
+        60,
+        min(
+            int((deadline - timezone.now()).total_seconds()),
+            int(getattr(settings, "RUNTIME_DEFAULT_TTL_SECONDS", 14400)),
+        ),
+    )
+    network_policy = dict(template.network_policy or {})
+    execution_spec = dict(task.execution_spec or {})
+    network_policy["mode"] = str(
+        execution_spec.get("network_mode")
+        or profile_snapshot.get("network_mode")
+        or profile.network_mode
+    )
     return RuntimeSpec(
         task_id=task.public_id,
         course_id=task.course.public_id,
         student_id=task.student.public_id,
         runtime_type=task.runtime_type,
-        image_digest=image.digest,
-        resource_profile_id=profile.public_id,
-        cpu_millicores=profile.cpu_millicores,
-        memory_mb=profile.memory_mb,
-        disk_gb=profile.disk_gb,
-        network_policy=template.network_policy,
+        image_registry=task.image_registry or image.registry,
+        image_repository=task.image_repository or image.repository,
+        image_digest=task.image_digest or image.digest,
+        resource_profile_id=str(profile_snapshot.get("public_id") or profile.public_id),
+        cpu_millicores=int(profile_snapshot.get("cpu_millicores") or profile.cpu_millicores),
+        memory_mb=int(profile_snapshot.get("memory_mb") or profile.memory_mb),
+        disk_gb=int(profile_snapshot.get("disk_gb") or profile.disk_gb),
+        network_policy={
+            "mode": profile_snapshot.get("network_mode") or profile.network_mode,
+            **network_policy,
+        },
         workspace_capabilities=template.workspace_capabilities,
+        ttl_seconds=ttl_seconds,
+        workspace_port=int(getattr(settings, "RUNTIME_WORKSPACE_PORT", 8080)),
+        healthcheck_path=str(getattr(settings, "RUNTIME_HEALTHCHECK_PATH", "/healthz")),
+        trace_id=trace_id,
+        instance_public_id=instance_public_id,
     )
 
 
 def _reservation_values(task: ExperimentTask) -> dict[str, int]:
-    profile = task.template_version.resource_profile
+    _, _, profile, profile_snapshot = _task_runtime_snapshot(task)
     return {
         "instance_count": 1,
         "start_count": 1,
-        "cpu_millicores": profile.cpu_millicores,
-        "memory_mb": profile.memory_mb,
-        "disk_gb": profile.disk_gb,
+        "cpu_millicores": int(profile_snapshot.get("cpu_millicores") or profile.cpu_millicores),
+        "memory_mb": int(profile_snapshot.get("memory_mb") or profile.memory_mb),
+        "disk_gb": int(profile_snapshot.get("disk_gb") or profile.disk_gb),
         "object_storage_bytes": 0,
         "agent_tokens": 0,
         "agent_requests": 0,
@@ -135,6 +194,9 @@ def _load_task(task_id: str, *, actor: User | None = None) -> ExperimentTask:
         "publication",
         "enrollment",
         "student",
+        "runtime_adapter",
+        "image",
+        "resource_profile",
         "template_version__runtime_adapter",
         "template_version__image",
         "template_version__resource_profile",
@@ -165,7 +227,10 @@ def _create_job_and_reservation(
         subject_ref=task.public_id,
         course_id=task.course.public_id,
         user_id=task.student.public_id,
-        resource_profile_id=task.template_version.resource_profile.public_id,
+        resource_profile_id=str(
+            (task.resource_profile_snapshot or {}).get("public_id")
+            or (task.resource_profile or task.template_version.resource_profile).public_id
+        ),
         values=_reservation_values(task),
         expires_at=None,
         context=context,
@@ -185,9 +250,9 @@ def _create_job_and_reservation(
         task=task,
         defaults={
             "course": task.course,
-            "runtime_adapter": task.template_version.runtime_adapter,
-            "image": task.template_version.image,
-            "resource_profile": task.template_version.resource_profile,
+            "runtime_adapter": _task_runtime_snapshot(task)[0],
+            "image": _task_runtime_snapshot(task)[1],
+            "resource_profile": _task_runtime_snapshot(task)[2],
             "runtime_type": task.runtime_type,
             "status": ProvisioningInstance.Status.CREATING,
             "created_trace_id": _trace(context),
@@ -268,19 +333,17 @@ def start_provisioning(
         raise PublicationPrerequisiteBlocked(detail={"blockers": blockers})
     if active_job_for_task(task) is not None:
         raise ProvisioningStateConflict(detail={"active_job": True})
-    adapter_row = task.template_version.runtime_adapter
+    adapter_row, image, profile, _ = _task_runtime_snapshot(task)
     if adapter_row.status != "ENABLED" or adapter_row.health_status in ("DEGRADED", "UNAVAILABLE"):
         raise ProvisioningStateConflict(detail={"runtime_adapter": adapter_row.public_id})
     if (
-        task.template_version.image.scan_status != "CLEAN"
-        or task.template_version.image.approval_status != "APPROVED"
+        image.scan_status != "CLEAN"
+        or image.approval_status != "APPROVED"
     ):
         raise ProvisioningConfigurationError(detail={"image": "not_approved_or_clean"})
-    if task.template_version.resource_profile.status != "ACTIVE":
+    if profile.status != "ACTIVE":
         raise ProvisioningConfigurationError(detail={"resource_profile": "not_active"})
-    job = _create_job_and_reservation(
-        task=task, context=context, attempt_no=_next_attempt_no(task)
-    )
+    job = _create_job_and_reservation(task=task, context=context, attempt_no=_next_attempt_no(task))
     changed = transition_task(
         task_id=task.public_id,
         to_status=ExperimentTask.Status.PROVISIONING,
@@ -416,6 +479,7 @@ def cancel_queued_provisioning(
     return changed_task, changed_job
 
 
+@transaction.atomic
 def _stage_started(job: ProvisioningJob, stage: str, context: Any) -> ProvisioningStageEvent:
     now = timezone.now()
     job = compare_and_swap(
@@ -436,9 +500,16 @@ def _stage_started(job: ProvisioningJob, stage: str, context: Any) -> Provisioni
     return event
 
 
+@transaction.atomic
 def _stage_finished(
-    event: ProvisioningStageEvent, *, status: str, detail: dict[str, Any], error_code: str = ""
+    event: ProvisioningStageEvent,
+    *,
+    status: str,
+    detail: dict[str, Any],
+    context: Any,
+    error_code: str = "",
 ) -> None:
+    completed_at = timezone.now()
     ProvisioningStageEvent.objects.create(
         job=event.job,
         stage=event.stage,
@@ -448,9 +519,29 @@ def _stage_finished(
         error_code=error_code,
         trace_id=event.trace_id,
         started_at=event.started_at,
-        completed_at=timezone.now(),
+        completed_at=completed_at,
     )
     PROVISIONING_STAGE_TOTAL.labels(stage=event.stage, status=status).inc()
+    job = ProvisioningJob.objects.select_related("task").get(pk=event.job_id)
+    duration = max(0.0, (completed_at - (event.started_at or completed_at)).total_seconds())
+    driver = str(job.task.runtime_adapter_driver or job.task.runtime_type or "UNKNOWN")
+    if event.stage == ProvisioningJob.Stage.CREATE:
+        RUNTIME_CONTAINER_CREATE_DURATION.labels(driver=driver, result=status).observe(duration)
+    elif event.stage == ProvisioningJob.Stage.WORKSPACE_READY:
+        RUNTIME_WORKSPACE_START_DURATION.labels(driver=driver, result=status).observe(duration)
+    _emit(
+        event_type=events.STAGE_CHANGED,
+        aggregate_type="provisioning_job",
+        aggregate_ref=job.public_id,
+        payload={
+            "job_id": job.public_id,
+            "task_id": job.task.public_id,
+            "stage": event.stage,
+            "status": status,
+            "error_code": error_code,
+        },
+        context=context,
+    )
 
 
 def _job_context(job: ProvisioningJob) -> ActorContext:
@@ -458,8 +549,8 @@ def _job_context(job: ProvisioningJob) -> ActorContext:
 
 
 def _error_code(exc: Exception) -> tuple[str, bool]:
-    if isinstance(exc, FakeRuntimeFailure):
-        return exc.code, True
+    if isinstance(exc, RuntimeAdapterFailure):
+        return exc.code, exc.retryable
     if isinstance(exc, TimeoutError):
         return str(exc) or "RUNTIME_TIMEOUT", True
     if isinstance(exc, ProvisioningConfigurationError):
@@ -471,8 +562,17 @@ def _failure_detail(exc: Exception, error_code: str) -> dict[str, Any]:
     return {"error_code": error_code, "retryable": True, "detail": str(exc)[:255]}
 
 
+@transaction.atomic
 def _mark_failed(job: ProvisioningJob, exc: Exception, context: ActorContext) -> None:
+    job = (
+        ProvisioningJob.objects.select_for_update()
+        .select_related("task", "reservation")
+        .get(pk=job.pk)
+    )
     error_code, retryable = _error_code(exc)
+    driver = str(job.task.runtime_adapter_driver or job.task.runtime_type or "UNKNOWN")
+    if is_engine_unavailable(error_code):
+        RUNTIME_ENGINE_UNAVAILABLE_TOTAL.labels(driver=driver).inc()
     failure = FailureRecord.objects.create(
         failure_type="PROVISIONING",
         subject_type="PROVISIONING_JOB",
@@ -538,6 +638,22 @@ def _mark_failed(job: ProvisioningJob, exc: Exception, context: ActorContext) ->
             detail={"retryable": retryable, "error_code": error_code, "stage": job.current_stage},
         )
     PROVISIONING_JOBS_TOTAL.labels(status=changed.status, runtime_type=job.task.runtime_type).inc()
+    if job.started_at and changed.completed_at:
+        PROVISIONING_DURATION.labels(runtime_type=job.task.runtime_type).observe(
+            max(0.0, (changed.completed_at - job.started_at).total_seconds())
+        )
+    logger.warning(
+        "runtime provisioning failed",
+        extra={
+            "trace_id": job.trace_id,
+            "task_ref": job.task.public_id,
+            "instance_ref": instance.public_id if instance else "",
+            "container_ref": instance.external_id if instance else "",
+            "resource_ref": job.public_id,
+            "error_code": error_code,
+            "result": changed.status,
+        },
+    )
     _emit(
         event_type=events.JOB_FAILED,
         aggregate_type="provisioning_job",
@@ -552,37 +668,47 @@ def _mark_failed(job: ProvisioningJob, exc: Exception, context: ActorContext) ->
     )
 
 
-@transaction.atomic
 def execute_provisioning_job(*, job_id: str, trace_id: str = "") -> ProvisioningJob:
-    job = (
-        ProvisioningJob.objects.select_for_update()
-        .select_related(
-            "task__course",
-            "task__student",
-            "task__template_version__runtime_adapter",
-            "task__template_version__image",
-            "task__template_version__resource_profile",
-            "reservation",
+    del trace_id
+    with transaction.atomic():
+        job = (
+            ProvisioningJob.objects.select_for_update()
+            .select_related(
+                "task__course",
+                "task__student",
+                "task__runtime_adapter",
+                "task__image",
+                "task__resource_profile",
+                "task__template_version__runtime_adapter",
+                "task__template_version__image",
+                "task__template_version__resource_profile",
+                "reservation",
+            )
+            .get(public_id=job_id)
         )
-        .get(public_id=job_id)
-    )
-    if job.status not in (ProvisioningJob.Status.QUEUED, ProvisioningJob.Status.RETRY):
-        return job
+        if job.status not in (ProvisioningJob.Status.QUEUED, ProvisioningJob.Status.RETRY):
+            return job
+        job = compare_and_swap(
+            ProvisioningJob,
+            pk=job.pk,
+            expected_version=job.row_version,
+            changes={
+                "status": ProvisioningJob.Status.RUNNING,
+                "attempt_count": job.attempt_count + 1,
+                "started_at": timezone.now(),
+            },
+        )  # type: ignore[assignment]
+        instance = ProvisioningInstance.objects.select_for_update().get(task=job.task)
+
     context = _job_context(job)
-    job = compare_and_swap(
-        ProvisioningJob,
-        pk=job.pk,
-        expected_version=job.row_version,
-        changes={
-            "status": ProvisioningJob.Status.RUNNING,
-            "attempt_count": job.attempt_count + 1,
-            "started_at": timezone.now(),
-        },
-    )  # type: ignore[assignment]
-    instance = ProvisioningInstance.objects.select_for_update().get(task=job.task)
-    spec = _runtime_spec(job.task)
+    spec = _runtime_spec(
+        job.task, trace_id=job.trace_id, instance_public_id=instance.public_id
+    )
     try:
-        adapter = runtime_for_driver(job.task.template_version.runtime_adapter.driver)
+        adapter_row, image, _, _ = _task_runtime_snapshot(job.task)
+        adapter_driver = job.task.runtime_adapter_driver or adapter_row.driver
+        adapter_config_ref = job.task.runtime_adapter_config_ref or adapter_row.config_ref
+        adapter = runtime_for_driver(adapter_driver, config_ref=adapter_config_ref)
         result = None
         for stage in STAGES:
             event = _stage_started(job, stage, context)
@@ -591,8 +717,8 @@ def execute_provisioning_job(*, job_id: str, trace_id: str = "") -> Provisioning
                     result = adapter.preflight(spec)
                 elif stage == ProvisioningJob.Stage.IMAGE_PREPARE:
                     if (
-                        job.task.template_version.image.approval_status != "APPROVED"
-                        or job.task.template_version.image.scan_status != "CLEAN"
+                        image.approval_status != "APPROVED"
+                        or image.scan_status != "CLEAN"
                     ):
                         raise ProvisioningConfigurationError(
                             detail={"image": "not_approved_or_clean"}
@@ -633,18 +759,9 @@ def execute_provisioning_job(*, job_id: str, trace_id: str = "") -> Provisioning
                     )
                     instance = ProvisioningInstance.objects.get(pk=instance.pk)
                 _stage_finished(
-                    event, status=ProvisioningStageEvent.Status.PASSED, detail={"stage": stage}
-                )
-                _emit(
-                    event_type=events.STAGE_CHANGED,
-                    aggregate_type="provisioning_job",
-                    aggregate_ref=job.public_id,
-                    payload={
-                        "job_id": job.public_id,
-                        "task_id": job.task.public_id,
-                        "stage": stage,
-                        "status": "PASSED",
-                    },
+                    event,
+                    status=ProvisioningStageEvent.Status.PASSED,
+                    detail={"stage": stage},
                     context=context,
                 )
                 job = ProvisioningJob.objects.get(pk=job.pk)
@@ -666,46 +783,68 @@ def execute_provisioning_job(*, job_id: str, trace_id: str = "") -> Provisioning
                     event,
                     status=ProvisioningStageEvent.Status.FAILED,
                     detail={"stage": stage},
+                    context=context,
                     error_code=error_code,
                 )
                 raise
-        task = ExperimentTask.objects.select_for_update().get(pk=job.task_id)
-        if task.status == ExperimentTask.Status.PROVISIONING:
-            transition_task(
-                task_id=task.public_id,
-                to_status=ExperimentTask.Status.READY,
-                actor=None,
-                expected_version=task.row_version,
-                trigger="PROVISION",
-                reason="provisioning completed",
-                context=context,
-                detail={"job_id": job.public_id},
+        with transaction.atomic():
+            job = (
+                ProvisioningJob.objects.select_for_update()
+                .select_related("task")
+                .get(pk=job.pk)
             )
-        changed = compare_and_swap(
-            ProvisioningJob,
-            pk=job.pk,
-            expected_version=ProvisioningJob.objects.get(pk=job.pk).row_version,
-            changes={
-                "status": ProvisioningJob.Status.PASSED,
-                "current_stage": ProvisioningJob.Stage.WORKSPACE_READY,
-                "completed_at": timezone.now(),
-            },
-        )
-        PROVISIONING_JOBS_TOTAL.labels(
-            status=changed.status, runtime_type=job.task.runtime_type
-        ).inc()
-        _emit(
-            event_type=events.JOB_PASSED,
-            aggregate_type="provisioning_job",
-            aggregate_ref=job.public_id,
-            payload={
-                "job_id": job.public_id,
-                "task_id": job.task.public_id,
-                "status": changed.status,
-            },
-            context=context,
-        )
-        return changed  # type: ignore[return-value]
+            task = ExperimentTask.objects.select_for_update().get(pk=job.task_id)
+            if task.status == ExperimentTask.Status.PROVISIONING:
+                transition_task(
+                    task_id=task.public_id,
+                    to_status=ExperimentTask.Status.READY,
+                    actor=None,
+                    expected_version=task.row_version,
+                    trigger="PROVISION",
+                    reason="provisioning completed",
+                    context=context,
+                    detail={"job_id": job.public_id},
+                )
+            changed = compare_and_swap(
+                ProvisioningJob,
+                pk=job.pk,
+                expected_version=job.row_version,
+                changes={
+                    "status": ProvisioningJob.Status.PASSED,
+                    "current_stage": ProvisioningJob.Stage.WORKSPACE_READY,
+                    "completed_at": timezone.now(),
+                },
+            )
+            PROVISIONING_JOBS_TOTAL.labels(
+                status=changed.status, runtime_type=job.task.runtime_type
+            ).inc()
+            if job.started_at and changed.completed_at:
+                PROVISIONING_DURATION.labels(runtime_type=job.task.runtime_type).observe(
+                    max(0.0, (changed.completed_at - job.started_at).total_seconds())
+                )
+            logger.info(
+                "runtime workspace ready",
+                extra={
+                    "trace_id": job.trace_id,
+                    "task_ref": job.task.public_id,
+                    "instance_ref": instance.public_id,
+                    "container_ref": instance.external_id or "",
+                    "resource_ref": job.public_id,
+                    "result": changed.status,
+                },
+            )
+            _emit(
+                event_type=events.JOB_PASSED,
+                aggregate_type="provisioning_job",
+                aggregate_ref=job.public_id,
+                payload={
+                    "job_id": job.public_id,
+                    "task_id": job.task.public_id,
+                    "status": changed.status,
+                },
+                context=context,
+            )
+            return changed  # type: ignore[return-value]
     except Exception as exc:
         _mark_failed(
             ProvisioningJob.objects.select_related("task", "reservation").get(pk=job.pk),
@@ -715,31 +854,437 @@ def execute_provisioning_job(*, job_id: str, trace_id: str = "") -> Provisioning
         return ProvisioningJob.objects.get(pk=job.pk)
 
 
-@transaction.atomic
 def compensate_provisioning(task: CompensationTask) -> None:
-    job = (
-        ProvisioningJob.objects.select_for_update()
-        .select_related("reservation", "task")
-        .get(public_id=task.subject_ref)
-    )
-    instance = ProvisioningInstance.objects.select_for_update().filter(task=job.task).first()
     context = ActorContext(actor_ref="compensation", portal="WORKER", trace_id=task.trace_id)
-    if instance is not None and instance.external_id:
-        adapter = runtime_for_driver(instance.runtime_adapter.driver)
-        adapter.destroy(instance.external_id, f"destroy:{job.public_id}")
-        compare_and_swap(
-            ProvisioningInstance,
-            pk=instance.pk,
-            expected_version=instance.row_version,
-            changes={
-                "status": ProvisioningInstance.Status.DESTROYED,
-                "external_id": None,
-                "endpoint": "",
-                "destroyed_at": timezone.now(),
-            },
+    with transaction.atomic():
+        job = (
+            ProvisioningJob.objects.select_for_update()
+            .select_related("reservation", "task")
+            .get(public_id=task.subject_ref)
         )
-    release_reservation(
-        reservation_id=job.reservation.public_id,
-        reason="provisioning compensation",
-        context=context,
+        instance = (
+            ProvisioningInstance.objects.select_for_update()
+            .select_related("runtime_adapter")
+            .filter(task=job.task)
+            .first()
+        )
+        external_id = instance.external_id if instance is not None else None
+        driver = instance.runtime_adapter.driver if instance is not None else ""
+        config_ref = instance.runtime_adapter.config_ref if instance is not None else ""
+
+    if instance is not None and external_id:
+        adapter = runtime_for_driver(driver, config_ref=config_ref)
+        adapter.destroy(external_id, f"destroy:{job.public_id}")
+
+    with transaction.atomic():
+        job = (
+            ProvisioningJob.objects.select_for_update()
+            .select_related("reservation", "task")
+            .get(pk=job.pk)
+        )
+        instance = (
+            ProvisioningInstance.objects.select_for_update().filter(task=job.task).first()
+        )
+        if instance is not None and instance.external_id:
+            compare_and_swap(
+                ProvisioningInstance,
+                pk=instance.pk,
+                expected_version=instance.row_version,
+                changes={
+                    "status": ProvisioningInstance.Status.DESTROYED,
+                    "external_id": None,
+                    "endpoint": "",
+                    "destroyed_at": timezone.now(),
+                },
+            )
+        release_reservation(
+            reservation_id=job.reservation.public_id,
+            reason="provisioning compensation",
+            context=context,
+        )
+
+
+def runtime_inventory(*, driver: str = "FAKE", config_ref: str = "") -> list[RuntimeInventoryItem]:
+    return runtime_for_driver(driver, config_ref=config_ref).inventory()
+
+
+def enabled_runtime_inventory(
+    *, include_unavailable: bool = False, trace_id: str = ""
+) -> list[RuntimeInventoryItem]:
+    """Return inventory for enabled adapters, optionally preserving outage facts.
+
+    Reconciliation callers historically treated an unavailable adapter as an empty
+    inventory.  The platform list needs to distinguish that condition from a
+    confirmed missing runtime, so it can opt into a synthetic marker item with no
+    external id.
+    """
+    result: list[RuntimeInventoryItem] = []
+    adapters = RuntimeAdapterConfig.objects.filter(status=RuntimeAdapterConfig.Status.ENABLED)
+    for adapter_config in adapters.order_by("driver", "code"):
+        try:
+            items = runtime_inventory(
+                driver=adapter_config.driver, config_ref=adapter_config.config_ref
+            )
+        except Exception as exc:  # noqa: BLE001 - inventory must not break the platform list
+            error_code = str(getattr(exc, "code", "RUNTIME_UNAVAILABLE"))[:64]
+            if is_engine_unavailable(error_code):
+                RUNTIME_ENGINE_UNAVAILABLE_TOTAL.labels(driver=adapter_config.driver).inc()
+            logger.error(
+                "runtime inventory unavailable",
+                extra={
+                    "trace_id": trace_id,
+                    "resource_ref": adapter_config.public_id,
+                    "error_code": error_code,
+                    "result": "UNAVAILABLE",
+                },
+            )
+            if include_unavailable:
+                result.append(
+                    RuntimeInventoryItem(
+                        external_id="",
+                        status="UNAVAILABLE",
+                        metadata={
+                            "adapter_id": adapter_config.public_id,
+                            "adapter_code": adapter_config.code,
+                            "driver": adapter_config.driver,
+                            "error_code": error_code,
+                            "inventory_unavailable": True,
+                        },
+                    )
+                )
+            continue
+        for item in items:
+            result.append(
+                RuntimeInventoryItem(
+                    external_id=item.external_id,
+                    status=item.status,
+                    metadata={
+                        **dict(item.metadata),
+                        "adapter_id": adapter_config.public_id,
+                        "adapter_code": adapter_config.code,
+                        "driver": adapter_config.driver,
+                    },
+                )
+            )
+    return result
+
+
+def enabled_runtime_resources() -> list[RuntimeInventoryItem]:
+    """Return managed transient (judge/volume) resources for P11 reconciliation."""
+
+    result: list[RuntimeInventoryItem] = []
+    adapters = RuntimeAdapterConfig.objects.filter(status=RuntimeAdapterConfig.Status.ENABLED)
+    for adapter_config in adapters.order_by("driver", "code"):
+        try:
+            adapter = runtime_for_driver(
+                adapter_config.driver, config_ref=adapter_config.config_ref
+            )
+            inventory_resources = getattr(adapter, "inventory_resources", None)
+            if not callable(inventory_resources):
+                continue
+            items = inventory_resources()
+        except RuntimeAdapterFailure:
+            continue
+        for item in items:
+            result.append(
+                RuntimeInventoryItem(
+                    external_id=item.external_id,
+                    status=item.status,
+                    metadata={
+                        **dict(item.metadata),
+                        "adapter_id": adapter_config.public_id,
+                        "adapter_code": adapter_config.code,
+                        "driver": adapter_config.driver,
+                    },
+                )
+            )
+    return result
+
+
+def runtime_inventory_snapshot(*, trace_id: str = "") -> dict[str, Any]:
+    """Build a bounded operations snapshot from DB and managed runtime facts."""
+
+    from apps.reviews.models import AutoCheckRun
+
+    from .metrics import RUNTIME_ENGINE_HEALTH, RUNTIME_INVENTORY, RUNTIME_ORPHAN_RESOURCES
+
+    configs = list(
+        RuntimeAdapterConfig.objects.filter(status=RuntimeAdapterConfig.Status.ENABLED)
+        .order_by("driver", "code")
     )
+    runtime_items: list[RuntimeInventoryItem] = []
+    transient_items: list[RuntimeInventoryItem] = []
+    drivers: list[dict[str, str]] = []
+    for config in configs:
+        driver = str(config.driver)
+        try:
+            adapter = runtime_for_driver(driver, config_ref=config.config_ref)
+            health = dict(adapter.health())
+            health_status = str(health.get("status", "UNKNOWN"))
+            drivers.append({"driver": driver, "code": config.code, "status": health_status})
+            RUNTIME_ENGINE_HEALTH.labels(driver=driver).set(1 if health_status == "HEALTHY" else 0)
+            if health_status == "UNAVAILABLE":
+                RUNTIME_ENGINE_UNAVAILABLE_TOTAL.labels(driver=driver).inc()
+                logger.error(
+                    "runtime engine unavailable",
+                    extra={
+                        "trace_id": trace_id,
+                        "resource_ref": config.public_id,
+                        "error_code": str(health.get("error_code", "RUNTIME_UNAVAILABLE")),
+                        "result": health_status,
+                    },
+                )
+                continue
+            for item in adapter.inventory():
+                runtime_items.append(
+                    RuntimeInventoryItem(
+                        external_id=item.external_id,
+                        status=item.status,
+                        metadata={
+                            **dict(item.metadata),
+                            "adapter_id": config.public_id,
+                            "adapter_code": config.code,
+                            "driver": driver,
+                        },
+                    )
+                )
+            inventory_resources = getattr(adapter, "inventory_resources", None)
+            if callable(inventory_resources):
+                for item in inventory_resources():
+                    transient_items.append(
+                        RuntimeInventoryItem(
+                            external_id=item.external_id,
+                            status=item.status,
+                            metadata={
+                                **dict(item.metadata),
+                                "adapter_id": config.public_id,
+                                "adapter_code": config.code,
+                                "driver": driver,
+                            },
+                        )
+                    )
+        except Exception as exc:  # noqa: BLE001 - inventory must degrade safely
+            drivers.append(
+                {
+                    "driver": driver,
+                    "code": config.code,
+                    "status": "UNAVAILABLE",
+                    "error_code": str(getattr(exc, "code", "RUNTIME_UNAVAILABLE"))[:64],
+                }
+            )
+            RUNTIME_ENGINE_HEALTH.labels(driver=driver).set(0)
+            error_code = str(getattr(exc, "code", "RUNTIME_UNAVAILABLE"))[:64]
+            if is_engine_unavailable(error_code):
+                RUNTIME_ENGINE_UNAVAILABLE_TOTAL.labels(driver=driver).inc()
+            logger.error(
+                "runtime inventory unavailable",
+                extra={
+                    "trace_id": trace_id,
+                    "resource_ref": config.public_id,
+                    "error_code": error_code,
+                    "result": "UNAVAILABLE",
+                },
+            )
+
+    db_external_ids = set(
+        ProvisioningInstance.objects.exclude(external_id__isnull=True).values_list(
+            "runtime_adapter__public_id", "external_id"
+        )
+    )
+    inventory_external_ids = {
+        (str(item.metadata.get("adapter_id", "")), item.external_id) for item in runtime_items
+    }
+    runtime_orphans = sum(
+        1
+        for item in runtime_items
+        if (str(item.metadata.get("adapter_id", "")), item.external_id) not in db_external_ids
+    )
+    missing_runtime = sum(
+        1
+        for instance in ProvisioningInstance.objects.exclude(
+            status=ProvisioningInstance.Status.DESTROYED
+        ).exclude(external_id__isnull=True)
+        if (instance.runtime_adapter.public_id, instance.external_id) not in inventory_external_ids
+    )
+    orphan_judges = 0
+    orphan_volumes = 0
+    for item in transient_items:
+        kind = str(item.metadata.get("kind", "")).casefold()
+        if kind == "judge":
+            judge_id = str(item.metadata.get("judge_id") or item.external_id)
+            if not AutoCheckRun.objects.filter(
+                public_id=judge_id,
+                status__in=(AutoCheckRun.Status.QUEUED, AutoCheckRun.Status.RUNNING),
+            ).exists():
+                orphan_judges += 1
+        elif kind == "volume":
+            task_id = str(item.metadata.get("task_id", ""))
+            if not ProvisioningInstance.objects.filter(task__public_id=task_id).exclude(
+                status=ProvisioningInstance.Status.DESTROYED
+            ).exists():
+                orphan_volumes += 1
+
+    counts: dict[tuple[str, str, str], int] = {}
+    for item in [*runtime_items, *transient_items]:
+        key = (
+            str(item.metadata.get("driver", "UNKNOWN")),
+            str(item.metadata.get("kind", "runtime")),
+            str(item.status),
+        )
+        counts[key] = counts.get(key, 0) + 1
+    RUNTIME_INVENTORY.clear()
+    for (driver, kind, status), value in counts.items():
+        RUNTIME_INVENTORY.labels(driver=driver, kind=kind, status=status).set(value)
+    RUNTIME_ENGINE_HEALTH.clear()
+    for driver_health in drivers:
+        RUNTIME_ENGINE_HEALTH.labels(driver=driver_health["driver"]).set(
+            1 if driver_health["status"] == "HEALTHY" else 0
+        )
+    RUNTIME_ORPHAN_RESOURCES.clear()
+    for kind, value in (
+        ("runtime", runtime_orphans),
+        ("judge", orphan_judges),
+        ("volume", orphan_volumes),
+    ):
+        RUNTIME_ORPHAN_RESOURCES.labels(kind=kind).set(value)
+    unavailable = any(item["status"] == "UNAVAILABLE" for item in drivers)
+    logger.info(
+        "runtime inventory reconciled",
+        extra={
+            "trace_id": trace_id,
+            "result": "UNAVAILABLE" if unavailable else "SUCCEEDED",
+            "runtime_count": len(runtime_items),
+            "transient_count": len(transient_items),
+            "orphan_runtime_count": runtime_orphans,
+            "orphan_judge_count": orphan_judges,
+            "orphan_volume_count": orphan_volumes,
+        },
+    )
+
+    return {
+        "status": (
+            "UNAVAILABLE"
+            if unavailable
+            else (
+                "HEALTHY"
+                if drivers and all(item["status"] == "HEALTHY" for item in drivers)
+                else "DEGRADED"
+            )
+        ),
+        "drivers": drivers,
+        "inventory": {"runtime": len(runtime_items), "transient": len(transient_items)},
+        "orphans": {"runtime": runtime_orphans, "judge": orphan_judges, "volume": orphan_volumes},
+        "missing_runtime": missing_runtime,
+    }
+
+
+def destroy_task_instance(
+    *,
+    task_id: str,
+    idempotency_key: str,
+    context: Any,
+    expected_version: int | None = None,
+) -> ProvisioningInstance | None:
+    """Destroy through the runtime adapter, verify absence, then close DB/quota facts."""
+
+    def release_latest_reservation() -> None:
+        job = (
+            ProvisioningJob.objects.select_related("reservation")
+            .filter(task__public_id=task_id)
+            .order_by("-attempt_no")
+            .first()
+        )
+        if job is not None:
+            release_reservation(
+                reservation_id=job.reservation.public_id,
+                reason="runtime destroyed",
+                context=ActorContext(
+                    actor_ref=str(getattr(context, "actor_ref", "worker")),
+                    portal=str(getattr(context, "portal", "WORKER")),
+                    trace_id=_trace(context),
+                ),
+            )
+
+    with transaction.atomic():
+        instance = (
+            ProvisioningInstance.objects.select_for_update()
+            .select_related("task", "course", "runtime_adapter")
+            .filter(task__public_id=task_id)
+            .first()
+        )
+        if instance is None:
+            release_latest_reservation()
+            return None
+        if expected_version is not None and instance.row_version != expected_version:
+            from apps.core.errors import RowVersionConflict
+
+            raise RowVersionConflict(
+                detail={
+                    "expected_row_version": expected_version,
+                    "actual_row_version": instance.row_version,
+                }
+            )
+        if instance.status == ProvisioningInstance.Status.DESTROYED:
+            release_latest_reservation()
+            return instance
+        if instance.status != ProvisioningInstance.Status.DESTROYING:
+            instance = compare_and_swap(
+                ProvisioningInstance,
+                pk=instance.pk,
+                expected_version=instance.row_version,
+                changes={"status": ProvisioningInstance.Status.DESTROYING, "endpoint": ""},
+            )
+        external_id = instance.external_id or ""
+        driver = instance.runtime_adapter.driver
+
+    adapter = runtime_for_driver(driver, config_ref=instance.runtime_adapter.config_ref)
+    if external_id:
+        # Capture the task-owned Volume before the adapter removes the
+        # container and its managed Volume.  FakeRuntime has no storage job.
+        from apps.workspaces.storage import finalize_workspace_before_destroy
+
+        finalize_workspace_before_destroy(task_id=task_id, context=context)
+        adapter.destroy(external_id, idempotency_key)
+        if adapter.status(external_id) != "ABSENT":
+            raise RuntimeError("RUNTIME_DESTROY_NOT_CONFIRMED")
+
+    with transaction.atomic():
+        current = (
+            ProvisioningInstance.objects.select_for_update()
+            .select_related("task", "course")
+            .get(pk=instance.pk)
+        )
+        if current.status != ProvisioningInstance.Status.DESTROYED:
+            current = compare_and_swap(
+                ProvisioningInstance,
+                pk=current.pk,
+                expected_version=current.row_version,
+                changes={
+                    "status": ProvisioningInstance.Status.DESTROYED,
+                    "endpoint": "",
+                    "destroyed_at": timezone.now(),
+                },
+            )
+            _audit(
+                context=context,
+                actor=None,
+                action="provisioning.instance.destroy",
+                target_type="provisioning_instance",
+                target_ref=current.public_id,
+                course_ref=current.course.public_id,
+                before={"status": instance.status},
+                after={"status": current.status, "external_absent": True},
+            )
+            _emit(
+                event_type=events.INSTANCE_DESTROYED,
+                aggregate_type="provisioning_instance",
+                aggregate_ref=current.public_id,
+                payload={
+                    "instance_id": current.public_id,
+                    "task_id": current.task.public_id,
+                    "status": current.status,
+                },
+                context=context,
+            )
+        release_latest_reservation()
+        return current

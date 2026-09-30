@@ -2,12 +2,32 @@ version: "3.9"
 
 x-app-environment: &app-environment
   APP_ENV: integration
-  APP_VERSION: ${APP_VERSION:-0.7.0-p06}
-  OPENAPI_REVISION: ${OPENAPI_REVISION:-v2-p06}
+  APP_VERSION: ${APP_VERSION:-0.15.0-p15}
+  OPENAPI_REVISION: ${OPENAPI_REVISION:-v2-p15}
   DJANGO_SETTINGS_MODULE: education_experiment_platform.settings.prod
-  DJANGO_ALLOWED_HOSTS: django,user.example.edu,teacher.example.edu,admin.example.edu,api.example.edu
-  DJANGO_TRUSTED_ORIGINS: https://user.example.edu,https://teacher.example.edu,https://admin.example.edu
-  TRUSTED_PROXY_CIDRS: 10.42.20.0/24
+  DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS}
+  DJANGO_TRUSTED_ORIGINS: ${DJANGO_TRUSTED_ORIGINS}
+  WORKSPACE_ALLOWED_ORIGINS: ${WORKSPACE_ALLOWED_ORIGINS}
+  USER_HOST: ${USER_HOST}
+  TEACHER_HOST: ${TEACHER_HOST}
+  ADMIN_HOST: ${ADMIN_HOST}
+  API_HOST: ${API_HOST}
+  WORKSPACE_COOKIE_NAME: workspace_ticket
+  WORKSPACE_AUTHORITY_URL: http://django:8000
+  WORKSPACE_STORAGE_STALE_AFTER_SECONDS: ${WORKSPACE_STORAGE_STALE_AFTER_SECONDS:-900}
+  WORKSPACE_STORAGE_REDISPATCH_SECONDS: ${WORKSPACE_STORAGE_REDISPATCH_SECONDS:-300}
+  WORKSPACE_FINALIZE_TIMEOUT_SECONDS: ${WORKSPACE_FINALIZE_TIMEOUT_SECONDS:-1200}
+  WORKSPACE_VOLUME_RETENTION_SECONDS: ${WORKSPACE_VOLUME_RETENTION_SECONDS:-900}
+  SWARM_DOCKER_HOST: ${SWARM_DOCKER_HOST}
+  SWARM_DOCKER_TLS_VERIFY: "true"
+  SWARM_DOCKER_CA_PATH: /run/secrets/swarm_docker_ca
+  SWARM_DOCKER_CERT_PATH: /run/secrets/swarm_docker_cert
+  SWARM_DOCKER_KEY_PATH: /run/secrets/swarm_docker_key
+  SWARM_RUNTIME_NETWORK: ${SWARM_RUNTIME_NETWORK:-edu-runtime}
+  LOCAL_RUNTIME_IMAGE: ${LOCAL_RUNTIME_IMAGE:-edu-platform-algorithm-workspace:local}
+  LOCAL_RUNTIME_NETWORK: ${LOCAL_RUNTIME_NETWORK:-edu-runtime}
+  LOCAL_DOCKER_HOST: ${LOCAL_DOCKER_HOST:-unix:///var/run/docker.sock}
+  TRUSTED_PROXY_CIDRS: ${TRUSTED_PROXY_CIDRS}
   MYSQL_DATABASE: edu_platform
   MYSQL_USER: edu_platform_app
   MYSQL_HOST: ${MYSQL_HOST}
@@ -23,7 +43,7 @@ x-app-environment: &app-environment
   MINIO_BUCKET: edu-platform
   CLAMAV_HOST: ${CLAMAV_HOST}
   CLAMAV_PORT: "3310"
-  OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+  OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4318}
   COURSE_INVITATION_HMAC_KEY_FILE: /run/secrets/course_invitation_hmac_key
 
 x-fluentd-logging: &fluentd-logging
@@ -47,7 +67,7 @@ services:
     networks: [edge]
     logging: *fluentd-logging
     healthcheck:
-      test: ["CMD-SHELL", "wget --no-check-certificate -q -O /dev/null --header='Host: user.example.edu' https://127.0.0.1:8443/health"]
+      test: ["CMD-SHELL", "wget --no-check-certificate -q -O /dev/null --header='Host: ${USER_HOST}' https://127.0.0.1:8443/health"]
       interval: 15s
       timeout: 5s
       retries: 5
@@ -62,7 +82,7 @@ services:
       rollback_config: { parallelism: 1, order: stop-first }
 
   kong:
-    image: kong:3.9
+    image: ${KONG_IMAGE}
     environment:
       KONG_DATABASE: "off"
       KONG_DECLARATIVE_CONFIG: /run/configs/kong.yml
@@ -96,8 +116,10 @@ services:
       DJANGO_SECRET_KEY_FILE: /run/secrets/django_secret_key
       IDENTITY_HMAC_KEY_FILE: /run/secrets/identity_hmac_key
       COURSE_INVITATION_HMAC_KEY_FILE: /run/secrets/course_invitation_hmac_key
+      WORKSPACE_INTERNAL_KEY_FILE: /run/secrets/workspace_internal_key
+      WORKSPACE_UPSTREAM_HMAC_KEY_FILE: /run/secrets/workspace_upstream_hmac_key
       MYSQL_PASSWORD_FILE: /run/secrets/mysql_app_password
-    secrets: [django_secret_key, identity_hmac_key, course_invitation_hmac_key, mysql_app_password, minio_app_access_key, minio_app_secret_key]
+    secrets: [django_secret_key, identity_hmac_key, course_invitation_hmac_key, workspace_internal_key, workspace_upstream_hmac_key, mysql_app_password, minio_app_access_key, minio_app_secret_key]
     networks: [app, data]
     logging: *fluentd-logging
     healthcheck:
@@ -117,7 +139,7 @@ services:
 
   celery:
     image: ${REGISTRY}/edu-platform-backend:${IMAGE_TAG}
-    command: ["celery", "-A", "education_experiment_platform", "worker", "--loglevel=INFO", "--queues=q_default,q_relay,q_provision,q_archive,q_compensate,q_agent,q_content,q_analytics,q_integrations"]
+    command: ["celery", "-A", "education_experiment_platform", "worker", "--loglevel=INFO", "--queues=q_default,q_relay,q_agent,q_content,q_analytics,q_integrations"]
     environment:
       <<: *app-environment
       DJANGO_SECRET_KEY_FILE: /run/secrets/django_secret_key
@@ -136,8 +158,85 @@ services:
         limits: { cpus: "1.00", memory: 768M }
       update_config: { parallelism: 1, order: stop-first, failure_action: rollback }
 
+  runtime-worker:
+    image: ${REGISTRY}/edu-platform-backend:${IMAGE_TAG}
+    command: ["celery", "-A", "education_experiment_platform", "worker", "--loglevel=INFO", "--concurrency=${RUNTIME_WORKER_CONCURRENCY:-2}", "--queues=q_provision,q_archive,q_compensate"]
+    environment:
+      <<: *app-environment
+      DJANGO_SECRET_KEY_FILE: /run/secrets/django_secret_key
+      IDENTITY_HMAC_KEY_FILE: /run/secrets/identity_hmac_key
+      COURSE_INVITATION_HMAC_KEY_FILE: /run/secrets/course_invitation_hmac_key
+      WORKSPACE_UPSTREAM_HMAC_KEY_FILE: /run/secrets/workspace_upstream_hmac_key
+      MYSQL_PASSWORD_FILE: /run/secrets/mysql_app_password
+    secrets: [django_secret_key, identity_hmac_key, course_invitation_hmac_key, workspace_upstream_hmac_key, mysql_app_password, minio_app_access_key, minio_app_secret_key, swarm_docker_ca, swarm_docker_cert, swarm_docker_key]
+    networks: [app, data, runtime]
+    deploy:
+      replicas: 2
+      placement:
+        constraints: [node.labels.edu.role.runtime == true]
+      resources:
+        reservations: { cpus: "0.25", memory: 256M }
+        limits: { cpus: "1.00", memory: 768M }
+      update_config: { parallelism: 1, order: stop-first, failure_action: rollback }
+
+  workspace-storage-worker:
+    image: ${REGISTRY}/edu-platform-backend:${IMAGE_TAG}
+    command: ["celery", "-A", "education_experiment_platform", "worker", "--loglevel=INFO", "--concurrency=${WORKSPACE_STORAGE_WORKER_CONCURRENCY:-2}", "--queues=q_workspace_storage"]
+    environment:
+      <<: *app-environment
+      DJANGO_SECRET_KEY_FILE: /run/secrets/django_secret_key
+      IDENTITY_HMAC_KEY_FILE: /run/secrets/identity_hmac_key
+      COURSE_INVITATION_HMAC_KEY_FILE: /run/secrets/course_invitation_hmac_key
+      WORKSPACE_UPSTREAM_HMAC_KEY_FILE: /run/secrets/workspace_upstream_hmac_key
+      MYSQL_PASSWORD_FILE: /run/secrets/mysql_app_password
+    secrets: [django_secret_key, identity_hmac_key, course_invitation_hmac_key, workspace_upstream_hmac_key, mysql_app_password, minio_app_access_key, minio_app_secret_key, swarm_docker_ca, swarm_docker_cert, swarm_docker_key]
+    networks: [app, data, runtime]
+    deploy:
+      replicas: 1
+      placement:
+        constraints: [node.labels.edu.role.runtime == true]
+      resources:
+        reservations: { cpus: "0.10", memory: 256M }
+        limits: { cpus: "1.00", memory: 768M }
+      update_config: { parallelism: 1, order: stop-first, failure_action: rollback }
+
+  workspace-gateway:
+    image: ${REGISTRY}/edu-platform-backend:${IMAGE_TAG}
+    command: ["uvicorn", "education_experiment_platform.workspace_gateway:application", "--host", "0.0.0.0", "--port", "8080", "--no-proxy-headers"]
+    environment:
+      <<: *app-environment
+      DJANGO_SECRET_KEY_FILE: /run/secrets/django_secret_key
+      IDENTITY_HMAC_KEY_FILE: /run/secrets/identity_hmac_key
+      COURSE_INVITATION_HMAC_KEY_FILE: /run/secrets/course_invitation_hmac_key
+      WORKSPACE_INTERNAL_KEY_FILE: /run/secrets/workspace_internal_key
+      WORKSPACE_UPSTREAM_HMAC_KEY_FILE: /run/secrets/workspace_upstream_hmac_key
+      MYSQL_PASSWORD_FILE: /run/secrets/mysql_app_password
+    secrets: [django_secret_key, identity_hmac_key, course_invitation_hmac_key, workspace_internal_key, workspace_upstream_hmac_key, mysql_app_password]
+    networks: [app, runtime]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      replicas: 2
+      placement:
+        constraints: [node.labels.edu.role.app == true]
+      resources:
+        reservations: { cpus: "0.10", memory: 128M }
+        limits: { cpus: "0.50", memory: 384M }
+      update_config: { parallelism: 1, order: start-first, failure_action: rollback }
+
+  runtime-reference:
+    image: ${REGISTRY}/edu-platform-reference-workspace:${IMAGE_TAG}
+    networks: [runtime]
+    deploy:
+      replicas: 0
+      placement:
+        constraints: [node.labels.edu.role.runtime == true]
+
   fluent-bit:
-    image: cr.fluentbit.io/fluent/fluent-bit:4.0.9
+    image: ${FLUENT_BIT_IMAGE}
     configs:
       - source: fluent_bit_config_v1
         target: /fluent-bit/etc/fluent-bit.conf
@@ -180,7 +279,7 @@ services:
       update_config: { parallelism: 1, order: start-first, failure_action: rollback }
 
   otel-collector:
-    image: otel/opentelemetry-collector-contrib:0.136.0
+    image: ${OTEL_COLLECTOR_IMAGE}
     command: ["--config=/run/configs/otel.yml"]
     configs:
       - source: otel_config_v1
@@ -198,8 +297,9 @@ networks:
     internal: true
     ipam:
       config:
-        - subnet: 10.42.20.0/24
+        - subnet: ${APP_NETWORK_SUBNET}
   data: { driver: overlay, internal: true }
+  runtime: { driver: overlay, internal: true, attachable: false }
   observability: { driver: overlay, internal: true }
 
 volumes:
@@ -229,6 +329,16 @@ secrets:
   minio_app_access_key:
     external: true
   minio_app_secret_key:
+    external: true
+  workspace_internal_key:
+    external: true
+  workspace_upstream_hmac_key:
+    external: true
+  swarm_docker_ca:
+    external: true
+  swarm_docker_cert:
+    external: true
+  swarm_docker_key:
     external: true
   tls_certificate:
     external: true

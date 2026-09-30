@@ -2,6 +2,7 @@ import json
 import uuid
 from collections.abc import Iterator
 from datetime import datetime
+from typing import cast
 
 from apps.accounts.authentication import PortalSessionAuthentication
 from apps.accounts.models import User
@@ -89,8 +90,11 @@ def _redis_replay(
 ) -> list[tuple[str, str, dict[str, object], str]]:
     """Read the bounded Redis window when available; MySQL remains the source of truth."""
     try:
-        entries = Redis.from_url(settings.REDIS_URL, decode_responses=True).xrange(
-            settings.OUTBOX_REDIS_STREAM, min="-", max="+", count=500
+        entries = cast(
+            list[tuple[str, dict[str, str]]],
+            Redis.from_url(settings.REDIS_URL, decode_responses=True).xrange(
+                settings.OUTBOX_REDIS_STREAM, min="-", max="+", count=500
+            ),
         )
     except Exception:
         return []

@@ -1,0 +1,9 @@
+{
+  "stack": "edu-platform",
+  "collected_at_utc": "2026-09-25T06:30:58.7155128Z",
+  "app_version": null,
+  "openapi_revision": null,
+  "image_tag": null,
+  "registry": null,
+  "limitation": "Single-node evidence cannot establish HA, production performance, external storage recovery, or RPO/RTO."
+}

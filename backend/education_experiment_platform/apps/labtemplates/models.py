@@ -74,6 +74,7 @@ class TemplateVersion(VersionedModel):
         ResourceProfile, on_delete=models.PROTECT, related_name="template_versions"
     )
     dependencies = models.JSONField(default=list)
+    execution_spec = models.JSONField(default=dict)
     network_policy = models.JSONField(default=dict)
     workspace_capabilities = models.JSONField(default=dict)
     material_refs = models.JSONField(default=list)
