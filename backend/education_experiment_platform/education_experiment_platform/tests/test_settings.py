@@ -137,6 +137,7 @@ class SettingsTests(SimpleTestCase):
             "workspaces_workspace_checkpoint",
             "workspaces_operation_event",
             "workspaces_execution_run",
+            "workspaces_workspace_storage_job",
         }
         assert {model._meta.db_table for model in apps.get_app_config("reports").get_models()} == {
             "reports_report_draft",

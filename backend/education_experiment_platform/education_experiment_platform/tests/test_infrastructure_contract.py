@@ -134,7 +134,7 @@ def test_local_runtime_docker_access_is_scoped_to_runtime_worker() -> None:
     )
     assert environment["RUNTIME_ADAPTER_CONFIGS"] == (
         '${RUNTIME_ADAPTER_CONFIGS:-{"runtime/local-docker":'
-        '{"runtime_network":"edu-platform-p14_runtime"}}}'
+        '{"runtime_network":"edu-platform-p14_runtime","pids_limit":128}}}'
     )
 
 
