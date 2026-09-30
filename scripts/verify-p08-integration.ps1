@@ -6,7 +6,7 @@ param(
 $ErrorActionPreference = 'Stop'
 if ($ProjectName -notmatch '^[a-z0-9][a-z0-9_-]{2,62}$') { throw 'ProjectName must be a narrow Docker Compose project identifier.' }
 $root = Split-Path -Parent $PSScriptRoot
-$compose = @('compose', '-p', $ProjectName, '-f', "$root\docker-compose.dev.yml")
+$compose = @('compose', '--profile', 'p14', '-p', $ProjectName, '-f', "$root\docker-compose.dev.yml")
 $previous = @{}
 foreach ($name in @('ENTRY_PORT', 'OPENAPI_REVISION', 'APP_VERSION', 'APP_NETWORK_SUBNET', 'FLUENTD_HOST_PORT', 'MINIO_API_PORT', 'MINIO_CONSOLE_PORT', 'PROMETHEUS_PORT', 'P02_E2E_PASSWORD', 'USER_WEB_URL', 'TEACHER_WEB_URL', 'ADMIN_WEB_URL')) {
     $previous[$name] = [Environment]::GetEnvironmentVariable($name)
@@ -21,9 +21,9 @@ $env:MINIO_CONSOLE_PORT = '19020'
 $env:PROMETHEUS_PORT = '19098'
 
 try {
-    & docker @compose up --build --detach mysql redis mysql-users migrate mysql-grants minio clamav minio-init
+    & docker @compose up --build --detach mysql redis mysql-users migrate mysql-grants minio clamav minio-init runtime-reference
     if ($LASTEXITCODE -ne 0) { throw 'P08 dependency services failed to start.' }
-    & docker @compose up --build --detach django celery
+    & docker @compose up --build --detach django celery runtime-worker workspace-storage-worker workspace-gateway runtime-reference
     if ($LASTEXITCODE -ne 0) { throw 'P08 application or Celery worker failed to start.' }
     & docker @compose exec -T django python manage.py spectacular --format openapi-json --validate --file /tmp/openapi-p08.json
     $seedPassword = 'P08-Disposable-Seed-Only-2026!'
@@ -38,7 +38,7 @@ try {
     & docker @compose exec -T django python manage.py seed_p07_e2e
     & docker @compose exec -T django python manage.py seed_p08_e2e
     if ($LASTEXITCODE -ne 0) { throw 'P02-P08 disposable seed chain failed.' }
-    & docker @compose up --build --detach
+    & docker @compose up --build --detach django celery runtime-worker workspace-storage-worker workspace-gateway runtime-reference nginx
     if ($LASTEXITCODE -ne 0) { throw 'P08 full local edge stack failed to start.' }
     $env:P02_E2E_PASSWORD = $seedPassword
     $env:USER_WEB_URL = 'http://user.localhost:18088'

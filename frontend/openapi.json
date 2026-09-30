@@ -2,7 +2,7 @@
     "openapi": "3.0.3",
     "info": {
         "title": "Education Agent Platform API",
-        "version": "v2-p14",
+        "version": "v2-p15",
         "description": "P15 student experiment workbench and platform operations."
     },
     "paths": {
