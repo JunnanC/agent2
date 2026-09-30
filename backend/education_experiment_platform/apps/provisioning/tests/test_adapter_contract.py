@@ -355,7 +355,7 @@ class DockerLocalAdapterTests(SimpleTestCase):
         host_config = next(kwargs for name, kwargs in client.calls if name == "create_host_config")
         self.assertEqual(host_config["mem_limit"], "256m")
         self.assertEqual(host_config["nano_cpus"], 500_000_000)
-        self.assertEqual(host_config["pids_limit"], 64)
+        self.assertEqual(host_config["pids_limit"], 128)
         self.assertTrue(host_config["read_only"])
         self.assertEqual(host_config["cap_drop"], ["ALL"])
         self.assertIn("no-new-privileges:true", host_config["security_opt"])
@@ -385,7 +385,7 @@ class DockerLocalAdapterTests(SimpleTestCase):
 
     def test_destroy_retains_creation_expiry_when_volume_updates_are_unavailable(self) -> None:
         client = FakeDockerEngine()
-        setattr(client, "update_volume", None)
+        client.__dict__["update_volume"] = None
         adapter = DockerLocalAdapter(client=client)
         created = adapter.create(runtime_spec(), "provisioning:local-no-volume-update")
 
