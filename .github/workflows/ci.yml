@@ -1,0 +1,89 @@
+name: EduTech CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  PYTHON_VERSION: "3.14"
+
+jobs:
+  lock-check:
+    name: 依赖锁校验
+    runs-on: ubuntu-latest
+    container: python:3.14-slim
+    steps:
+      - uses: actions/checkout@v4
+      - name: 安装 uv
+        run: pip install --no-cache-dir uv
+      - name: 校验 uv.lock 与 pyproject.toml 一致性
+        working-directory: backend
+        run: |
+          if [ ! -f uv.lock ]; then
+            echo "ERROR: uv.lock 不存在，请先运行 uv lock"
+            exit 1
+          fi
+          uv lock --check
+          echo "OK: uv.lock 与 pyproject.toml 一致"
+
+  lint:
+    name: 代码规范检查
+    runs-on: ubuntu-latest
+    container: python:3.14-slim
+    steps:
+      - uses: actions/checkout@v4
+      - name: 安装 ruff
+        run: pip install --no-cache-dir ruff==0.13.1
+      - name: Ruff check
+        working-directory: backend
+        run: ruff check .
+
+  test:
+    name: 单元测试
+    runs-on: ubuntu-latest
+    container:
+      image: python:3.14-slim
+      options: --init
+    services:
+      redis:
+        image: redis:7
+    steps:
+      - uses: actions/checkout@v4
+      - name: 安装系统依赖
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends default-libmysqlclient-dev build-essential pkg-config
+          rm -rf /var/lib/apt/lists/*
+      - name: 安装 uv
+        run: pip install --no-cache-dir uv
+      - name: 安装项目依赖
+        working-directory: backend
+        run: uv pip install --system ".[dev]"
+      - name: 运行测试
+        working-directory: backend
+        env:
+          DJANGO_SETTINGS_MODULE: education_experiment_platform.settings.test
+          REDIS_CACHE_URL: redis://redis:6379/0
+          CELERY_BROKER_URL: redis://redis:6379/1
+        run: python -m pytest --tb=short -q
+
+  docker-build:
+    name: 构建镜像
+    needs: [lock-check, lint, test]
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: 构建后端镜像
+        run: |
+          docker build \
+            -f backend/Dockerfile \
+            -t edutech/backend:latest \
+            -t edutech/backend:$(date +%Y%m%d)-${GITHUB_SHA:0:7} \
+            backend/
+      - name: 镜像构建完成
+        run: |
+          docker images edutech/backend
+          echo "镜像已构建"
