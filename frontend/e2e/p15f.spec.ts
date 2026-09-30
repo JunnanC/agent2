@@ -19,7 +19,10 @@ async function login(page: Page) {
 function startRuntimeWorker() {
   execFileSync(
     'docker',
-    ['compose', '--profile', 'p14', '-p', composeProject, '-f', composeFile, 'start', 'runtime-worker'],
+    [
+      'compose', '--profile', 'p14', '-p', composeProject, '-f', composeFile,
+      'up', '--detach', '--no-deps', 'runtime-worker',
+    ],
     { stdio: 'inherit' },
   )
 }
