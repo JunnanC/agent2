@@ -18,9 +18,9 @@ $pythonVersion = & $python @pythonArgs -c 'import sys; print(f"{sys.version_info
 if ($LASTEXITCODE -ne 0 -or $pythonVersion -ne '3.14') {
     throw 'P13-C requires an available Python 3.14 interpreter.'
 }
-$env:APP_VERSION = '0.14.0-p14'
-$env:OPENAPI_REVISION = 'v2-p14'
-$openApiFile = Join-Path ([IO.Path]::GetTempPath()) "edu-platform-openapi-p13-c-$PID.json"
+$env:APP_VERSION = '0.15.0-p15'
+$env:OPENAPI_REVISION = 'v2-p15'
+$openApiFile = Join-Path ([IO.Path]::GetTempPath()) "edu-platform-openapi-p15-c-$PID.json"
 
 try {
     Push-Location "$root\backend\education_experiment_platform"

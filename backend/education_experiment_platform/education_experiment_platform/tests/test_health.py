@@ -50,6 +50,17 @@ class HealthTests(TestCase):
         assert response.status_code == 401
         assert response.json()["error"]["code"] == "AUTH_REQUIRED"
 
+    def test_browser_api_negotiates_server_sent_events(self) -> None:
+        response = self.client.get(
+            "/api/v2/events/stream",
+            HTTP_ACCEPT="text/event-stream",
+            HTTP_X_PORTAL="USER",
+            HTTP_X_PROXY_CONTEXT="ingress-v1",
+        )
+
+        assert response.status_code == 401
+        assert response.json()["error"]["code"] == "AUTH_REQUIRED"
+
     def test_machine_context_cannot_access_browser_namespace(self) -> None:
         response = self.client.get(
             "/api/v2/events/stream",

@@ -2,7 +2,7 @@ import json
 import uuid
 from collections.abc import Iterator
 from datetime import datetime
-from typing import cast
+from typing import Any, cast
 
 from apps.accounts.authentication import PortalSessionAuthentication
 from apps.accounts.models import User
@@ -12,11 +12,13 @@ from apps.courses.models import Course, CourseStaffGrant, Enrollment
 from apps.courses.selectors import has_course_capability
 from apps.experiments.models import ExperimentTask
 from django.conf import settings
-from django.http import StreamingHttpResponse
+from django.http import HttpResponseBase, StreamingHttpResponse
 from django.utils.dateparse import parse_datetime
 from drf_spectacular.utils import OpenApiResponse, extend_schema
 from redis import Redis
+from rest_framework.renderers import BaseRenderer, JSONRenderer
 from rest_framework.request import Request
+from rest_framework.response import Response
 from rest_framework.views import APIView
 
 
@@ -171,9 +173,48 @@ def _event_stream(*, trace_id: str, request: Request) -> Iterator[bytes]:
     yield b": heartbeat\n\n"
 
 
+class EventStreamRenderer(BaseRenderer):
+    """Allow DRF to negotiate the media type before returning a streaming response."""
+
+    media_type = "text/event-stream"
+    # Keep DRF's URL-format metadata aligned with JSON so schema generation does
+    # not expose a synthetic `?format=sse` parameter; Accept selects SSE.
+    format = "json"
+    charset = None
+    render_style = "binary"
+
+    def render(
+        self,
+        data: object,
+        accepted_media_type: str | None = None,
+        renderer_context: dict[str, object] | None = None,
+    ) -> bytes:
+        if isinstance(data, bytes):
+            return data
+        return str(data).encode("utf-8")
+
+
 class EventStreamView(APIView):
     authentication_classes = [PortalSessionAuthentication]
     permission_classes = [IsAuthenticatedAccount]
+    renderer_classes = [JSONRenderer, EventStreamRenderer]
+
+    def finalize_response(
+        self,
+        request: Request,
+        response: HttpResponseBase,
+        *args: Any,
+        **kwargs: Any,
+    ) -> HttpResponseBase:
+        finalized = super().finalize_response(request, response, *args, **kwargs)
+        if (
+            isinstance(finalized, Response)
+            and finalized.status_code >= 400
+            and isinstance(finalized.accepted_renderer, EventStreamRenderer)
+        ):
+            finalized.accepted_renderer = JSONRenderer()
+            finalized.accepted_media_type = JSONRenderer.media_type
+        return finalized
 
     @extend_schema(
         tags=["events"],

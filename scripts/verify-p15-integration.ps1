@@ -38,8 +38,18 @@ try {
     $env:TEACHER_WEB_URL = "http://teacher.localhost:$EntryPort"
     $env:ADMIN_WEB_URL = "http://admin.localhost:$EntryPort"
 
+    # Re-apply the restricted runtime grants after the baseline migrations. The
+    # one-shot grants container may predate newly added tables in a reused P14
+    # project, so `up` alone would incorrectly keep stale privileges.
+    Invoke-P15Compose -StepArguments @('run', '--rm', 'mysql-grants') -FailureMessage 'P15 database grants could not be refreshed.'
     Invoke-P15Compose -StepArguments @('up', '--build', '--detach', 'django', 'celery', 'runtime-worker', 'workspace-gateway', 'nginx') -FailureMessage 'P15 application image refresh failed.'
+    # Compose does not recreate long-running Kong/nginx services when their
+    # Django upstream is replaced, leaving stale container IPs in proxy DNS.
+    Invoke-P15Compose -StepArguments @('up', '--detach', '--force-recreate', '--no-deps', 'kong') -FailureMessage 'P15 Kong proxy could not refresh its upstreams.'
+    Invoke-P15Compose -StepArguments @('up', '--detach', '--force-recreate', '--no-deps', 'nginx') -FailureMessage 'P15 nginx edge proxy could not refresh its upstreams.'
     Invoke-P15Compose -StepArguments @('exec', '-T', 'django', 'python', 'manage.py', 'spectacular', '--format', 'openapi-json', '--validate', '--file', '/tmp/openapi-p15.json') -FailureMessage 'P15 container OpenAPI validation failed.'
+    Invoke-P15Compose -StepArguments @('exec', '-T', 'django', 'python', 'manage.py', 'seed_p07_e2e') -FailureMessage 'P07 disposable journey seed failed.'
+    Invoke-P15Compose -StepArguments @('exec', '-T', 'django', 'python', 'manage.py', 'seed_p08_e2e') -FailureMessage 'P08 disposable workspace seed failed.'
     Invoke-P15Compose -StepArguments @('exec', '-T', 'django', 'python', 'manage.py', 'seed_p15_e2e', '--run-id', $runId) -FailureMessage 'P15 disposable journey seed failed. Ensure the P02-P06 integration facts already exist.'
 
     $ready = $false
@@ -61,7 +71,7 @@ try {
         & npx.cmd playwright test e2e/p15f.spec.ts --project=user-web --workers=1
         $journeyExit = $LASTEXITCODE
     } finally { Pop-Location }
-    Invoke-P15Compose -StepArguments @('start', 'runtime-worker') -FailureMessage 'P15 runtime worker could not be restored after the loading-page check.'
+    Invoke-P15Compose -StepArguments @('up', '--detach', '--no-deps', 'runtime-worker') -FailureMessage 'P15 runtime worker could not be restored after the loading-page check.'
     $runtimeWorkerStopped = $false
     if ($journeyExit -ne 0) {
         & "$root\.venv\Scripts\python.exe" "$root\scripts\redact-playwright-artifacts.py" "$root\frontend\test-results"
@@ -79,7 +89,7 @@ try {
     }
     Write-Output "P15 container journey passed for project '$ProjectName'; production HA, capacity, recovery, and DNS/TLS remain pending."
 } finally {
-    if ($runtimeWorkerStopped) { & docker @compose start runtime-worker | Out-Null }
+    if ($runtimeWorkerStopped) { & docker @compose up --detach --no-deps runtime-worker | Out-Null }
     foreach ($name in $previous.Keys) {
         $value = $previous[$name]
         if ($null -eq $value) { Remove-Item "Env:$name" -ErrorAction SilentlyContinue } else { Set-Item "Env:$name" $value }

@@ -23,6 +23,7 @@ class Command(BaseCommand):
         instance = (
             ProvisioningInstance.objects.filter(
                 task__student=student,
+                task__publication__title="P07 FakeRuntime 任务",
                 task__runtime_adapter_driver="FAKE",
                 status=ProvisioningInstance.Status.READY,
             )
@@ -33,6 +34,7 @@ class Command(BaseCommand):
         if instance is None:
             task = (
                 ExperimentTask.objects.filter(student=student)
+                .filter(publication__title="P07 FakeRuntime 任务")
                 .filter(runtime_adapter_driver="FAKE")
                 .select_related("course", "enrollment")
                 .order_by("-created_at")

@@ -9,7 +9,7 @@ from apps.accounts.models import User
 from apps.core.concurrency import compare_and_swap
 from apps.courses.models import Course
 from apps.courses.services import ActorContext
-from apps.experiments.models import TaskPublication
+from apps.experiments.models import ExperimentTask, TaskPublication
 from apps.experiments.services import create_publication, publish_publication
 from apps.governance.models import Quota, RuntimeAdapter
 from apps.labtemplates.models import TemplateVersion
@@ -172,6 +172,13 @@ class Command(BaseCommand):
                 selected_ids=[enrollment.public_id],
                 context=context,
             )
+        task = ExperimentTask.objects.filter(
+            publication=publication, student=student
+        ).first()
+        if task is None:
+            raise CommandError("P07 publication did not create the integration task")
+        # Keep the disposable fixture on the first page despite older local runs.
+        ExperimentTask.objects.filter(pk=task.pk).update(created_at=timezone.now())
         return version
 
     @staticmethod
