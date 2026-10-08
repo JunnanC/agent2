@@ -361,7 +361,7 @@ services:
     depends_on:
       mysql-grants: { condition: service_completed_successfully }
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/healthz"]
+      test: ["CMD", "curl", "-fsS", "https://127.0.0.1:8443/healthz"]
       interval: 5s
       timeout: 3s
       retries: 20
@@ -380,6 +380,14 @@ services:
       runtime:
         aliases:
           - tasks.fake-runtime
+    environment:
+      - USER_HOST=${USER_HOST:-47.114.58.170}
+      - TEACHER_HOST=${TEACHER_HOST:-47.114.58.170}
+      - ADMIN_HOST=${ADMIN_HOST:-47.114.58.170}
+      - API_HOST=${API_HOST:-47.114.58.170}
+    secrets:
+      - tls_certificate
+      - tls_private_key
     read_only: true
     tmpfs: [/tmp]
     deploy:
@@ -397,6 +405,14 @@ services:
         PYTHON_BASE_IMAGE: m.daocloud.io/docker.io/library/python:3.14.0-slim-bookworm@sha256:9bbb8720ae0a24a6ca8dd678bfdf57818fe70caf54c52a53ec01d8db43405056
     image: ${LOCAL_RUNTIME_IMAGE:-edu-platform-algorithm-workspace:local}
     networks: [runtime]
+    environment:
+      - USER_HOST=${USER_HOST:-47.114.58.170}
+      - TEACHER_HOST=${TEACHER_HOST:-47.114.58.170}
+      - ADMIN_HOST=${ADMIN_HOST:-47.114.58.170}
+      - API_HOST=${API_HOST:-47.114.58.170}
+    secrets:
+      - tls_certificate
+      - tls_private_key
     read_only: true
     tmpfs: [/tmp]
     deploy:
@@ -507,7 +523,7 @@ services:
   nginx:
     build:
       context: .
-      dockerfile: infrastructure/nginx/Dockerfile
+      dockerfile: infrastructure/nginx/Dockerfile.prod
       args:
         NODE_BASE_IMAGE: ${NODE_BASE_IMAGE:-public.ecr.aws/docker/library/node:24-alpine}
         NGINX_BASE_IMAGE: ${NGINX_BASE_IMAGE:-m.daocloud.io/docker.io/library/nginx:1.29-alpine}
@@ -515,15 +531,23 @@ services:
         OPENAPI_REVISION: ${OPENAPI_REVISION:-v2-p15}
         GIT_REVISION: ${GIT_REVISION:-development}
         BUILD_TIME: ${BUILD_TIME:-development}
+    environment:
+      - USER_HOST=${USER_HOST:-47.114.58.170}
+      - TEACHER_HOST=${TEACHER_HOST:-47.114.58.170}
+      - ADMIN_HOST=${ADMIN_HOST:-47.114.58.170}
+      - API_HOST=${API_HOST:-47.114.58.170}
+    secrets:
+      - tls_certificate
+      - tls_private_key
     read_only: true
     tmpfs: [/tmp, /var/cache/nginx]
     networks: [edge]
-    ports: ["${ENTRY_PORT:-8080}:8080", "8081:8081", "8082:8082"]
+    ports: ["${ENTRY_PORT:-8080}:8080", "8443:8443", "8081:8081", "8082:8082"]
     depends_on:
       kong: { condition: service_healthy }
       fluent-bit: { condition: service_started }
     healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/health", "--header=Host: user.localhost"]
+      test: ["CMD", "wget", "--no-check-certificate", "-q", "-O", "/dev/null", "https://127.0.0.1:8443/health", "--header=Host: user.localhost"]
       interval: 5s
       timeout: 3s
       retries: 20
@@ -558,3 +582,9 @@ volumes:
   clamav-data: {}
   fluent-bit-buffer: {}
   prometheus-data: {}
+
+secrets:
+  tls_certificate:
+    external: true
+  tls_private_key:
+    external: true
