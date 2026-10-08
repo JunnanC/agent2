@@ -385,10 +385,9 @@ services:
       - TEACHER_HOST=${TEACHER_HOST:-47.114.58.170}
       - ADMIN_HOST=${ADMIN_HOST:-47.114.58.170}
       - API_HOST=${API_HOST:-47.114.58.170}
-    secrets:
-      - tls_certificate
-      - tls_private_key
-    read_only: true
+    volumes:
+      - /opt/agent2/certs/tls.crt:/run/secrets/tls_certificate:ro
+      - /opt/agent2/certs/tls.key:/run/secrets/tls_private_key:ro
     tmpfs: [/tmp]
     deploy:
       resources:
@@ -410,10 +409,9 @@ services:
       - TEACHER_HOST=${TEACHER_HOST:-47.114.58.170}
       - ADMIN_HOST=${ADMIN_HOST:-47.114.58.170}
       - API_HOST=${API_HOST:-47.114.58.170}
-    secrets:
-      - tls_certificate
-      - tls_private_key
-    read_only: true
+    volumes:
+      - /opt/agent2/certs/tls.crt:/run/secrets/tls_certificate:ro
+      - /opt/agent2/certs/tls.key:/run/secrets/tls_private_key:ro
     tmpfs: [/tmp]
     deploy:
       resources:
@@ -536,11 +534,11 @@ services:
       - TEACHER_HOST=${TEACHER_HOST:-47.114.58.170}
       - ADMIN_HOST=${ADMIN_HOST:-47.114.58.170}
       - API_HOST=${API_HOST:-47.114.58.170}
-    secrets:
-      - tls_certificate
-      - tls_private_key
-    read_only: true
+    volumes:
+      - /opt/agent2/certs/tls.crt:/run/secrets/tls_certificate:ro
+      - /opt/agent2/certs/tls.key:/run/secrets/tls_private_key:ro
     tmpfs: [/tmp, /var/cache/nginx]
+    command: ["nginx", "-g", "daemon off;"]
     networks: [edge]
     ports: ["${ENTRY_PORT:-8080}:8080", "8443:8443", "8081:8081", "8082:8082"]
     depends_on:
@@ -582,9 +580,3 @@ volumes:
   clamav-data: {}
   fluent-bit-buffer: {}
   prometheus-data: {}
-
-secrets:
-  tls_certificate:
-    external: true
-  tls_private_key:
-    external: true
