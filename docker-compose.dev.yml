@@ -20,9 +20,9 @@ x-app-environment: &app-environment
   DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-unsafe-compose-key-change-me}
   IDENTITY_HMAC_KEY: ${IDENTITY_HMAC_KEY:-unsafe-local-identity-hmac-key-change-me}
   COURSE_INVITATION_HMAC_KEY: ${COURSE_INVITATION_HMAC_KEY:-unsafe-local-course-invitation-hmac-key-change-me}
-  DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1,django,47.114.40.7,user.localhost,teacher.localhost,admin.localhost,api.localhost,user.example.edu,teacher.example.edu,admin.example.edu,api.example.edu
-  DJANGO_TRUSTED_ORIGINS: http://user.localhost:${ENTRY_PORT:-8080},http://teacher.localhost:${ENTRY_PORT:-8080},http://admin.localhost:${ENTRY_PORT:-8080},http://47.114.40.7:8080,http://47.114.40.7:8081,http://47.114.40.7:8082
-  WORKSPACE_ALLOWED_ORIGINS: http://user.localhost:${ENTRY_PORT:-8080}
+  DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1,django,47.114.58.170,user.localhost,teacher.localhost,admin.localhost,api.localhost,user.example.edu,teacher.example.edu,admin.example.edu,api.example.edu
+  DJANGO_TRUSTED_ORIGINS: http://user.localhost:${ENTRY_PORT:-8080},http://teacher.localhost:${ENTRY_PORT:-8080},http://admin.localhost:${ENTRY_PORT:-8080},http://47.114.58.170:8080,http://47.114.58.170:8081,http://47.114.58.170:8082
+  WORKSPACE_ALLOWED_ORIGINS: http://user.localhost:${ENTRY_PORT:-8080},http://47.114.58.170:${ENTRY_PORT:-8080}
   WORKSPACE_INTERNAL_KEY: ${WORKSPACE_INTERNAL_KEY:-unsafe-local-workspace-internal-key}
   WORKSPACE_UPSTREAM_HMAC_KEY: ${WORKSPACE_UPSTREAM_HMAC_KEY:-unsafe-local-workspace-upstream-hmac-key}
   WORKSPACE_AUTHORITY_URL: ${WORKSPACE_AUTHORITY_URL:-http://django:8000}
@@ -284,7 +284,7 @@ services:
       redis: { condition: service_healthy }
       fluent-bit: { condition: service_started }
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/api/v2/health"]
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/api/v2/health/ready"]
       interval: 5s
       timeout: 3s
       retries: 20
