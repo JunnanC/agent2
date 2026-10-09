@@ -3,7 +3,7 @@ from rest_framework import serializers
 
 from apps.core.models import ObjectAsset
 
-from .models import AutoCheckRule, Template, TemplatePrecheckRun, TemplateVersion
+from .models import AutoCheckRule, Template, TemplateChapter, TemplatePrecheckRun, TemplateTask, TemplateVersion
 
 
 class ExecutionSpecSerializer(serializers.Serializer):
@@ -82,6 +82,32 @@ class AutoCheckRulesWriteSerializer(serializers.Serializer):
     rules = AutoCheckRuleWriteSerializer(many=True)
 
 
+class TemplateChapterWriteSerializer(serializers.Serializer):
+    title = serializers.CharField(max_length=160, required=False)
+    description = serializers.CharField(required=False, allow_blank=True)
+    learning_objectives = serializers.ListField(child=serializers.CharField(), required=False)
+    sort_order = serializers.IntegerField(min_value=1, required=False)
+    status = serializers.ChoiceField(choices=TemplateChapter.Status.choices, required=False)
+    resource_profile_id = serializers.CharField(max_length=26, required=False, allow_null=True)
+
+
+class TemplateTaskWriteSerializer(serializers.Serializer):
+    title = serializers.CharField(max_length=160, required=False)
+    description = serializers.CharField(required=False, allow_blank=True)
+    instructions = serializers.CharField(required=False, allow_blank=True)
+    task_type = serializers.CharField(max_length=64, required=False)
+    sort_order = serializers.IntegerField(min_value=1, required=False)
+    status = serializers.ChoiceField(choices=TemplateTask.Status.choices, required=False)
+    execution_spec = serializers.DictField(required=False)
+    resource_profile_id = serializers.CharField(max_length=26, required=False, allow_null=True)
+    submission_policy = serializers.DictField(required=False)
+    grading_policy = serializers.DictField(required=False)
+
+
+class ReorderWriteSerializer(serializers.Serializer):
+    ids = serializers.ListField(child=serializers.CharField(max_length=26), allow_empty=False)
+
+
 class TemplateAssetCreateSerializer(serializers.Serializer):
     version_id = serializers.CharField(max_length=26)
     purpose = serializers.ChoiceField(choices=("MANUAL", "STARTER", "REPORT_TEMPLATE", "TESTS"))
@@ -147,6 +173,35 @@ class AutoCheckRuleDataSerializer(serializers.Serializer):
     rule_digest = serializers.CharField()
 
 
+class TemplateTaskDataSerializer(serializers.Serializer):
+    public_id = serializers.CharField()
+    title = serializers.CharField()
+    description = serializers.CharField()
+    instructions = serializers.CharField()
+    task_type = serializers.CharField()
+    sort_order = serializers.IntegerField()
+    status = serializers.CharField()
+    execution_spec = serializers.DictField()
+    resource_profile_id = serializers.CharField(allow_null=True)
+    effective_resource_profile_id = serializers.CharField()
+    submission_policy = serializers.DictField()
+    grading_policy = serializers.DictField()
+    row_version = serializers.IntegerField()
+
+
+class TemplateChapterDataSerializer(serializers.Serializer):
+    public_id = serializers.CharField()
+    title = serializers.CharField()
+    description = serializers.CharField()
+    learning_objectives = serializers.ListField()
+    sort_order = serializers.IntegerField()
+    status = serializers.CharField()
+    resource_profile_id = serializers.CharField(allow_null=True)
+    effective_resource_profile_id = serializers.CharField()
+    row_version = serializers.IntegerField()
+    tasks = TemplateTaskDataSerializer(many=True)
+
+
 class AutoCheckRulesDataSerializer(serializers.Serializer):
     rules = AutoCheckRuleDataSerializer(many=True)
 
@@ -180,6 +235,7 @@ class TemplateVersionDataSerializer(serializers.Serializer):
     spec_digest = serializers.CharField(allow_null=True)
     row_version = serializers.IntegerField()
     rules = AutoCheckRuleDataSerializer(many=True)
+    chapters = TemplateChapterDataSerializer(many=True)
 
 
 class PrecheckRunDataSerializer(serializers.Serializer):
@@ -275,7 +331,50 @@ def rule_data(item: AutoCheckRule) -> dict[str, object]:
     }
 
 
+def task_data(item: TemplateTask, version: TemplateVersion) -> dict[str, object]:
+    profile = item.resource_profile or item.chapter.resource_profile or version.resource_profile
+    return {
+        "public_id": item.public_id,
+        "title": item.title,
+        "description": item.description,
+        "instructions": item.instructions,
+        "task_type": item.task_type,
+        "sort_order": item.sort_order,
+        "status": item.status,
+        "execution_spec": item.execution_spec,
+        "resource_profile_id": item.resource_profile.public_id if item.resource_profile else None,
+        "effective_resource_profile_id": profile.public_id,
+        "submission_policy": item.submission_policy,
+        "grading_policy": item.grading_policy,
+        "row_version": item.row_version,
+    }
+
+
+def chapter_data(item: TemplateChapter, version: TemplateVersion) -> dict[str, object]:
+    profile = item.resource_profile or version.resource_profile
+    return {
+        "public_id": item.public_id,
+        "title": item.title,
+        "description": item.description,
+        "learning_objectives": item.learning_objectives,
+        "sort_order": item.sort_order,
+        "status": item.status,
+        "resource_profile_id": item.resource_profile.public_id if item.resource_profile else None,
+        "effective_resource_profile_id": profile.public_id,
+        "row_version": item.row_version,
+        "tasks": [task_data(task, version) for task in item.tasks.all().order_by("sort_order")],
+    }
+
+
 def version_data(item: TemplateVersion) -> dict[str, object]:
+    def task_value(task: TemplateTask) -> dict[str, object]:
+        profile = task.resource_profile or task.chapter.resource_profile or item.resource_profile
+        return {"public_id": task.public_id, "title": task.title, "description": task.description, "instructions": task.instructions, "task_type": task.task_type, "sort_order": task.sort_order, "status": task.status, "execution_spec": task.execution_spec, "resource_profile_id": task.resource_profile.public_id if task.resource_profile else None, "effective_resource_profile_id": profile.public_id, "submission_policy": task.submission_policy, "grading_policy": task.grading_policy, "row_version": task.row_version}
+
+    def chapter_value(chapter: TemplateChapter) -> dict[str, object]:
+        profile = chapter.resource_profile or item.resource_profile
+        return {"public_id": chapter.public_id, "title": chapter.title, "description": chapter.description, "learning_objectives": chapter.learning_objectives, "sort_order": chapter.sort_order, "status": chapter.status, "resource_profile_id": chapter.resource_profile.public_id if chapter.resource_profile else None, "effective_resource_profile_id": profile.public_id, "row_version": chapter.row_version, "tasks": [task_value(task) for task in chapter.tasks.all().order_by("sort_order")]}
+
     return {
         "public_id": item.public_id,
         "template_id": item.template.public_id,
@@ -305,6 +404,7 @@ def version_data(item: TemplateVersion) -> dict[str, object]:
             rule_data(rule)
             for rule in item.auto_check_rules.filter(is_active=True).order_by("position")
         ],
+        "chapters": [chapter_data(chapter, item) for chapter in item.chapters.all().prefetch_related("tasks").order_by("sort_order")],
     }
 
 

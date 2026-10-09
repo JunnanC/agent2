@@ -187,6 +187,78 @@ class AutoCheckRule(VersionedModel):
         indexes = [models.Index(fields=("template_version", "position"), name="lab_rule_order_idx")]
 
 
+class TemplateChapter(VersionedModel):
+    class Status(models.TextChoices):
+        DRAFT = "DRAFT"
+        PUBLISHED = "PUBLISHED"
+
+    public_id = public_id_field()
+    template_version = models.ForeignKey(
+        TemplateVersion, on_delete=models.PROTECT, related_name="chapters"
+    )
+    title = models.CharField(max_length=160)
+    description = models.TextField(blank=True, default="")
+    learning_objectives = models.JSONField(default=list)
+    sort_order = models.PositiveIntegerField()
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.DRAFT)
+    resource_profile = models.ForeignKey(
+        ResourceProfile,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="template_chapters",
+    )
+
+    class Meta:
+        db_table = "labtemplates_template_chapter"
+        constraints = [
+            models.UniqueConstraint(
+                fields=("template_version", "sort_order"), name="lab_chapter_order_uniq"
+            ),
+            models.CheckConstraint(condition=models.Q(sort_order__gte=1), name="lab_chapter_order_ck"),
+            models.CheckConstraint(
+                condition=models.Q(status__in=("DRAFT", "PUBLISHED")), name="lab_chapter_status_ck"
+            ),
+        ]
+        indexes = [models.Index(fields=("template_version", "sort_order"), name="lab_chapter_order_idx")]
+
+
+class TemplateTask(VersionedModel):
+    class Status(models.TextChoices):
+        DRAFT = "DRAFT"
+        PUBLISHED = "PUBLISHED"
+
+    public_id = public_id_field()
+    chapter = models.ForeignKey(TemplateChapter, on_delete=models.PROTECT, related_name="tasks")
+    title = models.CharField(max_length=160)
+    description = models.TextField(blank=True, default="")
+    instructions = models.TextField(blank=True, default="")
+    task_type = models.CharField(max_length=64)
+    sort_order = models.PositiveIntegerField()
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.DRAFT)
+    execution_spec = models.JSONField(default=dict)
+    resource_profile = models.ForeignKey(
+        ResourceProfile,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="template_tasks",
+    )
+    submission_policy = models.JSONField(default=dict)
+    grading_policy = models.JSONField(default=dict)
+
+    class Meta:
+        db_table = "labtemplates_template_task"
+        constraints = [
+            models.UniqueConstraint(fields=("chapter", "sort_order"), name="lab_task_order_uniq"),
+            models.CheckConstraint(condition=models.Q(sort_order__gte=1), name="lab_task_order_ck"),
+            models.CheckConstraint(
+                condition=models.Q(status__in=("DRAFT", "PUBLISHED")), name="lab_task_status_ck"
+            ),
+        ]
+        indexes = [models.Index(fields=("chapter", "sort_order"), name="lab_task_order_idx")]
+
+
 class TemplatePrecheckRun(VersionedModel):
     class Status(models.TextChoices):
         QUEUED = "QUEUED"

@@ -15,6 +15,12 @@ from .views import (
     TemplateOptionsView,
     TemplateVersionDetailView,
     TemplateVersionListView,
+    TemplateChapterCollectionView,
+    TemplateChapterDetailView,
+    TemplateChapterReorderView,
+    TemplateTaskCollectionView,
+    TemplateTaskDetailView,
+    TemplateTaskReorderView,
     WithdrawVersionView,
 )
 
@@ -48,6 +54,12 @@ urlpatterns = [
         "teaching/courses/<str:course_id>/template-versions/<str:version_id>/auto-check-rules",
         AutoCheckRuleView.as_view(),
     ),
+    path("teaching/courses/<str:course_id>/template-versions/<str:version_id>/chapters", TemplateChapterCollectionView.as_view()),
+    path("teaching/courses/<str:course_id>/template-versions/<str:version_id>/chapters/reorder", TemplateChapterReorderView.as_view()),
+    path("teaching/courses/<str:course_id>/template-chapters/<str:chapter_id>", TemplateChapterDetailView.as_view()),
+    path("teaching/courses/<str:course_id>/template-chapters/<str:chapter_id>/tasks", TemplateTaskCollectionView.as_view()),
+    path("teaching/courses/<str:course_id>/template-chapters/<str:chapter_id>/tasks/reorder", TemplateTaskReorderView.as_view()),
+    path("teaching/courses/<str:course_id>/template-tasks/<str:task_id>", TemplateTaskDetailView.as_view()),
     path(
         "teaching/courses/<str:course_id>/template-versions/<str:version_id>/precheck",
         PrecheckView.as_view(),

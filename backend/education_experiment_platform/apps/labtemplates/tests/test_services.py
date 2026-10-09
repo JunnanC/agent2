@@ -5,7 +5,7 @@ from apps.core.models import ObjectAsset
 from apps.governance.models import ResourceProfile
 
 from ..errors import TemplateStateConflict, TemplateValidationError
-from ..models import AutoCheckRule, TemplatePrecheckRun, TemplateVersion
+from ..models import AutoCheckRule, TemplateChapter, TemplatePrecheckRun, TemplateTask, TemplateVersion
 from ..services import (
     build_execution_command,
     clone_version,
@@ -15,11 +15,65 @@ from ..services import (
     replace_rules,
     request_precheck,
     update_version,
+    create_chapter,
+    create_task,
+    reorder_chapters,
+    reorder_tasks,
+    update_chapter,
 )
+from ..serializers import version_data
 from .helpers import add_valid_rule, context, create_template_version
 
 
 class TemplateServiceTests(TestCase):
+    def test_versioned_content_orders_inherits_resources_and_serializes_nested(self) -> None:
+        owner, course, _template, version = create_template_version(suffix="content")
+        chapter = create_chapter(
+            course_id=course.public_id, version_id=version.public_id, actor=owner,
+            expected_version=version.row_version,
+            data={"title": "Second", "sort_order": 2}, context=context(owner, "a"),
+        )
+        version.refresh_from_db()
+        first = create_chapter(
+            course_id=course.public_id, version_id=version.public_id, actor=owner,
+            expected_version=version.row_version,
+            data={"title": "First", "sort_order": 1}, context=context(owner, "b"),
+        )
+        version.refresh_from_db()
+        task = create_task(
+            course_id=course.public_id, chapter_id=first.public_id, actor=owner,
+            expected_version=version.row_version,
+            data={"title": "Inherited task", "task_type": "CODE", "sort_order": 1},
+            context=context(owner, "c"),
+        )
+        version.refresh_from_db()
+        data = version_data(version)
+        self.assertEqual([item["title"] for item in data["chapters"]], ["First", "Second"])
+        self.assertEqual(data["chapters"][0]["tasks"][0]["public_id"], task.public_id)
+        self.assertEqual(
+            data["chapters"][0]["tasks"][0]["effective_resource_profile_id"],
+            version.resource_profile.public_id,
+        )
+
+    def test_content_reorder_rejects_duplicate_and_mixed_parent_ids(self) -> None:
+        owner, course, _template, version = create_template_version(suffix="content-order")
+        first = create_chapter(course_id=course.public_id, version_id=version.public_id, actor=owner, expected_version=version.row_version, data={"title": "First"}, context=context(owner, "a"))
+        version.refresh_from_db()
+        second = create_chapter(course_id=course.public_id, version_id=version.public_id, actor=owner, expected_version=version.row_version, data={"title": "Second"}, context=context(owner, "b"))
+        version.refresh_from_db()
+        with self.assertRaises(TemplateValidationError):
+            reorder_chapters(course_id=course.public_id, version_id=version.public_id, actor=owner, expected_version=version.row_version, chapter_ids=[first.public_id, first.public_id], context=context(owner, "c"))
+        with self.assertRaises(TemplateValidationError):
+            reorder_tasks(course_id=course.public_id, chapter_id=first.public_id, actor=owner, expected_version=version.row_version, task_ids=[second.public_id], context=context(owner, "d"))
+        reordered = reorder_chapters(course_id=course.public_id, version_id=version.public_id, actor=owner, expected_version=version.row_version, chapter_ids=[second.public_id, first.public_id], context=context(owner, "e"))
+        self.assertEqual([item.sort_order for item in TemplateChapter.objects.filter(template_version=reordered).order_by("sort_order")], [1, 2])
+
+    def test_content_is_locked_after_publication(self) -> None:
+        owner, course, _template, version = create_template_version(suffix="content-lock")
+        TemplateVersion.objects.filter(pk=version.pk).update(status=TemplateVersion.Status.PUBLISHED)
+        version.refresh_from_db()
+        with self.assertRaises(TemplateStateConflict):
+            create_chapter(course_id=course.public_id, version_id=version.public_id, actor=owner, expected_version=version.row_version, data={"title": "Locked"}, context=context(owner, "a"))
     def test_execution_spec_is_in_digest_and_only_generates_python_command(self) -> None:
         owner, course, _template, version = create_template_version(suffix="execution")
         version = add_valid_rule(owner=owner, course=course, version=version)
