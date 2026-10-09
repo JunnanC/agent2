@@ -176,7 +176,18 @@ def release_runtime_capacity(
 
 
 def _release_reservation(*, reservation_id: str, reason: str, context: Any) -> None:
-    release_runtime_capacity(reservation_id=reservation_id)
+    try:
+        release_runtime_capacity(reservation_id=reservation_id)
+    except Exception as exc:  # noqa: BLE001 - quota release must proceed independently
+        logger.error(
+            "runtime capacity release failed",
+            extra={
+                "trace_id": _trace(context),
+                "resource_ref": reservation_id,
+                "error_code": str(getattr(exc, "code", "RUNTIME_CAPACITY_RELEASE_FAILED")),
+                "result": "FAILED",
+            },
+        )
     release_reservation(reservation_id=reservation_id, reason=reason, context=context)
 
 

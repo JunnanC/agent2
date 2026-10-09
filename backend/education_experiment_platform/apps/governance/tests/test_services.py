@@ -177,6 +177,31 @@ class GovernanceServiceTests(TestCase):
         self.assertEqual(effective["memory_request_mb"], 4096)
         self.assertEqual(effective["memory_limit_mb"], 4096)
 
+    def test_effective_legacy_snapshot_is_unchanged_when_profile_changes(self) -> None:
+        task = SimpleNamespace(
+            resource_profile=self.profile,
+            resource_profile_snapshot={
+                "public_id": self.profile.public_id,
+                "cpu_millicores": 2000,
+                "memory_mb": 4096,
+            },
+        )
+        ResourceProfile.objects.filter(pk=self.profile.pk).update(
+            cpu_millicores=8000,
+            memory_mb=16384,
+            cpu_request_millicores=4000,
+            cpu_limit_millicores=8000,
+            memory_request_mb=8192,
+            memory_limit_mb=16384,
+        )
+
+        effective = effective_resource_profile(task)
+
+        self.assertEqual(effective["cpu_request_millicores"], 2000)
+        self.assertEqual(effective["cpu_limit_millicores"], 2000)
+        self.assertEqual(effective["memory_request_mb"], 4096)
+        self.assertEqual(effective["memory_limit_mb"], 4096)
+
     @override_settings(RUNTIME_MODE="fake", RUNTIME_ADAPTER_CODE="runtime/governance")
     def test_runtime_health_probe_uses_configured_runtime_resolver(self) -> None:
         RuntimeAdapter.objects.create(

@@ -144,3 +144,50 @@ class GovernanceApiTests(TestCase):
             **PROXY_HEADERS,
         )
         self.assertEqual(hidden.status_code, 404)
+
+    def test_resource_profile_api_returns_request_and_limit_fields(self) -> None:
+        admin_client = Client(enforce_csrf_checks=True)
+        csrf = self._login(admin_client, portal="PLATFORM", identifier=self.admin.email)
+        response = admin_client.post(
+            "/api/v2/platform/resource-profiles",
+            {
+                "code": "API-RESOURCE-PROFILE",
+                "name": "API resource profile",
+                "runtime_type": "CONTAINER",
+                "cpu_millicores": 500,
+                "memory_mb": 1024,
+                "cpu_request_millicores": 250,
+                "cpu_limit_millicores": 750,
+                "memory_request_mb": 512,
+                "memory_limit_mb": 2048,
+                "disk_gb": 10,
+                "network_mode": "DENY_ALL",
+                "cost_minor_per_hour": 0,
+                "currency_code": "CNY",
+                "reason": "API resource profile",
+            },
+            content_type="application/json",
+            HTTP_X_CSRFTOKEN=csrf,
+            HTTP_X_PORTAL="PLATFORM",
+            HTTP_IDEMPOTENCY_KEY="resource-profile-api",
+            **PROXY_HEADERS,
+        )
+
+        self.assertEqual(response.status_code, 201, response.content)
+        self.assertEqual(
+            {
+                key: response.json()["data"][key]
+                for key in (
+                    "cpu_request_millicores",
+                    "cpu_limit_millicores",
+                    "memory_request_mb",
+                    "memory_limit_mb",
+                )
+            },
+            {
+                "cpu_request_millicores": 250,
+                "cpu_limit_millicores": 750,
+                "memory_request_mb": 512,
+                "memory_limit_mb": 2048,
+            },
+        )

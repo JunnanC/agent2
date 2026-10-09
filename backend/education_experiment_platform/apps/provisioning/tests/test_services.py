@@ -323,6 +323,27 @@ class ProvisioningServiceTests(TestCase):
                 )
                 self.assertEqual(failed_event.error_code, f"FAKE_{stage}_FAILED")
 
+    def test_failed_provisioning_releases_quota_when_runtime_release_fails(self) -> None:
+        fake_runtime().failures[ProvisioningJob.Stage.QUOTA_CHECK] = "FAKE_QUOTA_CHECK_FAILED"
+        job = self._start()
+
+        with (
+            patch(
+                "apps.provisioning.services.release_runtime_capacity",
+                side_effect=RuntimeError("runtime release unavailable"),
+            ) as release_runtime,
+            self.assertLogs("runtime.provisioning", level="ERROR") as logs,
+        ):
+            failed = execute_provisioning_job(job_id=job.public_id)
+
+        failed.reservation.refresh_from_db()
+        binding = RuntimeCapacityReservation.objects.get(reservation=failed.reservation)
+        self.assertEqual(failed.status, ProvisioningJob.Status.FAILED)
+        self.assertEqual(failed.reservation.status, "RELEASED")
+        self.assertEqual(binding.status, RuntimeCapacityReservation.Status.ACTIVE)
+        release_runtime.assert_called_once_with(reservation_id=failed.reservation.public_id)
+        self.assertIn("runtime capacity release failed", logs.records[0].message)
+
     def test_partial_create_failure_requires_compensation_before_retry(self) -> None:
         fake_runtime().failures[ProvisioningJob.Stage.CREATE] = "FAKE_CREATE_FAILED"
         fake_runtime().partial_success.add(ProvisioningJob.Stage.CREATE)

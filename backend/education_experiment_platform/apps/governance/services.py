@@ -97,26 +97,38 @@ def effective_resource_profile(task: Any) -> dict[str, Any]:
     def value(name: str, fallback: Any) -> Any:
         return snapshot[name] if snapshot.get(name) is not None else fallback
 
-    cpu = value("cpu_millicores", profile.cpu_millicores)
-    memory = value("memory_mb", profile.memory_mb)
+    legacy_cpu = snapshot.get("cpu_millicores")
+    legacy_memory = snapshot.get("memory_mb")
+    cpu = legacy_cpu if legacy_cpu is not None else profile.cpu_millicores
+    memory = legacy_memory if legacy_memory is not None else profile.memory_mb
+    cpu_request_fallback = (
+        cpu
+        if legacy_cpu is not None
+        else getattr(profile, "cpu_request_millicores", None) or cpu
+    )
+    cpu_limit_fallback = (
+        cpu if legacy_cpu is not None else getattr(profile, "cpu_limit_millicores", None) or cpu
+    )
+    memory_request_fallback = (
+        memory
+        if legacy_memory is not None
+        else getattr(profile, "memory_request_mb", None) or memory
+    )
+    memory_limit_fallback = (
+        memory
+        if legacy_memory is not None
+        else getattr(profile, "memory_limit_mb", None) or memory
+    )
     return {
         "public_id": value("public_id", profile.public_id),
         "code": value("code", profile.code),
         "runtime_type": value("runtime_type", profile.runtime_type),
         "cpu_millicores": cpu,
         "memory_mb": memory,
-        "cpu_request_millicores": value(
-            "cpu_request_millicores", getattr(profile, "cpu_request_millicores", None) or cpu
-        ),
-        "cpu_limit_millicores": value(
-            "cpu_limit_millicores", getattr(profile, "cpu_limit_millicores", None) or cpu
-        ),
-        "memory_request_mb": value(
-            "memory_request_mb", getattr(profile, "memory_request_mb", None) or memory
-        ),
-        "memory_limit_mb": value(
-            "memory_limit_mb", getattr(profile, "memory_limit_mb", None) or memory
-        ),
+        "cpu_request_millicores": value("cpu_request_millicores", cpu_request_fallback),
+        "cpu_limit_millicores": value("cpu_limit_millicores", cpu_limit_fallback),
+        "memory_request_mb": value("memory_request_mb", memory_request_fallback),
+        "memory_limit_mb": value("memory_limit_mb", memory_limit_fallback),
         "disk_gb": value("disk_gb", profile.disk_gb),
         "network_mode": value("network_mode", profile.network_mode),
     }

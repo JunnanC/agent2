@@ -965,6 +965,8 @@ def _validated_snapshot(
     adapter = governance["adapter"]
     image = governance["image"]
     profile: ResourceProfile = governance["profile"]
+    cpu_limit = getattr(profile, "cpu_limit_millicores", None) or profile.cpu_millicores
+    memory_limit = getattr(profile, "memory_limit_mb", None) or profile.memory_mb
     if adapter.runtime_type != version.runtime_type or profile.runtime_type != version.runtime_type:
         raise TemplateValidationError(detail={"runtime_type": "resource_mismatch"})
     if version.runtime_type != RuntimeAdapter.RuntimeType.CONTAINER:
@@ -973,9 +975,9 @@ def _validated_snapshot(
         )
     if execution_spec["timeout_seconds"] > settings.TEMPLATE_CHECK_TIMEOUT_MAX_SECONDS:
         raise TemplateValidationError(detail={"execution_spec": {"timeout_seconds": "too_large"}})
-    if execution_spec["memory_mb"] > profile.memory_mb:
+    if execution_spec["memory_mb"] > memory_limit:
         raise TemplateValidationError(detail={"execution_spec": {"memory_mb": "exceeds_profile"}})
-    if execution_spec["cpu_millicores"] > profile.cpu_millicores:
+    if execution_spec["cpu_millicores"] > cpu_limit:
         raise TemplateValidationError(
             detail={"execution_spec": {"cpu_millicores": "exceeds_profile"}}
         )
@@ -1014,8 +1016,8 @@ def _validated_snapshot(
             )
         limits = rule.resource_limit
         if (
-            int(limits.get("cpu_millicores", 0)) > profile.cpu_millicores
-            or int(limits.get("memory_mb", 0)) > profile.memory_mb
+            int(limits.get("cpu_millicores", 0)) > cpu_limit
+            or int(limits.get("memory_mb", 0)) > memory_limit
             or int(limits.get("disk_gb", 0)) > profile.disk_gb
         ):
             raise TemplateValidationError(
@@ -1091,6 +1093,11 @@ def _validated_snapshot(
             "code": profile.code,
             "cpu_millicores": profile.cpu_millicores,
             "memory_mb": profile.memory_mb,
+            "cpu_request_millicores": getattr(profile, "cpu_request_millicores", None)
+            or profile.cpu_millicores,
+            "cpu_limit_millicores": cpu_limit,
+            "memory_request_mb": getattr(profile, "memory_request_mb", None) or profile.memory_mb,
+            "memory_limit_mb": memory_limit,
             "disk_gb": profile.disk_gb,
             "network_mode": profile.network_mode,
         },

@@ -5058,6 +5058,10 @@ export interface components {
             runtime_type?: components["schemas"]["RuntimeType467Enum"];
             cpu_millicores?: number;
             memory_mb?: number;
+            cpu_request_millicores?: number;
+            cpu_limit_millicores?: number;
+            memory_request_mb?: number;
+            memory_limit_mb?: number;
             disk_gb?: number;
             network_mode?: components["schemas"]["NetworkMode7ceEnum"];
             cost_minor_per_hour?: number;
@@ -5614,6 +5618,10 @@ export interface components {
             runtime_type: components["schemas"]["RuntimeType467Enum"];
             cpu_millicores: number;
             memory_mb: number;
+            cpu_request_millicores?: number;
+            cpu_limit_millicores?: number;
+            memory_request_mb?: number;
+            memory_limit_mb?: number;
             disk_gb: number;
             network_mode: components["schemas"]["NetworkMode7ceEnum"];
             /** @default 0 */
@@ -5630,6 +5638,10 @@ export interface components {
             status: string;
             cpu_millicores: number;
             memory_mb: number;
+            cpu_request_millicores?: number;
+            cpu_limit_millicores?: number;
+            memory_request_mb?: number;
+            memory_limit_mb?: number;
             disk_gb: number;
             network_mode: string;
             cost_minor_per_hour: number;

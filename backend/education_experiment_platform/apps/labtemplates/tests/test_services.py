@@ -354,6 +354,34 @@ class TemplateServiceTests(TestCase):
         self.assertEqual(clone.execution_spec["entrypoint"], published.execution_spec["entrypoint"])
         self.assertEqual(build_execution_command(clone.execution_spec), ["python", "main.py"])
 
+    def test_precheck_uses_profile_limits_when_requests_are_smaller(self) -> None:
+        owner, course, _template, version = create_template_version(suffix="resource-limits")
+        ResourceProfile.objects.filter(pk=version.resource_profile_id).update(
+            cpu_millicores=250,
+            memory_mb=128,
+            cpu_request_millicores=125,
+            cpu_limit_millicores=750,
+            memory_request_mb=64,
+            memory_limit_mb=384,
+        )
+        version = add_valid_rule(owner=owner, course=course, version=version)
+        AutoCheckRule.objects.filter(template_version=version, is_active=True).update(
+            resource_limit={"cpu_millicores": 750, "memory_mb": 384, "disk_gb": 2}
+        )
+
+        run = request_precheck(
+            course_id=course.public_id,
+            version_id=version.public_id,
+            actor=owner,
+            expected_version=version.row_version,
+            context=context(owner, "limits"),
+        )
+
+        self.assertEqual(
+            execute_precheck(run_id=run.public_id).status,
+            TemplatePrecheckRun.Status.PASSED,
+        )
+
     def test_invalid_schema_records_exact_failed_stage(self) -> None:
         owner, course, _template, version = create_template_version(suffix="schema")
         version = replace_rules(

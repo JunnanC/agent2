@@ -18288,6 +18288,22 @@
                         "type": "integer",
                         "minimum": 1
                     },
+                    "cpu_request_millicores": {
+                        "type": "integer",
+                        "minimum": 1
+                    },
+                    "cpu_limit_millicores": {
+                        "type": "integer",
+                        "minimum": 1
+                    },
+                    "memory_request_mb": {
+                        "type": "integer",
+                        "minimum": 1
+                    },
+                    "memory_limit_mb": {
+                        "type": "integer",
+                        "minimum": 1
+                    },
                     "disk_gb": {
                         "type": "integer",
                         "minimum": 1
@@ -20057,6 +20073,22 @@
                         "type": "integer",
                         "minimum": 1
                     },
+                    "cpu_request_millicores": {
+                        "type": "integer",
+                        "minimum": 1
+                    },
+                    "cpu_limit_millicores": {
+                        "type": "integer",
+                        "minimum": 1
+                    },
+                    "memory_request_mb": {
+                        "type": "integer",
+                        "minimum": 1
+                    },
+                    "memory_limit_mb": {
+                        "type": "integer",
+                        "minimum": 1
+                    },
                     "disk_gb": {
                         "type": "integer",
                         "minimum": 1
@@ -20113,6 +20145,18 @@
                         "type": "integer"
                     },
                     "memory_mb": {
+                        "type": "integer"
+                    },
+                    "cpu_request_millicores": {
+                        "type": "integer"
+                    },
+                    "cpu_limit_millicores": {
+                        "type": "integer"
+                    },
+                    "memory_request_mb": {
+                        "type": "integer"
+                    },
+                    "memory_limit_mb": {
                         "type": "integer"
                     },
                     "disk_gb": {
