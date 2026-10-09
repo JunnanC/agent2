@@ -59,6 +59,10 @@ class ResourceProfileCreateSerializer(serializers.Serializer):
     runtime_type = serializers.ChoiceField(choices=RuntimeAdapter.RuntimeType.choices)
     cpu_millicores = serializers.IntegerField(min_value=1)
     memory_mb = serializers.IntegerField(min_value=1)
+    cpu_request_millicores = serializers.IntegerField(min_value=1, required=False)
+    cpu_limit_millicores = serializers.IntegerField(min_value=1, required=False)
+    memory_request_mb = serializers.IntegerField(min_value=1, required=False)
+    memory_limit_mb = serializers.IntegerField(min_value=1, required=False)
     disk_gb = serializers.IntegerField(min_value=1)
     network_mode = serializers.ChoiceField(choices=ResourceProfile.NetworkMode.choices)
     cost_minor_per_hour = serializers.IntegerField(min_value=0, default=0)
@@ -73,6 +77,10 @@ class ResourceProfileUpdateSerializer(serializers.Serializer):
     )
     cpu_millicores = serializers.IntegerField(min_value=1, required=False)
     memory_mb = serializers.IntegerField(min_value=1, required=False)
+    cpu_request_millicores = serializers.IntegerField(min_value=1, required=False)
+    cpu_limit_millicores = serializers.IntegerField(min_value=1, required=False)
+    memory_request_mb = serializers.IntegerField(min_value=1, required=False)
+    memory_limit_mb = serializers.IntegerField(min_value=1, required=False)
     disk_gb = serializers.IntegerField(min_value=1, required=False)
     network_mode = serializers.ChoiceField(
         choices=ResourceProfile.NetworkMode.choices, required=False
@@ -372,6 +380,10 @@ def resource_profile_data(item: ResourceProfile) -> dict[str, Any]:
         "status": item.status,
         "cpu_millicores": item.cpu_millicores,
         "memory_mb": item.memory_mb,
+        "cpu_request_millicores": item.cpu_request_millicores,
+        "cpu_limit_millicores": item.cpu_limit_millicores,
+        "memory_request_mb": item.memory_request_mb,
+        "memory_limit_mb": item.memory_limit_mb,
         "disk_gb": item.disk_gb,
         "network_mode": item.network_mode,
         "cost_minor_per_hour": item.cost_minor_per_hour,

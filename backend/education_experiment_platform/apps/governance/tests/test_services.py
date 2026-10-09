@@ -1,4 +1,5 @@
 from datetime import timedelta
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from django.test import TestCase, override_settings
@@ -7,7 +8,12 @@ from django.utils import timezone
 from apps.core.errors import RowVersionConflict
 from apps.provisioning.adapters import fake_runtime, reset_fake_runtime
 
-from ..errors import GovernanceStateConflict, ImageNotApproved, QuotaExceeded
+from ..errors import (
+    GovernanceStateConflict,
+    GovernanceValidationError,
+    ImageNotApproved,
+    QuotaExceeded,
+)
 from ..models import ImageAsset, QuotaReservation, ResourceProfile, RuntimeAdapter
 from ..selectors import resource_summary
 from ..services import (
@@ -16,10 +22,12 @@ from ..services import (
     create_quota,
     create_resource_profile,
     decide_image,
+    effective_resource_profile,
     release_reservation,
     reserve_quota,
     transition_resource_profile,
     update_image_scan,
+    validate_resource_profile,
 )
 from ..tasks import probe_runtime_adapters
 from .helpers import create_governance_admin, create_governance_course, create_governance_teacher
@@ -119,6 +127,55 @@ class GovernanceServiceTests(TestCase):
             expires_at=timezone.now() + timedelta(hours=1),
             context=ActorContext(self.student.public_id, "USER", "r" * 32),
         )
+
+    def test_resource_profile_validation_normalizes_legacy_values(self) -> None:
+        values = validate_resource_profile(
+            {"cpu_millicores": 500, "memory_mb": 1024, "disk_gb": 5}
+        )
+
+        self.assertEqual(values["cpu_request_millicores"], 500)
+        self.assertEqual(values["cpu_limit_millicores"], 500)
+        self.assertEqual(values["memory_request_mb"], 1024)
+        self.assertEqual(values["memory_limit_mb"], 1024)
+
+    def test_resource_profile_validation_rejects_non_positive_and_inverted_limits(self) -> None:
+        with self.assertRaises(GovernanceValidationError):
+            validate_resource_profile(
+                {
+                    "cpu_millicores": 500,
+                    "memory_mb": 1024,
+                    "cpu_request_millicores": 0,
+                    "cpu_limit_millicores": 500,
+                    "disk_gb": 5,
+                }
+            )
+        with self.assertRaises(GovernanceValidationError):
+            validate_resource_profile(
+                {
+                    "cpu_millicores": 500,
+                    "memory_mb": 1024,
+                    "cpu_request_millicores": 600,
+                    "cpu_limit_millicores": 500,
+                    "disk_gb": 5,
+                }
+            )
+
+    def test_effective_resource_profile_falls_back_for_legacy_task_snapshot(self) -> None:
+        task = SimpleNamespace(
+            resource_profile=self.profile,
+            resource_profile_snapshot={
+                "public_id": self.profile.public_id,
+                "cpu_millicores": 2000,
+                "memory_mb": 4096,
+            },
+        )
+
+        effective = effective_resource_profile(task)
+
+        self.assertEqual(effective["cpu_request_millicores"], 2000)
+        self.assertEqual(effective["cpu_limit_millicores"], 2000)
+        self.assertEqual(effective["memory_request_mb"], 4096)
+        self.assertEqual(effective["memory_limit_mb"], 4096)
 
     @override_settings(RUNTIME_MODE="fake", RUNTIME_ADAPTER_CODE="runtime/governance")
     def test_runtime_health_probe_uses_configured_runtime_resolver(self) -> None:

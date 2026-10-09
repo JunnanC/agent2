@@ -1,6 +1,7 @@
 from unittest.mock import Mock, patch
 
 from django.test import TestCase, override_settings
+from django.utils import timezone
 
 from apps.accounts.models import User
 from apps.courses.services import ActorContext
@@ -12,7 +13,8 @@ from apps.experiments.tests.helpers import (
     create_draft_publication,
     create_enrollment,
 )
-from apps.governance.models import Quota, RuntimeAdapter
+from apps.governance.errors import QuotaExceeded
+from apps.governance.models import Quota, QuotaReservation, RuntimeAdapter
 
 from ..adapters import (
     docker_local_protocol_stub,
@@ -21,13 +23,20 @@ from ..adapters import (
     reset_fake_runtime,
 )
 from ..errors import ProvisioningStateConflict
-from ..models import ProvisioningInstance, ProvisioningJob, ProvisioningStageEvent
+from ..models import (
+    ProvisioningInstance,
+    ProvisioningJob,
+    ProvisioningStageEvent,
+    RuntimeCapacityReservation,
+)
 from ..selectors import job_for_user
 from ..services import (
     cancel_queued_provisioning,
     compensate_provisioning,
     enabled_runtime_inventory,
     execute_provisioning_job,
+    release_runtime_capacity,
+    reserve_runtime_capacity,
     retry_provisioning,
     runtime_inventory,
     runtime_inventory_snapshot,
@@ -134,6 +143,141 @@ class ProvisioningServiceTests(TestCase):
             context=experiment_context(self.owner),
         )
         return published.tasks.get(student=enrollment.student), enrollment.student
+
+    def test_template_creation_does_not_change_runtime_capacity(self) -> None:
+        RuntimeAdapter.objects.filter(pk=self.adapter.pk).update(
+            capacity_cpu_millicores=4000,
+            available_cpu_millicores=4000,
+            capacity_memory_mb=8192,
+            available_memory_mb=8192,
+        )
+        before = RuntimeAdapter.objects.values_list(
+            "available_cpu_millicores", "available_memory_mb"
+        ).get(pk=self.adapter.pk)
+
+        create_draft_publication(
+            owner=self.owner,
+            course=self.course,
+            template_version=self.template_version,
+            rubric_version=self.rubric_version,
+            suffix="p07-capacity-publication",
+        )
+
+        self.assertEqual(
+            RuntimeAdapter.objects.values_list(
+                "available_cpu_millicores", "available_memory_mb"
+            ).get(pk=self.adapter.pk),
+            before,
+        )
+
+    def test_runtime_capacity_rejects_insufficient_capacity(self) -> None:
+        RuntimeAdapter.objects.filter(pk=self.adapter.pk).update(
+            capacity_cpu_millicores=1000,
+            available_cpu_millicores=1000,
+            capacity_memory_mb=2048,
+            available_memory_mb=2048,
+        )
+        reservation = QuotaReservation.objects.create(
+            reservation_key="runtime-capacity-insufficient",
+            reservation_type=QuotaReservation.ReservationType.STANDARD,
+            subject_type="TASK",
+            subject_ref="runtime-capacity-insufficient",
+            course=self.course,
+            user=self.enrollment.student,
+            resource_profile=self.task.resource_profile,
+            reserved_at=timezone.now(),
+            trace_id="capacity-insufficient-test",
+        )
+
+        with self.assertRaises(QuotaExceeded) as raised:
+            reserve_runtime_capacity(
+                reservation_id=reservation,
+                runtime_adapter_id=self.adapter.public_id,
+                cpu_millicores=2000,
+                memory_mb=4096,
+            )
+
+        self.assertEqual(raised.exception.code, "QUOTA_EXCEEDED")
+        self.adapter.refresh_from_db()
+        self.assertEqual(self.adapter.available_cpu_millicores, 1000)
+        self.assertEqual(self.adapter.available_memory_mb, 2048)
+
+    def test_runtime_capacity_binding_is_reused_and_release_is_idempotent(self) -> None:
+        RuntimeAdapter.objects.filter(pk=self.adapter.pk).update(
+            capacity_cpu_millicores=4000,
+            available_cpu_millicores=4000,
+            capacity_memory_mb=8192,
+            available_memory_mb=8192,
+        )
+        reservation = QuotaReservation.objects.create(
+            reservation_key="runtime-capacity-replay",
+            reservation_type=QuotaReservation.ReservationType.STANDARD,
+            subject_type="TASK",
+            subject_ref="runtime-capacity-replay",
+            course=self.course,
+            user=self.enrollment.student,
+            resource_profile=self.task.resource_profile,
+            reserved_at=timezone.now(),
+            trace_id="capacity-replay-test",
+        )
+
+        binding = reserve_runtime_capacity(
+            reservation_id=reservation,
+            runtime_adapter_id=self.adapter.public_id,
+            cpu_millicores=2000,
+            memory_mb=4096,
+        )
+        replay = reserve_runtime_capacity(
+            reservation_id=reservation,
+            runtime_adapter_id=self.adapter.public_id,
+            cpu_millicores=2000,
+            memory_mb=4096,
+        )
+        self.assertEqual(binding.pk, replay.pk)
+        self.adapter.refresh_from_db()
+        self.assertEqual(self.adapter.available_cpu_millicores, 2000)
+        self.assertEqual(self.adapter.available_memory_mb, 4096)
+
+        released = release_runtime_capacity(reservation_id=reservation)
+        again = release_runtime_capacity(reservation_id=reservation)
+
+        self.assertEqual(released.pk, binding.pk)
+        self.assertEqual(again.pk, binding.pk)
+        self.assertEqual(again.status, RuntimeCapacityReservation.Status.RELEASED)
+        self.adapter.refresh_from_db()
+        self.assertEqual(self.adapter.available_cpu_millicores, 4000)
+        self.assertEqual(self.adapter.available_memory_mb, 8192)
+
+    def test_runtime_capacity_release_restores_memory_when_cpu_capacity_is_unreported(self) -> None:
+        RuntimeAdapter.objects.filter(pk=self.adapter.pk).update(
+            capacity_cpu_millicores=0,
+            available_cpu_millicores=0,
+            capacity_memory_mb=8192,
+            available_memory_mb=8192,
+        )
+        reservation = QuotaReservation.objects.create(
+            reservation_key="runtime-capacity-memory-only",
+            reservation_type=QuotaReservation.ReservationType.STANDARD,
+            subject_type="TASK",
+            subject_ref="runtime-capacity-memory-only",
+            course=self.course,
+            user=self.enrollment.student,
+            resource_profile=self.task.resource_profile,
+            reserved_at=timezone.now(),
+            trace_id="capacity-memory-test",
+        )
+
+        reserve_runtime_capacity(
+            reservation_id=reservation,
+            runtime_adapter_id=self.adapter.public_id,
+            cpu_millicores=2000,
+            memory_mb=4096,
+        )
+        self.adapter.refresh_from_db()
+        self.assertEqual(self.adapter.available_memory_mb, 4096)
+        release_runtime_capacity(reservation_id=reservation)
+        self.adapter.refresh_from_db()
+        self.assertEqual(self.adapter.available_memory_mb, 8192)
 
     def test_success_writes_append_only_start_and_pass_events_for_all_stages(self) -> None:
         job = self._start()

@@ -195,6 +195,10 @@ class ResourceProfile(GovernanceModel):
     status = models.CharField(max_length=16, choices=Status.choices, default=Status.DRAFT)
     cpu_millicores = models.PositiveIntegerField()
     memory_mb = models.PositiveIntegerField()
+    cpu_request_millicores = models.PositiveIntegerField()
+    cpu_limit_millicores = models.PositiveIntegerField()
+    memory_request_mb = models.PositiveIntegerField()
+    memory_limit_mb = models.PositiveIntegerField()
     disk_gb = models.PositiveIntegerField()
     network_mode = models.CharField(max_length=16, choices=NetworkMode.choices)
     cost_minor_per_hour = models.PositiveBigIntegerField(default=0)
@@ -210,6 +214,16 @@ class ResourceProfile(GovernanceModel):
                 condition=models.Q(cpu_millicores__gt=0), name="gov_profile_cpu_ck"
             ),
             models.CheckConstraint(condition=models.Q(memory_mb__gt=0), name="gov_profile_mem_ck"),
+            models.CheckConstraint(
+                condition=models.Q(cpu_request_millicores__gt=0)
+                & models.Q(cpu_limit_millicores__gte=models.F("cpu_request_millicores")),
+                name="gov_profile_cpu_request_limit_ck",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(memory_request_mb__gt=0)
+                & models.Q(memory_limit_mb__gte=models.F("memory_request_mb")),
+                name="gov_profile_memory_request_limit_ck",
+            ),
             models.CheckConstraint(condition=models.Q(disk_gb__gt=0), name="gov_profile_disk_ck"),
             models.CheckConstraint(
                 condition=models.Q(status__in=("DRAFT", "ACTIVE", "RETIRED")),

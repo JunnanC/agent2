@@ -49,6 +49,79 @@ QUOTA_VALUE_FIELDS = frozenset(LIMIT_FIELDS)
 RESERVATION_VALUE_FIELDS = frozenset(USAGE_TO_LIMIT)
 
 
+def validate_resource_profile(profile_data: dict[str, Any]) -> dict[str, int]:
+    """Normalize legacy resource fields and validate request/limit semantics."""
+    cpu = int(profile_data.get("cpu_millicores") or 0)
+    memory = int(profile_data.get("memory_mb") or 0)
+    cpu_request = int(
+        profile_data["cpu_request_millicores"]
+        if profile_data.get("cpu_request_millicores") is not None
+        else cpu
+    )
+    cpu_limit = int(
+        profile_data["cpu_limit_millicores"]
+        if profile_data.get("cpu_limit_millicores") is not None
+        else cpu
+    )
+    memory_request = int(
+        profile_data["memory_request_mb"]
+        if profile_data.get("memory_request_mb") is not None
+        else memory
+    )
+    memory_limit = int(
+        profile_data["memory_limit_mb"]
+        if profile_data.get("memory_limit_mb") is not None
+        else memory
+    )
+    disk = int(profile_data.get("disk_gb") or 0)
+    if min(cpu, memory, disk, cpu_request, cpu_limit, memory_request, memory_limit) <= 0:
+        raise GovernanceValidationError(detail={"resource": "positive_values_required"})
+    if cpu_request > cpu_limit or memory_request > memory_limit:
+        raise GovernanceValidationError(detail={"resource": "request_exceeds_limit"})
+    return {
+        "cpu_millicores": cpu,
+        "memory_mb": memory,
+        "cpu_request_millicores": cpu_request,
+        "cpu_limit_millicores": cpu_limit,
+        "memory_request_mb": memory_request,
+        "memory_limit_mb": memory_limit,
+        "disk_gb": disk,
+    }
+
+
+def effective_resource_profile(task: Any) -> dict[str, Any]:
+    """Return the frozen task profile, with legacy snapshots normalized."""
+    profile = getattr(task, "resource_profile", None) or task.template_version.resource_profile
+    snapshot = dict(getattr(task, "resource_profile_snapshot", None) or {})
+
+    def value(name: str, fallback: Any) -> Any:
+        return snapshot[name] if snapshot.get(name) is not None else fallback
+
+    cpu = value("cpu_millicores", profile.cpu_millicores)
+    memory = value("memory_mb", profile.memory_mb)
+    return {
+        "public_id": value("public_id", profile.public_id),
+        "code": value("code", profile.code),
+        "runtime_type": value("runtime_type", profile.runtime_type),
+        "cpu_millicores": cpu,
+        "memory_mb": memory,
+        "cpu_request_millicores": value(
+            "cpu_request_millicores", getattr(profile, "cpu_request_millicores", None) or cpu
+        ),
+        "cpu_limit_millicores": value(
+            "cpu_limit_millicores", getattr(profile, "cpu_limit_millicores", None) or cpu
+        ),
+        "memory_request_mb": value(
+            "memory_request_mb", getattr(profile, "memory_request_mb", None) or memory
+        ),
+        "memory_limit_mb": value(
+            "memory_limit_mb", getattr(profile, "memory_limit_mb", None) or memory
+        ),
+        "disk_gb": value("disk_gb", profile.disk_gb),
+        "network_mode": value("network_mode", profile.network_mode),
+    }
+
+
 @dataclass(frozen=True)
 class ActorContext:
     actor_ref: str
@@ -473,6 +546,10 @@ def create_resource_profile(
     runtime_type: str,
     cpu_millicores: int,
     memory_mb: int,
+    cpu_request_millicores: int | None = None,
+    cpu_limit_millicores: int | None = None,
+    memory_request_mb: int | None = None,
+    memory_limit_mb: int | None = None,
     disk_gb: int,
     network_mode: str,
     cost_minor_per_hour: int,
@@ -480,8 +557,17 @@ def create_resource_profile(
     reason: str,
     context: ActorContext,
 ) -> ResourceProfile:
-    if min(cpu_millicores, memory_mb, disk_gb) <= 0:
-        raise GovernanceValidationError(detail={"resource": "positive_values_required"})
+    profile_data = validate_resource_profile(
+        {
+            "cpu_millicores": cpu_millicores,
+            "memory_mb": memory_mb,
+            "cpu_request_millicores": cpu_request_millicores,
+            "cpu_limit_millicores": cpu_limit_millicores,
+            "memory_request_mb": memory_request_mb,
+            "memory_limit_mb": memory_limit_mb,
+            "disk_gb": disk_gb,
+        }
+    )
     if (
         runtime_type not in RuntimeAdapter.RuntimeType.values
         or network_mode not in ResourceProfile.NetworkMode.values
@@ -494,9 +580,13 @@ def create_resource_profile(
             code=code.strip().upper(),
             name=name.strip(),
             runtime_type=runtime_type,
-            cpu_millicores=cpu_millicores,
-            memory_mb=memory_mb,
-            disk_gb=disk_gb,
+            cpu_millicores=profile_data["cpu_millicores"],
+            memory_mb=profile_data["memory_mb"],
+            cpu_request_millicores=profile_data["cpu_request_millicores"],
+            cpu_limit_millicores=profile_data["cpu_limit_millicores"],
+            memory_request_mb=profile_data["memory_request_mb"],
+            memory_limit_mb=profile_data["memory_limit_mb"],
+            disk_gb=profile_data["disk_gb"],
             network_mode=network_mode,
             cost_minor_per_hour=cost_minor_per_hour,
             currency_code=currency_code.strip().upper(),
@@ -535,12 +625,32 @@ def update_resource_profile(
         "runtime_type",
         "cpu_millicores",
         "memory_mb",
+        "cpu_request_millicores",
+        "cpu_limit_millicores",
+        "memory_request_mb",
+        "memory_limit_mb",
         "disk_gb",
         "network_mode",
         "cost_minor_per_hour",
         "currency_code",
     }
     clean = {key: value for key, value in changes.items() if key in allowed}
+    merged = {field: getattr(profile, field) for field in allowed}
+    merged.update(clean)
+    clean.update(
+        {
+            field: validate_resource_profile(merged)[field]
+            for field in (
+                "cpu_millicores",
+                "memory_mb",
+                "cpu_request_millicores",
+                "cpu_limit_millicores",
+                "memory_request_mb",
+                "memory_limit_mb",
+                "disk_gb",
+            )
+        }
+    )
     clean["change_reason"] = _reason(reason)
     changed = compare_and_swap(
         ResourceProfile,

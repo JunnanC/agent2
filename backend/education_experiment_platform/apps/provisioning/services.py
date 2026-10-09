@@ -19,9 +19,10 @@ from apps.experiments.services import (
     prerequisite_blockers_for_publication,
     transition_task,
 )
+from apps.governance.errors import QuotaExceeded
 from apps.governance.models import QuotaReservation
 from apps.governance.models import RuntimeAdapter as RuntimeAdapterConfig
-from apps.governance.services import release_reservation, reserve_quota
+from apps.governance.services import effective_resource_profile, release_reservation, reserve_quota
 
 from . import events
 from .adapters import RuntimeAdapterFailure, runtime_adapter_for, runtime_for_driver
@@ -35,7 +36,13 @@ from .metrics import (
     RUNTIME_WORKSPACE_START_DURATION,
     is_engine_unavailable,
 )
-from .models import ProvisioningInstance, ProvisioningJob, ProvisioningStageEvent, public_id_field
+from .models import (
+    ProvisioningInstance,
+    ProvisioningJob,
+    ProvisioningStageEvent,
+    RuntimeCapacityReservation,
+    public_id_field,
+)
 from .ports import RuntimeAdapter, RuntimeInventoryItem, RuntimeSpec
 from .selectors import active_job_for_task, jobs_for_task
 
@@ -45,6 +52,133 @@ ACTIVE_JOB_STATUSES = (
     ProvisioningJob.Status.RUNNING,
     ProvisioningJob.Status.RETRY,
 )
+
+
+@transaction.atomic
+def reserve_runtime_capacity(
+    *,
+    reservation_id: str | QuotaReservation,
+    runtime_adapter_id: str,
+    cpu_millicores: int,
+    memory_mb: int,
+) -> RuntimeCapacityReservation | None:
+    """Atomically admit a quota reservation against adapter capacity."""
+    if cpu_millicores <= 0 or memory_mb <= 0:
+        raise ProvisioningConfigurationError(
+            detail={"capacity": "cpu_and_memory_must_be_positive"}
+        )
+    reservation = reservation_id
+    if isinstance(reservation_id, str):
+        reservation = QuotaReservation.objects.select_for_update().get(public_id=reservation_id)
+    else:
+        reservation = QuotaReservation.objects.select_for_update().get(pk=reservation.pk)
+    runtime = RuntimeAdapterConfig.objects.select_for_update().get(public_id=runtime_adapter_id)
+    if reservation.status != QuotaReservation.Status.ACTIVE:
+        raise ProvisioningStateConflict(detail={"reservation": reservation.status})
+    existing = RuntimeCapacityReservation.objects.select_for_update().filter(
+        reservation=reservation
+    ).first()
+    if existing is not None:
+        if existing.status != RuntimeCapacityReservation.Status.ACTIVE:
+            raise ProvisioningStateConflict(detail={"reservation": "capacity_already_released"})
+        if (existing.cpu_millicores, existing.memory_mb) != (cpu_millicores, memory_mb):
+            raise ProvisioningStateConflict(detail={"reservation": "capacity_binding_mismatch"})
+        if existing.runtime_adapter_id != runtime.pk:
+            raise ProvisioningStateConflict(detail={"reservation": "runtime_binding_mismatch"})
+        return existing
+    # Zero-valued capacity is the historical "not reported" marker.
+    if (
+        runtime.capacity_cpu_millicores
+        and runtime.available_cpu_millicores < cpu_millicores
+    ) or (
+        runtime.capacity_memory_mb
+        and runtime.available_memory_mb < memory_mb
+    ):
+        raise QuotaExceeded(
+            detail={
+                "dimension": "runtime_capacity",
+                "available_cpu_millicores": runtime.available_cpu_millicores,
+                "available_memory_mb": runtime.available_memory_mb,
+                "requested_cpu_millicores": cpu_millicores,
+                "requested_memory_mb": memory_mb,
+            }
+        )
+    if runtime.capacity_cpu_millicores or runtime.capacity_memory_mb:
+        changed = compare_and_swap(
+            RuntimeAdapterConfig,
+            pk=runtime.pk,
+            expected_version=runtime.row_version,
+            changes={
+                "available_cpu_millicores": (
+                    runtime.available_cpu_millicores - cpu_millicores
+                    if runtime.capacity_cpu_millicores
+                    else runtime.available_cpu_millicores
+                ),
+                "available_memory_mb": (
+                    runtime.available_memory_mb - memory_mb
+                    if runtime.capacity_memory_mb
+                    else runtime.available_memory_mb
+                ),
+            },
+        )
+        del changed
+    return RuntimeCapacityReservation.objects.create(
+        reservation=reservation,
+        runtime_adapter=runtime,
+        cpu_millicores=cpu_millicores,
+        memory_mb=memory_mb,
+    )
+
+
+@transaction.atomic
+def release_runtime_capacity(
+    *, reservation_id: str | QuotaReservation
+) -> RuntimeCapacityReservation | None:
+    """Release a runtime binding once; repeated calls are no-ops."""
+    reservation = reservation_id
+    if isinstance(reservation_id, str):
+        reservation = QuotaReservation.objects.select_for_update().get(public_id=reservation_id)
+    else:
+        reservation = QuotaReservation.objects.select_for_update().get(pk=reservation.pk)
+    binding = RuntimeCapacityReservation.objects.select_for_update().filter(
+        reservation=reservation
+    ).first()
+    if binding is None or binding.status != RuntimeCapacityReservation.Status.ACTIVE:
+        return binding
+    runtime = RuntimeAdapterConfig.objects.select_for_update().get(pk=binding.runtime_adapter_id)
+    changes: dict[str, int] = {}
+    if runtime.capacity_cpu_millicores:
+        changes["available_cpu_millicores"] = min(
+            runtime.capacity_cpu_millicores,
+            runtime.available_cpu_millicores + binding.cpu_millicores,
+        )
+    if runtime.capacity_memory_mb:
+        changes["available_memory_mb"] = min(
+            runtime.capacity_memory_mb,
+            runtime.available_memory_mb + binding.memory_mb,
+        )
+    if changes:
+        compare_and_swap(
+            RuntimeAdapterConfig,
+            pk=runtime.pk,
+            expected_version=runtime.row_version,
+            changes=changes,
+        )
+    return compare_and_swap(
+        RuntimeCapacityReservation,
+        pk=binding.pk,
+        expected_version=binding.row_version,
+        changes={
+            "status": RuntimeCapacityReservation.Status.RELEASED,
+            "released_at": timezone.now(),
+        },
+    )
+
+
+def _release_reservation(*, reservation_id: str, reason: str, context: Any) -> None:
+    release_runtime_capacity(reservation_id=reservation_id)
+    release_reservation(reservation_id=reservation_id, reason=reason, context=context)
+
 
 logger = logging.getLogger("runtime.provisioning")
 
@@ -115,17 +249,7 @@ def _task_runtime_snapshot(task: ExperimentTask) -> tuple[Any, Any, Any, dict[st
     adapter = task.runtime_adapter or template.runtime_adapter
     image = task.image or template.image
     profile = task.resource_profile or template.resource_profile
-    profile_snapshot = dict(task.resource_profile_snapshot or {})
-    if not profile_snapshot:
-        profile_snapshot = {
-            "public_id": profile.public_id,
-            "code": profile.code,
-            "runtime_type": profile.runtime_type,
-            "cpu_millicores": profile.cpu_millicores,
-            "memory_mb": profile.memory_mb,
-            "disk_gb": profile.disk_gb,
-            "network_mode": profile.network_mode,
-        }
+    profile_snapshot = effective_resource_profile(task)
     return adapter, image, profile, profile_snapshot
 
 
@@ -159,8 +283,10 @@ def _runtime_spec(
         image_repository=task.image_repository or image.repository,
         image_digest=task.image_digest or image.digest,
         resource_profile_id=str(profile_snapshot.get("public_id") or profile.public_id),
-        cpu_millicores=int(profile_snapshot.get("cpu_millicores") or profile.cpu_millicores),
-        memory_mb=int(profile_snapshot.get("memory_mb") or profile.memory_mb),
+        cpu_millicores=int(
+            profile_snapshot.get("cpu_request_millicores") or profile.cpu_millicores
+        ),
+        memory_mb=int(profile_snapshot.get("memory_request_mb") or profile.memory_mb),
         disk_gb=int(profile_snapshot.get("disk_gb") or profile.disk_gb),
         network_policy={
             "mode": profile_snapshot.get("network_mode") or profile.network_mode,
@@ -195,8 +321,10 @@ def _reservation_values(task: ExperimentTask) -> dict[str, int]:
     return {
         "instance_count": 1,
         "start_count": 1,
-        "cpu_millicores": int(profile_snapshot.get("cpu_millicores") or profile.cpu_millicores),
-        "memory_mb": int(profile_snapshot.get("memory_mb") or profile.memory_mb),
+        "cpu_millicores": int(
+            profile_snapshot.get("cpu_request_millicores") or profile.cpu_millicores
+        ),
+        "memory_mb": int(profile_snapshot.get("memory_request_mb") or profile.memory_mb),
         "disk_gb": int(profile_snapshot.get("disk_gb") or profile.disk_gb),
         "object_storage_bytes": 0,
         "agent_tokens": 0,
@@ -250,6 +378,13 @@ def _create_job_and_reservation(
         values=_reservation_values(task),
         expires_at=None,
         context=context,
+    )
+    adapter = _task_runtime_snapshot(task)[0]
+    reserve_runtime_capacity(
+        reservation_id=reservation,
+        runtime_adapter_id=adapter.public_id,
+        cpu_millicores=_reservation_values(task)["cpu_millicores"],
+        memory_mb=_reservation_values(task)["memory_mb"],
     )
     job = ProvisioningJob.objects.create(
         public_id=job_id,
@@ -466,7 +601,7 @@ def cancel_queued_provisioning(
                 "destroyed_at": timezone.now(),
             },
         )
-    release_reservation(
+    _release_reservation(
         reservation_id=job.reservation.public_id,
         reason="queued provisioning cancelled",
         context=context,
@@ -638,7 +773,7 @@ def _mark_failed(job: ProvisioningJob, exc: Exception, context: ActorContext) ->
             changes={"status": ProvisioningInstance.Status.FAILED, "failure_record": failure},
         )
     with suppress(Exception):
-        release_reservation(
+        _release_reservation(
             reservation_id=job.reservation.public_id, reason=error_code, context=context
         )
     task = ExperimentTask.objects.select_for_update().get(pk=job.task_id)
@@ -921,7 +1056,7 @@ def compensate_provisioning(task: CompensationTask) -> None:
                     "destroyed_at": timezone.now(),
                 },
             )
-        release_reservation(
+        _release_reservation(
             reservation_id=job.reservation.public_id,
             reason="provisioning compensation",
             context=context,
@@ -1231,7 +1366,7 @@ def destroy_task_instance(
             .first()
         )
         if job is not None:
-            release_reservation(
+            _release_reservation(
                 reservation_id=job.reservation.public_id,
                 reason="runtime destroyed",
                 context=ActorContext(
