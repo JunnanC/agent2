@@ -160,6 +160,14 @@ class FakeRuntimeAdapter:
     volumes: dict[str, RuntimeResult] = field(default_factory=dict)
     calls: list[tuple[str, str]] = field(default_factory=list)
 
+    def capabilities(self) -> Mapping[str, bool]:
+        return {
+            "image_build": True,
+            "real_container": False,
+            "resource_limits": True,
+            "workspace_access": True,
+        }
+
     def _step(self, stage: str) -> FakeRuntimeFailure | None:
         self.calls.append((stage, "call"))
         if stage in self.timeouts:
@@ -587,6 +595,14 @@ class DockerLocalAdapter(DockerLocalProtocolStub):
             # permission, and version-negotiation failures inside the adapter
             # contract so read-only inventory callers can degrade safely.
             raise RuntimeAdapterFailure("RUNTIME_CLIENT_UNAVAILABLE") from exc
+
+    def capabilities(self) -> Mapping[str, bool]:
+        return {
+            "image_build": False,
+            "real_container": True,
+            "resource_limits": True,
+            "workspace_access": True,
+        }
 
     def _call(self, code: str, operation: Any) -> Any:
         try:
@@ -1867,6 +1883,14 @@ class DockerSwarmAdapter:
             ),
         )
 
+    def capabilities(self) -> Mapping[str, bool]:
+        return {
+            "image_build": False,
+            "real_container": True,
+            "resource_limits": True,
+            "workspace_access": True,
+        }
+
     @staticmethod
     def _safe_name(task_id: str, *, prefix: str = "edu-lab") -> str:
         normalized = NAME_PATTERN.sub("-", task_id.casefold()).strip("-")
@@ -2627,3 +2651,29 @@ def runtime_for_driver(driver: str, *, config_ref: str = "") -> RuntimeAdapter:
         config = configs.get(config_ref, {}) if isinstance(configs, Mapping) else {}
         return DockerSwarmAdapter(config=config)
     raise RuntimeAdapterFailure("RUNTIME_ADAPTER_NOT_IMPLEMENTED", retryable=False)
+
+
+def runtime_adapter_for(code: str) -> RuntimeAdapter:
+    """Resolve the configured runtime mode without exposing driver details to callers."""
+
+    mode = str(getattr(settings, "RUNTIME_MODE", "fake")).strip().lower()
+    clean_code = (code or str(getattr(settings, "RUNTIME_ADAPTER_CODE", ""))).strip()
+    if mode not in {"fake", "local", "swarm"}:
+        raise RuntimeAdapterFailure("RUNTIME_MODE_INVALID", retryable=False)
+    if mode == "fake":
+        return _fake_runtime
+    if not clean_code:
+        raise RuntimeAdapterFailure("RUNTIME_CONFIG_INVALID", retryable=False)
+    configs = getattr(settings, "RUNTIME_ADAPTER_CONFIGS", {})
+    if not isinstance(configs, Mapping) or clean_code not in configs:
+        raise RuntimeAdapterFailure("RUNTIME_CONFIG_INVALID", retryable=False)
+    config = configs[clean_code]
+    if not isinstance(config, Mapping):
+        raise RuntimeAdapterFailure("RUNTIME_CONFIG_INVALID", retryable=False)
+    if mode == "local":
+        adapter = _docker_local_adapters.get(clean_code)
+        if adapter is None:
+            adapter = DockerLocalAdapter(config=config, config_ref=clean_code)
+            _docker_local_adapters[clean_code] = adapter
+        return adapter
+    return DockerSwarmAdapter(config=config)

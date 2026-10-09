@@ -1,6 +1,6 @@
 from unittest.mock import Mock, patch
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from apps.accounts.models import User
 from apps.courses.services import ActorContext
@@ -29,6 +29,7 @@ from ..services import (
     enabled_runtime_inventory,
     execute_provisioning_job,
     retry_provisioning,
+    runtime_inventory,
     runtime_inventory_snapshot,
     start_provisioning,
 )
@@ -335,3 +336,16 @@ class ProvisioningServiceTests(TestCase):
         self.assertEqual(items[0].status, "UNAVAILABLE")
         self.assertEqual(items[0].metadata["adapter_id"], self.adapter.public_id)
         self.assertTrue(items[0].metadata["inventory_unavailable"])
+
+    @override_settings(RUNTIME_MODE="fake", RUNTIME_ADAPTER_CODE="runtime/fake")
+    def test_runtime_inventory_uses_the_explicit_runtime_mode_resolver(self) -> None:
+        RuntimeAdapter.objects.filter(pk=self.adapter.pk).update(
+            code="runtime/fake",
+            driver=RuntimeAdapter.Driver.FAKE,
+        )
+
+        with patch("apps.provisioning.services.runtime_adapter_for") as resolver:
+            resolver.return_value = fake_runtime()
+            runtime_inventory(driver=RuntimeAdapter.Driver.FAKE, config_ref="runtime/fake")
+
+        resolver.assert_called_once_with("runtime/fake")

@@ -24,7 +24,7 @@ from apps.governance.models import RuntimeAdapter as RuntimeAdapterConfig
 from apps.governance.services import release_reservation, reserve_quota
 
 from . import events
-from .adapters import RuntimeAdapterFailure, runtime_for_driver
+from .adapters import RuntimeAdapterFailure, runtime_adapter_for, runtime_for_driver
 from .errors import ProvisioningConfigurationError, ProvisioningStateConflict
 from .metrics import (
     PROVISIONING_DURATION,
@@ -905,6 +905,9 @@ def compensate_provisioning(task: CompensationTask) -> None:
 
 
 def runtime_inventory(*, driver: str = "FAKE", config_ref: str = "") -> list[RuntimeInventoryItem]:
+    configured_code = str(getattr(settings, "RUNTIME_ADAPTER_CODE", "")).strip()
+    if config_ref and config_ref == configured_code:
+        return runtime_adapter_for(config_ref).inventory()
     return runtime_for_driver(driver, config_ref=config_ref).inventory()
 
 

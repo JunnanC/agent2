@@ -14,6 +14,7 @@ from ..adapters import (
     fake_runtime,
     reset_docker_local_protocol_stub,
     reset_fake_runtime,
+    runtime_adapter_for,
     runtime_for_driver,
 )
 from ..ports import RuntimeSpec
@@ -137,6 +138,77 @@ class RuntimeAdapterContractTests(SimpleTestCase):
         self.assertEqual(getattr(local, "config_ref", None), "runtime/local-algorithm")
         self.assertEqual(fake_runtime().calls, [])
         self.assertTrue(callable(getattr(local, "execute_judge", None)))
+
+    @override_settings(RUNTIME_MODE="fake", RUNTIME_ADAPTER_CODE="runtime/fake")
+    def test_fake_mode_resolves_with_capabilities(self) -> None:
+        adapter = runtime_adapter_for("runtime/fake")
+
+        self.assertIs(adapter, fake_runtime())
+        self.assertEqual(
+            adapter.capabilities(),
+            {
+                "image_build": True,
+                "real_container": False,
+                "resource_limits": True,
+                "workspace_access": True,
+            },
+        )
+
+    @override_settings(
+        RUNTIME_MODE="local",
+        RUNTIME_ADAPTER_CODE="runtime/local-docker",
+        RUNTIME_ADAPTER_CONFIGS={"runtime/local-docker": {"runtime_network": "edu-runtime"}},
+    )
+    def test_local_mode_resolves_the_real_local_adapter(self) -> None:
+        with patch(
+            "apps.provisioning.adapters.DockerLocalAdapter._build_client",
+            return_value=object(),
+        ):
+            adapter = runtime_adapter_for("runtime/local-docker")
+
+        self.assertIsInstance(adapter, DockerLocalAdapter)
+        self.assertEqual(adapter.capabilities()["real_container"], True)
+
+    @override_settings(
+        RUNTIME_MODE="swarm",
+        RUNTIME_ADAPTER_CODE="runtime/swarm",
+        RUNTIME_ADAPTER_CONFIGS={"runtime/swarm": {"runtime_network": "edu-runtime"}},
+    )
+    def test_swarm_mode_resolves_the_swarm_adapter(self) -> None:
+        with patch(
+            "apps.provisioning.adapters.DockerSwarmAdapter._build_client",
+            return_value=object(),
+        ):
+            adapter = runtime_adapter_for("runtime/swarm")
+
+        self.assertEqual(type(adapter).__name__, "DockerSwarmAdapter")
+        self.assertEqual(
+            adapter.capabilities(),
+            {
+                "image_build": False,
+                "real_container": True,
+                "resource_limits": True,
+                "workspace_access": True,
+            },
+        )
+
+    @override_settings(RUNTIME_MODE="unknown", RUNTIME_ADAPTER_CODE="runtime/unknown")
+    def test_unknown_mode_is_rejected(self) -> None:
+        with self.assertRaises(RuntimeAdapterFailure) as raised:
+            runtime_adapter_for("runtime/unknown")
+
+        self.assertEqual(raised.exception.code, "RUNTIME_MODE_INVALID")
+        self.assertFalse(raised.exception.retryable)
+
+    @override_settings(
+        RUNTIME_MODE="swarm", RUNTIME_ADAPTER_CODE="runtime/swarm", RUNTIME_ADAPTER_CONFIGS={}
+    )
+    def test_production_mode_requires_adapter_configuration(self) -> None:
+        with self.assertRaises(RuntimeAdapterFailure) as raised:
+            runtime_adapter_for("runtime/swarm")
+
+        self.assertEqual(raised.exception.code, "RUNTIME_CONFIG_INVALID")
+        self.assertFalse(raised.exception.retryable)
 
     def test_local_driver_requires_a_configuration_reference(self) -> None:
         with self.assertRaises(RuntimeAdapterFailure) as raised:
