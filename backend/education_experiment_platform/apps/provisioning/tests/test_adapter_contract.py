@@ -150,9 +150,23 @@ class RuntimeAdapterContractTests(SimpleTestCase):
                 "image_build": True,
                 "real_container": False,
                 "resource_limits": True,
-                "workspace_access": True,
+                "workspace_access": False,
             },
         )
+
+    @override_settings(RUNTIME_MODE="fake", RUNTIME_ADAPTER_CODE="runtime/fake")
+    def test_fake_mode_reports_workspace_access_as_unsupported(self) -> None:
+        adapter = runtime_adapter_for("runtime/fake")
+
+        self.assertFalse(adapter.capabilities()["workspace_access"])
+        with self.assertRaises(RuntimeAdapterFailure) as raised:
+            adapter.capture_workspace(
+                external_id="fake-runtime:1",
+                relative_path="main.py",
+                max_bytes=1024,
+            )
+
+        self.assertEqual(raised.exception.code, "WORKSPACE_CAPTURE_UNSUPPORTED")
 
     @override_settings(
         RUNTIME_MODE="local",

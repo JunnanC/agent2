@@ -36,7 +36,7 @@ from .metrics import (
     is_engine_unavailable,
 )
 from .models import ProvisioningInstance, ProvisioningJob, ProvisioningStageEvent, public_id_field
-from .ports import RuntimeInventoryItem, RuntimeSpec
+from .ports import RuntimeAdapter, RuntimeInventoryItem, RuntimeSpec
 from .selectors import active_job_for_task, jobs_for_task
 
 STAGES: tuple[str, ...] = tuple(ProvisioningJob.Stage.values)
@@ -142,6 +142,7 @@ def _runtime_spec(
             int(getattr(settings, "RUNTIME_DEFAULT_TTL_SECONDS", 14400)),
         ),
     )
+
     network_policy = dict(template.network_policy or {})
     execution_spec = dict(task.execution_spec or {})
     network_policy["mode"] = str(
@@ -172,6 +173,21 @@ def _runtime_spec(
         trace_id=trace_id,
         instance_public_id=instance_public_id,
     )
+
+
+def _runtime_adapter_for_row(
+    *, driver: str, config_ref: str = "", code: str = ""
+) -> RuntimeAdapter:
+    """Use the explicit deployment mode for its selected governance row.
+
+    Historical rows may still name a different driver/configuration, so those
+    continue through the compatibility resolver until they are migrated.
+    """
+
+    configured_code = str(getattr(settings, "RUNTIME_ADAPTER_CODE", "")).strip()
+    if configured_code and code.strip().casefold() == configured_code.casefold():
+        return runtime_adapter_for(configured_code)
+    return runtime_for_driver(driver, config_ref=config_ref)
 
 
 def _reservation_values(task: ExperimentTask) -> dict[str, int]:
@@ -708,7 +724,11 @@ def execute_provisioning_job(*, job_id: str, trace_id: str = "") -> Provisioning
         adapter_row, image, _, _ = _task_runtime_snapshot(job.task)
         adapter_driver = job.task.runtime_adapter_driver or adapter_row.driver
         adapter_config_ref = job.task.runtime_adapter_config_ref or adapter_row.config_ref
-        adapter = runtime_for_driver(adapter_driver, config_ref=adapter_config_ref)
+        adapter = _runtime_adapter_for_row(
+            driver=adapter_driver,
+            config_ref=adapter_config_ref,
+            code=adapter_row.code,
+        )
         result = None
         for stage in STAGES:
             event = _stage_started(job, stage, context)
@@ -873,7 +893,11 @@ def compensate_provisioning(task: CompensationTask) -> None:
         config_ref = instance.runtime_adapter.config_ref if instance is not None else ""
 
     if instance is not None and external_id:
-        adapter = runtime_for_driver(driver, config_ref=config_ref)
+        adapter = _runtime_adapter_for_row(
+            driver=driver,
+            config_ref=config_ref,
+            code=instance.runtime_adapter.code if instance is not None else "",
+        )
         adapter.destroy(external_id, f"destroy:{job.public_id}")
 
     with transaction.atomic():
@@ -905,10 +929,9 @@ def compensate_provisioning(task: CompensationTask) -> None:
 
 
 def runtime_inventory(*, driver: str = "FAKE", config_ref: str = "") -> list[RuntimeInventoryItem]:
-    configured_code = str(getattr(settings, "RUNTIME_ADAPTER_CODE", "")).strip()
-    if config_ref and config_ref == configured_code:
-        return runtime_adapter_for(config_ref).inventory()
-    return runtime_for_driver(driver, config_ref=config_ref).inventory()
+    return _runtime_adapter_for_row(
+        driver=driver, config_ref=config_ref, code=config_ref
+    ).inventory()
 
 
 def enabled_runtime_inventory(
@@ -979,8 +1002,10 @@ def enabled_runtime_resources() -> list[RuntimeInventoryItem]:
     adapters = RuntimeAdapterConfig.objects.filter(status=RuntimeAdapterConfig.Status.ENABLED)
     for adapter_config in adapters.order_by("driver", "code"):
         try:
-            adapter = runtime_for_driver(
-                adapter_config.driver, config_ref=adapter_config.config_ref
+            adapter = _runtime_adapter_for_row(
+                driver=adapter_config.driver,
+                config_ref=adapter_config.config_ref,
+                code=adapter_config.code,
             )
             inventory_resources = getattr(adapter, "inventory_resources", None)
             if not callable(inventory_resources):
@@ -1021,7 +1046,11 @@ def runtime_inventory_snapshot(*, trace_id: str = "") -> dict[str, Any]:
     for config in configs:
         driver = str(config.driver)
         try:
-            adapter = runtime_for_driver(driver, config_ref=config.config_ref)
+            adapter = _runtime_adapter_for_row(
+                driver=driver,
+                config_ref=config.config_ref,
+                code=config.code,
+            )
             health = dict(adapter.health())
             health_status = str(health.get("status", "UNKNOWN"))
             drivers.append({"driver": driver, "code": config.code, "status": health_status})
@@ -1240,7 +1269,11 @@ def destroy_task_instance(
         external_id = instance.external_id or ""
         driver = instance.runtime_adapter.driver
 
-    adapter = runtime_for_driver(driver, config_ref=instance.runtime_adapter.config_ref)
+    adapter = _runtime_adapter_for_row(
+        driver=driver,
+        config_ref=instance.runtime_adapter.config_ref,
+        code=instance.runtime_adapter.code,
+    )
     if external_id:
         # Capture the task-owned Volume before the adapter removes the
         # container and its managed Volume.  FakeRuntime has no storage job.

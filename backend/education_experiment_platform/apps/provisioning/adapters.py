@@ -165,7 +165,7 @@ class FakeRuntimeAdapter:
             "image_build": True,
             "real_container": False,
             "resource_limits": True,
-            "workspace_access": True,
+            "workspace_access": False,
         }
 
     def _step(self, stage: str) -> FakeRuntimeFailure | None:

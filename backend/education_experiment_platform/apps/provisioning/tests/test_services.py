@@ -349,3 +349,17 @@ class ProvisioningServiceTests(TestCase):
             runtime_inventory(driver=RuntimeAdapter.Driver.FAKE, config_ref="runtime/fake")
 
         resolver.assert_called_once_with("runtime/fake")
+
+    @override_settings(RUNTIME_MODE="fake", RUNTIME_ADAPTER_CODE="runtime/fake")
+    def test_provisioning_uses_the_explicit_runtime_mode_resolver(self) -> None:
+        RuntimeAdapter.objects.filter(pk=self.adapter.pk).update(code="runtime/fake")
+        self.task.refresh_from_db()
+        job = self._start()
+
+        with patch(
+            "apps.provisioning.services.runtime_adapter_for", return_value=fake_runtime()
+        ) as resolver:
+            finished = execute_provisioning_job(job_id=job.public_id)
+
+        self.assertEqual(finished.status, ProvisioningJob.Status.PASSED)
+        resolver.assert_called_once_with("runtime/fake")

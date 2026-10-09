@@ -271,7 +271,7 @@ RUNTIME_ADAPTER_CONFIGS = json_env("RUNTIME_ADAPTER_CONFIGS")
 RUNTIME_MODE = env("RUNTIME_MODE", "fake").strip().lower()
 if RUNTIME_MODE not in {"fake", "local", "swarm"}:
     raise RuntimeError("RUNTIME_MODE must be fake, local, or swarm")
-RUNTIME_ADAPTER_CODE = env("RUNTIME_ADAPTER_CODE", "runtime/local-docker")
+RUNTIME_ADAPTER_CODE = env("RUNTIME_ADAPTER_CODE", "runtime/fake")
 LOCAL_RUNTIME_IMAGE = env("LOCAL_RUNTIME_IMAGE", "edu-platform-algorithm-workspace:local")
 LOCAL_RUNTIME_NETWORK = env("LOCAL_RUNTIME_NETWORK", "edu-platform-p14_runtime")
 LOCAL_DOCKER_HOST = env("LOCAL_DOCKER_HOST", "unix:///var/run/docker.sock")
