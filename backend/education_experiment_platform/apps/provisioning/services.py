@@ -268,7 +268,7 @@ def _runtime_spec(
     task: ExperimentTask, *, trace_id: str = "", instance_public_id: str = ""
 ) -> RuntimeSpec:
     template = task.template_version
-    _, image, profile, profile_snapshot = _task_runtime_snapshot(task)
+    _, image, _, profile_snapshot = _task_runtime_snapshot(task)
     deadline = task.effective_deadline or task.publication.window_end
     ttl_seconds = max(
         60,
@@ -282,8 +282,7 @@ def _runtime_spec(
     execution_spec = dict(task.execution_spec or {})
     network_policy["mode"] = str(
         execution_spec.get("network_mode")
-        or profile_snapshot.get("network_mode")
-        or profile.network_mode
+        or profile_snapshot["network_mode"]
     )
     return RuntimeSpec(
         task_id=task.public_id,
@@ -293,14 +292,12 @@ def _runtime_spec(
         image_registry=task.image_registry or image.registry,
         image_repository=task.image_repository or image.repository,
         image_digest=task.image_digest or image.digest,
-        resource_profile_id=str(profile_snapshot.get("public_id") or profile.public_id),
-        cpu_millicores=int(
-            profile_snapshot.get("cpu_request_millicores") or profile.cpu_millicores
-        ),
-        memory_mb=int(profile_snapshot.get("memory_request_mb") or profile.memory_mb),
-        disk_gb=int(profile_snapshot.get("disk_gb") or profile.disk_gb),
+        resource_profile_id=str(profile_snapshot["public_id"]),
+        cpu_millicores=int(profile_snapshot["cpu_request_millicores"]),
+        memory_mb=int(profile_snapshot["memory_request_mb"]),
+        disk_gb=int(profile_snapshot["disk_gb"]),
         network_policy={
-            "mode": profile_snapshot.get("network_mode") or profile.network_mode,
+            "mode": profile_snapshot["network_mode"],
             **network_policy,
         },
         workspace_capabilities=template.workspace_capabilities,
@@ -328,15 +325,13 @@ def _runtime_adapter_for_row(
 
 
 def _reservation_values(task: ExperimentTask) -> dict[str, int]:
-    _, _, profile, profile_snapshot = _task_runtime_snapshot(task)
+    _, _, _, profile_snapshot = _task_runtime_snapshot(task)
     return {
         "instance_count": 1,
         "start_count": 1,
-        "cpu_millicores": int(
-            profile_snapshot.get("cpu_request_millicores") or profile.cpu_millicores
-        ),
-        "memory_mb": int(profile_snapshot.get("memory_request_mb") or profile.memory_mb),
-        "disk_gb": int(profile_snapshot.get("disk_gb") or profile.disk_gb),
+        "cpu_millicores": int(profile_snapshot["cpu_request_millicores"]),
+        "memory_mb": int(profile_snapshot["memory_request_mb"]),
+        "disk_gb": int(profile_snapshot["disk_gb"]),
         "object_storage_bytes": 0,
         "agent_tokens": 0,
         "agent_requests": 0,

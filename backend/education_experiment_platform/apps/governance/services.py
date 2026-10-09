@@ -119,6 +119,12 @@ def effective_resource_profile(task: Any) -> dict[str, Any]:
         if legacy_memory is not None
         else getattr(profile, "memory_limit_mb", None) or memory
     )
+    legacy_disk = snapshot.get("disk_gb")
+    legacy_network_mode = snapshot.get("network_mode")
+    disk = legacy_disk if legacy_disk is not None else profile.disk_gb
+    network_mode = (
+        legacy_network_mode if legacy_network_mode is not None else profile.network_mode
+    )
     return {
         "public_id": value("public_id", profile.public_id),
         "code": value("code", profile.code),
@@ -129,8 +135,8 @@ def effective_resource_profile(task: Any) -> dict[str, Any]:
         "cpu_limit_millicores": value("cpu_limit_millicores", cpu_limit_fallback),
         "memory_request_mb": value("memory_request_mb", memory_request_fallback),
         "memory_limit_mb": value("memory_limit_mb", memory_limit_fallback),
-        "disk_gb": value("disk_gb", profile.disk_gb),
-        "network_mode": value("network_mode", profile.network_mode),
+        "disk_gb": disk,
+        "network_mode": network_mode,
     }
 
 

@@ -184,6 +184,8 @@ class GovernanceServiceTests(TestCase):
                 "public_id": self.profile.public_id,
                 "cpu_millicores": 2000,
                 "memory_mb": 4096,
+                "disk_gb": 20,
+                "network_mode": "DENY_ALL",
             },
         )
         ResourceProfile.objects.filter(pk=self.profile.pk).update(
@@ -193,6 +195,8 @@ class GovernanceServiceTests(TestCase):
             cpu_limit_millicores=8000,
             memory_request_mb=8192,
             memory_limit_mb=16384,
+            disk_gb=80,
+            network_mode="ALLOWLIST",
         )
 
         effective = effective_resource_profile(task)
@@ -201,6 +205,8 @@ class GovernanceServiceTests(TestCase):
         self.assertEqual(effective["cpu_limit_millicores"], 2000)
         self.assertEqual(effective["memory_request_mb"], 4096)
         self.assertEqual(effective["memory_limit_mb"], 4096)
+        self.assertEqual(effective["disk_gb"], 20)
+        self.assertEqual(effective["network_mode"], "DENY_ALL")
 
     @override_settings(RUNTIME_MODE="fake", RUNTIME_ADAPTER_CODE="runtime/governance")
     def test_runtime_health_probe_uses_configured_runtime_resolver(self) -> None:
