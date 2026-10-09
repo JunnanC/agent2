@@ -168,6 +168,26 @@ class FakeRuntimeAdapter:
             "workspace_access": False,
         }
 
+    def build_image(self, *, registry: str, repository: str, tag: str, context: Mapping[str, Any], build_args: Mapping[str, Any]) -> Mapping[str, Any]:
+        failure = self._step("IMAGE_BUILD")
+        if failure:
+            raise failure
+        material = json.dumps({"registry": registry, "repository": repository, "tag": tag, "context": dict(context), "build_args": dict(build_args)}, sort_keys=True).encode()
+        return {"digest": "sha256:" + hashlib.sha256(material).hexdigest(), "logs": "fake image build complete"}
+
+    def resolve_image(self, *, registry: str, repository: str, tag: str) -> Mapping[str, Any]:
+        failure = self._step("IMAGE_RESOLVE")
+        if failure:
+            raise failure
+        digest = hashlib.sha256(f"{registry}/{repository}:{tag}".encode()).hexdigest()
+        return {"digest": "sha256:" + digest, "logs": "fake image resolve complete"}
+
+    def validate_image(self, *, digest: str) -> Mapping[str, Any]:
+        failure = self._step("IMAGE_VALIDATE")
+        if failure:
+            raise failure
+        return {"valid": True, "scan_status": "CLEAN", "digest": digest}
+
     def _step(self, stage: str) -> FakeRuntimeFailure | None:
         self.calls.append((stage, "call"))
         if stage in self.timeouts:

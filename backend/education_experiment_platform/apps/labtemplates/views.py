@@ -17,6 +17,7 @@ from apps.courses.services import ActorContext
 
 from .assets import asset_for_course, complete_asset_upload, create_asset_upload
 from .models import TemplateChapter
+from .models import ExperimentImage
 from .selectors import (
     options_for_course,
     platform_precheck_summary,
@@ -34,6 +35,9 @@ from .serializers import (
     TemplateAssetCreateSerializer,
     TemplateAssetResponseSerializer,
     TemplateAssetUploadResponseSerializer,
+    ExperimentImageCreateSerializer,
+    ExperimentImageListResponseSerializer,
+    ExperimentImageResponseSerializer,
     TemplateChapterListResponseSerializer,
     TemplateChapterResponseSerializer,
     TemplateChapterWriteSerializer,
@@ -55,7 +59,9 @@ from .serializers import (
     task_data,
     template_data,
     version_data,
+    experiment_image_data,
 )
+from .image_services import create_experiment_image, retire_experiment_image
 from .services import (
     clone_version,
     create_chapter,
@@ -74,6 +80,7 @@ from .services import (
     withdraw_version,
 )
 from .tasks import run_template_precheck, scan_template_asset
+from .tasks import prepare_experiment_image_task
 
 IF_MATCH = OpenApiParameter("If-Match", str, OpenApiParameter.HEADER, required=True)
 IDEMPOTENCY_KEY = OpenApiParameter("Idempotency-Key", str, OpenApiParameter.HEADER, required=True)
@@ -133,6 +140,70 @@ class TemplateOptionsView(APIView):
     )
     def get(self, request: HttpRequest, course_id: str) -> Response:
         return _response(request, options_for_course(actor=request.user, course_id=course_id))
+
+
+class ExperimentImageCollectionView(APIView):
+    permission_classes = [IsTeachingPortal]
+
+    @extend_schema(operation_id="teaching_experiment_images_list", responses={200: ExperimentImageListResponseSerializer}, extensions={"x-portals": ["TEACHING"]})
+    def get(self, request: HttpRequest, course_id: str) -> Response:
+        images = ExperimentImage.objects.filter(template_version__template__course__public_id=course_id).select_related("template_version", "image_asset", "build_context_asset").order_by("-created_at")
+        return _response(request, [experiment_image_data(item) for item in images])
+
+    @extend_schema(operation_id="teaching_experiment_images_create", request=ExperimentImageCreateSerializer, responses={201: ExperimentImageResponseSerializer}, parameters=[IDEMPOTENCY_KEY], extensions={"x-portals": ["TEACHING"]})
+    def post(self, request: HttpRequest, course_id: str) -> Response:
+        serializer = ExperimentImageCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        def operation() -> StoredResponse:
+            values = serializer.validated_data
+            version = version_for_course(actor=request.user, course_id=course_id, version_id=values["template_version_id"])
+            image = create_experiment_image(template_version=version, actor=request.user, context=_ctx(request), **values)
+            return StoredResponse(201, _body(request, experiment_image_data(image)), {"ETag": etag_for_version(image.row_version)})
+        return _idempotent(request, payload=serializer.validated_data, operation=operation)
+
+
+class ExperimentImageDetailView(APIView):
+    permission_classes = [IsTeachingPortal]
+
+    @extend_schema(operation_id="teaching_experiment_images_retrieve", responses={200: ExperimentImageResponseSerializer}, extensions={"x-portals": ["TEACHING"]})
+    def get(self, request: HttpRequest, course_id: str, image_id: str) -> Response:
+        version = version_for_course(actor=request.user, course_id=course_id, version_id=ExperimentImage.objects.get(public_id=image_id).template_version.public_id)
+        item = ExperimentImage.objects.select_related("template_version", "image_asset", "build_context_asset").get(public_id=image_id, template_version=version)
+        return _response(request, experiment_image_data(item), etag=item.row_version)
+
+
+class ExperimentImagePrepareView(APIView):
+    permission_classes = [IsTeachingPortal]
+
+    @extend_schema(operation_id="teaching_experiment_images_prepare", request=None, responses={202: ExperimentImageResponseSerializer}, parameters=[IDEMPOTENCY_KEY], extensions={"x-portals": ["TEACHING"]})
+    def post(self, request: HttpRequest, course_id: str, image_id: str) -> Response:
+        item = ExperimentImage.objects.select_related("template_version").get(public_id=image_id)
+        version_for_course(actor=request.user, course_id=course_id, version_id=item.template_version.public_id)
+        trace_id = str(getattr(request, "trace_id", ""))
+        transaction.on_commit(lambda: prepare_experiment_image_task.delay(image_id, trace_id), robust=True)
+        return _response(request, experiment_image_data(item), status=202, etag=item.row_version)
+
+
+class ExperimentImageRetireView(APIView):
+    permission_classes = [IsTeachingPortal]
+
+    @extend_schema(operation_id="teaching_experiment_images_retire", request=None, responses={200: ExperimentImageResponseSerializer}, parameters=[IF_MATCH], extensions={"x-portals": ["TEACHING"]})
+    def post(self, request: HttpRequest, course_id: str, image_id: str) -> Response:
+        item = ExperimentImage.objects.select_related("template_version").get(public_id=image_id)
+        version_for_course(actor=request.user, course_id=course_id, version_id=item.template_version.public_id)
+        item = retire_experiment_image(image_id=image_id, context=_ctx(request))
+        return _response(request, experiment_image_data(item), etag=item.row_version)
+
+
+class ExperimentImageEventsView(APIView):
+    permission_classes = [IsTeachingPortal]
+
+    def get(self, request: HttpRequest, course_id: str, image_id: str) -> Response:
+        from apps.core.models import OutboxEvent
+        item = ExperimentImage.objects.select_related("template_version").get(public_id=image_id)
+        version_for_course(actor=request.user, course_id=course_id, version_id=item.template_version.public_id)
+        events_data = list(OutboxEvent.objects.filter(aggregate_type="experiment_image", aggregate_ref=image_id).order_by("created_at").values("event_type", "payload", "trace_id", "created_at"))
+        return _response(request, events_data)
 
 
 class TemplateListView(APIView):

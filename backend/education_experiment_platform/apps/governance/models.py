@@ -128,6 +128,14 @@ class ImageAsset(GovernanceModel):
         MEDIUM = "MEDIUM"
         HIGH = "HIGH"
 
+    @property
+    def is_ready(self) -> bool:
+        return (
+            self.scan_status == self.ScanStatus.CLEAN
+            and self.approval_status == self.ApprovalStatus.APPROVED
+            and bool(self.digest)
+        )
+
     registry = models.CharField(max_length=255)
     repository = models.CharField(max_length=255)
     display_tag = models.CharField(max_length=128, blank=True, default="")

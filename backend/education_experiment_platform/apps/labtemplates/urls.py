@@ -22,9 +22,19 @@ from .views import (
     TemplateVersionDetailView,
     TemplateVersionListView,
     WithdrawVersionView,
+    ExperimentImageCollectionView,
+    ExperimentImageDetailView,
+    ExperimentImageEventsView,
+    ExperimentImagePrepareView,
+    ExperimentImageRetireView,
 )
 
 urlpatterns = [
+    path("teaching/courses/<str:course_id>/experiment-images", ExperimentImageCollectionView.as_view()),
+    path("teaching/courses/<str:course_id>/experiment-images/<str:image_id>", ExperimentImageDetailView.as_view()),
+    path("teaching/courses/<str:course_id>/experiment-images/<str:image_id>/prepare", ExperimentImagePrepareView.as_view()),
+    path("teaching/courses/<str:course_id>/experiment-images/<str:image_id>/events", ExperimentImageEventsView.as_view()),
+    path("teaching/courses/<str:course_id>/experiment-images/<str:image_id>/retire", ExperimentImageRetireView.as_view()),
     path("teaching/courses/<str:course_id>/template-options", TemplateOptionsView.as_view()),
     path("teaching/courses/<str:course_id>/templates", TemplateListView.as_view()),
     path(

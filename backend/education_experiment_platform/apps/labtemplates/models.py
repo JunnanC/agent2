@@ -308,3 +308,109 @@ class TemplatePrecheckRun(VersionedModel):
             models.Index(fields=("template_version", "created_at"), name="lab_precheck_ver_idx"),
             models.Index(fields=("status", "created_at"), name="lab_precheck_status_idx"),
         ]
+
+
+class ExperimentImage(VersionedModel):
+    class SourceType(models.TextChoices):
+        BUILD_CONTEXT = "BUILD_CONTEXT"
+        EXTERNAL_REFERENCE = "EXTERNAL_REFERENCE"
+
+    class Status(models.TextChoices):
+        QUEUED = "QUEUED"
+        PREPARING = "PREPARING"
+        READY = "READY"
+        FAILED = "FAILED"
+        RETIRED = "RETIRED"
+
+    class ScanStatus(models.TextChoices):
+        PENDING = "PENDING"
+        CLEAN = "CLEAN"
+        FAILED = "FAILED"
+
+    public_id = public_id_field()
+    template_version = models.ForeignKey(
+        TemplateVersion, on_delete=models.PROTECT, related_name="experiment_images"
+    )
+    source_type = models.CharField(max_length=24, choices=SourceType.choices)
+    registry = models.CharField(max_length=255, default="")
+    repository = models.CharField(max_length=255)
+    requested_tag = models.CharField(max_length=128)
+    resolved_digest = models.CharField(max_length=71, blank=True, default="", db_collation="ascii_bin")
+    image_asset = models.OneToOneField(
+        ImageAsset, on_delete=models.PROTECT, null=True, blank=True, related_name="experiment_image"
+    )
+    build_context_asset = models.ForeignKey(
+        ObjectAsset,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="experiment_image_build_contexts",
+    )
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.QUEUED)
+    scan_status = models.CharField(max_length=16, choices=ScanStatus.choices, default=ScanStatus.PENDING)
+    validation_detail = models.JSONField(default=dict)
+    build_args_masked = models.JSONField(default=dict)
+    logs_masked = models.TextField(blank=True, default="")
+    error_code = models.CharField(max_length=64, blank=True, default="")
+    trace_id = models.CharField(max_length=32)
+    created_by = models.ForeignKey(User, on_delete=models.PROTECT, related_name="created_experiment_images")
+
+    class Meta:
+        db_table = "labtemplates_experiment_image"
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(source_type__in=("BUILD_CONTEXT", "EXTERNAL_REFERENCE")),
+                name="lab_exp_image_source_ck",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(status__in=("QUEUED", "PREPARING", "READY", "FAILED", "RETIRED")),
+                name="lab_exp_image_status_ck",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(scan_status__in=("PENDING", "CLEAN", "FAILED")),
+                name="lab_exp_image_scan_ck",
+            ),
+            models.CheckConstraint(
+                condition=(models.Q(source_type="BUILD_CONTEXT", build_context_asset__isnull=False)
+                           | models.Q(source_type="EXTERNAL_REFERENCE", build_context_asset__isnull=True)),
+                name="lab_exp_image_context_ck",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=("template_version", "status"), name="lab_exp_image_ver_idx"),
+            models.Index(fields=("status", "created_at"), name="lab_exp_image_status_idx"),
+        ]
+
+
+class ImageBuildJob(VersionedModel):
+    class Status(models.TextChoices):
+        QUEUED = "QUEUED"
+        RUNNING = "RUNNING"
+        SUCCEEDED = "SUCCEEDED"
+        FAILED = "FAILED"
+
+    public_id = public_id_field()
+    experiment_image = models.ForeignKey(
+        ExperimentImage, on_delete=models.PROTECT, related_name="build_jobs"
+    )
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.QUEUED)
+    attempt_count = models.PositiveIntegerField(default=0)
+    build_args_masked = models.JSONField(default=dict)
+    logs_masked = models.TextField(blank=True, default="")
+    error_code = models.CharField(max_length=64, blank=True, default="")
+    trace_id = models.CharField(max_length=32)
+    started_at = models.DateTimeField(null=True, blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = "labtemplates_image_build_job"
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(status__in=("QUEUED", "RUNNING", "SUCCEEDED", "FAILED")),
+                name="lab_image_job_status_ck",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=("experiment_image", "created_at"), name="lab_image_job_image_idx"),
+            models.Index(fields=("status", "created_at"), name="lab_image_job_status_idx"),
+        ]

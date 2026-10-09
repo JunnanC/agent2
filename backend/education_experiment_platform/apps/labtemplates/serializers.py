@@ -10,6 +10,7 @@ from .models import (
     TemplatePrecheckRun,
     TemplateTask,
     TemplateVersion,
+    ExperimentImage,
 )
 
 
@@ -120,6 +121,45 @@ class TemplateAssetCreateSerializer(serializers.Serializer):
     media_type = serializers.CharField(max_length=255)
     size_bytes = serializers.IntegerField(min_value=1)
     digest_sha256 = serializers.RegexField(r"^[0-9a-fA-F]{64}$")
+
+
+class ExperimentImageCreateSerializer(serializers.Serializer):
+    template_version_id = serializers.CharField(max_length=26)
+    source_type = serializers.ChoiceField(choices=ExperimentImage.SourceType.choices)
+    registry = serializers.CharField(max_length=255, required=False, allow_blank=True)
+    repository = serializers.CharField(max_length=255)
+    requested_tag = serializers.CharField(max_length=128)
+    build_context_asset_id = serializers.CharField(max_length=26, required=False)
+    build_args = serializers.DictField(required=False)
+
+
+class ExperimentImageDataSerializer(serializers.Serializer):
+    public_id = serializers.CharField()
+    template_version_id = serializers.CharField()
+    source_type = serializers.ChoiceField(choices=ExperimentImage.SourceType.choices)
+    registry = serializers.CharField()
+    repository = serializers.CharField()
+    requested_tag = serializers.CharField()
+    resolved_digest = serializers.CharField(allow_blank=True)
+    status = serializers.ChoiceField(choices=ExperimentImage.Status.choices)
+    scan_status = serializers.ChoiceField(choices=ExperimentImage.ScanStatus.choices)
+    image_asset_id = serializers.CharField(allow_null=True)
+    build_context_asset_id = serializers.CharField(allow_null=True)
+    validation_detail = serializers.DictField()
+    build_args = serializers.DictField()
+    logs = serializers.CharField()
+    error_code = serializers.CharField()
+    row_version = serializers.IntegerField()
+
+
+class ExperimentImageResponseSerializer(serializers.Serializer):
+    data = ExperimentImageDataSerializer()
+    meta = serializers.DictField()
+
+
+class ExperimentImageListResponseSerializer(serializers.Serializer):
+    data = ExperimentImageDataSerializer(many=True)
+    meta = serializers.DictField()
 
 
 class TemplateAssetDataSerializer(serializers.Serializer):
@@ -511,5 +551,26 @@ def asset_data(item: object, version: TemplateVersion) -> dict[str, object]:
         "status": item.status,
         "failure_code": item.failure_code,
         "attached": attached,
+        "row_version": item.row_version,
+    }
+
+
+def experiment_image_data(item: ExperimentImage) -> dict[str, object]:
+    return {
+        "public_id": item.public_id,
+        "template_version_id": item.template_version.public_id,
+        "source_type": item.source_type,
+        "registry": item.registry,
+        "repository": item.repository,
+        "requested_tag": item.requested_tag,
+        "resolved_digest": item.resolved_digest,
+        "status": item.status,
+        "scan_status": item.scan_status,
+        "image_asset_id": item.image_asset.public_id if item.image_asset else None,
+        "build_context_asset_id": item.build_context_asset.public_id if item.build_context_asset else None,
+        "validation_detail": item.validation_detail,
+        "build_args": item.build_args_masked,
+        "logs": item.logs_masked,
+        "error_code": item.error_code,
         "row_version": item.row_version,
     }
