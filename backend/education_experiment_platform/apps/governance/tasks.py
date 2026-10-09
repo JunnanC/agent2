@@ -11,8 +11,9 @@ from redis import Redis
 
 from apps.core.audit import append_failure
 from apps.core.models import FailureRecord
-from apps.provisioning.adapters import RuntimeAdapterFailure, runtime_for_driver
+from apps.provisioning.adapters import RuntimeAdapterFailure
 from apps.provisioning.ports import RuntimeSpec
+from apps.provisioning.services import _runtime_adapter_for_row
 
 from .metrics import RUNTIME_ADAPTER_CAPACITY, RUNTIME_ADAPTER_HEALTH
 from .models import QuotaReservation, RuntimeAdapter
@@ -63,8 +64,10 @@ def probe_runtime_adapters(*, trace_id: str = "") -> dict[str, str]:
     for adapter_config in adapters:
         try:
             health = dict(
-                runtime_for_driver(
-                    adapter_config.driver, config_ref=adapter_config.config_ref
+                _runtime_adapter_for_row(
+                    driver=adapter_config.driver,
+                    config_ref=adapter_config.config_ref,
+                    code=adapter_config.code,
                 ).health()
             )
         except RuntimeAdapterFailure:
@@ -176,8 +179,10 @@ def reconcile_runtime_capacity(*, trace_id: str = "") -> dict[str, int]:
                     "RUNTIME_CAPACITY_TEMPLATE_UNAVAILABLE", retryable=False
                 )
             adapter_config, spec = resolved
-            runtime_for_driver(
-                adapter_config.driver, config_ref=adapter_config.config_ref
+            _runtime_adapter_for_row(
+                driver=adapter_config.driver,
+                config_ref=adapter_config.config_ref,
+                code=adapter_config.code,
             ).coordinate_capacity(
                 spec,
                 idempotency_key=f"capacity:{reservation.reservation_key}",
@@ -214,8 +219,10 @@ def reconcile_runtime_capacity(*, trace_id: str = "") -> dict[str, int]:
     for reservation in recent.iterator():
         for adapter_config in adapters:
             try:
-                runtime_for_driver(
-                    adapter_config.driver, config_ref=adapter_config.config_ref
+                _runtime_adapter_for_row(
+                    driver=adapter_config.driver,
+                    config_ref=adapter_config.config_ref,
+                    code=adapter_config.code,
                 ).release_capacity(
                     idempotency_key=f"capacity:{reservation.reservation_key}"
                 )

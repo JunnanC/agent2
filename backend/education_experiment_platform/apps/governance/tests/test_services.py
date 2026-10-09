@@ -1,12 +1,14 @@
 from datetime import timedelta
+from unittest.mock import patch
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.utils import timezone
 
 from apps.core.errors import RowVersionConflict
+from apps.provisioning.adapters import fake_runtime, reset_fake_runtime
 
 from ..errors import GovernanceStateConflict, ImageNotApproved, QuotaExceeded
-from ..models import ImageAsset, QuotaReservation, ResourceProfile
+from ..models import ImageAsset, QuotaReservation, ResourceProfile, RuntimeAdapter
 from ..selectors import resource_summary
 from ..services import (
     ActorContext,
@@ -19,6 +21,7 @@ from ..services import (
     transition_resource_profile,
     update_image_scan,
 )
+from ..tasks import probe_runtime_adapters
 from .helpers import create_governance_admin, create_governance_course, create_governance_teacher
 
 
@@ -115,6 +118,31 @@ class GovernanceServiceTests(TestCase):
             },
             expires_at=timezone.now() + timedelta(hours=1),
             context=ActorContext(self.student.public_id, "USER", "r" * 32),
+        )
+
+    @override_settings(RUNTIME_MODE="fake", RUNTIME_ADAPTER_CODE="runtime/governance")
+    def test_runtime_health_probe_uses_configured_runtime_resolver(self) -> None:
+        RuntimeAdapter.objects.create(
+            code="runtime/governance",
+            name="Governance runtime",
+            runtime_type=RuntimeAdapter.RuntimeType.CONTAINER,
+            driver=RuntimeAdapter.Driver.FAKE,
+            status=RuntimeAdapter.Status.ENABLED,
+            config_ref="",
+            change_reason="test",
+        )
+        reset_fake_runtime()
+
+        with patch(
+            "apps.governance.tasks._runtime_adapter_for_row", return_value=fake_runtime()
+        ) as resolver:
+            result = probe_runtime_adapters.run(trace_id="governance-runtime-test")
+
+        self.assertEqual(result, {"runtime/governance": "HEALTHY"})
+        resolver.assert_called_once_with(
+            driver=RuntimeAdapter.Driver.FAKE,
+            config_ref="",
+            code="runtime/governance",
         )
 
     def test_reservation_uses_platform_course_user_intersection(self) -> None:

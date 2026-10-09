@@ -346,9 +346,39 @@ class ProvisioningServiceTests(TestCase):
 
         with patch("apps.provisioning.services.runtime_adapter_for") as resolver:
             resolver.return_value = fake_runtime()
-            runtime_inventory(driver=RuntimeAdapter.Driver.FAKE, config_ref="runtime/fake")
+            runtime_inventory(
+                driver=RuntimeAdapter.Driver.FAKE,
+                config_ref="runtime/fake",
+                code="runtime/fake",
+            )
 
         resolver.assert_called_once_with("runtime/fake")
+
+    @override_settings(RUNTIME_MODE="fake", RUNTIME_ADAPTER_CODE="runtime/selected")
+    def test_enabled_inventory_preserves_code_when_config_ref_differs(self) -> None:
+        RuntimeAdapter.objects.filter(pk=self.adapter.pk).update(
+            code="runtime/selected", config_ref="legacy-config"
+        )
+
+        with patch(
+            "apps.provisioning.services.runtime_adapter_for", return_value=fake_runtime()
+        ) as resolver:
+            enabled_runtime_inventory()
+
+        resolver.assert_called_once_with("runtime/selected")
+
+    @override_settings(RUNTIME_MODE="fake", RUNTIME_ADAPTER_CODE="runtime/selected")
+    def test_enabled_inventory_preserves_code_when_config_ref_is_empty(self) -> None:
+        RuntimeAdapter.objects.filter(pk=self.adapter.pk).update(
+            code="runtime/selected", config_ref=""
+        )
+
+        with patch(
+            "apps.provisioning.services.runtime_adapter_for", return_value=fake_runtime()
+        ) as resolver:
+            enabled_runtime_inventory()
+
+        resolver.assert_called_once_with("runtime/selected")
 
     @override_settings(RUNTIME_MODE="fake", RUNTIME_ADAPTER_CODE="runtime/fake")
     def test_provisioning_uses_the_explicit_runtime_mode_resolver(self) -> None:

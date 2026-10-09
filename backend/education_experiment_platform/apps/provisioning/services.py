@@ -928,9 +928,11 @@ def compensate_provisioning(task: CompensationTask) -> None:
         )
 
 
-def runtime_inventory(*, driver: str = "FAKE", config_ref: str = "") -> list[RuntimeInventoryItem]:
+def runtime_inventory(
+    *, driver: str = "FAKE", config_ref: str = "", code: str = ""
+) -> list[RuntimeInventoryItem]:
     return _runtime_adapter_for_row(
-        driver=driver, config_ref=config_ref, code=config_ref
+        driver=driver, config_ref=config_ref, code=code
     ).inventory()
 
 
@@ -949,7 +951,9 @@ def enabled_runtime_inventory(
     for adapter_config in adapters.order_by("driver", "code"):
         try:
             items = runtime_inventory(
-                driver=adapter_config.driver, config_ref=adapter_config.config_ref
+                driver=adapter_config.driver,
+                config_ref=adapter_config.config_ref,
+                code=adapter_config.code,
             )
         except Exception as exc:  # noqa: BLE001 - inventory must not break the platform list
             error_code = str(getattr(exc, "code", "RUNTIME_UNAVAILABLE"))[:64]
