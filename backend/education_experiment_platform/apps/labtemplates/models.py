@@ -318,6 +318,7 @@ class ExperimentImage(VersionedModel):
     class Status(models.TextChoices):
         QUEUED = "QUEUED"
         PREPARING = "PREPARING"
+        PENDING_APPROVAL = "PENDING_APPROVAL"
         READY = "READY"
         FAILED = "FAILED"
         RETIRED = "RETIRED"
@@ -335,8 +336,10 @@ class ExperimentImage(VersionedModel):
     registry = models.CharField(max_length=255, default="")
     repository = models.CharField(max_length=255)
     requested_tag = models.CharField(max_length=128)
-    resolved_digest = models.CharField(max_length=71, blank=True, default="", db_collation="ascii_bin")
-    image_asset = models.OneToOneField(
+    resolved_digest = models.CharField(
+        max_length=71, blank=True, default="", db_collation="ascii_bin"
+    )
+    image_asset = models.ForeignKey(
         ImageAsset, on_delete=models.PROTECT, null=True, blank=True, related_name="experiment_image"
     )
     build_context_asset = models.ForeignKey(
@@ -347,13 +350,17 @@ class ExperimentImage(VersionedModel):
         related_name="experiment_image_build_contexts",
     )
     status = models.CharField(max_length=16, choices=Status.choices, default=Status.QUEUED)
-    scan_status = models.CharField(max_length=16, choices=ScanStatus.choices, default=ScanStatus.PENDING)
+    scan_status = models.CharField(
+        max_length=16, choices=ScanStatus.choices, default=ScanStatus.PENDING
+    )
     validation_detail = models.JSONField(default=dict)
     build_args_masked = models.JSONField(default=dict)
     logs_masked = models.TextField(blank=True, default="")
     error_code = models.CharField(max_length=64, blank=True, default="")
     trace_id = models.CharField(max_length=32)
-    created_by = models.ForeignKey(User, on_delete=models.PROTECT, related_name="created_experiment_images")
+    created_by = models.ForeignKey(
+        User, on_delete=models.PROTECT, related_name="created_experiment_images"
+    )
 
     class Meta:
         db_table = "labtemplates_experiment_image"
@@ -363,7 +370,16 @@ class ExperimentImage(VersionedModel):
                 name="lab_exp_image_source_ck",
             ),
             models.CheckConstraint(
-                condition=models.Q(status__in=("QUEUED", "PREPARING", "READY", "FAILED", "RETIRED")),
+                condition=models.Q(
+                    status__in=(
+                        "QUEUED",
+                        "PREPARING",
+                        "PENDING_APPROVAL",
+                        "READY",
+                        "FAILED",
+                        "RETIRED",
+                    )
+                ),
                 name="lab_exp_image_status_ck",
             ),
             models.CheckConstraint(
@@ -371,8 +387,10 @@ class ExperimentImage(VersionedModel):
                 name="lab_exp_image_scan_ck",
             ),
             models.CheckConstraint(
-                condition=(models.Q(source_type="BUILD_CONTEXT", build_context_asset__isnull=False)
-                           | models.Q(source_type="EXTERNAL_REFERENCE", build_context_asset__isnull=True)),
+                condition=(
+                    models.Q(source_type="BUILD_CONTEXT", build_context_asset__isnull=False)
+                    | models.Q(source_type="EXTERNAL_REFERENCE", build_context_asset__isnull=True)
+                ),
                 name="lab_exp_image_context_ck",
             ),
         ]

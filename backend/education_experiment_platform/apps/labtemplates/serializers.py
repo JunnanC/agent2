@@ -5,12 +5,12 @@ from apps.core.models import ObjectAsset
 
 from .models import (
     AutoCheckRule,
+    ExperimentImage,
     Template,
     TemplateChapter,
     TemplatePrecheckRun,
     TemplateTask,
     TemplateVersion,
-    ExperimentImage,
 )
 
 
@@ -155,6 +155,10 @@ class ExperimentImageDataSerializer(serializers.Serializer):
 class ExperimentImageResponseSerializer(serializers.Serializer):
     data = ExperimentImageDataSerializer()
     meta = serializers.DictField()
+
+
+class ExperimentImagePrepareSerializer(serializers.Serializer):
+    build_args = serializers.DictField(required=False)
 
 
 class ExperimentImageListResponseSerializer(serializers.Serializer):
@@ -567,7 +571,9 @@ def experiment_image_data(item: ExperimentImage) -> dict[str, object]:
         "status": item.status,
         "scan_status": item.scan_status,
         "image_asset_id": item.image_asset.public_id if item.image_asset else None,
-        "build_context_asset_id": item.build_context_asset.public_id if item.build_context_asset else None,
+        "build_context_asset_id": item.build_context_asset.public_id
+        if item.build_context_asset
+        else None,
         "validation_detail": item.validation_detail,
         "build_args": item.build_args_masked,
         "logs": item.logs_masked,

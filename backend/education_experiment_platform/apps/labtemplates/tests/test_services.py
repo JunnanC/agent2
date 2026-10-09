@@ -8,14 +8,14 @@ from apps.governance.models import ResourceProfile
 from apps.provisioning.adapters import fake_runtime, reset_fake_runtime
 
 from ..errors import TemplateStateConflict, TemplateValidationError
+from ..image_services import create_experiment_image, prepare_experiment_image
 from ..models import (
     AutoCheckRule,
+    ExperimentImage,
     TemplateChapter,
     TemplatePrecheckRun,
     TemplateVersion,
-    ExperimentImage,
 )
-from ..image_services import create_experiment_image, prepare_experiment_image
 from ..serializers import version_data
 from ..services import (
     build_execution_command,
@@ -49,29 +49,44 @@ class TemplateServiceTests(TestCase):
             actor=owner,
             context=context(owner, "image"),
         )
-        with patch("apps.labtemplates.image_services.runtime_for_driver", return_value=fake_runtime()):
+        with patch(
+            "apps.labtemplates.image_services.runtime_for_driver",
+            return_value=fake_runtime(),
+        ):
             prepared = prepare_experiment_image(image_id=image.public_id)
-        self.assertEqual(prepared.status, ExperimentImage.Status.READY)
+        self.assertEqual(prepared.status, ExperimentImage.Status.PENDING_APPROVAL)
         self.assertTrue(prepared.resolved_digest.startswith("sha256:"))
-        self.assertTrue(prepared.image_asset.is_ready)
+        self.assertFalse(prepared.image_asset.is_ready)
         self.assertIs(prepare_experiment_image(image_id=image.public_id).pk, prepared.pk)
 
     def test_build_context_rejects_unscanned_asset_without_runtime_call(self) -> None:
         owner, _course, _template, version = create_template_version(suffix="image-build")
         context_asset = ObjectAsset.objects.create(
-            bucket="test-assets", object_key="contexts/context.tar", object_version="v1",
-            digest_sha256="c" * 64, size_bytes=1, owner_type="TEMPLATE_VERSION",
-            owner_ref=version.public_id, purpose="BUILD_CONTEXT",
-            scan_status=ObjectAsset.ScanStatus.PENDING, status=ObjectAsset.Status.ACTIVE,
+            bucket="test-assets",
+            object_key="contexts/context.tar",
+            object_version="v1",
+            digest_sha256="c" * 64,
+            size_bytes=1,
+            owner_type="TEMPLATE_VERSION",
+            owner_ref=version.public_id,
+            purpose="BUILD_CONTEXT",
+            scan_status=ObjectAsset.ScanStatus.PENDING,
+            status=ObjectAsset.Status.ACTIVE,
         )
         image = create_experiment_image(
             template_version=version,
             source_type=ExperimentImage.SourceType.BUILD_CONTEXT,
-            repository="labs/build", requested_tag="v1", build_context_asset_id=context_asset.public_id,
-            actor=owner, context=context(owner, "build"),
+            repository="labs/build",
+            requested_tag="v1",
+            build_context_asset_id=context_asset.public_id,
+            actor=owner,
+            context=context(owner, "build"),
         )
         reset_fake_runtime()
-        with patch("apps.labtemplates.image_services.runtime_for_driver", return_value=fake_runtime()):
+        with patch(
+            "apps.labtemplates.image_services.runtime_for_driver",
+            return_value=fake_runtime(),
+        ):
             prepared = prepare_experiment_image(image_id=image.public_id)
         self.assertEqual(prepared.status, ExperimentImage.Status.FAILED)
         self.assertEqual(prepared.error_code, "TEMPLATE_ASSET_NOT_READY")

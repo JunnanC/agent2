@@ -199,7 +199,7 @@ class RuntimeAdapterContractTests(SimpleTestCase):
         self.assertEqual(
             adapter.capabilities(),
             {
-                "image_build": False,
+                "image_build": True,
                 "real_container": True,
                 "resource_limits": True,
                 "workspace_access": True,
@@ -258,9 +258,7 @@ class RuntimeAdapterContractTests(SimpleTestCase):
         self.assertFalse(
             any(item.external_id == "judge-cleanup-1" for item in adapter.inventory_resources())
         )
-        adapter.destroy_resource(
-            f"volume:{created.external_id}", "resource-destroy:volume-cleanup"
-        )
+        adapter.destroy_resource(f"volume:{created.external_id}", "resource-destroy:volume-cleanup")
         self.assertFalse(
             any(item.metadata.get("kind") == "volume" for item in adapter.inventory_resources())
         )
@@ -362,9 +360,7 @@ class FakeDockerEngine:
         return {"Id": container_id}
 
     def start(self, container_id: str) -> None:
-        self.containers_state[container_id]["State"].update(
-            {"Running": True, "Status": "running"}
-        )
+        self.containers_state[container_id]["State"].update({"Running": True, "Status": "running"})
 
     def inspect_container(self, container_id: str) -> dict[str, Any]:
         if container_id not in self.containers_state:
@@ -391,12 +387,10 @@ class FakeDockerEngine:
 
     def put_archive(self, container_id: str, path: str, data: bytes) -> bool:
         self.archives.append(data)
-        self.calls.append(
-            (
-                "put_archive",
-                {"container_id": container_id, "path": path, "size": len(data)},
-            )
-        )
+        self.calls.append((
+            "put_archive",
+            {"container_id": container_id, "path": path, "size": len(data)},
+        ))
         return True
 
     def wait(self, container_id: str, timeout: int | None = None) -> dict[str, int]:

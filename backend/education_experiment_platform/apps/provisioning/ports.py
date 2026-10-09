@@ -75,8 +75,13 @@ class RuntimeAdapter(Protocol):
     def prepare_image(self, spec: RuntimeSpec) -> None: ...
 
     def build_image(
-        self, *, registry: str, repository: str, tag: str,
-        context: Mapping[str, object], build_args: Mapping[str, object]
+        self,
+        *,
+        registry: str,
+        repository: str,
+        tag: str,
+        context: Mapping[str, object],
+        build_args: Mapping[str, object],
     ) -> Mapping[str, object]: ...
 
     def resolve_image(

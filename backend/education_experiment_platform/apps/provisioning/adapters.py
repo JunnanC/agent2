@@ -121,9 +121,7 @@ def _extract_workspace_archive(archive_bytes: bytes, relative_path: str, max_byt
                 if not item.isreg() or item.issym() or item.islnk():
                     raise RuntimeAdapterFailure("WORKSPACE_FILE_INVALID", retryable=False)
             matching = [
-                item
-                for item in members
-                if item.name in {relative_path, f"./{relative_path}"}
+                item for item in members if item.name in {relative_path, f"./{relative_path}"}
             ]
             if len(matching) != 1:
                 raise RuntimeAdapterFailure("WORKSPACE_FILE_MISSING", retryable=False)
@@ -147,6 +145,34 @@ class FakeRuntimeFailure(RuntimeAdapterFailure):
     pass
 
 
+def _docker_image_result(output: Any, client: Any, reference: str) -> Mapping[str, Any]:
+    digest = ""
+    for item in output or ():
+        if isinstance(item, (bytes, bytearray)):
+            try:
+                item = json.loads(bytes(item).decode())
+            except (UnicodeDecodeError, json.JSONDecodeError):
+                continue
+        if isinstance(item, Mapping):
+            aux = item.get("aux")
+            if isinstance(aux, Mapping):
+                digest = str(aux.get("ID") or aux.get("Digest") or digest)
+            digest = str(item.get("digest") or digest)
+    inspected = client.inspect_image(reference)
+    repo_digests = inspected.get("RepoDigests") or [] if isinstance(inspected, Mapping) else []
+    for repo_digest in repo_digests:
+        candidate = str(repo_digest).rsplit("@", 1)[-1]
+        if re.fullmatch(r"sha256:[0-9a-f]{64}", candidate):
+            digest = candidate
+            break
+    if not re.fullmatch(r"sha256:[0-9a-f]{64}", digest):
+        candidate = str(inspected.get("Id", "")) if isinstance(inspected, Mapping) else ""
+        digest = candidate if re.fullmatch(r"sha256:[0-9a-f]{64}", candidate) else ""
+    if not digest:
+        raise RuntimeAdapterFailure("RUNTIME_IMAGE_DIGEST_UNAVAILABLE", retryable=False)
+    return {"digest": digest, "logs": "docker image operation completed"}
+
+
 @dataclass
 class FakeRuntimeAdapter:
     """Deterministic local adapter used by unit tests and non-Swarm Compose runs."""
@@ -168,12 +194,33 @@ class FakeRuntimeAdapter:
             "workspace_access": False,
         }
 
-    def build_image(self, *, registry: str, repository: str, tag: str, context: Mapping[str, Any], build_args: Mapping[str, Any]) -> Mapping[str, Any]:
+    def build_image(
+        self,
+        *,
+        registry: str,
+        repository: str,
+        tag: str,
+        context: Mapping[str, Any],
+        build_args: Mapping[str, Any],
+    ) -> Mapping[str, Any]:
         failure = self._step("IMAGE_BUILD")
         if failure:
             raise failure
-        material = json.dumps({"registry": registry, "repository": repository, "tag": tag, "context": dict(context), "build_args": dict(build_args)}, sort_keys=True).encode()
-        return {"digest": "sha256:" + hashlib.sha256(material).hexdigest(), "logs": "fake image build complete"}
+        material = json.dumps(
+            {
+                "registry": registry,
+                "repository": repository,
+                "tag": tag,
+                "context": {key: value for key, value in context.items() if key != "archive"},
+                "build_args": sorted(build_args),
+            },
+            sort_keys=True,
+            default=str,
+        ).encode()
+        return {
+            "digest": "sha256:" + hashlib.sha256(material).hexdigest(),
+            "logs": "fake image build complete",
+        }
 
     def resolve_image(self, *, registry: str, repository: str, tag: str) -> Mapping[str, Any]:
         failure = self._step("IMAGE_RESOLVE")
@@ -186,7 +233,7 @@ class FakeRuntimeAdapter:
         failure = self._step("IMAGE_VALIDATE")
         if failure:
             raise failure
-        return {"valid": True, "scan_status": "CLEAN", "digest": digest}
+        return {"valid": True, "scan_status": "PENDING", "digest": digest}
 
     def _step(self, stage: str) -> FakeRuntimeFailure | None:
         self.calls.append((stage, "call"))
@@ -618,7 +665,7 @@ class DockerLocalAdapter(DockerLocalProtocolStub):
 
     def capabilities(self) -> Mapping[str, bool]:
         return {
-            "image_build": False,
+            "image_build": True,
             "real_container": True,
             "resource_limits": True,
             "workspace_access": True,
@@ -664,15 +711,12 @@ class DockerLocalAdapter(DockerLocalProtocolStub):
     def _image_ref(self, spec: RuntimeSpec) -> str:
         # A local image is deliberately tag-based: unlike Swarm, the local
         # adapter is used after the image was built into the local Engine.
-        configured = self.config.get("image") or getattr(
-            settings, "LOCAL_RUNTIME_IMAGE", ""
-        )
+        configured = self.config.get("image") or getattr(settings, "LOCAL_RUNTIME_IMAGE", "")
         return str(configured) or spec.image_ref
 
     def _network_name(self) -> str:
         return str(
-            self.config.get("runtime_network")
-            or getattr(settings, "LOCAL_RUNTIME_NETWORK", "")
+            self.config.get("runtime_network") or getattr(settings, "LOCAL_RUNTIME_NETWORK", "")
         )
 
     def _network_id(self) -> str:
@@ -818,6 +862,46 @@ class DockerLocalAdapter(DockerLocalProtocolStub):
         image = self._image_ref(spec)
         self._call("RUNTIME_IMAGE_QUERY_FAILED", lambda: self.client.inspect_image(image))
 
+    def build_image(
+        self,
+        *,
+        registry: str,
+        repository: str,
+        tag: str,
+        context: Mapping[str, Any],
+        build_args: Mapping[str, Any],
+    ) -> Mapping[str, Any]:
+        archive = context.get("archive")
+        if not isinstance(archive, (bytes, bytearray)):
+            raise RuntimeAdapterFailure("RUNTIME_IMAGE_CONTEXT_UNAVAILABLE", retryable=False)
+        reference = f"{registry.rstrip('/')}/{repository.lstrip('/')}:{tag}"
+        output = self._call(
+            "RUNTIME_IMAGE_BUILD_FAILED",
+            lambda: self.client.build(
+                fileobj=io.BytesIO(bytes(archive)),
+                custom_context=True,
+                encoding="gzip",
+                tag=reference,
+                buildargs=dict(build_args),
+                rm=True,
+                decode=True,
+            ),
+        )
+        return _docker_image_result(output, self.client, reference)
+
+    def resolve_image(self, *, registry: str, repository: str, tag: str) -> Mapping[str, Any]:
+        reference = f"{registry.rstrip('/')}/{repository.lstrip('/')}:{tag}"
+        self._call("RUNTIME_IMAGE_PULL_FAILED", lambda: self.client.pull(reference))
+        return _docker_image_result((), self.client, reference)
+
+    def validate_image(self, *, digest: str) -> Mapping[str, Any]:
+        inspected = self._call(
+            "RUNTIME_IMAGE_VALIDATE_FAILED", lambda: self.client.inspect_image(digest)
+        )
+        if not inspected:
+            raise RuntimeAdapterFailure("RUNTIME_IMAGE_VALIDATE_FAILED", retryable=False)
+        return {"valid": True, "digest": digest, "scan_status": "PENDING"}
+
     def attach_network(self, spec: RuntimeSpec) -> None:
         self._network_id()
 
@@ -936,9 +1020,7 @@ class DockerLocalAdapter(DockerLocalProtocolStub):
             network_id = self._network_id()
             endpoint_config = self._call(
                 "RUNTIME_NETWORK_CONFIG_FAILED",
-                lambda: self.client.create_endpoint_config(
-                    aliases=[f"tasks.{container_name}"]
-                ),
+                lambda: self.client.create_endpoint_config(aliases=[f"tasks.{container_name}"]),
             )
             networking_config = self._call(
                 "RUNTIME_NETWORK_CONFIG_FAILED",
@@ -1038,9 +1120,7 @@ class DockerLocalAdapter(DockerLocalProtocolStub):
                 return "FAILED"
             if state.get("Running"):
                 health_value = state.get("Health")
-                health = (
-                    dict(health_value) if isinstance(health_value, Mapping) else {}
-                )
+                health = dict(health_value) if isinstance(health_value, Mapping) else {}
                 health_status = str(health.get("Status", "")).casefold()
                 if health_status == "unhealthy":
                     raise RuntimeAdapterFailure("RUNTIME_HEALTH_FAILED")
@@ -1137,10 +1217,7 @@ class DockerLocalAdapter(DockerLocalProtocolStub):
             command = [
                 "python",
                 "-c",
-                (
-                    "import os; "
-                    f"os.replace('/workspace/{temporary}', '/workspace/{path}')"
-                ),
+                (f"import os; os.replace('/workspace/{temporary}', '/workspace/{path}')"),
             ]
             self._exec(external_id, command)
             artifact = self.capture_workspace(
@@ -1270,9 +1347,7 @@ class DockerLocalAdapter(DockerLocalProtocolStub):
             "RUNTIME_CONTAINER_QUERY_FAILED",
             lambda: self.client.containers(
                 all=True,
-                filters={
-                    "label": [f"{MANAGED_LABEL}=true", f"{KIND_LABEL}={RUNTIME_KIND}"]
-                },
+                filters={"label": [f"{MANAGED_LABEL}=true", f"{KIND_LABEL}={RUNTIME_KIND}"]},
             ),
         )
         result: list[RuntimeInventoryItem] = []
@@ -1378,7 +1453,7 @@ class DockerLocalAdapter(DockerLocalProtocolStub):
         runner_command = ["python", f"/judge/{command[1]}"]
         encoded_command = json.dumps(runner_command, ensure_ascii=True)
         encoded_inputs = json.dumps(case_inputs, ensure_ascii=True)
-        return f'''import json, os, subprocess, time
+        return f"""import json, os, subprocess, time
 
 COMMAND = {encoded_command}
 CASE_INPUTS = {encoded_inputs}
@@ -1439,7 +1514,7 @@ print(
         ensure_ascii=True,
     )
 )
-'''.encode()
+""".encode()
 
     def _stage_judge_files(
         self,
@@ -1476,9 +1551,7 @@ print(
                 or existing_labels.get(KIND_LABEL) != "volume"
                 or existing_labels.get("edu.platform.judge") != resource_id
             ):
-                raise RuntimeAdapterFailure(
-                    "RUNTIME_RESOURCE_NOT_MANAGED", retryable=False
-                )
+                raise RuntimeAdapterFailure("RUNTIME_RESOURCE_NOT_MANAGED", retryable=False)
             self._call(
                 "RUNTIME_RESOURCE_DESTROY_FAILED",
                 lambda: self.client.remove_volume(volume_name, force=True),
@@ -1494,13 +1567,8 @@ print(
             lambda: self.client.inspect_volume(volume_name),
         )
         actual_labels = dict(inspected_volume.get("Labels") or {})
-        if (
-            actual_labels.get(MANAGED_LABEL) != "true"
-            or actual_labels.get(KIND_LABEL) != "volume"
-        ):
-            raise RuntimeAdapterFailure(
-                "RUNTIME_RESOURCE_NOT_MANAGED", retryable=False
-            )
+        if actual_labels.get(MANAGED_LABEL) != "true" or actual_labels.get(KIND_LABEL) != "volume":
+            raise RuntimeAdapterFailure("RUNTIME_RESOURCE_NOT_MANAGED", retryable=False)
 
         stage_id = ""
         stage_labels = self._labels(
@@ -1509,12 +1577,10 @@ print(
             external_id=resource_id,
             expires_at=expires_at,
         )
-        archive = self._archive(
-            {
-                "runner.py": self._runner_source(command, case_inputs),
-                command[1]: source,
-            }
-        )
+        archive = self._archive({
+            "runner.py": self._runner_source(command, case_inputs),
+            command[1]: source,
+        })
         staged_successfully = False
         try:
             stage_host_config = self._host_config(
@@ -1625,26 +1691,22 @@ print(
             self._call("RUNTIME_JUDGE_START_FAILED", lambda: self.client.start(container_id))
             wait_result = self._call(
                 "RUNTIME_JUDGE_WAIT_FAILED",
-                lambda: self.client.wait(
-                    container_id, timeout=max(1, int(timeout_seconds) + 2)
-                ),
+                lambda: self.client.wait(container_id, timeout=max(1, int(timeout_seconds) + 2)),
             )
             status_code = (
-                int(wait_result.get("StatusCode", 1))
-                if isinstance(wait_result, Mapping)
-                else 1
+                int(wait_result.get("StatusCode", 1)) if isinstance(wait_result, Mapping) else 1
             )
             inspected = self._call(
                 "RUNTIME_JUDGE_QUERY_FAILED",
                 lambda: self.client.inspect_container(container_id),
             )
             state = dict(inspected.get("State") or {})
-            stdout = self.client.logs(
-                container_id, stdout=True, stderr=False
-            ).decode(errors="replace")
-            stderr = self.client.logs(
-                container_id, stdout=False, stderr=True
-            ).decode(errors="replace")
+            stdout = self.client.logs(container_id, stdout=True, stderr=False).decode(
+                errors="replace"
+            )
+            stderr = self.client.logs(container_id, stdout=False, stderr=True).decode(
+                errors="replace"
+            )
             if bool(state.get("OOMKilled")):
                 return RuntimeExecutionResult(
                     status="RESOURCE_EXCEEDED",
@@ -1826,9 +1888,7 @@ print(
         volumes = self._call(
             "RUNTIME_RESOURCE_QUERY_FAILED",
             lambda: self.client.volumes(
-                filters={
-                    "label": [f"{MANAGED_LABEL}=true", f"{KIND_LABEL}=volume"]
-                }
+                filters={"label": [f"{MANAGED_LABEL}=true", f"{KIND_LABEL}=volume"]}
             ),
         )
         for volume in (volumes.get("Volumes") or []) if isinstance(volumes, Mapping) else []:
@@ -1905,7 +1965,7 @@ class DockerSwarmAdapter:
 
     def capabilities(self) -> Mapping[str, bool]:
         return {
-            "image_build": False,
+            "image_build": True,
             "real_container": True,
             "resource_limits": True,
             "workspace_access": True,
@@ -1998,8 +2058,10 @@ class DockerSwarmAdapter:
     def preflight(self, spec: RuntimeSpec) -> RuntimeResult:
         if spec.runtime_type != "CONTAINER":
             raise RuntimeAdapterFailure("RUNTIME_TYPE_UNSUPPORTED", retryable=False)
-        if not spec.image_registry or not spec.image_repository or not spec.image_digest.startswith(
-            "sha256:"
+        if (
+            not spec.image_registry
+            or not spec.image_repository
+            or not spec.image_digest.startswith("sha256:")
         ):
             raise RuntimeAdapterFailure("RUNTIME_IMAGE_REFERENCE_INVALID", retryable=False)
         if not 1 <= spec.workspace_port <= 65535 or not spec.healthcheck_path.startswith("/"):
@@ -2018,6 +2080,46 @@ class DockerSwarmAdapter:
         if bool(self.config.get("skip_manager_pull", False)):
             return
         self._call("RUNTIME_IMAGE_PULL_FAILED", lambda: self.client.pull(spec.image_ref))
+
+    def build_image(
+        self,
+        *,
+        registry: str,
+        repository: str,
+        tag: str,
+        context: Mapping[str, Any],
+        build_args: Mapping[str, Any],
+    ) -> Mapping[str, Any]:
+        archive = context.get("archive")
+        if not isinstance(archive, (bytes, bytearray)):
+            raise RuntimeAdapterFailure("RUNTIME_IMAGE_CONTEXT_UNAVAILABLE", retryable=False)
+        reference = f"{registry.rstrip('/')}/{repository.lstrip('/')}:{tag}"
+        output = self._call(
+            "RUNTIME_IMAGE_BUILD_FAILED",
+            lambda: self.client.build(
+                fileobj=io.BytesIO(bytes(archive)),
+                custom_context=True,
+                encoding="gzip",
+                tag=reference,
+                buildargs=dict(build_args),
+                rm=True,
+                decode=True,
+            ),
+        )
+        return _docker_image_result(output, self.client, reference)
+
+    def resolve_image(self, *, registry: str, repository: str, tag: str) -> Mapping[str, Any]:
+        reference = f"{registry.rstrip('/')}/{repository.lstrip('/')}:{tag}"
+        self._call("RUNTIME_IMAGE_PULL_FAILED", lambda: self.client.pull(reference))
+        return _docker_image_result((), self.client, reference)
+
+    def validate_image(self, *, digest: str) -> Mapping[str, Any]:
+        inspected = self._call(
+            "RUNTIME_IMAGE_VALIDATE_FAILED", lambda: self.client.inspect_image(digest)
+        )
+        if not inspected:
+            raise RuntimeAdapterFailure("RUNTIME_IMAGE_VALIDATE_FAILED", retryable=False)
+        return {"valid": True, "digest": digest, "scan_status": "PENDING"}
 
     def attach_network(self, spec: RuntimeSpec) -> None:
         self._networks(spec)
@@ -2217,9 +2319,7 @@ class DockerSwarmAdapter:
         return "CREATING"
 
     def status(self, external_id: str) -> str:
-        timeout = _config_int(
-            self.config.get("boot_timeout", settings.SWARM_BOOT_TIMEOUT_SECONDS)
-        )
+        timeout = _config_int(self.config.get("boot_timeout", settings.SWARM_BOOT_TIMEOUT_SECONDS))
         poll_interval = _config_float(
             self.config.get("poll_interval", settings.SWARM_POLL_INTERVAL_SECONDS)
         )
@@ -2310,9 +2410,7 @@ class DockerSwarmAdapter:
         services = self._call(
             "RUNTIME_SERVICE_QUERY_FAILED",
             lambda: self.client.services(
-                filters={
-                    "label": [f"{MANAGED_LABEL}=true", f"{KIND_LABEL}={RUNTIME_KIND}"]
-                }
+                filters={"label": [f"{MANAGED_LABEL}=true", f"{KIND_LABEL}={RUNTIME_KIND}"]}
             ),
         )
         result: list[RuntimeInventoryItem] = []
@@ -2357,10 +2455,13 @@ class DockerSwarmAdapter:
                 if node.get("Status", {}).get("State", "ready") == "ready"
                 and node.get("Spec", {}).get("Availability", "active") == "active"
             ]
-            cpu = sum(
-                int(node.get("Description", {}).get("Resources", {}).get("NanoCPUs", 0))
-                for node in nodes
-            ) // 1_000_000
+            cpu = (
+                sum(
+                    int(node.get("Description", {}).get("Resources", {}).get("NanoCPUs", 0))
+                    for node in nodes
+                )
+                // 1_000_000
+            )
             memory = sum(
                 int(node.get("Description", {}).get("Resources", {}).get("MemoryBytes", 0))
                 for node in nodes
