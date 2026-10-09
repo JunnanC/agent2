@@ -53,3 +53,11 @@ Implemented and committed as `feat: add versioned experiment chapters and tasks`
 - Added OpenAPI response serializers/declarations and API coverage for ETags, missing preconditions, and missing chapter mapping.
 
 Review-round verification: `21 passed`; Ruff clean; Django system check clean; migration drift check clean.
+
+## Review Round 2 Fixes
+
+- Added the missing `@extend_schema` declaration to task creation, including request/response serializers, `If-Match` and `Idempotency-Key`, and teaching portal metadata.
+- Version cloning now preserves the source execution specification while retaining the existing image/manual/test asset safety semantics.
+- Added regression coverage proving the clone retains its execution entrypoint and passes the existing execution-spec validation/command path.
+
+Review-round verification: `21 passed`; Ruff clean; Django system check clean; migration drift check clean; diff check clean.

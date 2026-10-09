@@ -559,6 +559,13 @@ class TemplateTaskCollectionView(APIView):
             [task_data(task, version) for task in chapter.tasks.all().order_by("sort_order")],
         )
 
+    @extend_schema(
+        operation_id="teaching_template_tasks_create",
+        request=TemplateTaskWriteSerializer,
+        responses={201: TemplateTaskResponseSerializer},
+        parameters=[IF_MATCH, IDEMPOTENCY_KEY],
+        extensions={"x-portals": ["TEACHING"]},
+    )
     def post(self, request: HttpRequest, course_id: str, chapter_id: str) -> Response:
         if not TemplateChapter.objects.filter(
             public_id=chapter_id, template_version__template__course__public_id=course_id

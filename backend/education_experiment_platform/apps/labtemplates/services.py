@@ -1524,7 +1524,7 @@ def clone_version(
         dependencies=source.dependencies,
         # TESTS assets are owned by the source version and cannot be reused by
         # a new mutable version; the clone must choose a new scanned asset.
-        execution_spec={},
+        execution_spec=source.execution_spec,
         network_policy=source.network_policy,
         workspace_capabilities=source.workspace_capabilities,
         material_refs=source.material_refs,

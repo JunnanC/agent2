@@ -351,6 +351,8 @@ class TemplateServiceTests(TestCase):
         self.assertEqual(clone.status, TemplateVersion.Status.DRAFT)
         self.assertIsNone(clone.spec_digest)
         self.assertNotEqual(clone.public_id, published.public_id)
+        self.assertEqual(clone.execution_spec["entrypoint"], published.execution_spec["entrypoint"])
+        self.assertEqual(build_execution_command(clone.execution_spec), ["python", "main.py"])
 
     def test_invalid_schema_records_exact_failed_stage(self) -> None:
         owner, course, _template, version = create_template_version(suffix="schema")
