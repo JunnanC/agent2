@@ -22,6 +22,7 @@ from .errors import (
 )
 from .metrics import COURSE_ENROLLMENT_DECISIONS_TOTAL
 from .models import (
+    AcademicTerm,
     Course,
     CourseStaff,
     CourseStaffEvent,
@@ -38,6 +39,10 @@ from .ports import (
     run_enrollment_activation_handlers,
 )
 from .selectors import require_course_capability, require_owner
+
+
+def current_academic_term() -> AcademicTerm:
+    return AcademicTerm.objects.get(is_current=True)
 
 
 @dataclass(frozen=True)
@@ -196,12 +201,25 @@ def create_course(
     actor = User.objects.select_for_update().get(pk=actor.pk)
     _active_teacher(actor)
     try:
+        term = current_academic_term()
+    except AcademicTerm.DoesNotExist:
+        now = timezone.now()
+        term = AcademicTerm.objects.create(
+            code="LEGACY-CURRENT",
+            name="Legacy Current Term",
+            starts_at=now,
+            ends_at=now.replace(year=now.year + 1),
+            status=AcademicTerm.Status.CURRENT,
+            is_current=True,
+        )
+    try:
         course = Course.objects.create(
             code=code.strip().upper(),
             title=title.strip(),
             summary=summary.strip(),
             description=description.strip(),
             owner=actor,
+            term=term,
             visibility=visibility,
             enrollment_mode=enrollment_mode,
             capacity=capacity,

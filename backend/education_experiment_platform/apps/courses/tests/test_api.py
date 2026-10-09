@@ -2,10 +2,12 @@ from unittest.mock import patch
 
 import yaml
 from django.test import Client, TestCase
+from django.utils import timezone
 
 from apps.accounts.tests.helpers import create_user, grant_admin, grant_teacher
 
 from ..models import Course, Enrollment
+from ..services import current_academic_term
 
 PROXY_HEADERS = {
     "HTTP_X_PROXY_CONTEXT": "ingress-v1",
@@ -34,6 +36,7 @@ class CourseApiTests(TestCase):
             password=self.password,
         )
         grant_admin(self.admin)
+        self.term = current_academic_term()
 
     def _login(self, client: Client, *, portal: str, identifier: str) -> str:
         client.get(
@@ -133,6 +136,49 @@ class CourseApiTests(TestCase):
         self.assertEqual(replay.status_code, 201)
         self.assertEqual(replay["X-Idempotent-Replayed"], "true")
         self.assertEqual(Enrollment.objects.count(), 1)
+
+    def test_context_returns_current_term_and_role_aware_courses(self) -> None:
+        teacher_client = Client(enforce_csrf_checks=True)
+        teacher_csrf = self._login(
+            teacher_client, portal="TEACHING", identifier=self.teacher.email
+        )
+        course = self._create_and_publish(teacher_client, teacher_csrf)
+        Course.objects.filter(public_id=course["public_id"]).update(term=self.term)
+
+        response = teacher_client.get(
+            "/api/v2/context", HTTP_X_PORTAL="TEACHING", **PROXY_HEADERS
+        )
+
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(response.json()["data"]["user_role"], "TEACHER")
+        self.assertEqual(response.json()["data"]["current_term"]["code"], self.term.code)
+        self.assertEqual(response.json()["data"]["courses"][0]["staff_role"], "OWNER")
+        self.assertEqual(
+            response.json()["data"]["courses"][0]["course_id"], course["public_id"]
+        )
+        self.assertEqual(response.json()["data"]["courses"][0]["code"], course["code"])
+
+        Enrollment.objects.create(
+            course=Course.objects.get(public_id=course["public_id"]),
+            student=self.student,
+            cycle_no=1,
+            status=Enrollment.Status.ACTIVE,
+            applied_at=timezone.now(),
+        )
+        student_client = Client(enforce_csrf_checks=True)
+        self._login(student_client, portal="USER", identifier=self.student.email)
+        student_context = student_client.get(
+            "/api/v2/context", HTTP_X_PORTAL="USER", **PROXY_HEADERS
+        )
+        self.assertEqual(student_context.status_code, 200, student_context.content)
+        self.assertEqual(student_context.json()["data"]["user_role"], "STUDENT")
+        self.assertEqual(
+            student_context.json()["data"]["courses"][0]["enrollment_role"], "STUDENT"
+        )
+
+    def test_context_requires_authentication(self) -> None:
+        response = Client().get("/api/v2/context", HTTP_X_PORTAL="USER", **PROXY_HEADERS)
+        self.assertIn(response.status_code, (401, 403))
 
     def test_platform_freeze_shell_never_changes_course(self) -> None:
         teacher_client = Client(enforce_csrf_checks=True)

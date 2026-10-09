@@ -1,14 +1,39 @@
 from django.db import IntegrityError, transaction
+from datetime import timedelta
+
 from django.test import TestCase
 from django.utils import timezone
 
 from apps.core.errors import ImmutableRecordError
 
-from ..models import CourseStaff, CourseStaffEvent, Enrollment
+from ..models import AcademicTerm, Course, CourseStaff, CourseStaffEvent, Enrollment
 from .helpers import create_draft_course, create_teacher
 
 
 class CourseModelTests(TestCase):
+    def test_only_one_academic_term_can_be_current(self) -> None:
+        self.assertEqual(AcademicTerm.objects.filter(is_current=True).count(), 1)
+
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            AcademicTerm.objects.create(
+                code="2026-FALL",
+                name="Fall 2026",
+                starts_at=timezone.now(),
+                ends_at=timezone.now() + timedelta(days=180),
+                status=AcademicTerm.Status.CURRENT,
+                is_current=True,
+            )
+
+    def test_course_requires_an_academic_term(self) -> None:
+        owner = create_teacher()
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            Course.objects.create(
+                code="UNTIMED-COURSE",
+                title="Untimed Course",
+                owner=owner,
+                term=None,
+            )
+
     def test_course_has_exactly_one_active_owner_slot(self) -> None:
         owner = create_teacher()
         second = create_teacher(suffix="second")

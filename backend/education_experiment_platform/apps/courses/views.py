@@ -5,6 +5,7 @@ from typing import Any
 from django.conf import settings
 from django.http import HttpRequest
 from drf_spectacular.utils import extend_schema
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -20,9 +21,13 @@ from apps.core.pagination import PageSpec
 from .errors import FeatureNotAvailable
 from .models import CourseStaff, CourseStaffGrant, Enrollment
 from .selectors import (
+    active_enrollment,
+    active_staff,
     paged_courses,
     paged_enrollments,
     require_owner,
+    student_courses_for_term,
+    teacher_courses_for_term,
     visible_course,
     visible_enrollment,
 )
@@ -149,6 +154,56 @@ def _idempotent_response(
 
 def _page_spec(request: HttpRequest) -> PageSpec:
     return PageSpec.parse(request.GET.get("page", 1), request.GET.get("page_size", 20))
+
+
+class ContextView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(operation_id="context_retrieve", tags=["context"])
+    def get(self, request: HttpRequest) -> Response:
+        from .services import current_academic_term
+
+        term = current_academic_term()
+        courses: dict[int, dict[str, object]] = {}
+        for course in teacher_courses_for_term(request.user, "current"):
+            staff = active_staff(course=course, actor=request.user)
+            if staff is None:
+                continue
+            courses[course.pk] = {
+                "course_id": course.public_id,
+                "code": course.code,
+                "title": course.title,
+                "status": course.status,
+                "staff_role": staff.role,
+            }
+        for course in student_courses_for_term(request.user, "current"):
+            enrollment = active_enrollment(course=course, student=request.user)
+            if enrollment is None:
+                continue
+            courses.setdefault(
+                course.pk,
+                {
+                    "course_id": course.public_id,
+                    "code": course.code,
+                    "title": course.title,
+                    "status": course.status,
+                },
+            )["enrollment_role"] = "STUDENT"
+        role = {
+            "TEACHING": "TEACHER",
+            "USER": "STUDENT",
+            "PLATFORM": "PLATFORM_ADMIN",
+        }.get(str(getattr(request, "portal", "")), "STUDENT")
+        return _response(request, {
+            "user_role": role,
+            "current_term": {
+                "id": term.public_id,
+                "code": term.code,
+                "name": term.name,
+                "status": term.status,
+            },
+            "courses": list(courses.values()),
+        })
 
 
 class PublicCourseListView(APIView):

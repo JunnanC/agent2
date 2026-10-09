@@ -1,4 +1,5 @@
 from django.test import TestCase
+from django.utils import timezone
 
 from apps.accounts.models import TeacherQualification
 from apps.accounts.services import ActorContext as AccountActorContext
@@ -15,7 +16,12 @@ from ..errors import (
 )
 from ..models import Course, CourseStaff, CourseStaffGrant, Enrollment, EnrollmentEvent
 from ..ports import Blocker, clear_blocker_providers, register_enrollment_blocker
-from ..selectors import has_course_capability
+from ..selectors import (
+    has_course_capability,
+    student_courses_for_term,
+    teacher_courses_for_term,
+)
+from ..services import current_academic_term
 from ..services import (
     ActorContext,
     apply_for_course,
@@ -37,6 +43,30 @@ class CourseServiceTests(TestCase):
 
     def tearDown(self) -> None:
         clear_blocker_providers()
+
+    def test_current_academic_term_and_term_course_selectors_filter_active_relations(self) -> None:
+        term = current_academic_term()
+        Course.objects.filter(pk=self.course.pk).update(term=term)
+        self.course.refresh_from_db()
+        self.assertEqual(list(teacher_courses_for_term(self.owner, "current")), [self.course])
+        student = create_user(email="term-student@example.edu", username="term-student")
+        active = Enrollment.objects.create(
+            course=self.course,
+            student=student,
+            cycle_no=1,
+            status=Enrollment.Status.ACTIVE,
+            applied_at=timezone.now(),
+        )
+        closed = create_draft_course(self.owner, code="CLOSED-TERM-001")
+        Course.objects.filter(pk=closed.pk).update(term=term, status=Course.Status.CLOSED)
+        archived = create_draft_course(self.owner, code="ARCHIVED-TERM-001")
+        Course.objects.filter(pk=archived.pk).update(term=term, status=Course.Status.ARCHIVED)
+        self.assertEqual(list(student_courses_for_term(student, "current")), [self.course])
+        CourseStaff.objects.filter(course=self.course, user=self.owner).update(
+            status=CourseStaff.Status.REVOKED
+        )
+        self.assertEqual(list(teacher_courses_for_term(self.owner, "current")), [])
+        self.assertEqual(list(student_courses_for_term(student, term.public_id)), [active.course])
 
     def _publish(self) -> Course:
         return publish_course(

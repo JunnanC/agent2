@@ -21,6 +21,7 @@ from .content_views import (
     UserQuestionCreateView,
 )
 from .views import (
+    ContextView,
     CourseEnrollmentApplyView,
     MyEnrollmentDetailView,
     MyEnrollmentDropCheckView,
@@ -52,6 +53,7 @@ from .views import (
 )
 
 urlpatterns = [
+    path("context", ContextView.as_view(), name="context"),
     path("courses", PublicCourseListView.as_view(), name="course-list"),
     path("courses/<str:course_id>", PublicCourseDetailView.as_view(), name="course-detail"),
     path(
