@@ -165,6 +165,8 @@ class ContextView(APIView):
                 return IsUserPortal().has_permission(request, view)
             if str(getattr(request, "portal", "")) == "TEACHING":
                 return IsTeachingPortal().has_permission(request, view)
+            if str(getattr(request, "portal", "")) == "PLATFORM":
+                return IsPlatformPortal().has_permission(request, view)
             return False
 
     permission_classes = [Permission]
@@ -187,7 +189,7 @@ class ContextView(APIView):
                         "staff_role": staff.role,
                     })
             role = "TEACHER"
-        else:
+        elif request.portal == "USER":
             for course in student_courses_for_term(request.user, "current"):
                 enrollment = active_enrollment(course=course, student=request.user)
                 if enrollment is not None:
@@ -199,6 +201,8 @@ class ContextView(APIView):
                         "enrollment_role": "STUDENT",
                     })
             role = "STUDENT"
+        else:
+            role = "PLATFORM_ADMIN"
         return _response(
             request,
             {

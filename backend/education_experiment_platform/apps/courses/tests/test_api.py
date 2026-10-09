@@ -180,6 +180,19 @@ class CourseApiTests(TestCase):
         response = Client().get("/api/v2/context", HTTP_X_PORTAL="USER", **PROXY_HEADERS)
         self.assertIn(response.status_code, (401, 403))
 
+    def test_platform_context_returns_role_without_course_memberships(self) -> None:
+        admin_client = Client(enforce_csrf_checks=True)
+        self._login(admin_client, portal="PLATFORM", identifier=self.admin.email)
+
+        response = admin_client.get(
+            "/api/v2/context", HTTP_X_PORTAL="PLATFORM", **PROXY_HEADERS
+        )
+
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(response.json()["data"]["user_role"], "PLATFORM_ADMIN")
+        self.assertEqual(response.json()["data"]["current_term"]["code"], self.term.code)
+        self.assertEqual(response.json()["data"]["courses"], [])
+
     def test_platform_freeze_shell_never_changes_course(self) -> None:
         teacher_client = Client(enforce_csrf_checks=True)
         teacher_csrf = self._login(

@@ -49,3 +49,14 @@ Commit created after final verification: `feat: add academic term and course con
 
 - Focused course tests: `17 passed in 24.03s`.
 - Ruff: `All checks passed!`.
+
+## Final Task 2 Fix
+
+- Restored PLATFORM portal support for `GET /api/v2/context` through the existing `IsPlatformPortal` convention.
+- Platform sessions now return `PLATFORM_ADMIN`, the current term, and an empty course list. Teacher and student memberships are intentionally excluded to preserve portal isolation and prevent cross-portal leakage.
+- Added a platform context regression test covering the authenticated platform session and empty membership list.
+
+## Final Verification
+
+- Focused course tests: `18 passed in 23.11s`.
+- Ruff: `All checks passed!`.
