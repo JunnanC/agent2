@@ -28,6 +28,20 @@ Completed and committed as `feat: enforce cpu memory resource reservations`.
 - Full backend Ruff check: **passed**
 - `git diff --check`: **passed**
 
+## Final Workspace Fix
+
+- Workspace execution runtime specs now call `effective_resource_profile` instead of reading mutable task profile identity and legacy resource fields directly.
+- Workspace execution now uses the normalized frozen profile public ID, CPU and memory request values, disk, and network mode, matching provisioning semantics.
+- Added a regression that removes request/limit keys from a legacy snapshot, mutates the linked profile including its public ID, CPU/memory, disk, and network, and verifies the workspace execution spec remains frozen.
+
+## Final Workspace Verification
+
+- Workspace, governance, provisioning, lab-template, and experiment tests: **124 passed**
+- Ruff: **passed**
+- Django `check`: **passed**
+- Django `makemigrations --check --dry-run`: **No changes detected**
+- `git diff --check`: **passed**
+
 ## Concerns and Assumptions
 
 - Runtime capacity values of zero retain the existing meaning of an unreported/unbounded dimension; configured positive dimensions are enforced and restored.

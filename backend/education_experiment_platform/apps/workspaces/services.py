@@ -26,6 +26,7 @@ from apps.courses.models import Enrollment
 from apps.courses.services import ActorContext
 from apps.experiments.models import ExperimentTask
 from apps.experiments.services import transition_task
+from apps.governance.services import effective_resource_profile
 from apps.labtemplates.services import build_execution_command
 from apps.provisioning.adapters import RuntimeAdapterFailure, runtime_for_driver
 from apps.provisioning.metrics import (
@@ -1130,7 +1131,7 @@ def _execution_rules(task: ExperimentTask) -> tuple[dict[str, Any], list[str], s
 
 
 def _runtime_spec_for_execution(task: ExperimentTask, *, trace_id: str) -> RuntimeSpec:
-    profile = dict(task.resource_profile_snapshot or {})
+    profile = effective_resource_profile(task)
     image = task.image
     return RuntimeSpec(
         task_id=task.public_id,
@@ -1140,15 +1141,11 @@ def _runtime_spec_for_execution(task: ExperimentTask, *, trace_id: str) -> Runti
         image_registry=task.image_registry or (image.registry if image else ""),
         image_repository=task.image_repository or (image.repository if image else ""),
         image_digest=task.image_digest or (image.digest if image else "sha256:"),
-        resource_profile_id=(
-            task.resource_profile.public_id
-            if task.resource_profile_id
-            else str(profile.get("public_id", ""))
-        ),
-        cpu_millicores=int(profile.get("cpu_millicores", 0) or 0),
-        memory_mb=int(profile.get("memory_mb", 0) or 0),
-        disk_gb=int(profile.get("disk_gb", 0) or 0),
-        network_policy={"mode": str(profile.get("network_mode", "DENY_ALL"))},
+        resource_profile_id=str(profile["public_id"]),
+        cpu_millicores=int(profile["cpu_request_millicores"]),
+        memory_mb=int(profile["memory_request_mb"]),
+        disk_gb=int(profile["disk_gb"]),
+        network_policy={"mode": str(profile["network_mode"])},
         workspace_capabilities=dict(task.template_version.workspace_capabilities or {}),
         workspace_port=int(getattr(settings, "RUNTIME_WORKSPACE_PORT", 8080)),
         healthcheck_path=str(getattr(settings, "RUNTIME_HEALTHCHECK_PATH", "/healthz")),

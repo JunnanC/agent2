@@ -18,7 +18,7 @@ from apps.experiments.tests.helpers import (
     create_draft_publication,
     create_enrollment,
 )
-from apps.governance.models import Quota, RuntimeAdapter
+from apps.governance.models import Quota, ResourceProfile, RuntimeAdapter
 from apps.provisioning.adapters import reset_fake_runtime
 from apps.provisioning.models import ProvisioningInstance
 from apps.provisioning.services import execute_provisioning_job, start_provisioning
@@ -38,6 +38,7 @@ from ..models import (
 from ..permissions import require_workspace_session
 from ..serializers import execution_run_data
 from ..services import (
+    _runtime_spec_for_execution,
     create_storage_job,
     enter_task,
     execute_execution_run,
@@ -115,6 +116,45 @@ class WorkspaceSessionServiceTests(TestCase):
 
     def tearDown(self) -> None:
         reset_fake_runtime()
+
+    def test_execution_spec_uses_frozen_legacy_resource_profile(self) -> None:
+        snapshot = dict(self.task.resource_profile_snapshot)
+        snapshot.update(
+            {
+                "cpu_millicores": 1200,
+                "memory_mb": 2048,
+                "disk_gb": 7,
+                "network_mode": "DENY_ALL",
+            }
+        )
+        for field in (
+            "cpu_request_millicores",
+            "cpu_limit_millicores",
+            "memory_request_mb",
+            "memory_limit_mb",
+        ):
+            snapshot.pop(field, None)
+        ExperimentTask.objects.filter(pk=self.task.pk).update(resource_profile_snapshot=snapshot)
+        ResourceProfile.objects.filter(pk=self.task.resource_profile_id).update(
+            public_id="profile-mutated-after-snapshot",
+            cpu_millicores=8000,
+            memory_mb=16384,
+            cpu_request_millicores=4000,
+            cpu_limit_millicores=8000,
+            memory_request_mb=8192,
+            memory_limit_mb=16384,
+            disk_gb=80,
+            network_mode="ALLOWLIST",
+        )
+        task = ExperimentTask.objects.get(pk=self.task.pk)
+
+        spec = _runtime_spec_for_execution(task, trace_id=self.context.trace_id)
+
+        self.assertEqual(spec.resource_profile_id, snapshot["public_id"])
+        self.assertEqual(spec.cpu_millicores, 1200)
+        self.assertEqual(spec.memory_mb, 2048)
+        self.assertEqual(spec.disk_gb, 7)
+        self.assertEqual(spec.network_policy["mode"], "DENY_ALL")
 
     def test_ready_task_exposes_enter_and_issue_is_scoped(self) -> None:
         self.assertEqual(
