@@ -85,3 +85,35 @@ All checks passed!
   `documents/`, and `outputs/`.
 - The broader repository test suite was not run; verification was limited to
   the requested focused provisioning tests, Ruff, and whitespace validation.
+
+## Review Round 2
+
+Round-2 findings were fixed in the follow-up change after `0d2ab9e`.
+
+### Fixes
+
+- Governance runtime health probing and capacity reconciliation now use the
+  shared row-aware provisioning resolver. Explicitly different legacy rows
+  still use their stored driver/configuration.
+- `runtime_inventory()` now accepts an explicit `code`, and
+  `enabled_runtime_inventory()` passes `adapter_config.code` separately from
+  `config_ref`. Configured rows therefore resolve correctly when their code
+  differs from the config reference or when the config reference is empty.
+- Added regression coverage for governance health resolution and both inventory
+  configuration edge cases.
+
+### Round-2 Verification
+
+```text
+.venv/Scripts/python.exe -m pytest education_experiment_platform/apps/provisioning/tests/test_adapter_contract.py education_experiment_platform/apps/provisioning/tests/test_services.py education_experiment_platform/apps/governance/tests/test_services.py -q
+.......................................                                  [100%]
+39 passed in 21.10s
+```
+
+```text
+.venv/Scripts/python.exe -m ruff check education_experiment_platform/apps/provisioning/adapters.py education_experiment_platform/apps/provisioning/services.py education_experiment_platform/apps/provisioning/tests/test_adapter_contract.py education_experiment_platform/apps/provisioning/tests/test_services.py education_experiment_platform/apps/governance/tasks.py education_experiment_platform/apps/governance/tests/test_services.py
+All checks passed!
+```
+
+`git diff --check` passed. The round-2 fix commit is recorded after this
+report update.
