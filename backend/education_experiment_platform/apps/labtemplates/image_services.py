@@ -1,9 +1,12 @@
+import hashlib
+import json
 import re
 from collections.abc import Mapping
 from typing import Any, Protocol
 
+from cryptography.fernet import Fernet, InvalidToken
 from django.conf import settings
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from apps.core.audit import append_audit, append_failure, hash_client_ip
@@ -14,6 +17,7 @@ from apps.core.object_storage import object_storage
 from apps.core.outbox import append_outbox_event, enqueue_relay_after_commit
 from apps.core.redaction import redact
 from apps.courses.services import ActorContext
+from apps.governance.errors import GovernanceStateConflict
 from apps.governance.models import ImageAsset, RuntimeAdapter
 from apps.governance.services import create_image
 from apps.provisioning.adapters import RuntimeAdapterFailure, runtime_for_driver
@@ -74,6 +78,42 @@ def _context(context: Any, trace_id: str = "") -> tuple[str, str, str, str, str]
     )
 
 
+def _build_args_key() -> bytes:
+    return __import__("base64").urlsafe_b64encode(
+        hashlib.sha256(str(settings.SECRET_KEY).encode()).digest()
+    )
+
+
+def _seal_build_args(value: Mapping[str, Any]) -> str:
+    return Fernet(_build_args_key()).encrypt(
+        json.dumps(dict(value), sort_keys=True, separators=(",", ":"), default=str).encode()
+    ).decode()
+
+
+def _unseal_build_args(value: str) -> dict[str, Any]:
+    if not value:
+        return {}
+    try:
+        decoded = json.loads(Fernet(_build_args_key()).decrypt(value.encode()).decode())
+    except (InvalidToken, UnicodeDecodeError, json.JSONDecodeError, TypeError) as exc:
+        raise TemplateValidationError(detail={"build_args": "unavailable"}) from exc
+    if not isinstance(decoded, dict):
+        raise TemplateValidationError(detail={"build_args": "invalid"})
+    return decoded
+
+
+def build_args_digest(value: Mapping[str, Any]) -> str:
+    return hashlib.sha256(
+        json.dumps(dict(value), sort_keys=True, separators=(",", ":"), default=str).encode()
+    ).hexdigest()
+
+
+def validate_prepare_build_args(*, image: ExperimentImage, build_args: Mapping[str, Any]) -> None:
+    stored = _unseal_build_args(image.build_args_sealed)
+    if build_args_digest(build_args) != build_args_digest(stored):
+        raise TemplateValidationError(detail={"build_args": "does_not_match_image"})
+
+
 def _event(image: ExperimentImage, event_type: str, trace_id: str, payload: dict[str, Any]) -> None:
     append_outbox_event(
         event_type=event_type,
@@ -124,6 +164,8 @@ def create_experiment_image(
 ) -> ExperimentImage:
     if source_type not in ExperimentImage.SourceType.values:
         raise TemplateValidationError(detail={"source_type": "unsupported"})
+    if not registry.strip():
+        raise TemplateValidationError(detail={"registry": "required"})
     version = template_version or TemplateVersion.objects.get(
         public_id=template_version_id or version_id
     )
@@ -148,6 +190,7 @@ def create_experiment_image(
         requested_tag=requested_tag.strip(),
         build_context_asset=asset,
         build_args_masked=_masked(dict(build_args or {})),
+        build_args_sealed=_seal_build_args(dict(build_args or {})),
         trace_id=trace_id,
         created_by=actor,
     )
@@ -185,7 +228,8 @@ def _image_changes(image: ExperimentImage, changes: dict[str, Any]) -> Experimen
 
 @transaction.atomic
 def prepare_experiment_image(
-    *, image_id: str, trace_id: str = "", build_args: Mapping[str, Any] | None = None
+    *, image_id: str, trace_id: str = "", build_args: Mapping[str, Any] | None = None,
+    runtime: ExperimentImageRuntime | None = None
 ) -> ExperimentImage:
     try:
         image = (
@@ -218,6 +262,10 @@ def prepare_experiment_image(
     if image.status == ExperimentImage.Status.PREPARING and running:
         return image
     trace_id = trace_id or image.trace_id
+    stored_build_args = _unseal_build_args(image.build_args_sealed)
+    if build_args is not None:
+        validate_prepare_build_args(image=image, build_args=build_args)
+    secrets = tuple(str(value) for value in stored_build_args.values() if value is not None)
     image = _image_changes(image, {"status": ExperimentImage.Status.PREPARING})
     job = ImageBuildJob.objects.create(
         experiment_image=image,
@@ -229,7 +277,7 @@ def prepare_experiment_image(
     )
     try:
         adapter = image.template_version.runtime_adapter
-        runtime = _runtime(adapter)
+        runtime = runtime or _runtime(adapter)
         if image.source_type == ExperimentImage.SourceType.BUILD_CONTEXT:
             asset = image.build_context_asset
             if (
@@ -252,7 +300,7 @@ def prepare_experiment_image(
                     "object_version": asset.object_version,
                     "digest_sha256": asset.digest_sha256,
                 },
-                build_args=dict(build_args or {}),
+                build_args=stored_build_args,
             )
         else:
             result = runtime.resolve_image(
@@ -267,23 +315,26 @@ def prepare_experiment_image(
         governed = ImageAsset.objects.filter(digest=digest).first()
         if governed is None:
             actor_context = ActorContext(image.created_by.public_id, "TEACHING", trace_id)
-            governed = create_image(
-                actor=image.created_by,
-                registry=image.registry,
-                repository=image.repository,
-                display_tag=image.requested_tag,
-                digest=digest,
-                risk_level=ImageAsset.RiskLevel.LOW,
-                reason="experiment image preparation",
-                context=actor_context,
-            )
+            try:
+                with transaction.atomic():
+                    governed = create_image(
+                        actor=image.created_by,
+                        registry=image.registry,
+                        repository=image.repository,
+                        display_tag=image.requested_tag,
+                        digest=digest,
+                        risk_level=ImageAsset.RiskLevel.LOW,
+                        reason="experiment image preparation",
+                        context=actor_context,
+                    )
+            except (IntegrityError, GovernanceStateConflict):
+                governed = ImageAsset.objects.get(digest=digest)
         if governed.is_ready:
             ready_status = ExperimentImage.Status.READY
             scan_status = ExperimentImage.ScanStatus.CLEAN
         else:
             ready_status = ExperimentImage.Status.PENDING_APPROVAL
             scan_status = ExperimentImage.ScanStatus.PENDING
-        secrets = tuple(str(value) for value in (build_args or {}).values() if value is not None)
         image = _image_changes(
             image,
             {
@@ -343,7 +394,7 @@ def prepare_experiment_image(
             subject_type="EXPERIMENT_IMAGE",
             subject_ref=image.public_id,
             error_code=code,
-            message=str(exc),
+            message=str(_masked(str(exc), secrets)),
             detail={},
             retryable=False,
             trace_id=trace_id,
@@ -351,6 +402,7 @@ def prepare_experiment_image(
         return image
 
 
+@transaction.atomic
 def retire_experiment_image(
     *, image_id: str, context: Any, expected_version: int
 ) -> ExperimentImage:
@@ -400,14 +452,22 @@ def resolve_external_digest(
     image_id: str,
     runtime: ExperimentImageRuntime | None = None,
 ) -> str:
-    image = ExperimentImage.objects.select_related(
+    try:
+        image = ExperimentImage.objects.select_related(
         "template_version__runtime_adapter", "image_asset"
-    ).get(public_id=image_id)
+        ).get(public_id=image_id)
+    except ExperimentImage.DoesNotExist as exc:
+        raise ResourceNotFound() from exc
     if image.source_type != ExperimentImage.SourceType.EXTERNAL_REFERENCE:
         raise TemplateValidationError(detail={"source_type": "external_reference_required"})
-    prepared = prepare_experiment_image(image_id=image_id)
+    adapter = image.template_version.runtime_adapter
+    probe = runtime or _runtime(adapter)
+    prepared = prepare_experiment_image(image_id=image_id, runtime=probe)
     if not _DIGEST.fullmatch(prepared.resolved_digest):
         raise RuntimeAdapterFailure("RUNTIME_IMAGE_DIGEST_INVALID", retryable=False)
+    validation = probe.validate_image(digest=prepared.resolved_digest)
+    if validation.get("valid", True) is False:
+        raise RuntimeAdapterFailure("RUNTIME_IMAGE_VALIDATION_FAILED", retryable=False)
     if prepared.image_asset is None or not prepared.image_asset.is_ready:
         raise RuntimeAdapterFailure("IMAGE_GOVERNANCE_NOT_READY", retryable=False)
     return prepared.resolved_digest

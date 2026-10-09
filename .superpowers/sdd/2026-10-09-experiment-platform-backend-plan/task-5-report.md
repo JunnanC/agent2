@@ -85,10 +85,32 @@ configured MySQL host `mysql` is unavailable in this environment.
 
 ## Concerns
 
-- Real Docker Swarm/Local adapters do not implement the new image operations;
-  they will fail preparation with `RUNTIME_IMAGE_LIFECYCLE_UNAVAILABLE` until
-  their image service integration is supplied. This is intentional at this
-  task boundary and prevents views from bypassing the runtime port.
-- Migration generation and Django checks could not connect to the configured
-  MySQL host in this environment; pytest uses the repository test setup and
-  passed all labtemplates tests.
+- Django checks could not complete because the configured MySQL host `mysql`
+  is unavailable in this environment; the migration drift check completed with
+  no changes detected.
+
+## Review Round 2 Fixes
+
+- Retire is transactionally atomic: the If-Match CAS, audit record, and outbox
+  event commit or roll back together.
+- Celery preparation receives only the image id and trace id. Build arguments
+  are encrypted at rest, exposed only transiently to the runtime adapter, and
+  masked in API, job, validation, failure, and audit/log paths. Prepare
+  idempotency includes a deterministic build-argument digest.
+- Docker Swarm pushes build output to the configured registry before resolving
+  its digest; Local and Swarm lifecycle methods remain behind the Docker client
+  boundary. Blank registries are rejected for both source types.
+- Governance digest creation handles unique races by reusing the existing
+  governance row without changing its approval state. Resolved digests remain
+  immutable through the lifecycle service guard.
+- BUILD_CONTEXT is a supported, scanned template asset purpose. External
+  resolution maps missing images to ResourceNotFound, honors an injected
+  runtime, probes the runtime, and requires governance readiness.
+- Added service, asset, task-payload, and Swarm adapter regression coverage.
+
+## Review Round 2 Verification
+
+- Labtemplates, provisioning, and governance tests: `92 passed`.
+- Ruff: passed.
+- `git diff --check`: passed.
+- `makemigrations --check --dry-run --skip-checks`: no changes detected.

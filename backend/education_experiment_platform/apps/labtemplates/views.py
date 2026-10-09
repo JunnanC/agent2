@@ -17,7 +17,12 @@ from apps.courses.models import CourseStaffGrant
 from apps.courses.services import ActorContext
 
 from .assets import asset_for_course, complete_asset_upload, create_asset_upload
-from .image_services import create_experiment_image, retire_experiment_image
+from .image_services import (
+    build_args_digest,
+    create_experiment_image,
+    retire_experiment_image,
+    validate_prepare_build_args,
+)
 from .models import ExperimentImage, TemplateChapter
 from .selectors import (
     options_for_course,
@@ -255,9 +260,13 @@ class ExperimentImagePrepareView(APIView):
                         "actual_row_version": current.row_version,
                     }
                 )
+            if "build_args" in serializer.validated_data:
+                validate_prepare_build_args(
+                    image=current, build_args=serializer.validated_data["build_args"]
+                )
             transaction.on_commit(
                 lambda: prepare_experiment_image_task.delay(
-                    image_id, trace_id, serializer.validated_data.get("build_args", {})
+                    image_id, trace_id
                 ),
                 robust=True,
             )
@@ -267,7 +276,16 @@ class ExperimentImagePrepareView(APIView):
                 {"ETag": etag_for_version(current.row_version)},
             )
 
-        return _idempotent(request, payload={}, operation=operation)
+        prepare_payload = {
+            "build_args_digest": build_args_digest(
+                serializer.validated_data.get("build_args", {})
+            )
+        }
+        return _idempotent(
+            request,
+            payload=prepare_payload,
+            operation=operation,
+        )
 
 
 class ExperimentImageRetireView(APIView):

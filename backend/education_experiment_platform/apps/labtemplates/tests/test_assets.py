@@ -44,6 +44,25 @@ class ContentScanner:
 
 
 class TemplateAssetTests(TestCase):
+    def test_build_context_archive_purpose_is_uploadable(self) -> None:
+        owner, course, template, version = create_template_version(suffix="build-context-asset")
+        payload = b"context archive placeholder"
+        with patch("apps.labtemplates.assets.object_storage", return_value=FakeStorage(payload)):
+            asset, _upload = create_asset_upload(
+                course_id=course.public_id,
+                template_id=template.public_id,
+                version_id=version.public_id,
+                actor=owner,
+                expected_version=version.row_version,
+                purpose="BUILD_CONTEXT",
+                file_name="context.tar",
+                media_type="application/x-tar",
+                size_bytes=len(payload),
+                digest_sha256=hashlib.sha256(payload).hexdigest(),
+                context=context(owner),
+            )
+        self.assertEqual(asset.purpose, "BUILD_CONTEXT")
+
     def test_clean_tests_asset_is_scanned_without_foreign_key_attachment(self) -> None:
         payload = b'{"cases": []}'
         owner, course, template, version = create_template_version(suffix="tests-asset")

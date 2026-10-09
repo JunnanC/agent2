@@ -2094,7 +2094,7 @@ class DockerSwarmAdapter:
         if not isinstance(archive, (bytes, bytearray)):
             raise RuntimeAdapterFailure("RUNTIME_IMAGE_CONTEXT_UNAVAILABLE", retryable=False)
         reference = f"{registry.rstrip('/')}/{repository.lstrip('/')}:{tag}"
-        output = self._call(
+        self._call(
             "RUNTIME_IMAGE_BUILD_FAILED",
             lambda: self.client.build(
                 fileobj=io.BytesIO(bytes(archive)),
@@ -2106,7 +2106,11 @@ class DockerSwarmAdapter:
                 decode=True,
             ),
         )
-        return _docker_image_result(output, self.client, reference)
+        self._call(
+            "RUNTIME_IMAGE_PUSH_FAILED",
+            lambda: self.client.push(reference, decode=True),
+        )
+        return _docker_image_result((), self.client, reference)
 
     def resolve_image(self, *, registry: str, repository: str, tag: str) -> Mapping[str, Any]:
         reference = f"{registry.rstrip('/')}/{repository.lstrip('/')}:{tag}"

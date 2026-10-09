@@ -92,12 +92,12 @@ def scan_template_asset(self: Any, asset_id: str, trace_id: str = "") -> str:
 
 @shared_task(bind=True, max_retries=2, queue="q_provision", acks_late=True)
 def prepare_experiment_image_task(
-    self: Any, image_id: str, trace_id: str = "", build_args: dict[str, Any] | None = None
+    self: Any, image_id: str, trace_id: str = ""
 ) -> str:
-    image = prepare_experiment_image(image_id=image_id, trace_id=trace_id, build_args=build_args)
+    image = prepare_experiment_image(image_id=image_id, trace_id=trace_id)
     if image.status == ExperimentImage.Status.FAILED and self.request.retries < self.max_retries:
         raise self.retry(
-            args=(image_id, trace_id, build_args),
+            args=(image_id, trace_id),
             exc=RuntimeError(image.error_code),
             countdown=2**self.request.retries,
         )

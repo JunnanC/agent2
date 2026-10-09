@@ -1,3 +1,4 @@
+import inspect
 from unittest.mock import patch
 
 from django.test import TestCase
@@ -8,7 +9,11 @@ from apps.governance.models import ResourceProfile
 from apps.provisioning.adapters import fake_runtime, reset_fake_runtime
 
 from ..errors import TemplateStateConflict, TemplateValidationError
-from ..image_services import create_experiment_image, prepare_experiment_image
+from ..image_services import (
+    create_experiment_image,
+    prepare_experiment_image,
+    resolve_external_digest,
+)
 from ..models import (
     AutoCheckRule,
     ExperimentImage,
@@ -33,10 +38,62 @@ from ..services import (
     update_task,
     update_version,
 )
+from ..tasks import prepare_experiment_image_task
 from .helpers import add_valid_rule, context, create_template_version
 
 
 class TemplateServiceTests(TestCase):
+    def test_prepare_task_payload_contains_no_build_args(self) -> None:
+        self.assertNotIn("build_args", str(inspect.signature(prepare_experiment_image_task.run)))
+
+    def test_image_requires_registry_and_seals_build_args(self) -> None:
+        owner, _course, _template, version = create_template_version(suffix="image-secrets")
+        with self.assertRaises(TemplateValidationError):
+            create_experiment_image(
+                template_version=version,
+                source_type=ExperimentImage.SourceType.EXTERNAL_REFERENCE,
+                repository="labs/external",
+                requested_tag="v1",
+                actor=owner,
+                context=context(owner, "image"),
+            )
+        image = create_experiment_image(
+            template_version=version,
+            source_type=ExperimentImage.SourceType.EXTERNAL_REFERENCE,
+            registry="registry.example.edu",
+            repository="labs/external",
+            requested_tag="v1",
+            build_args={"TOKEN": "super-secret"},
+            actor=owner,
+            context=context(owner, "image"),
+        )
+        self.assertNotIn("super-secret", str(image.build_args_masked))
+        self.assertNotIn("super-secret", image.build_args_sealed)
+
+    def test_external_digest_uses_supplied_runtime_and_maps_missing_image(self) -> None:
+        owner, _course, _template, version = create_template_version(suffix="image-runtime")
+        image = create_experiment_image(
+            template_version=version,
+            source_type=ExperimentImage.SourceType.EXTERNAL_REFERENCE,
+            registry="registry.example.edu",
+            repository="labs/external",
+            requested_tag="v1",
+            actor=owner,
+            context=context(owner, "image"),
+        )
+        runtime = fake_runtime()
+        with (
+            patch(
+                "apps.labtemplates.image_services.runtime_for_driver", side_effect=AssertionError
+            ),
+            self.assertRaises(Exception) as not_ready,
+        ):
+            resolve_external_digest(image_id=image.public_id, runtime=runtime)
+        self.assertEqual(getattr(not_ready.exception, "code", ""), "IMAGE_GOVERNANCE_NOT_READY")
+        with self.assertRaises(Exception) as raised:
+            resolve_external_digest(image_id="0" * 26, runtime=runtime)
+        self.assertEqual(getattr(raised.exception, "code", ""), "RESOURCE_NOT_FOUND")
+
     def test_external_reference_resolves_to_governed_ready_digest(self) -> None:
         owner, _course, _template, version = create_template_version(suffix="image-external")
         reset_fake_runtime()
@@ -76,6 +133,7 @@ class TemplateServiceTests(TestCase):
         image = create_experiment_image(
             template_version=version,
             source_type=ExperimentImage.SourceType.BUILD_CONTEXT,
+            registry="registry.example.edu",
             repository="labs/build",
             requested_tag="v1",
             build_context_asset_id=context_asset.public_id,

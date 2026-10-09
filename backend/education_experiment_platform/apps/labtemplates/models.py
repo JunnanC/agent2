@@ -355,6 +355,7 @@ class ExperimentImage(VersionedModel):
     )
     validation_detail = models.JSONField(default=dict)
     build_args_masked = models.JSONField(default=dict)
+    build_args_sealed = models.TextField(blank=True, default="")
     logs_masked = models.TextField(blank=True, default="")
     error_code = models.CharField(max_length=64, blank=True, default="")
     trace_id = models.CharField(max_length=32)

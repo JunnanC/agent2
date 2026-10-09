@@ -116,7 +116,9 @@ class ReorderWriteSerializer(serializers.Serializer):
 
 class TemplateAssetCreateSerializer(serializers.Serializer):
     version_id = serializers.CharField(max_length=26)
-    purpose = serializers.ChoiceField(choices=("MANUAL", "STARTER", "REPORT_TEMPLATE", "TESTS"))
+    purpose = serializers.ChoiceField(
+        choices=("MANUAL", "STARTER", "REPORT_TEMPLATE", "TESTS", "BUILD_CONTEXT")
+    )
     file_name = serializers.CharField(max_length=255)
     media_type = serializers.CharField(max_length=255)
     size_bytes = serializers.IntegerField(min_value=1)

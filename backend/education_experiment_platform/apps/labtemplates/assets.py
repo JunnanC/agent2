@@ -35,6 +35,7 @@ PURPOSE_FIELDS = {
     # TESTS assets are referenced by execution_spec.tests_asset instead of a
     # mutable foreign-key slot on the version.
     "TESTS": None,
+    "BUILD_CONTEXT": None,
 }
 ALLOWED_FILES = {
     "MANUAL": {
@@ -57,6 +58,12 @@ ALLOWED_FILES = {
     "TESTS": {
         ".json": "application/json",
         ".txt": "text/plain",
+        ".zip": "application/zip",
+        ".tar": "application/x-tar",
+        ".gz": "application/gzip",
+        ".tgz": "application/gzip",
+    },
+    "BUILD_CONTEXT": {
         ".zip": "application/zip",
         ".tar": "application/x-tar",
         ".gz": "application/gzip",

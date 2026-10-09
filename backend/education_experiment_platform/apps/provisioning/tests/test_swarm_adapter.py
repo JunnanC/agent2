@@ -20,6 +20,8 @@ class FakeDockerClient:
         self.removed_services: list[str] = []
         self.removed_networks: list[str] = []
         self.pulled: list[str] = []
+        self.built: list[dict[str, Any]] = []
+        self.pushed: list[str] = []
 
     def ping(self) -> bool:
         return True
@@ -29,6 +31,18 @@ class FakeDockerClient:
 
     def pull(self, image_ref: str) -> None:
         self.pulled.append(image_ref)
+
+    def build(self, **kwargs: Any) -> list[dict[str, Any]]:
+        self.built.append(kwargs)
+        return [{"stream": "built"}]
+
+    def push(self, image_ref: str, *, decode: bool = True) -> list[dict[str, Any]]:
+        del decode
+        self.pushed.append(image_ref)
+        return [{"aux": {"Digest": "sha256:" + "b" * 64}}]
+
+    def inspect_image(self, reference: str) -> dict[str, Any]:
+        return {"RepoDigests": [f"{reference.split(':', 1)[0]}@sha256:{'b' * 64}"], "Id": ""}
 
     def networks(self, *, names: list[str]) -> list[dict[str, Any]]:
         return [item for item in self.network_values if item["Name"] in names]
@@ -215,3 +229,14 @@ class DockerSwarmAdapterTests(SimpleTestCase):
 
         self.assertEqual(raised.exception.code, "RUNTIME_CONFIG_INVALID")
         self.assertFalse(raised.exception.retryable)
+
+    def test_build_context_pushes_registry_reference_before_returning_digest(self) -> None:
+        result = self.adapter.build_image(
+            registry="registry.example.edu",
+            repository="labs/build",
+            tag="v1",
+            context={"archive": b"archive"},
+            build_args={"MODE": "test"},
+        )
+        self.assertEqual(self.client.pushed, ["registry.example.edu/labs/build:v1"])
+        self.assertEqual(result["digest"], "sha256:" + "b" * 64)
