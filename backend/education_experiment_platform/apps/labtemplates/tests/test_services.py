@@ -5,43 +5,57 @@ from apps.core.models import ObjectAsset
 from apps.governance.models import ResourceProfile
 
 from ..errors import TemplateStateConflict, TemplateValidationError
-from ..models import AutoCheckRule, TemplateChapter, TemplatePrecheckRun, TemplateTask, TemplateVersion
+from ..models import (
+    AutoCheckRule,
+    TemplateChapter,
+    TemplatePrecheckRun,
+    TemplateVersion,
+)
+from ..serializers import version_data
 from ..services import (
     build_execution_command,
     clone_version,
     compute_spec_digest,
-    execute_precheck,
-    publish_version,
-    replace_rules,
-    request_precheck,
-    update_version,
     create_chapter,
     create_task,
+    execute_precheck,
+    publish_version,
     reorder_chapters,
     reorder_tasks,
+    replace_rules,
+    request_precheck,
     update_chapter,
+    update_task,
+    update_version,
 )
-from ..serializers import version_data
 from .helpers import add_valid_rule, context, create_template_version
 
 
 class TemplateServiceTests(TestCase):
     def test_versioned_content_orders_inherits_resources_and_serializes_nested(self) -> None:
         owner, course, _template, version = create_template_version(suffix="content")
-        chapter = create_chapter(
-            course_id=course.public_id, version_id=version.public_id, actor=owner,
+        create_chapter(
+            course_id=course.public_id,
+            version_id=version.public_id,
+            actor=owner,
             expected_version=version.row_version,
-            data={"title": "Second", "sort_order": 2}, context=context(owner, "a"),
+            data={"title": "Second", "sort_order": 2},
+            context=context(owner, "a"),
         )
         version.refresh_from_db()
         first = create_chapter(
-            course_id=course.public_id, version_id=version.public_id, actor=owner,
+            course_id=course.public_id,
+            version_id=version.public_id,
+            actor=owner,
             expected_version=version.row_version,
-            data={"title": "First", "sort_order": 1}, context=context(owner, "b"),
+            data={"title": "First", "sort_order": 1},
+            context=context(owner, "b"),
         )
         version.refresh_from_db()
         task = create_task(
-            course_id=course.public_id, chapter_id=first.public_id, actor=owner,
+            course_id=course.public_id,
+            chapter_id=first.public_id,
+            actor=owner,
             expected_version=version.row_version,
             data={"title": "Inherited task", "task_type": "CODE", "sort_order": 1},
             context=context(owner, "c"),
@@ -57,23 +71,158 @@ class TemplateServiceTests(TestCase):
 
     def test_content_reorder_rejects_duplicate_and_mixed_parent_ids(self) -> None:
         owner, course, _template, version = create_template_version(suffix="content-order")
-        first = create_chapter(course_id=course.public_id, version_id=version.public_id, actor=owner, expected_version=version.row_version, data={"title": "First"}, context=context(owner, "a"))
+        first = create_chapter(
+            course_id=course.public_id,
+            version_id=version.public_id,
+            actor=owner,
+            expected_version=version.row_version,
+            data={"title": "First"},
+            context=context(owner, "a"),
+        )
         version.refresh_from_db()
-        second = create_chapter(course_id=course.public_id, version_id=version.public_id, actor=owner, expected_version=version.row_version, data={"title": "Second"}, context=context(owner, "b"))
+        second = create_chapter(
+            course_id=course.public_id,
+            version_id=version.public_id,
+            actor=owner,
+            expected_version=version.row_version,
+            data={"title": "Second"},
+            context=context(owner, "b"),
+        )
         version.refresh_from_db()
         with self.assertRaises(TemplateValidationError):
-            reorder_chapters(course_id=course.public_id, version_id=version.public_id, actor=owner, expected_version=version.row_version, chapter_ids=[first.public_id, first.public_id], context=context(owner, "c"))
+            reorder_chapters(
+                course_id=course.public_id,
+                version_id=version.public_id,
+                actor=owner,
+                expected_version=version.row_version,
+                chapter_ids=[first.public_id, first.public_id],
+                context=context(owner, "c"),
+            )
         with self.assertRaises(TemplateValidationError):
-            reorder_tasks(course_id=course.public_id, chapter_id=first.public_id, actor=owner, expected_version=version.row_version, task_ids=[second.public_id], context=context(owner, "d"))
-        reordered = reorder_chapters(course_id=course.public_id, version_id=version.public_id, actor=owner, expected_version=version.row_version, chapter_ids=[second.public_id, first.public_id], context=context(owner, "e"))
-        self.assertEqual([item.sort_order for item in TemplateChapter.objects.filter(template_version=reordered).order_by("sort_order")], [1, 2])
+            reorder_tasks(
+                course_id=course.public_id,
+                chapter_id=first.public_id,
+                actor=owner,
+                expected_version=version.row_version,
+                task_ids=[second.public_id],
+                context=context(owner, "d"),
+            )
+        reordered = reorder_chapters(
+            course_id=course.public_id,
+            version_id=version.public_id,
+            actor=owner,
+            expected_version=version.row_version,
+            chapter_ids=[second.public_id, first.public_id],
+            context=context(owner, "e"),
+        )
+        self.assertEqual(
+            [
+                item.sort_order
+                for item in TemplateChapter.objects.filter(template_version=reordered).order_by(
+                    "sort_order"
+                )
+            ],
+            [1, 2],
+        )
 
     def test_content_is_locked_after_publication(self) -> None:
         owner, course, _template, version = create_template_version(suffix="content-lock")
-        TemplateVersion.objects.filter(pk=version.pk).update(status=TemplateVersion.Status.PUBLISHED)
+        TemplateVersion.objects.filter(pk=version.pk).update(
+            status=TemplateVersion.Status.PUBLISHED
+        )
         version.refresh_from_db()
         with self.assertRaises(TemplateStateConflict):
-            create_chapter(course_id=course.public_id, version_id=version.public_id, actor=owner, expected_version=version.row_version, data={"title": "Locked"}, context=context(owner, "a"))
+            create_chapter(
+                course_id=course.public_id,
+                version_id=version.public_id,
+                actor=owner,
+                expected_version=version.row_version,
+                data={"title": "Locked"},
+                context=context(owner, "a"),
+            )
+
+    def test_child_edits_use_template_version_cas_and_clone_content(self) -> None:
+        owner, course, _template, version = create_template_version(suffix="content-clone")
+        chapter = create_chapter(
+            course_id=course.public_id,
+            version_id=version.public_id,
+            actor=owner,
+            expected_version=version.row_version,
+            data={"title": "Chapter"},
+            context=context(owner, "a"),
+        )
+        version.refresh_from_db()
+        task = create_task(
+            course_id=course.public_id,
+            chapter_id=chapter.public_id,
+            actor=owner,
+            expected_version=version.row_version,
+            data={"title": "Task", "task_type": "CODE"},
+            context=context(owner, "b"),
+        )
+        version.refresh_from_db()
+        stale_version = version.row_version
+        update_chapter(
+            course_id=course.public_id,
+            chapter_id=chapter.public_id,
+            actor=owner,
+            expected_version=stale_version,
+            changes={"description": "changed"},
+            context=context(owner, "c"),
+        )
+        with self.assertRaises(RowVersionConflict):
+            update_task(
+                course_id=course.public_id,
+                task_id=task.public_id,
+                actor=owner,
+                expected_version=stale_version,
+                changes={"description": "stale"},
+                context=context(owner, "d"),
+            )
+        TemplateVersion.objects.filter(pk=version.pk).update(
+            status=TemplateVersion.Status.PUBLISHED
+        )
+        version.refresh_from_db()
+        cloned = clone_version(
+            course_id=course.public_id,
+            version_id=version.public_id,
+            actor=owner,
+            expected_version=version.row_version,
+            context=context(owner, "e"),
+        )
+        self.assertEqual(cloned.chapters.count(), 1)
+        self.assertEqual(cloned.chapters.first().tasks.count(), 1)
+
+    def test_reorder_requires_complete_collection(self) -> None:
+        owner, course, _template, version = create_template_version(suffix="content-partial")
+        first = create_chapter(
+            course_id=course.public_id,
+            version_id=version.public_id,
+            actor=owner,
+            expected_version=version.row_version,
+            data={"title": "First"},
+            context=context(owner, "a"),
+        )
+        version.refresh_from_db()
+        create_chapter(
+            course_id=course.public_id,
+            version_id=version.public_id,
+            actor=owner,
+            expected_version=version.row_version,
+            data={"title": "Second"},
+            context=context(owner, "b"),
+        )
+        version.refresh_from_db()
+        with self.assertRaises(TemplateValidationError):
+            reorder_chapters(
+                course_id=course.public_id,
+                version_id=version.public_id,
+                actor=owner,
+                expected_version=version.row_version,
+                chapter_ids=[first.public_id],
+                context=context(owner, "c"),
+            )
+
     def test_execution_spec_is_in_digest_and_only_generates_python_command(self) -> None:
         owner, course, _template, version = create_template_version(suffix="execution")
         version = add_valid_rule(owner=owner, course=course, version=version)
@@ -101,10 +250,10 @@ class TemplateServiceTests(TestCase):
                 },
                 context=context(owner),
             )
-        tests_asset = ObjectAsset.objects.get(
-            public_id=version.execution_spec["tests_asset"]
+        tests_asset = ObjectAsset.objects.get(public_id=version.execution_spec["tests_asset"])
+        ObjectAsset.objects.filter(pk=tests_asset.pk).update(
+            scan_status=ObjectAsset.ScanStatus.PENDING
         )
-        ObjectAsset.objects.filter(pk=tests_asset.pk).update(scan_status=ObjectAsset.ScanStatus.PENDING)
         version = TemplateVersion.objects.get(pk=version.pk)
         run = request_precheck(
             course_id=course.public_id,
@@ -120,7 +269,9 @@ class TemplateServiceTests(TestCase):
     def test_failed_precheck_can_be_repaired_before_retry(self) -> None:
         owner, course, _template, version = create_template_version(suffix="execution-retry")
         tests_asset = ObjectAsset.objects.get(public_id=version.execution_spec["tests_asset"])
-        ObjectAsset.objects.filter(pk=tests_asset.pk).update(scan_status=ObjectAsset.ScanStatus.PENDING)
+        ObjectAsset.objects.filter(pk=tests_asset.pk).update(
+            scan_status=ObjectAsset.ScanStatus.PENDING
+        )
         run = request_precheck(
             course_id=course.public_id,
             version_id=version.public_id,
@@ -130,7 +281,9 @@ class TemplateServiceTests(TestCase):
         )
         execute_precheck(run_id=run.public_id)
         version.refresh_from_db()
-        ObjectAsset.objects.filter(pk=tests_asset.pk).update(scan_status=ObjectAsset.ScanStatus.CLEAN)
+        ObjectAsset.objects.filter(pk=tests_asset.pk).update(
+            scan_status=ObjectAsset.ScanStatus.CLEAN
+        )
         repaired = update_version(
             course_id=course.public_id,
             version_id=version.public_id,

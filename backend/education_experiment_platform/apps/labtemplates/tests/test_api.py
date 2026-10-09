@@ -5,6 +5,8 @@ from django.test import Client, TestCase
 from apps.courses.tests.helpers import create_draft_course, create_teacher
 
 from ..models import Template
+from ..services import create_template, create_version
+from .helpers import context, create_resources
 
 PROXY_HEADERS = {"HTTP_X_PROXY_CONTEXT": "ingress-v1", "REMOTE_ADDR": "127.0.0.1"}
 
@@ -93,3 +95,46 @@ class TemplateApiTests(TestCase):
             **self._headers(),
         )
         self.assertEqual(hidden.status_code, 404)
+
+    def test_content_routes_require_if_match_and_map_missing_chapter(self) -> None:
+        adapter, image, profile = create_resources(self.owner, suffix="api-content")
+        template = create_template(
+            course_id=self.course.public_id,
+            actor=self.owner,
+            name="Content API",
+            category="",
+            description="",
+            context=context(self.owner, "v"),
+        )
+        version = create_version(
+            course_id=self.course.public_id,
+            template_id=template.public_id,
+            actor=self.owner,
+            data={
+                "runtime_type": "CONTAINER",
+                "runtime_adapter_id": adapter.public_id,
+                "image_id": image.public_id,
+                "resource_profile_id": profile.public_id,
+            },
+            context=context(self.owner, "w"),
+        )
+        url = (
+            f"/api/v2/teaching/courses/{self.course.public_id}/"
+            f"template-versions/{version.public_id}/chapters"
+        )
+        listing = self.client.get(url, **self._headers())
+        self.assertEqual(listing.status_code, 200)
+        self.assertEqual(listing["ETag"], '"1"')
+        missing_match = self.client.post(
+            url, {"title": "Chapter"}, content_type="application/json", **self._headers()
+        )
+        self.assertEqual(missing_match.status_code, 428)
+        missing_chapter = self.client.post(
+            f"/api/v2/teaching/courses/{self.course.public_id}/template-chapters/{'0' * 26}/tasks",
+            {"title": "Task", "task_type": "CODE"},
+            content_type="application/json",
+            HTTP_IF_MATCH='"1"',
+            HTTP_IDEMPOTENCY_KEY="missing-chapter-task",
+            **self._headers(),
+        )
+        self.assertEqual(missing_chapter.status_code, 404)

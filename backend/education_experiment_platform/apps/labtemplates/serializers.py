@@ -3,14 +3,19 @@ from rest_framework import serializers
 
 from apps.core.models import ObjectAsset
 
-from .models import AutoCheckRule, Template, TemplateChapter, TemplatePrecheckRun, TemplateTask, TemplateVersion
+from .models import (
+    AutoCheckRule,
+    Template,
+    TemplateChapter,
+    TemplatePrecheckRun,
+    TemplateTask,
+    TemplateVersion,
+)
 
 
 class ExecutionSpecSerializer(serializers.Serializer):
     language = serializers.ChoiceField(choices=("python",))
-    entrypoint = serializers.RegexField(
-        r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,126}\.py$", max_length=128
-    )
+    entrypoint = serializers.RegexField(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,126}\.py$", max_length=128)
     timeout_seconds = serializers.IntegerField(
         min_value=1, max_value=settings.TEMPLATE_CHECK_TIMEOUT_MAX_SECONDS
     )
@@ -202,6 +207,26 @@ class TemplateChapterDataSerializer(serializers.Serializer):
     tasks = TemplateTaskDataSerializer(many=True)
 
 
+class TemplateChapterResponseSerializer(serializers.Serializer):
+    data = TemplateChapterDataSerializer()
+    meta = serializers.DictField()
+
+
+class TemplateChapterListResponseSerializer(serializers.Serializer):
+    data = TemplateChapterDataSerializer(many=True)
+    meta = serializers.DictField()
+
+
+class TemplateTaskResponseSerializer(serializers.Serializer):
+    data = TemplateTaskDataSerializer()
+    meta = serializers.DictField()
+
+
+class TemplateTaskListResponseSerializer(serializers.Serializer):
+    data = TemplateTaskDataSerializer(many=True)
+    meta = serializers.DictField()
+
+
 class AutoCheckRulesDataSerializer(serializers.Serializer):
     rules = AutoCheckRuleDataSerializer(many=True)
 
@@ -369,11 +394,40 @@ def chapter_data(item: TemplateChapter, version: TemplateVersion) -> dict[str, o
 def version_data(item: TemplateVersion) -> dict[str, object]:
     def task_value(task: TemplateTask) -> dict[str, object]:
         profile = task.resource_profile or task.chapter.resource_profile or item.resource_profile
-        return {"public_id": task.public_id, "title": task.title, "description": task.description, "instructions": task.instructions, "task_type": task.task_type, "sort_order": task.sort_order, "status": task.status, "execution_spec": task.execution_spec, "resource_profile_id": task.resource_profile.public_id if task.resource_profile else None, "effective_resource_profile_id": profile.public_id, "submission_policy": task.submission_policy, "grading_policy": task.grading_policy, "row_version": task.row_version}
+        return {
+            "public_id": task.public_id,
+            "title": task.title,
+            "description": task.description,
+            "instructions": task.instructions,
+            "task_type": task.task_type,
+            "sort_order": task.sort_order,
+            "status": task.status,
+            "execution_spec": task.execution_spec,
+            "resource_profile_id": task.resource_profile.public_id
+            if task.resource_profile
+            else None,
+            "effective_resource_profile_id": profile.public_id,
+            "submission_policy": task.submission_policy,
+            "grading_policy": task.grading_policy,
+            "row_version": task.row_version,
+        }
 
     def chapter_value(chapter: TemplateChapter) -> dict[str, object]:
         profile = chapter.resource_profile or item.resource_profile
-        return {"public_id": chapter.public_id, "title": chapter.title, "description": chapter.description, "learning_objectives": chapter.learning_objectives, "sort_order": chapter.sort_order, "status": chapter.status, "resource_profile_id": chapter.resource_profile.public_id if chapter.resource_profile else None, "effective_resource_profile_id": profile.public_id, "row_version": chapter.row_version, "tasks": [task_value(task) for task in chapter.tasks.all().order_by("sort_order")]}
+        return {
+            "public_id": chapter.public_id,
+            "title": chapter.title,
+            "description": chapter.description,
+            "learning_objectives": chapter.learning_objectives,
+            "sort_order": chapter.sort_order,
+            "status": chapter.status,
+            "resource_profile_id": chapter.resource_profile.public_id
+            if chapter.resource_profile
+            else None,
+            "effective_resource_profile_id": profile.public_id,
+            "row_version": chapter.row_version,
+            "tasks": [task_value(task) for task in chapter.tasks.all().order_by("sort_order")],
+        }
 
     return {
         "public_id": item.public_id,
@@ -404,7 +458,10 @@ def version_data(item: TemplateVersion) -> dict[str, object]:
             rule_data(rule)
             for rule in item.auto_check_rules.filter(is_active=True).order_by("position")
         ],
-        "chapters": [chapter_data(chapter, item) for chapter in item.chapters.all().prefetch_related("tasks").order_by("sort_order")],
+        "chapters": [
+            chapter_data(chapter, item)
+            for chapter in item.chapters.all().prefetch_related("tasks").order_by("sort_order")
+        ],
     }
 
 

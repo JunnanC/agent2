@@ -11,6 +11,7 @@ from apps.accounts.models import User
 from apps.accounts.permissions import IsPlatformPortal, IsTeachingPortal
 from apps.accounts.security import client_ip
 from apps.core.concurrency import etag_for_version, parse_if_match
+from apps.core.errors import ResourceNotFound
 from apps.core.idempotency import PrincipalScope, StoredResponse, execute_idempotent
 from apps.courses.services import ActorContext
 
@@ -29,44 +30,48 @@ from .serializers import (
     PlatformPrecheckSummaryResponseSerializer,
     PrecheckRunListResponseSerializer,
     PrecheckRunResponseSerializer,
+    ReorderWriteSerializer,
     TemplateAssetCreateSerializer,
     TemplateAssetResponseSerializer,
     TemplateAssetUploadResponseSerializer,
+    TemplateChapterListResponseSerializer,
+    TemplateChapterResponseSerializer,
+    TemplateChapterWriteSerializer,
     TemplateListResponseSerializer,
     TemplateOptionsResponseSerializer,
     TemplatePatchSerializer,
     TemplateResponseSerializer,
+    TemplateTaskListResponseSerializer,
+    TemplateTaskResponseSerializer,
+    TemplateTaskWriteSerializer,
     TemplateVersionListResponseSerializer,
     TemplateVersionResponseSerializer,
     TemplateVersionWriteSerializer,
     TemplateWriteSerializer,
-    ReorderWriteSerializer,
-    TemplateChapterWriteSerializer,
-    TemplateTaskWriteSerializer,
     asset_data,
+    chapter_data,
     precheck_data,
     rule_data,
+    task_data,
     template_data,
     version_data,
-    chapter_data,
-    task_data,
 )
 from .services import (
     clone_version,
+    create_chapter,
+    create_task,
     create_template,
     create_version,
     publish_version,
+    reorder_chapters,
+    reorder_tasks,
     replace_rules,
     request_precheck,
+    update_chapter,
+    update_task,
     update_template,
     update_version,
     withdraw_version,
-    create_chapter,
-    update_chapter,
-    create_task,
-    update_task,
-    reorder_chapters,
-    reorder_tasks,
 )
 from .tasks import run_template_precheck, scan_template_asset
 
@@ -445,79 +450,188 @@ class AutoCheckRuleView(APIView):
 class TemplateChapterCollectionView(APIView):
     permission_classes = [IsTeachingPortal]
 
+    @extend_schema(
+        operation_id="teaching_template_chapters_list",
+        responses={200: TemplateChapterListResponseSerializer},
+        extensions={"x-portals": ["TEACHING"]},
+    )
     def get(self, request: HttpRequest, course_id: str, version_id: str) -> Response:
         version = version_for_course(actor=request.user, course_id=course_id, version_id=version_id)
         return _response(request, version_data(version)["chapters"], etag=version.row_version)
 
+    @extend_schema(
+        operation_id="teaching_template_chapters_create",
+        request=TemplateChapterWriteSerializer,
+        responses={201: TemplateChapterResponseSerializer},
+        parameters=[IF_MATCH],
+        extensions={"x-portals": ["TEACHING"]},
+    )
     def post(self, request: HttpRequest, course_id: str, version_id: str) -> Response:
         serializer = TemplateChapterWriteSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        chapter = create_chapter(course_id=course_id, version_id=version_id, actor=request.user, expected_version=parse_if_match(request.headers.get("If-Match")), data=serializer.validated_data, context=_ctx(request))
+        chapter = create_chapter(
+            course_id=course_id,
+            version_id=version_id,
+            actor=request.user,
+            expected_version=parse_if_match(request.headers.get("If-Match")),
+            data=serializer.validated_data,
+            context=_ctx(request),
+        )
         version = version_for_course(actor=request.user, course_id=course_id, version_id=version_id)
-        return _response(request, chapter_data(chapter, version), status=201, etag=version.row_version)
+        return _response(
+            request, chapter_data(chapter, version), status=201, etag=version.row_version
+        )
 
 
 class TemplateChapterDetailView(APIView):
     permission_classes = [IsTeachingPortal]
 
+    @extend_schema(
+        operation_id="teaching_template_chapters_update",
+        request=TemplateChapterWriteSerializer,
+        responses={200: TemplateChapterResponseSerializer},
+        parameters=[IF_MATCH],
+        extensions={"x-portals": ["TEACHING"]},
+    )
     def patch(self, request: HttpRequest, course_id: str, chapter_id: str) -> Response:
         serializer = TemplateChapterWriteSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        chapter = update_chapter(course_id=course_id, chapter_id=chapter_id, actor=request.user, expected_version=parse_if_match(request.headers.get("If-Match")), changes=serializer.validated_data, context=_ctx(request))
-        version = version_for_course(actor=request.user, course_id=course_id, version_id=chapter.template_version.public_id)
-        return _response(request, chapter_data(chapter, version), etag=chapter.row_version)
+        chapter = update_chapter(
+            course_id=course_id,
+            chapter_id=chapter_id,
+            actor=request.user,
+            expected_version=parse_if_match(request.headers.get("If-Match")),
+            changes=serializer.validated_data,
+            context=_ctx(request),
+        )
+        version = version_for_course(
+            actor=request.user, course_id=course_id, version_id=chapter.template_version.public_id
+        )
+        return _response(request, chapter_data(chapter, version), etag=version.row_version)
 
 
 class TemplateChapterReorderView(APIView):
     permission_classes = [IsTeachingPortal]
 
+    @extend_schema(
+        operation_id="teaching_template_chapters_reorder",
+        request=ReorderWriteSerializer,
+        responses={200: TemplateVersionResponseSerializer},
+        parameters=[IF_MATCH],
+        extensions={"x-portals": ["TEACHING"]},
+    )
     def post(self, request: HttpRequest, course_id: str, version_id: str) -> Response:
         serializer = ReorderWriteSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        version = reorder_chapters(course_id=course_id, version_id=version_id, actor=request.user, expected_version=parse_if_match(request.headers.get("If-Match")), chapter_ids=serializer.validated_data["ids"], context=_ctx(request))
+        version = reorder_chapters(
+            course_id=course_id,
+            version_id=version_id,
+            actor=request.user,
+            expected_version=parse_if_match(request.headers.get("If-Match")),
+            chapter_ids=serializer.validated_data["ids"],
+            context=_ctx(request),
+        )
         return _response(request, version_data(version), etag=version.row_version)
 
 
 class TemplateTaskCollectionView(APIView):
     permission_classes = [IsTeachingPortal]
 
+    @extend_schema(
+        operation_id="teaching_template_tasks_list",
+        responses={200: TemplateTaskListResponseSerializer},
+        extensions={"x-portals": ["TEACHING"]},
+    )
     def get(self, request: HttpRequest, course_id: str, chapter_id: str) -> Response:
         try:
-            chapter = TemplateChapter.objects.select_related("template_version").get(public_id=chapter_id)
+            chapter = TemplateChapter.objects.select_related("template_version").get(
+                public_id=chapter_id
+            )
         except TemplateChapter.DoesNotExist as exc:
             from apps.core.errors import ResourceNotFound
+
             raise ResourceNotFound() from exc
-        version = version_for_course(actor=request.user, course_id=course_id, version_id=chapter.template_version.public_id)
-        return _response(request, [task_data(task, version) for task in chapter.tasks.all().order_by("sort_order")])
+        version = version_for_course(
+            actor=request.user, course_id=course_id, version_id=chapter.template_version.public_id
+        )
+        return _response(
+            request,
+            [task_data(task, version) for task in chapter.tasks.all().order_by("sort_order")],
+        )
 
     def post(self, request: HttpRequest, course_id: str, chapter_id: str) -> Response:
+        if not TemplateChapter.objects.filter(
+            public_id=chapter_id, template_version__template__course__public_id=course_id
+        ).exists():
+            raise ResourceNotFound()
         serializer = TemplateTaskWriteSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        chapter = TemplateChapter.objects.select_related("template_version").get(public_id=chapter_id)
-        task = create_task(course_id=course_id, chapter_id=chapter_id, actor=request.user, expected_version=parse_if_match(request.headers.get("If-Match")), data=serializer.validated_data, context=_ctx(request))
-        version = version_for_course(actor=request.user, course_id=course_id, version_id=task.chapter.template_version.public_id)
+        task = create_task(
+            course_id=course_id,
+            chapter_id=chapter_id,
+            actor=request.user,
+            expected_version=parse_if_match(request.headers.get("If-Match")),
+            data=serializer.validated_data,
+            context=_ctx(request),
+        )
+        version = version_for_course(
+            actor=request.user,
+            course_id=course_id,
+            version_id=task.chapter.template_version.public_id,
+        )
         return _response(request, task_data(task, version), status=201, etag=version.row_version)
 
 
 class TemplateTaskDetailView(APIView):
     permission_classes = [IsTeachingPortal]
 
+    @extend_schema(
+        operation_id="teaching_template_tasks_update",
+        request=TemplateTaskWriteSerializer,
+        responses={200: TemplateTaskResponseSerializer},
+        parameters=[IF_MATCH],
+        extensions={"x-portals": ["TEACHING"]},
+    )
     def patch(self, request: HttpRequest, course_id: str, task_id: str) -> Response:
         serializer = TemplateTaskWriteSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        task = update_task(course_id=course_id, task_id=task_id, actor=request.user, expected_version=parse_if_match(request.headers.get("If-Match")), changes=serializer.validated_data, context=_ctx(request))
-        version = version_for_course(actor=request.user, course_id=course_id, version_id=task.chapter.template_version.public_id)
-        return _response(request, task_data(task, version), etag=task.row_version)
+        task = update_task(
+            course_id=course_id,
+            task_id=task_id,
+            actor=request.user,
+            expected_version=parse_if_match(request.headers.get("If-Match")),
+            changes=serializer.validated_data,
+            context=_ctx(request),
+        )
+        version = version_for_course(
+            actor=request.user,
+            course_id=course_id,
+            version_id=task.chapter.template_version.public_id,
+        )
+        return _response(request, task_data(task, version), etag=version.row_version)
 
 
 class TemplateTaskReorderView(APIView):
     permission_classes = [IsTeachingPortal]
 
+    @extend_schema(
+        operation_id="teaching_template_tasks_reorder",
+        request=ReorderWriteSerializer,
+        responses={200: TemplateVersionResponseSerializer},
+        parameters=[IF_MATCH],
+        extensions={"x-portals": ["TEACHING"]},
+    )
     def post(self, request: HttpRequest, course_id: str, chapter_id: str) -> Response:
         serializer = ReorderWriteSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        chapter = TemplateChapter.objects.select_related("template_version").get(public_id=chapter_id)
-        version = reorder_tasks(course_id=course_id, chapter_id=chapter_id, actor=request.user, expected_version=parse_if_match(request.headers.get("If-Match")), task_ids=serializer.validated_data["ids"], context=_ctx(request))
+        version = reorder_tasks(
+            course_id=course_id,
+            chapter_id=chapter_id,
+            actor=request.user,
+            expected_version=parse_if_match(request.headers.get("If-Match")),
+            task_ids=serializer.validated_data["ids"],
+            context=_ctx(request),
+        )
         return _response(request, version_data(version), etag=version.row_version)
 
 

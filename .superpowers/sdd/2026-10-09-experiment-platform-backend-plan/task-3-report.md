@@ -41,4 +41,15 @@ Implemented and committed as `feat: add versioned experiment chapters and tasks`
 ## Notes and residual concerns
 
 - The existing unrelated worktree changes were preserved and excluded from the commit.
-- The content routes currently use the existing teaching portal/API envelope conventions but do not add separate OpenAPI response decorators for every new view; runtime behavior and serializers are covered by the shared version serialization and service tests.
+- The content routes use the existing teaching portal/API envelope conventions and now include explicit OpenAPI request, response, parameter, and portal metadata.
+
+## Review Round 1 Fixes
+
+- Child chapter/task updates now require the request `If-Match` to match the parent `TemplateVersion` row version; child CAS and parent CAS occur in one transaction, preserving independent child row versions.
+- Reorders now require the complete sibling collection exactly once, reject partial/duplicate/foreign ids, use a data-derived temporary offset, and emit audit/outbox records.
+- Version cloning now copies chapters and tasks into the new draft version with new public ids and preserved content/resource overrides.
+- Chapter/task update operations emit audit/outbox records.
+- Task-create and task-reorder views map nonexistent or cross-course chapter ids to `ResourceNotFound` before precondition parsing.
+- Added OpenAPI response serializers/declarations and API coverage for ETags, missing preconditions, and missing chapter mapping.
+
+Review-round verification: `21 passed`; Ruff clean; Django system check clean; migration drift check clean.

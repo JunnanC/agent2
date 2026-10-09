@@ -215,12 +215,16 @@ class TemplateChapter(VersionedModel):
             models.UniqueConstraint(
                 fields=("template_version", "sort_order"), name="lab_chapter_order_uniq"
             ),
-            models.CheckConstraint(condition=models.Q(sort_order__gte=1), name="lab_chapter_order_ck"),
+            models.CheckConstraint(
+                condition=models.Q(sort_order__gte=1), name="lab_chapter_order_ck"
+            ),
             models.CheckConstraint(
                 condition=models.Q(status__in=("DRAFT", "PUBLISHED")), name="lab_chapter_status_ck"
             ),
         ]
-        indexes = [models.Index(fields=("template_version", "sort_order"), name="lab_chapter_order_idx")]
+        indexes = [
+            models.Index(fields=("template_version", "sort_order"), name="lab_chapter_order_idx")
+        ]
 
 
 class TemplateTask(VersionedModel):
