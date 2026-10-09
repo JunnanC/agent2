@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 from django.test import TestCase
 from django.utils import timezone
 
@@ -21,11 +23,11 @@ from ..selectors import (
     student_courses_for_term,
     teacher_courses_for_term,
 )
-from ..services import current_academic_term
 from ..services import (
     ActorContext,
     apply_for_course,
     appoint_course_assistant,
+    current_academic_term,
     drop_enrollment,
     grant_course_capability,
     publish_course,
@@ -67,6 +69,17 @@ class CourseServiceTests(TestCase):
         )
         self.assertEqual(list(teacher_courses_for_term(self.owner, "current")), [])
         self.assertEqual(list(student_courses_for_term(student, term.public_id)), [active.course])
+
+    def test_current_window_course_is_visible_from_current_term(self) -> None:
+        now = timezone.now()
+        Course.objects.filter(pk=self.course.pk).update(
+            term=current_academic_term(),
+            teaching_start=now - timedelta(days=7),
+            teaching_end=now + timedelta(days=7),
+        )
+        self.assertEqual(
+            list(teacher_courses_for_term(self.owner, "current")), [self.course]
+        )
 
     def _publish(self) -> Course:
         return publish_course(

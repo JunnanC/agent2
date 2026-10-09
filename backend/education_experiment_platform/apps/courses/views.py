@@ -5,7 +5,7 @@ from typing import Any
 from django.conf import settings
 from django.http import HttpRequest
 from drf_spectacular.utils import extend_schema
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import BasePermission
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -157,53 +157,61 @@ def _page_spec(request: HttpRequest) -> PageSpec:
 
 
 class ContextView(APIView):
-    permission_classes = [IsAuthenticated]
+    class Permission(BasePermission):
+        def has_permission(self, request: HttpRequest, view: object) -> bool:
+            if not getattr(request.user, "is_authenticated", False):
+                return False
+            if str(getattr(request, "portal", "")) == "USER":
+                return IsUserPortal().has_permission(request, view)
+            if str(getattr(request, "portal", "")) == "TEACHING":
+                return IsTeachingPortal().has_permission(request, view)
+            return False
+
+    permission_classes = [Permission]
 
     @extend_schema(operation_id="context_retrieve", tags=["context"])
     def get(self, request: HttpRequest) -> Response:
         from .services import current_academic_term
 
         term = current_academic_term()
-        courses: dict[int, dict[str, object]] = {}
-        for course in teacher_courses_for_term(request.user, "current"):
-            staff = active_staff(course=course, actor=request.user)
-            if staff is None:
-                continue
-            courses[course.pk] = {
-                "course_id": course.public_id,
-                "code": course.code,
-                "title": course.title,
-                "status": course.status,
-                "staff_role": staff.role,
-            }
-        for course in student_courses_for_term(request.user, "current"):
-            enrollment = active_enrollment(course=course, student=request.user)
-            if enrollment is None:
-                continue
-            courses.setdefault(
-                course.pk,
-                {
-                    "course_id": course.public_id,
-                    "code": course.code,
-                    "title": course.title,
-                    "status": course.status,
+        courses: list[dict[str, object]] = []
+        if request.portal == "TEACHING":
+            for course in teacher_courses_for_term(request.user, "current"):
+                staff = active_staff(course=course, actor=request.user)
+                if staff is not None:
+                    courses.append({
+                        "id": course.public_id,
+                        "code": course.code,
+                        "title": course.title,
+                        "status": course.status,
+                        "staff_role": staff.role,
+                    })
+            role = "TEACHER"
+        else:
+            for course in student_courses_for_term(request.user, "current"):
+                enrollment = active_enrollment(course=course, student=request.user)
+                if enrollment is not None:
+                    courses.append({
+                        "id": course.public_id,
+                        "code": course.code,
+                        "title": course.title,
+                        "status": course.status,
+                        "enrollment_role": "STUDENT",
+                    })
+            role = "STUDENT"
+        return _response(
+            request,
+            {
+                "user_role": role,
+                "current_term": {
+                    "id": term.public_id,
+                    "code": term.code,
+                    "name": term.name,
+                    "status": term.status,
                 },
-            )["enrollment_role"] = "STUDENT"
-        role = {
-            "TEACHING": "TEACHER",
-            "USER": "STUDENT",
-            "PLATFORM": "PLATFORM_ADMIN",
-        }.get(str(getattr(request, "portal", "")), "STUDENT")
-        return _response(request, {
-            "user_role": role,
-            "current_term": {
-                "id": term.public_id,
-                "code": term.code,
-                "name": term.name,
-                "status": term.status,
+                "courses": courses,
             },
-            "courses": list(courses.values()),
-        })
+        )
 
 
 class PublicCourseListView(APIView):

@@ -139,23 +139,17 @@ class CourseApiTests(TestCase):
 
     def test_context_returns_current_term_and_role_aware_courses(self) -> None:
         teacher_client = Client(enforce_csrf_checks=True)
-        teacher_csrf = self._login(
-            teacher_client, portal="TEACHING", identifier=self.teacher.email
-        )
+        teacher_csrf = self._login(teacher_client, portal="TEACHING", identifier=self.teacher.email)
         course = self._create_and_publish(teacher_client, teacher_csrf)
         Course.objects.filter(public_id=course["public_id"]).update(term=self.term)
 
-        response = teacher_client.get(
-            "/api/v2/context", HTTP_X_PORTAL="TEACHING", **PROXY_HEADERS
-        )
+        response = teacher_client.get("/api/v2/context", HTTP_X_PORTAL="TEACHING", **PROXY_HEADERS)
 
         self.assertEqual(response.status_code, 200, response.content)
         self.assertEqual(response.json()["data"]["user_role"], "TEACHER")
         self.assertEqual(response.json()["data"]["current_term"]["code"], self.term.code)
         self.assertEqual(response.json()["data"]["courses"][0]["staff_role"], "OWNER")
-        self.assertEqual(
-            response.json()["data"]["courses"][0]["course_id"], course["public_id"]
-        )
+        self.assertEqual(response.json()["data"]["courses"][0]["id"], course["public_id"])
         self.assertEqual(response.json()["data"]["courses"][0]["code"], course["code"])
 
         Enrollment.objects.create(
@@ -172,9 +166,15 @@ class CourseApiTests(TestCase):
         )
         self.assertEqual(student_context.status_code, 200, student_context.content)
         self.assertEqual(student_context.json()["data"]["user_role"], "STUDENT")
-        self.assertEqual(
-            student_context.json()["data"]["courses"][0]["enrollment_role"], "STUDENT"
+        self.assertEqual(student_context.json()["data"]["courses"][0]["enrollment_role"], "STUDENT")
+
+        teacher_context = teacher_client.get(
+            "/api/v2/context", HTTP_X_PORTAL="TEACHING", **PROXY_HEADERS
         )
+        self.assertEqual(teacher_context.status_code, 200, teacher_context.content)
+        self.assertEqual(teacher_context.json()["data"]["user_role"], "TEACHER")
+        self.assertEqual(teacher_context.json()["data"]["courses"][0]["id"], course["public_id"])
+        self.assertNotIn("enrollment_role", teacher_context.json()["data"]["courses"][0])
 
     def test_context_requires_authentication(self) -> None:
         response = Client().get("/api/v2/context", HTTP_X_PORTAL="USER", **PROXY_HEADERS)

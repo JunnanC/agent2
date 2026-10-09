@@ -1,6 +1,6 @@
-from django.db import IntegrityError, transaction
 from datetime import timedelta
 
+from django.db import IntegrityError, transaction
 from django.test import TestCase
 from django.utils import timezone
 
