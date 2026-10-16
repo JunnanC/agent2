@@ -268,14 +268,14 @@ ARCHIVE_MAX_ATTEMPTS = int(env("ARCHIVE_MAX_ATTEMPTS", "5"))
 RUNTIME_EXECUTION_RETENTION_DAYS = int(env("RUNTIME_EXECUTION_RETENTION_DAYS", "30"))
 RUNTIME_CLEANUP_MAX_ATTEMPTS = int(env("RUNTIME_CLEANUP_MAX_ATTEMPTS", "10"))
 RUNTIME_ADAPTER_CONFIGS = json_env("RUNTIME_ADAPTER_CONFIGS")
-RUNTIME_MODE = env("RUNTIME_MODE", "fake").strip().lower()
+RUNTIME_MODE = env("RUNTIME_MODE", "local").strip().lower()
 if RUNTIME_MODE not in {"fake", "local", "swarm"}:
     raise RuntimeError("RUNTIME_MODE must be fake, local, or swarm")
-RUNTIME_ADAPTER_CODE = env("RUNTIME_ADAPTER_CODE", "runtime/fake")
+RUNTIME_ADAPTER_CODE = env("RUNTIME_ADAPTER_CODE", "runtime/local-docker")
 LOCAL_RUNTIME_IMAGE = env("LOCAL_RUNTIME_IMAGE", "edu-platform-algorithm-workspace:local")
 LOCAL_RUNTIME_NETWORK = env("LOCAL_RUNTIME_NETWORK", "edu-platform-p14_runtime")
 LOCAL_DOCKER_HOST = env("LOCAL_DOCKER_HOST", "unix:///var/run/docker.sock")
-LOCAL_RUNTIME_MODE = env("LOCAL_RUNTIME_MODE", "STUB").upper()
+LOCAL_RUNTIME_MODE = env("LOCAL_RUNTIME_MODE", "REAL").upper()
 if LOCAL_RUNTIME_MODE not in {"STUB", "REAL"}:
     raise RuntimeError("LOCAL_RUNTIME_MODE must be STUB or REAL")
 if not LOCAL_RUNTIME_IMAGE.strip() or any(char.isspace() for char in LOCAL_RUNTIME_IMAGE):
@@ -294,6 +294,11 @@ SWARM_REQUEST_TIMEOUT_SECONDS = int(env("SWARM_REQUEST_TIMEOUT_SECONDS", "30"))
 SWARM_BOOT_TIMEOUT_SECONDS = int(env("SWARM_BOOT_TIMEOUT_SECONDS", "120"))
 SWARM_POLL_INTERVAL_SECONDS = float(env("SWARM_POLL_INTERVAL_SECONDS", "2"))
 SWARM_RUNTIME_NETWORK = env("SWARM_RUNTIME_NETWORK", "edu-runtime")
+if os.getenv("DJANGO_SETTINGS_MODULE", "").endswith(".prod"):
+    if RUNTIME_MODE != "swarm" or not RUNTIME_ADAPTER_CODE.strip():
+        raise RuntimeError("Production requires RUNTIME_MODE=swarm and RUNTIME_ADAPTER_CODE")
+    if RUNTIME_ADAPTER_CODE not in RUNTIME_ADAPTER_CONFIGS:
+        raise RuntimeError("Production runtime adapter configuration is missing")
 RUNTIME_DEFAULT_TTL_SECONDS = int(env("RUNTIME_DEFAULT_TTL_SECONDS", "14400"))
 RUNTIME_WORKSPACE_PORT = int(env("RUNTIME_WORKSPACE_PORT", "8080"))
 RUNTIME_HEALTHCHECK_PATH = env("RUNTIME_HEALTHCHECK_PATH", "/healthz")

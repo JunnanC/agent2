@@ -1,4 +1,4 @@
-from django.db.models import Q, QuerySet
+from django.db.models import Prefetch, Q, QuerySet
 
 from apps.accounts.models import User
 from apps.core.errors import ResourceNotFound
@@ -6,7 +6,43 @@ from apps.core.pagination import PageSpec
 from apps.courses.models import Course, CourseStaffGrant
 from apps.courses.selectors import require_course_capability, visible_course
 
-from .models import ExperimentTask, TaskExtensionRequest, TaskPublication
+from .models import (
+    ExperimentTask,
+    PublicationAudience,
+    PublicationChapter,
+    PublicationPrerequisite,
+    PublicationTask,
+    TaskExtensionRequest,
+    TaskPublication,
+)
+
+
+def publication_response_prefetches() -> tuple[Prefetch, ...]:
+    return (
+        Prefetch(
+            "prerequisites",
+            queryset=PublicationPrerequisite.objects.select_related(
+                "chapter", "prerequisite_publication"
+            ).order_by("id"),
+            to_attr="_response_prerequisites",
+        ),
+        Prefetch(
+            "audience",
+            queryset=PublicationAudience.objects.order_by("id"),
+            to_attr="_response_audience",
+        ),
+        Prefetch(
+            "chapter_snapshots",
+            queryset=PublicationChapter.objects.prefetch_related(
+                Prefetch(
+                    "task_snapshots",
+                    queryset=PublicationTask.objects.order_by("sort_order", "id"),
+                    to_attr="_response_tasks",
+                )
+            ).order_by("sort_order", "id"),
+            to_attr="_response_chapters",
+        ),
+    )
 
 
 def teaching_course(*, actor: User, course_id: str, capability: str) -> Course:
@@ -31,7 +67,7 @@ def publication_for_course(*, actor: User, course_id: str, publication_id: str) 
                 "image",
                 "resource_profile",
             )
-            .prefetch_related("prerequisites", "audience")
+            .prefetch_related(*publication_response_prefetches())
             .get(public_id=publication_id, course=course)
         )
     except TaskPublication.DoesNotExist as exc:
@@ -47,12 +83,14 @@ def publications_for_course(*, actor: User, course_id: str) -> QuerySet[TaskPubl
     return (
         TaskPublication.objects.filter(course=course)
         .select_related(
+            "course",
             "template_version__template",
             "rubric_version__rubric",
             "runtime_adapter",
             "image",
             "resource_profile",
         )
+        .prefetch_related(*publication_response_prefetches())
         .order_by("-created_at", "-id")
     )
 

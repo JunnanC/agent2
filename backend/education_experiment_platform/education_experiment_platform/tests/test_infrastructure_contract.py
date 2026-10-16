@@ -1,13 +1,25 @@
 import json
+import os
 from pathlib import Path
 
 import yaml
 
-ROOT = Path(__file__).resolve().parents[4]
+ROOT = (
+    Path(os.environ["PROJECT_ROOT"])
+    if os.environ.get("PROJECT_ROOT")
+    else Path(__file__).resolve().parents[4]
+)
 
 
 def load_yaml(relative_path: str) -> dict:
     return yaml.safe_load((ROOT / relative_path).read_text(encoding="utf-8"))
+
+def server_block(text: str, server_name: str) -> str:
+    marker = f"server_name {server_name};"
+    marker_index = text.index(marker)
+    start = text.rfind("\n  server {", 0, marker_index)
+    end = text.find("\n  server {", marker_index)
+    return text[start : end if end >= 0 else len(text)]
 
 
 def test_kong_overwrites_browser_and_machine_contexts() -> None:
@@ -17,7 +29,7 @@ def test_kong_overwrites_browser_and_machine_contexts() -> None:
     routes = {route["name"]: route for route in service["routes"]}
 
     expected_portals = {
-        "user-browser-api": "USER",
+        "student-browser-api": "USER",
         "teacher-browser-api": "TEACHING",
         "admin-browser-api": "PLATFORM",
     }
@@ -48,6 +60,41 @@ def test_kong_uses_protocol_specific_upstream_timeouts() -> None:
     }
 
 
+def test_only_student_portal_exposes_event_stream() -> None:
+    config = load_yaml("infrastructure/kong/kong.yml")
+    events = next(service for service in config["services"] if service["name"] == "django-events")
+    assert {route["name"] for route in events["routes"]} == {"student-events"}
+    for relative_path, hosts in (
+        (
+            "infrastructure/nginx/nginx.conf",
+            {
+                "student.localhost student.example.edu": True,
+                "teacher.localhost teacher.example.edu": False,
+                "admin.localhost admin.example.edu": False,
+            },
+        ),
+        (
+            "infrastructure/nginx/nginx.prod.conf",
+            {
+                "${STUDENT_HOST}": True,
+                "${TEACHER_HOST}": False,
+                "${ADMIN_HOST}": False,
+            },
+        ),
+    ):
+        nginx = (ROOT / relative_path).read_text(encoding="utf-8")
+        for host, student_access in hosts.items():
+            block = server_block(nginx, host)
+            event_location = block.split("location = /api/v2/events/stream {", maxsplit=1)[1]
+            event_location = event_location.split("}", maxsplit=1)[0]
+            if student_access:
+                assert "proxy_pass http://gateway;" in event_location
+                assert "proxy_buffering off;" in event_location
+                assert "proxy_read_timeout 1h;" in event_location
+            else:
+                assert "return 403;" in event_location
+
+
 def test_machine_host_has_no_static_site_and_only_integration_routes() -> None:
     nginx = (ROOT / "infrastructure/nginx/nginx.conf").read_text(encoding="utf-8")
     machine_server = nginx.split("server_name api.localhost api.example.edu;", maxsplit=1)[1]
@@ -71,13 +118,13 @@ def test_production_edge_terminates_tls_from_swarm_secrets() -> None:
 
 
 def test_workspace_edge_allows_only_same_origin_embedding() -> None:
-    for relative_path in (
-        "infrastructure/nginx/nginx.conf",
-        "infrastructure/nginx/nginx.prod.conf",
+    for relative_path, student_host in (
+        ("infrastructure/nginx/nginx.conf", "student.localhost student.example.edu"),
+        ("infrastructure/nginx/nginx.prod.conf", "${STUDENT_HOST}"),
     ):
         nginx = (ROOT / relative_path).read_text(encoding="utf-8")
-        user_server = nginx.split("server_name", maxsplit=1)[1]
-        workspace = user_server.split("location /workspace/ {", maxsplit=1)[1]
+        student = server_block(nginx, student_host)
+        workspace = student.split("location /workspace/ {", maxsplit=1)[1]
         workspace = workspace.split("}", maxsplit=1)[0]
 
         assert "proxy_hide_header X-Frame-Options;" in workspace
@@ -118,11 +165,16 @@ def test_local_runtime_docker_access_is_scoped_to_runtime_worker() -> None:
     compose = load_yaml("docker-compose.dev.yml")
     services = compose["services"]
     assert "/var/run/docker.sock:/var/run/docker.sock" in services["runtime-worker"]["volumes"]
-    for service in ("django", "celery", "workspace-gateway"):
+    for service, definition in services.items():
+        if service == "runtime-worker":
+            continue
         assert not any(
-            "docker.sock" in str(item) for item in services[service].get("volumes", [])
+            "docker.sock" in str(item) for item in definition.get("volumes", [])
         )
     environment = compose["x-app-environment"]
+    assert environment["RUNTIME_MODE"] == "${RUNTIME_MODE:-local}"
+    assert environment["RUNTIME_ADAPTER_CODE"] == "${RUNTIME_ADAPTER_CODE:-runtime/local-docker}"
+    assert environment["LOCAL_RUNTIME_MODE"] == "${LOCAL_RUNTIME_MODE:-REAL}"
     assert environment["LOCAL_RUNTIME_IMAGE"] == (
         "${LOCAL_RUNTIME_IMAGE:-edu-platform-algorithm-workspace:local}"
     )
@@ -136,6 +188,28 @@ def test_local_runtime_docker_access_is_scoped_to_runtime_worker() -> None:
         '${RUNTIME_ADAPTER_CONFIGS:-{"runtime/local-docker":'
         '{"runtime_network":"edu-platform-p14_runtime","pids_limit":128}}}'
     )
+    assert "q_workspace_storage" in services["runtime-worker"]["command"][-1]
+
+
+def test_swarm_runtime_access_is_injected_only_into_runtime_worker() -> None:
+    stack = load_yaml("infrastructure/swarm/stack.yml")
+    environment = stack["x-app-environment"]
+    services = stack["services"]
+    assert environment["RUNTIME_MODE"] == "swarm"
+    assert environment["RUNTIME_ADAPTER_CODE"] == "${RUNTIME_ADAPTER_CODE:-runtime/swarm}"
+    assert "runtime/swarm" in environment["RUNTIME_ADAPTER_CONFIGS"]
+    assert {
+        "swarm_docker_ca",
+        "swarm_docker_cert",
+        "swarm_docker_key",
+    } <= set(services["runtime-worker"]["secrets"])
+    for service in ("django", "celery", "workspace-gateway"):
+        assert not {
+            "swarm_docker_ca",
+            "swarm_docker_cert",
+            "swarm_docker_key",
+        } & set(services[service].get("secrets", []))
+    assert "q_workspace_storage" in services["runtime-worker"]["command"][-1]
 
 
 def test_compose_declares_foundation_services_and_isolated_app_network() -> None:
@@ -271,6 +345,27 @@ def test_p11_archive_permissions_and_scheduler_are_least_privilege() -> None:
     assert compose["services"]["celery-beat"]["command"][3] == "beat"
 
 
+def test_p15_new_experiment_tables_are_available_to_the_application_user() -> None:
+    bootstrap = (ROOT / "infrastructure/mysql/configure-users.sh").read_text(encoding="utf-8")
+    writable_tables = (
+        "courses_academic_term",
+        "labtemplates_template_chapter",
+        "labtemplates_template_task",
+        "labtemplates_experiment_image",
+        "labtemplates_image_build_job",
+        "labtemplates_legacy_template_migration",
+        "provisioning_runtime_capacity_reservation",
+    )
+    append_only_tables = (
+        "experiments_publication_chapter",
+        "experiments_publication_task",
+    )
+    for table in writable_tables:
+        assert rf"GRANT SELECT, INSERT, UPDATE ON \`${{MYSQL_DATABASE}}\`.{table}" in bootstrap
+    for table in append_only_tables:
+        assert rf"GRANT SELECT, INSERT ON \`${{MYSQL_DATABASE}}\`.{table}" in bootstrap
+
+
 def test_p08_minio_policy_scopes_versioned_workspace_objects() -> None:
     policy = json.loads(
         (ROOT / "infrastructure/minio/app-policy.json").read_text(encoding="utf-8")
@@ -351,7 +446,7 @@ def test_backend_has_single_canonical_django_project() -> None:
 
 def test_frontends_are_independent_build_entries() -> None:
     apps_root = ROOT / "frontend/apps"
-    for app_name in ("user-web", "teacher-web", "admin-web"):
+    for app_name in ("student-web", "teacher-web", "admin-web"):
         app = apps_root / app_name
         assert (app / "index.html").is_file()
         assert (app / "vite.config.ts").is_file()

@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Linux 网络故障排查 · 实验工作台</title>
+<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="workflow-enhancements.css">
+<script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.js"></script>
+</head>
+<body class="workbench-shell">
+<header class="topbar compact workbench-topbar">
+  <div class="brand-lockup"><a class="brand-mark" href="index.html" aria-label="返回门户"><i data-lucide="layers-3"></i></a><span class="brand-name">实验工作台</span><span class="context-dot"></span><span class="context-label">计算机网络 / Linux 网络故障排查</span></div>
+  <div class="topbar-actions workbench-top-actions">
+    <span class="status good"><span class="save-indicator"></span>自动保存已开启</span>
+    <div class="profile-menu-wrap">
+      <button class="profile-trigger" id="profileMenuButton" type="button" aria-label="打开个人菜单" aria-haspopup="true" aria-expanded="false"><span class="avatar">林</span><span class="profile-trigger-text"><strong>林知夏</strong><small>学生 · 计算机网络</small></span><i data-lucide="chevron-down"></i></button>
+      <div class="profile-popover" id="profilePopover" role="menu" hidden>
+        <div class="profile-popover-heading"><strong>林知夏</strong><small>学生 · 计算机网络</small></div>
+        <button type="button" role="menuitem" data-profile-action="settings"><i data-lucide="user-round-cog"></i><span>个人设置</span></button>
+        <button type="button" role="menuitem" data-profile-action="help"><i data-lucide="circle-help"></i><span>帮助中心</span></button>
+      </div>
+    </div>
+  </div>
+</header>
+<main class="workbench-main workbench-layout">
+  <aside class="workbench-panel workbench-left">
+    <div class="workbench-panel-header workbench-task-header">
+      <div class="task-heading-row">
+        <button class="chapter-menu-toggle" id="chapterMenuToggle" type="button" aria-label="打开实验章节菜单" aria-expanded="false"><i data-lucide="menu"></i></button>
+        <div><span class="eyebrow">实验任务</span><h1>Linux 网络故障排查</h1></div>
+      </div>
+      <div class="chapter-menu" id="chapterMenu" hidden>
+        <div class="chapter-menu-heading"><strong>选择章节任务</strong><button type="button" id="chapterMenuClose" aria-label="关闭章节菜单"><i data-lucide="x"></i></button></div>
+        <nav id="chapterList" aria-label="实验章节">
+          <button class="chapter-option is-complete" type="button" data-chapter="prep"><span class="chapter-state"><i data-lucide="check"></i></span><span><strong>1. 实验准备</strong><small>已完成</small></span></button>
+          <button class="chapter-option is-complete" type="button" data-chapter="dns"><span class="chapter-state"><i data-lucide="check"></i></span><span><strong>2. DNS 故障定位</strong><small>已完成</small></span></button>
+          <button class="chapter-option is-current" type="button" data-chapter="routing" aria-current="step"><span class="chapter-state">3</span><span><strong>3. 路由与端口检查</strong><small>进行中</small></span></button>
+          <button class="chapter-option" type="button" data-chapter="repair"><span class="chapter-state">4</span><span><strong>4. 修复并验证</strong><small>未开始</small></span></button>
+          <button class="chapter-option" type="button" data-chapter="summary"><span class="chapter-state">5</span><span><strong>5. 实验总结</strong><small>未开始</small></span></button>
+        </nav>
+      </div>
+    </div>
+    <div class="workbench-left-content">
+      <div class="workbench-switcher" role="tablist" aria-label="任务内容">
+        <button class="active" id="briefTab" type="button" role="tab" aria-selected="true" aria-controls="taskDetailPanel" data-view="brief">实验说明</button>
+        <button id="reportTab" type="button" role="tab" aria-selected="false" aria-controls="reportEditorPanel" data-view="report">实验报告</button>
+      </div>
+      <section class="task-detail-panel" id="taskDetailPanel" role="tabpanel" aria-labelledby="briefTab">
+        <div class="detail-kicker" id="chapterKicker">第 3 阶段 · 路由与端口检查</div>
+        <h2 id="chapterTaskName">检查网络路由与服务端口</h2>
+        <p id="chapterTaskDescription">确认默认路由配置，并检查目标服务端口是否可达。记录导致网络服务无法访问的原因。</p>
+        <div class="task-hint"><i data-lucide="lightbulb"></i><p id="chapterTaskHint">先确认网络接口与路由状态，再验证目标主机和端口的连通性。</p></div>
+        <div class="task-completion-note"><i data-lucide="file-text"></i><span>完成本阶段后，请填写并提交对应的实验报告。</span></div>
+      </section>
+      <section class="report-editor-panel" id="reportEditorPanel" role="tabpanel" aria-labelledby="reportTab" hidden>
+        <div class="report-format-toolbar" role="toolbar" aria-label="报告文本格式">
+          <button type="button" data-format="bold" aria-label="加粗"><strong>B</strong></button>
+          <button type="button" data-format="italic" aria-label="斜体"><em>I</em></button>
+          <span aria-hidden="true"></span>
+          <button type="button" data-format="insertUnorderedList" aria-label="项目符号列表"><i data-lucide="list"></i></button>
+          <button type="button" data-format="formatBlock" data-format-value="h3" aria-label="小标题"><i data-lucide="heading-3"></i></button>
+          <div class="report-toolbar-actions" role="group" aria-label="报告编辑与保存操作">
+            <span class="report-toolbar-status" id="reportSaveStatus">草稿</span>
+            <button class="report-toolbar-button" type="button" data-action="add-report-attachment"><i data-lucide="paperclip"></i>附件</button>
+            <input id="reportAttachmentInput" type="file" hidden>
+            <button class="report-save-action" type="button" data-action="submit-chapter-report">保存阶段</button>
+          </div>
+        </div>
+        <div class="report-editor-divider" aria-hidden="true"></div>
+        <div class="report-attachments" id="reportAttachments" hidden></div>
+        <div class="rich-report-editor" id="chapterReportEditor" contenteditable="true" role="textbox" aria-label="实验报告编辑器" aria-multiline="true"></div>
+      </section>
+    </div>
+  </aside>
+  <div class="workbench-splitter report-workbench-splitter" data-splitter="report-workspace" role="separator" aria-label="调整实验报告与工作台宽度" aria-orientation="vertical" aria-valuemin="240" aria-valuemax="560" aria-valuenow="320" tabindex="0"></div>
+  <section class="workbench-panel workbench-center">
+    <div class="workspace-tabs" role="tablist" aria-label="工作区工具">
+      <div class="workspace-tab-list">
+        <button class="active" type="button" data-worktab="terminal" role="tab" aria-selected="true">终端</button>
+        <button type="button" data-worktab="editor" role="tab" aria-selected="false">文件编辑</button>
+        <button type="button" data-worktab="preview" role="tab" aria-selected="false">结果预览</button>
+      </div>
+      <button class="btn sm workspace-exit" type="button" data-action="open-exit"><i data-lucide="log-out"></i>退出实验</button>
+    </div>
+    <div class="workspace-content">
+      <div class="workspace-card workspace-terminal" id="workspace-terminal" role="tabpanel">
+        <div class="terminal-head"><span>终端</span><span>交互环境</span></div>
+        <div>student@network-lab:~$ <span class="green">ip route</span></div>
+        <div>default via 10.10.0.1 dev eth0 proto dhcp src 10.10.0.24</div>
+        <div>10.10.0.0/24 dev eth0 proto kernel scope link src 10.10.0.24</div>
+        <div>student@network-lab:~$ <span class="green">dig api.edu.local</span></div>
+        <div>;; connection timed out; no servers could be reached</div>
+        <div>student@network-lab:~$ <span class="green">cat /etc/resolv.conf</span></div>
+        <div>nameserver 10.10.0.53</div>
+        <div>student@network-lab:~$ <span class="green">_</span></div>
+      </div>
+      <div class="workspace-card workspace-placeholder" id="workspace-editor" role="tabpanel" hidden><div class="terminal-head"><span>文件编辑</span><span>实验文件</span></div><div class="editor-file-title">/etc/resolv.conf</div><pre>nameserver 10.10.0.53
+options timeout:2 attempts:2</pre><p>编辑实验文件后，运行测试用例验证配置。</p></div>
+      <div class="workspace-card workspace-placeholder" id="workspace-preview" role="tabpanel" hidden><div class="terminal-head"><span>结果预览</span><span>最近一次测试结果</span></div><div class="preview-empty"><i data-lucide="flask-conical"></i><strong>还没有测试结果</strong><span>完成本阶段任务后，运行测试用例查看结果。</span></div></div>
+      <div class="workbench-splitter workspace-tests-splitter" data-splitter="workspace-tests" role="separator" aria-label="调整工作台与测试用例高度" aria-orientation="horizontal" aria-valuemin="120" aria-valuemax="360" aria-valuenow="155" tabindex="0"></div>
+      <section class="test-panel" aria-labelledby="testPanelTitle">
+        <div class="test-panel-heading"><h2 id="testPanelTitle">测试用例</h2><span id="testSummary">本阶段共 3 项 · 尚未运行</span><button class="test-history-button" type="button" data-action="open-executions">执行记录</button><span class="test-status neutral" id="testRunStatus">待运行</span></div>
+        <div class="test-case-list" id="testCaseList">
+          <div class="test-case" data-test-case="interface"><span class="test-case-icon"><i data-lucide="circle-dashed"></i></span><span><strong>网络接口状态正常</strong><small>检查 eth0 接口是否已启用</small></span><span class="test-case-result">待测试</span></div>
+          <div class="test-case" data-test-case="route"><span class="test-case-icon"><i data-lucide="circle-dashed"></i></span><span><strong>默认路由配置正确</strong><small>确认默认网关与路由表</small></span><span class="test-case-result">待测试</span></div>
+          <div class="test-case" data-test-case="dns"><span class="test-case-icon"><i data-lucide="circle-dashed"></i></span><span><strong>目标服务连通性</strong><small>验证 api.edu.local 解析与访问</small></span><span class="test-case-result">待测试</span></div>
+        </div>
+        <div class="test-panel-actions">
+          <button class="btn" type="button" data-action="checkpoint"><i data-lucide="bookmark-plus"></i>保存检查点</button>
+          <div><button class="btn" type="button" data-action="run-tests"><i data-lucide="play"></i>运行测试</button><button class="btn primary" type="button" data-action="open-submit"><i data-lucide="send"></i>提交报告</button></div>
+        </div>
+      </section>
+    </div>
+  </section>
+</main>
+<div id="modalRoot"></div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<script src="workbench.js"></script>
+</body>
+</html>

@@ -443,6 +443,7 @@ class DockerLocalAdapterTests(SimpleTestCase):
         self.assertEqual(labels["edu.platform.managed"], "true")
         self.assertEqual(client.networks_state[0]["driver"], "bridge")
         container_config = client.containers_state[created.external_id]["_kwargs"]
+        self.assertEqual(container_config["image"], spec.image_ref)
         self.assertEqual(
             container_config["healthcheck"]["Test"],
             ["CMD", "/usr/local/bin/workspace-router", "healthcheck"],
@@ -462,6 +463,27 @@ class DockerLocalAdapterTests(SimpleTestCase):
         )
         adapter.destroy_resource(workspace_volume["Name"], "resource-destroy:local-1")
         self.assertEqual(client.volumes_state, {})
+
+    def test_workspace_uses_resource_limits_while_admission_values_are_requests(self) -> None:
+        client = FakeDockerEngine()
+        adapter = DockerLocalAdapter(
+            client=client,
+            config={
+                "image": "edu-platform-algorithm-workspace:local",
+                "runtime_network": "edu-runtime",
+            },
+        )
+        spec = runtime_spec(
+            cpu_millicores=500,
+            memory_mb=256,
+            cpu_limit_millicores=1500,
+            memory_limit_mb=2048,
+        )
+
+        adapter.create(spec, "provisioning:local-limits")
+        host_config = next(kwargs for name, kwargs in client.calls if name == "create_host_config")
+        self.assertEqual(host_config["nano_cpus"], 1_500_000_000)
+        self.assertEqual(host_config["mem_limit"], "2048m")
 
     def test_destroy_retains_creation_expiry_when_volume_updates_are_unavailable(self) -> None:
         client = FakeDockerEngine()
@@ -554,6 +576,7 @@ class DockerLocalAdapterTests(SimpleTestCase):
         common = {
             "edu.platform.managed": "true",
             "edu.platform.judge": "judge-stale",
+            "edu.platform.config_ref": "runtime/local-docker",
         }
         client.create_container(
             image="workspace",

@@ -10,6 +10,7 @@ from apps.courses.selectors import require_course_capability, visible_course
 from apps.governance.models import ImageAsset
 from apps.governance.ports import template_resource_options
 
+from .legacy import LegacyTemplateAdapter
 from .models import Template, TemplatePrecheckRun, TemplateVersion
 
 
@@ -58,6 +59,14 @@ def version_for_course(*, actor: User, course_id: str, version_id: str) -> Templ
         )
     except TemplateVersion.DoesNotExist as exc:
         raise ResourceNotFound() from exc
+
+
+def template_content_for_course(
+    *, actor: User, course_id: str, version_id: str
+) -> LegacyTemplateAdapter:
+    return LegacyTemplateAdapter.from_version(
+        version_for_course(actor=actor, course_id=course_id, version_id=version_id)
+    )
 
 
 def options_for_course(*, actor: User, course_id: str) -> dict[str, Any]:

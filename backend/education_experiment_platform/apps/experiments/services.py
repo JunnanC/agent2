@@ -1,5 +1,7 @@
 import hashlib
-from collections.abc import Iterable
+import json
+import re
+from collections.abc import Iterable, Mapping
 from typing import Any
 
 from django.conf import settings
@@ -17,7 +19,10 @@ from apps.courses.content_services import prerequisite_status
 from apps.courses.models import Chapter, CourseStaffGrant, Enrollment
 from apps.courses.ports import Blocker
 from apps.courses.selectors import require_course_capability
-from apps.labtemplates.models import TemplateVersion
+from apps.governance.models import ResourceProfile
+from apps.labtemplates.errors import TemplateValidationError
+from apps.labtemplates.models import ExperimentImage, TemplateChapter, TemplateTask, TemplateVersion
+from apps.labtemplates.services import _normalize_execution_spec
 from apps.reviews.models import RubricVersion
 
 from . import events
@@ -37,7 +42,9 @@ from .metrics import (
 from .models import (
     ExperimentTask,
     PublicationAudience,
+    PublicationChapter,
     PublicationPrerequisite,
+    PublicationTask,
     TaskExtensionDecision,
     TaskExtensionRequest,
     TaskPublication,
@@ -162,36 +169,301 @@ def _digest(values: Iterable[str]) -> str:
     return hashlib.sha256("\n".join(sorted(values)).encode()).hexdigest()
 
 
-def _runtime_snapshot(template: TemplateVersion) -> dict[str, Any]:
+def _json_digest(value: Any) -> str:
+    return hashlib.sha256(
+        json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+
+
+_IMAGE_DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
+
+
+def _resource_snapshot(
+    profile: ResourceProfile | None, *, runtime_type: str, source_id: str
+) -> dict[str, Any]:
+    if profile is None:
+        raise PublicationValidationError(
+            detail={"resource_profile_id": {source_id: "required"}}
+        )
+    request_limit_valid = (
+        profile.cpu_request_millicores > 0
+        and profile.cpu_request_millicores <= profile.cpu_limit_millicores
+        and profile.memory_request_mb > 0
+        and profile.memory_request_mb <= profile.memory_limit_mb
+    )
+    if profile.status != ResourceProfile.Status.ACTIVE or profile.runtime_type != runtime_type:
+        raise PublicationValidationError(
+            detail={"resource_profile_id": {source_id: "active_runtime_profile_required"}}
+        )
+    if not request_limit_valid:
+        raise PublicationValidationError(
+            detail={"resource_profile_id": {source_id: "invalid_request_limit"}}
+        )
+    return {
+        "public_id": profile.public_id,
+        "code": profile.code,
+        "runtime_type": profile.runtime_type,
+        "cpu_millicores": profile.cpu_millicores,
+        "memory_mb": profile.memory_mb,
+        "cpu_request_millicores": profile.cpu_request_millicores,
+        "cpu_limit_millicores": profile.cpu_limit_millicores,
+        "memory_request_mb": profile.memory_request_mb,
+        "memory_limit_mb": profile.memory_limit_mb,
+        "disk_gb": profile.disk_gb,
+        "network_mode": profile.network_mode,
+        "cost_minor_per_hour": profile.cost_minor_per_hour,
+        "currency_code": profile.currency_code,
+    }
+
+
+def _ready_image_snapshot(template: TemplateVersion) -> dict[str, Any]:
+    image = (
+        ExperimentImage.objects.filter(
+            template_version=template,
+            status=ExperimentImage.Status.READY,
+        )
+        .select_related("image_asset")
+        .order_by("-created_at", "-id")
+        .first()
+    )
+    if image is None or image.image_asset is None:
+        raise PublicationValidationError(detail={"image": "READY_REQUIRED"})
+    asset = image.image_asset
+    digest = image.resolved_digest or asset.digest
+    if not _IMAGE_DIGEST.fullmatch(digest) or not asset.is_ready:
+        raise PublicationValidationError(detail={"image": "READY_DIGEST_REQUIRED"})
+    return {
+        "experiment_image": image,
+        "image": asset,
+        "registry": image.registry or asset.registry,
+        "repository": image.repository or asset.repository,
+        "digest": digest,
+    }
+
+
+def _content_snapshot(template: TemplateVersion) -> dict[str, Any]:
+    all_chapters = list(
+        TemplateChapter.objects.filter(template_version=template)
+        .select_related("resource_profile")
+        .prefetch_related("tasks__resource_profile")
+        .order_by("sort_order", "id")
+    )
+    if not all_chapters:
+        raise PublicationValidationError(detail={"chapters": "at_least_one_required"})
+    draft_chapters = [
+        chapter.public_id
+        for chapter in all_chapters
+        if chapter.status != TemplateChapter.Status.PUBLISHED
+    ]
+    if draft_chapters:
+        raise PublicationValidationError(
+            detail={"chapters": {"not_published": draft_chapters}}
+        )
+    chapters = [
+        chapter for chapter in all_chapters if chapter.status == TemplateChapter.Status.PUBLISHED
+    ]
+    chapter_orders = [chapter.sort_order for chapter in chapters]
+    if len(chapter_orders) != len(set(chapter_orders)) or any(
+        order < 1 for order in chapter_orders
+    ):
+        raise PublicationValidationError(detail={"chapter_sort_order": "unique_positive_required"})
+
+    image_snapshot = _ready_image_snapshot(template)
+    version_profile = _resource_snapshot(
+        template.resource_profile,
+        runtime_type=template.runtime_type,
+        source_id=template.public_id,
+    )
+    chapter_snapshots: list[dict[str, Any]] = []
+    for chapter in chapters:
+        all_tasks = list(chapter.tasks.all().order_by("sort_order", "id"))
+        draft_tasks = [
+            task.public_id
+            for task in all_tasks
+            if task.status != TemplateTask.Status.PUBLISHED
+        ]
+        if draft_tasks:
+            raise PublicationValidationError(
+                detail={"chapter_tasks": {chapter.public_id: {"not_published": draft_tasks}}}
+            )
+        tasks = [task for task in all_tasks if task.status == TemplateTask.Status.PUBLISHED]
+        if not tasks:
+            raise PublicationValidationError(
+                detail={"chapter_tasks": {chapter.public_id: "at_least_one_required"}}
+            )
+        task_orders = [task.sort_order for task in tasks]
+        if len(task_orders) != len(set(task_orders)) or any(order < 1 for order in task_orders):
+            raise PublicationValidationError(
+                detail={"task_sort_order": {chapter.public_id: "unique_positive_required"}}
+            )
+        task_snapshots: list[dict[str, Any]] = []
+        for task in tasks:
+            profile = task.resource_profile or chapter.resource_profile or template.resource_profile
+            resource_snapshot = _resource_snapshot(
+                profile,
+                runtime_type=template.runtime_type,
+                source_id=task.public_id,
+            )
+            merged_execution_spec = {
+                **dict(template.execution_spec or {}),
+                **dict(task.execution_spec or {}),
+            }
+            try:
+                normalized_execution_spec = _normalize_execution_spec(merged_execution_spec)
+            except TemplateValidationError as exc:
+                raise PublicationValidationError(
+                    detail={"execution_spec": {task.public_id: exc.detail}}
+                ) from exc
+            execution_snapshot = {
+                "execution_spec": normalized_execution_spec,
+                "network_policy": dict(template.network_policy or {}),
+                "workspace_capabilities": dict(template.workspace_capabilities or {}),
+                "report_policy": dict(template.report_policy or {}),
+                "review_policy": dict(template.review_policy or {}),
+            }
+            task_snapshots.append({
+                "source_task_id": task.public_id,
+                "title": task.title,
+                "description": task.description,
+                "instructions": task.instructions,
+                "task_type": task.task_type,
+                "sort_order": task.sort_order,
+                "image_digest": image_snapshot["digest"],
+                "resource_profile_snapshot": resource_snapshot,
+                "execution_snapshot": execution_snapshot,
+                "submission_policy": dict(task.submission_policy or {}),
+                "grading_policy": dict(task.grading_policy or {}),
+            })
+        chapter_snapshots.append({
+            "source_chapter_id": chapter.public_id,
+            "title": chapter.title,
+            "description": chapter.description,
+            "learning_objectives": list(chapter.learning_objectives or []),
+            "sort_order": chapter.sort_order,
+            "resource_profile_snapshot": _resource_snapshot(
+                chapter.resource_profile or template.resource_profile,
+                runtime_type=template.runtime_type,
+                source_id=chapter.public_id,
+            ),
+            "tasks": task_snapshots,
+        })
+
+    template_digest = _json_digest({
+        "template_version_id": template.public_id,
+        "template_spec_digest": template.spec_digest,
+        "runtime_type": template.runtime_type,
+        "runtime_adapter_id": template.runtime_adapter.public_id,
+        "runtime_adapter_driver": template.runtime_adapter.driver,
+        "runtime_adapter_config_ref": template.runtime_adapter.config_ref,
+        "image": {
+            "registry": image_snapshot["registry"],
+            "repository": image_snapshot["repository"],
+            "digest": image_snapshot["digest"],
+        },
+        "resource_profile": version_profile,
+        "execution_spec": dict(template.execution_spec or {}),
+        "network_policy": dict(template.network_policy or {}),
+        "workspace_capabilities": dict(template.workspace_capabilities or {}),
+        "chapters": chapter_snapshots,
+    })
+    return {
+        "chapters": chapter_snapshots,
+        "template_digest": template_digest,
+        "image": image_snapshot,
+        "resource_profile": version_profile,
+        "template_spec_digest": template.spec_digest,
+        "execution_spec": dict(template.execution_spec or {}),
+        "runtime_adapter": template.runtime_adapter,
+        "runtime_adapter_driver": template.runtime_adapter.driver,
+        "runtime_adapter_config_ref": template.runtime_adapter.config_ref,
+    }
+
+
+@transaction.atomic
+def precheck_template_version(
+    *,
+    template_version: TemplateVersion | None = None,
+    template_version_id: str | None = None,
+) -> dict[str, Any]:
+    lookup = {"public_id": template_version_id} if template_version_id else {}
+    if template_version is not None:
+        lookup = {"pk": template_version.pk}
+    if not lookup:
+        raise PublicationValidationError(detail={"template_version_id": "required"})
+    try:
+        locked_template = (
+            TemplateVersion.objects.select_for_update()
+            .select_related("template", "runtime_adapter", "resource_profile")
+            .get(**lookup)
+        )
+    except TemplateVersion.DoesNotExist as exc:
+        raise ResourceNotFound() from exc
+    if (
+        locked_template.status != TemplateVersion.Status.PUBLISHED
+        or not locked_template.spec_digest
+    ):
+        raise PublicationValidationError(
+            detail={"template_version_status": locked_template.status}
+        )
+    return _content_snapshot(locked_template)
+
+
+def publish_template_version(*, template_version: TemplateVersion) -> dict[str, Any]:
+    return precheck_template_version(template_version=template_version)
+
+
+def _runtime_snapshot(
+    template: TemplateVersion, content: dict[str, Any] | None = None
+) -> dict[str, Any]:
     """Capture mutable runtime inputs when a publication is frozen."""
 
     adapter = template.runtime_adapter
-    image = template.image
+    image = content["image"]["image"] if content is not None else template.image
     profile = template.resource_profile
+    image_registry = content["image"]["registry"] if content is not None else image.registry
+    image_repository = content["image"]["repository"] if content is not None else image.repository
+    image_digest = content["image"]["digest"] if content is not None else image.digest
+    execution_spec = dict(
+        content["execution_spec"] if content is not None else template.execution_spec or {}
+    )
+    execution_spec["_runtime"] = {
+        "network_policy": dict(template.network_policy or {}),
+        "workspace_capabilities": dict(template.workspace_capabilities or {}),
+    }
     return {
-        "template_spec_digest": template.spec_digest,
-        "execution_spec": dict(template.execution_spec or {}),
+        "template_spec_digest": (
+            content["template_spec_digest"] if content is not None else template.spec_digest
+        ),
+        "execution_spec": execution_spec,
         "runtime_adapter": adapter,
-        "runtime_adapter_driver": adapter.driver,
-        "runtime_adapter_config_ref": adapter.config_ref,
+        "runtime_adapter_driver": (
+            content["runtime_adapter_driver"] if content is not None else adapter.driver
+        ),
+        "runtime_adapter_config_ref": (
+            content["runtime_adapter_config_ref"] if content is not None else adapter.config_ref
+        ),
         "image": image,
-        "image_registry": image.registry,
-        "image_repository": image.repository,
-        "image_digest": image.digest,
+        "image_registry": image_registry,
+        "image_repository": image_repository,
+        "image_digest": image_digest,
         "resource_profile": profile,
-        "resource_profile_snapshot": {
-            "public_id": profile.public_id,
-            "code": profile.code,
-            "runtime_type": profile.runtime_type,
-            "cpu_millicores": profile.cpu_millicores,
-            "memory_mb": profile.memory_mb,
-            "cpu_request_millicores": profile.cpu_request_millicores or profile.cpu_millicores,
-            "cpu_limit_millicores": profile.cpu_limit_millicores or profile.cpu_millicores,
-            "memory_request_mb": profile.memory_request_mb or profile.memory_mb,
-            "memory_limit_mb": profile.memory_limit_mb or profile.memory_mb,
-            "disk_gb": profile.disk_gb,
-            "network_mode": profile.network_mode,
-        },
+        "resource_profile_snapshot": (
+            dict(content["resource_profile"])
+            if content is not None
+            else {
+                "public_id": profile.public_id,
+                "code": profile.code,
+                "runtime_type": profile.runtime_type,
+                "cpu_millicores": profile.cpu_millicores,
+                "memory_mb": profile.memory_mb,
+                "cpu_request_millicores": profile.cpu_request_millicores or profile.cpu_millicores,
+                "cpu_limit_millicores": profile.cpu_limit_millicores or profile.cpu_millicores,
+                "memory_request_mb": profile.memory_request_mb or profile.memory_mb,
+                "memory_limit_mb": profile.memory_limit_mb or profile.memory_mb,
+                "disk_gb": profile.disk_gb,
+                "network_mode": profile.network_mode,
+            }
+        ),
     }
 
 
@@ -473,7 +745,9 @@ def _audience_enrollments(
     enrollments = list(
         Enrollment.objects.filter(
             course=publication.course, status=Enrollment.Status.ACTIVE, public_id__in=selected_ids
-        ).select_related("student")
+        )
+        .select_related("student")
+        .order_by("id")
     )
     if len(enrollments) != len(set(selected_ids)):
         raise PublicationValidationError(
@@ -605,6 +879,40 @@ def _create_task(
     return task
 
 
+def _copy_publication_snapshots(
+    *, publication: TaskPublication, content: dict[str, Any]
+) -> None:
+    for chapter_snapshot in content["chapters"]:
+        chapter = PublicationChapter.objects.create(
+            publication=publication,
+            source_chapter_id=chapter_snapshot["source_chapter_id"],
+            title=chapter_snapshot["title"],
+            description=chapter_snapshot["description"],
+            learning_objectives=chapter_snapshot["learning_objectives"],
+            sort_order=chapter_snapshot["sort_order"],
+            snapshot={
+                "resource_profile_snapshot": chapter_snapshot["resource_profile_snapshot"],
+            },
+        )
+        PublicationTask.objects.bulk_create([
+            PublicationTask(
+                publication_chapter=chapter,
+                source_task_id=task_snapshot["source_task_id"],
+                title=task_snapshot["title"],
+                description=task_snapshot["description"],
+                instructions=task_snapshot["instructions"],
+                task_type=task_snapshot["task_type"],
+                sort_order=task_snapshot["sort_order"],
+                image_digest=task_snapshot["image_digest"],
+                resource_profile_snapshot=task_snapshot["resource_profile_snapshot"],
+                execution_snapshot=task_snapshot["execution_snapshot"],
+                submission_policy=task_snapshot["submission_policy"],
+                grading_policy=task_snapshot["grading_policy"],
+            )
+            for task_snapshot in chapter_snapshot["tasks"]
+        ])
+
+
 @transaction.atomic
 def publish_publication(
     *,
@@ -622,7 +930,7 @@ def publish_publication(
         course = Course.objects.select_for_update().get(public_id=course_id)
         publication = (
             TaskPublication.objects.select_for_update()
-            .select_related("course", "template_version__template", "rubric_version__rubric")
+            .select_related("course", "rubric_version__rubric")
             .get(public_id=publication_id, course=course)
         )
     except (Course.DoesNotExist, TaskPublication.DoesNotExist) as exc:
@@ -632,8 +940,35 @@ def publish_publication(
     )
     if publication.status != TaskPublication.Status.DRAFT:
         raise PublicationStateConflict(detail={"status": publication.status})
+    try:
+        template = (
+            TemplateVersion.objects.select_for_update()
+            .select_related("template", "runtime_adapter", "image", "resource_profile")
+            .get(pk=publication.template_version_id)
+        )
+    except TemplateVersion.DoesNotExist as exc:
+        raise ResourceNotFound() from exc
+    publication.template_version = template
     _validate_dependencies(publication=publication)
+    content = publish_template_version(template_version=template)
     enrollments = _freeze_audience(publication=publication, selected_ids=selected_ids)
+    publication_digest = _json_digest({
+        "course_id": course.public_id,
+        "template_digest": content["template_digest"],
+        "audience_mode": publication.audience_mode,
+        "audience_enrollment_ids": sorted(item.public_id for item in enrollments),
+        "title": publication.title,
+        "description": publication.description,
+        "window_start": publication.window_start.isoformat(),
+        "window_end": publication.window_end.isoformat(),
+        "assignment_deadline": (
+            publication.assignment_deadline.isoformat()
+            if publication.assignment_deadline is not None
+            else None
+        ),
+        "report_required": publication.report_required,
+        "review_mode": publication.review_mode,
+    })
     now = timezone.now()
     async_assignment = len(enrollments) >= int(getattr(settings, "P06_PUBLICATION_SYNC_LIMIT", 100))
     next_status = (
@@ -642,13 +977,16 @@ def publish_publication(
     changes: dict[str, Any] = {
         "status": next_status,
         "published_by": actor,
-        **_runtime_snapshot(publication.template_version),
+        "template_digest": content["template_digest"],
+        "publication_digest": publication_digest,
+        **_runtime_snapshot(template, content),
     }
     if not async_assignment:
         changes["published_at"] = now
     published = compare_and_swap(
         TaskPublication, pk=publication.pk, expected_version=expected_version, changes=changes
     )
+    _copy_publication_snapshots(publication=published, content=content)
     if async_assignment:
         from .tasks import assign_publication_tasks
 
@@ -1077,6 +1415,8 @@ def start_task(*, task_id: str, actor: User, expected_version: int, context: Any
         raise ResourceNotFound() from exc
     if task.status != ExperimentTask.Status.ASSIGNED:
         raise TaskStateConflict(detail={"status": task.status})
+    if task.publication.status != task.publication.Status.PUBLISHED:
+        raise TaskStateConflict(detail={"publication_status": task.publication.status})
     if task.enrollment.status != Enrollment.Status.ACTIVE:
         raise TaskStateConflict(detail={"enrollment_status": task.enrollment.status})
     now = timezone.now()
@@ -1099,6 +1439,73 @@ def start_task(*, task_id: str, actor: User, expected_version: int, context: Any
         reason="student started experiment",
         context=context,
     )
+
+
+def start_task_runtime(
+    *,
+    task_id: str,
+    actor: User,
+    context: Any,
+    expected_version: int | None = None,
+    overrides: Mapping[str, object] | None = None,
+    payload: Mapping[str, object] | None = None,
+) -> tuple[ExperimentTask, Any]:
+    """Start or reuse the student's runtime from the published task snapshot."""
+
+    from apps.provisioning.services import start_provisioning
+
+    try:
+        task = ExperimentTask.objects.get(public_id=task_id, student=actor)
+    except ExperimentTask.DoesNotExist as exc:
+        raise ResourceNotFound() from exc
+    requested = overrides if overrides is not None else payload
+    return start_provisioning(
+        task_id=task_id,
+        actor=actor,
+        expected_version=task.row_version if expected_version is None else expected_version,
+        context=context,
+        overrides=requested,
+    )
+
+
+def stop_task_runtime(
+    *, runtime_id: str, actor: User, context: Any, expected_version: int | None = None
+) -> Any:
+    """Destroy a student-owned runtime and revoke its workspace sessions."""
+
+    from apps.provisioning.models import ProvisioningInstance
+    from apps.provisioning.services import destroy_task_instance
+    from apps.workspaces.services import revoke_task_sessions
+
+    try:
+        instance = (
+            ProvisioningInstance.objects.select_related("task", "task__student")
+            .get(public_id=runtime_id, task__student=actor)
+        )
+    except ProvisioningInstance.DoesNotExist as exc:
+        raise ResourceNotFound() from exc
+    if expected_version is not None and instance.task.row_version != expected_version:
+        from apps.core.errors import RowVersionConflict
+
+        raise RowVersionConflict(
+            detail={
+                "expected_row_version": expected_version,
+                "actual_row_version": instance.task.row_version,
+            }
+        )
+    instance_version = instance.row_version
+    revoke_task_sessions(
+        task_id=instance.task.public_id,
+        reason="student stopped runtime",
+        context=context,
+    )
+    destroyed = destroy_task_instance(
+        task_id=instance.task.public_id,
+        idempotency_key=f"student-stop:{runtime_id}",
+        context=context,
+        expected_version=instance_version,
+    )
+    return destroyed or instance
 
 
 @transaction.atomic

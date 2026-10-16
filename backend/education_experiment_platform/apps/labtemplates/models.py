@@ -433,3 +433,40 @@ class ImageBuildJob(VersionedModel):
             models.Index(fields=("experiment_image", "created_at"), name="lab_image_job_image_idx"),
             models.Index(fields=("status", "created_at"), name="lab_image_job_status_idx"),
         ]
+
+
+class LegacyTemplateMigration(VersionedModel):
+    class Status(models.TextChoices):
+        MIGRATED = "MIGRATED"
+        SKIPPED = "SKIPPED"
+        MIGRATION_REQUIRED = "MIGRATION_REQUIRED"
+        FAILED = "FAILED"
+
+    public_id = public_id_field()
+    template_version = models.OneToOneField(
+        TemplateVersion, on_delete=models.PROTECT, related_name="legacy_migration"
+    )
+    chapter = models.ForeignKey(
+        TemplateChapter,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="legacy_migrations",
+    )
+    task = models.ForeignKey(
+        TemplateTask,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="legacy_migrations",
+    )
+    status = models.CharField(max_length=24, choices=Status.choices)
+    error_code = models.CharField(max_length=64, blank=True, default="")
+    detail = models.JSONField(default=dict, blank=True)
+    processed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = "labtemplates_legacy_template_migration"
+        indexes = [
+            models.Index(fields=("status", "processed_at"), name="lab_legacy_mig_status_idx")
+        ]

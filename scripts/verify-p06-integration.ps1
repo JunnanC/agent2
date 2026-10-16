@@ -8,7 +8,7 @@ if ($ProjectName -notmatch '^[a-z0-9][a-z0-9_-]{2,62}$') { throw 'ProjectName mu
 $root = Split-Path -Parent $PSScriptRoot
 $compose = @('compose', '-p', $ProjectName, '-f', "$root\docker-compose.dev.yml")
 $previous = @{}
-foreach ($name in @('ENTRY_PORT', 'OPENAPI_REVISION', 'APP_VERSION', 'APP_NETWORK_SUBNET', 'FLUENTD_HOST_PORT', 'MINIO_API_PORT', 'MINIO_CONSOLE_PORT', 'PROMETHEUS_PORT', 'P02_E2E_PASSWORD', 'USER_WEB_URL', 'TEACHER_WEB_URL', 'ADMIN_WEB_URL')) {
+foreach ($name in @('ENTRY_PORT', 'OPENAPI_REVISION', 'APP_VERSION', 'APP_NETWORK_SUBNET', 'FLUENTD_HOST_PORT', 'MINIO_API_PORT', 'MINIO_CONSOLE_PORT', 'PROMETHEUS_PORT', 'P02_E2E_PASSWORD', 'STUDENT_WEB_URL', 'TEACHER_WEB_URL', 'ADMIN_WEB_URL')) {
     $previous[$name] = [Environment]::GetEnvironmentVariable($name)
 }
 $env:ENTRY_PORT = '18086'
@@ -67,13 +67,13 @@ try {
     & docker @compose up --build --detach
     if ($LASTEXITCODE -ne 0) { throw 'P06 full local edge stack failed to start.' }
     $env:P02_E2E_PASSWORD = $seedPassword
-    $env:USER_WEB_URL = 'http://user.localhost:18086'
+    $env:STUDENT_WEB_URL = 'http://student.localhost:18086'
     $env:TEACHER_WEB_URL = 'http://teacher.localhost:18086'
     $env:ADMIN_WEB_URL = 'http://admin.localhost:18086'
     $edgeReady = $false
     for ($attempt = 0; $attempt -lt 60; $attempt++) {
         try {
-            $userHealth = Invoke-RestMethod -Uri "$($env:USER_WEB_URL)/api/v2/health" -TimeoutSec 5 -NoProxy
+            $userHealth = Invoke-RestMethod -Uri "$($env:STUDENT_WEB_URL)/api/v2/health" -TimeoutSec 5 -NoProxy
             $teacherHealth = Invoke-RestMethod -Uri "$($env:TEACHER_WEB_URL)/api/v2/health" -TimeoutSec 5 -NoProxy
             $adminHealth = Invoke-RestMethod -Uri "$($env:ADMIN_WEB_URL)/api/v2/health" -TimeoutSec 5 -NoProxy
             if ($userHealth.data.openapi_revision -eq 'v2-p06' -and $teacherHealth.data.openapi_revision -eq 'v2-p06' -and $adminHealth.data.openapi_revision -eq 'v2-p06') {
@@ -86,7 +86,7 @@ try {
     if (-not $edgeReady) { throw 'P06 local edge stack did not become ready.' }
     Push-Location "$root\frontend"
     try {
-        & npx.cmd playwright test e2e/p06.spec.ts --project=user-web --project=teacher-web --project=admin-web --workers=1
+        & npx.cmd playwright test e2e/p06.spec.ts --project=student-web --project=teacher-web --project=admin-web --workers=1
         if ($LASTEXITCODE -ne 0) { throw 'P06 three-portal Playwright verification failed.' }
     } finally { Pop-Location }
     Write-Output 'P06 isolated Compose schema, seed, edge, Celery, OpenAPI, and three-portal Playwright checks passed; production evidence remains environment-dependent.'

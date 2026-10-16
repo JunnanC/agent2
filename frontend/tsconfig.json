@@ -1,14 +1,17 @@
 {
-  "files": [],
-  "references": [
-    { "path": "packages/ui" },
-    { "path": "packages/api-client" },
-    { "path": "packages/auth-client" },
-    { "path": "packages/event-client" },
-    { "path": "packages/query-keys" },
-    { "path": "apps/user-web" },
-    { "path": "apps/teacher-web" },
-    { "path": "apps/admin-web" }
-  ]
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "jsx": "react-jsx",
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "allowImportingTsExtensions": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "esModuleInterop": true,
+    "types": ["vite/client", "node"]
+  }
 }
-

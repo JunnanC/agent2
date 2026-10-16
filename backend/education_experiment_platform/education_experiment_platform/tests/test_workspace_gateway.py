@@ -24,19 +24,19 @@ class WorkspaceGatewayContractTests(SimpleTestCase):
         with self.assertRaises(GatewayDenied):
             _workspace_path("/api/v2/tasks/task-1")
 
-    @override_settings(WORKSPACE_ALLOWED_ORIGINS=["https://user.example.edu"])
+    @override_settings(WORKSPACE_ALLOWED_ORIGINS=["https://student.example.edu"])
     def test_origin_is_allowlisted_and_cross_site_without_origin_is_denied(self) -> None:
-        allowed = {b"origin": b"https://user.example.edu", b"host": b"user.example.edu"}
-        denied = {b"origin": b"https://evil.example", b"host": b"user.example.edu"}
+        allowed = {b"origin": b"https://student.example.edu", b"host": b"student.example.edu"}
+        denied = {b"origin": b"https://evil.example", b"host": b"student.example.edu"}
         cross_site = {
-            b"host": b"user.example.edu",
+            b"host": b"student.example.edu",
             b"sec-fetch-site": b"cross-site",
         }
         self.assertTrue(_origin_allowed({}, allowed))
         self.assertFalse(_origin_allowed({}, denied))
         self.assertFalse(_origin_allowed({}, cross_site))
 
-    @override_settings(WORKSPACE_ALLOWED_ORIGINS=["https://user.example.edu"])
+    @override_settings(WORKSPACE_ALLOWED_ORIGINS=["https://student.example.edu"])
     def test_asgi_application_rejects_bad_origin_before_authority_call(self) -> None:
         sent: list[dict[str, object]] = []
 
@@ -51,7 +51,7 @@ class WorkspaceGatewayContractTests(SimpleTestCase):
             "method": "GET",
             "path": "/workspace/session-1/webide/",
             "headers": [
-                (b"host", b"user.example.edu"),
+                (b"host", b"student.example.edu"),
                 (b"origin", b"https://evil.example"),
             ],
             "query_string": b"",

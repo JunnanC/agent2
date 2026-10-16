@@ -171,7 +171,24 @@ def _new_token() -> tuple[str, str, str]:
 
 
 def _session_capabilities(task: ExperimentTask) -> dict[str, bool]:
-    declared = task.template_version.workspace_capabilities or {}
+    declared = {}
+    execution_spec = task.execution_spec if isinstance(task.execution_spec, dict) else {}
+    runtime_snapshot = execution_spec.get("_runtime")
+    if isinstance(runtime_snapshot, dict):
+        declared = runtime_snapshot.get("workspace_capabilities") or {}
+    if not declared and isinstance(execution_spec.get("workspace_capabilities"), dict):
+        declared = execution_spec["workspace_capabilities"]
+    if not declared:
+        publication_execution = task.publication.execution_spec
+        runtime_snapshot = (
+            publication_execution.get("_runtime")
+            if isinstance(publication_execution, dict)
+            else None
+        )
+        if isinstance(runtime_snapshot, dict):
+            declared = runtime_snapshot.get("workspace_capabilities") or {}
+    if not declared:
+        declared = task.template_version.workspace_capabilities or {}
     return {name: bool(declared.get(name, False)) for name in WORKSPACE_CAPABILITIES}
 
 
@@ -276,6 +293,7 @@ def issue_session(
                 "status": WorkspaceSession.Status.ACTIVE,
                 "revoked_at": None,
                 "revoke_reason": "",
+                "instance": instance,
             },
         )
         session = changed  # type: ignore[assignment]

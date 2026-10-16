@@ -3,6 +3,8 @@ from rest_framework import serializers
 
 from apps.core.models import ObjectAsset
 
+from .errors import TemplateValidationError
+from .image_services import normalize_image_reference
 from .models import (
     AutoCheckRule,
     ExperimentImage,
@@ -134,6 +136,22 @@ class ExperimentImageCreateSerializer(serializers.Serializer):
     build_context_asset_id = serializers.CharField(max_length=26, required=False)
     build_args = serializers.DictField(required=False)
 
+    def validate(self, attrs: dict[str, object]) -> dict[str, object]:
+        try:
+            registry, repository, requested_tag = normalize_image_reference(
+                registry=attrs.get("registry", ""),
+                repository=attrs.get("repository"),
+                requested_tag=attrs.get("requested_tag"),
+            )
+        except TemplateValidationError as exc:
+            raise serializers.ValidationError(exc.detail) from exc
+        attrs.update(
+            registry=registry,
+            repository=repository,
+            requested_tag=requested_tag,
+        )
+        return attrs
+
 
 class ExperimentImageDataSerializer(serializers.Serializer):
     public_id = serializers.CharField()
@@ -165,6 +183,18 @@ class ExperimentImagePrepareSerializer(serializers.Serializer):
 
 class ExperimentImageListResponseSerializer(serializers.Serializer):
     data = ExperimentImageDataSerializer(many=True)
+    meta = serializers.DictField()
+
+
+class ExperimentImageEventSerializer(serializers.Serializer):
+    event_type = serializers.CharField()
+    payload = serializers.DictField()
+    trace_id = serializers.CharField()
+    created_at = serializers.DateTimeField()
+
+
+class ExperimentImageEventsResponseSerializer(serializers.Serializer):
+    data = ExperimentImageEventSerializer(many=True)
     meta = serializers.DictField()
 
 

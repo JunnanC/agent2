@@ -1,4 +1,6 @@
+import gzip
 import hashlib
+import tarfile
 from io import BytesIO
 from unittest.mock import patch
 
@@ -44,9 +46,21 @@ class ContentScanner:
 
 
 class TemplateAssetTests(TestCase):
+    @staticmethod
+    def _gzip_tar(payload: bytes = b"FROM python:3.12-slim\n") -> bytes:
+        archive = BytesIO()
+        with tarfile.open(fileobj=archive, mode="w") as tar:
+            info = tarfile.TarInfo("Dockerfile")
+            info.size = len(payload)
+            tar.addfile(info, BytesIO(payload))
+        compressed = BytesIO()
+        with gzip.GzipFile(fileobj=compressed, mode="wb") as stream:
+            stream.write(archive.getvalue())
+        return compressed.getvalue()
+
     def test_build_context_archive_purpose_is_uploadable(self) -> None:
         owner, course, template, version = create_template_version(suffix="build-context-asset")
-        payload = b"context archive placeholder"
+        payload = self._gzip_tar()
         with patch("apps.labtemplates.assets.object_storage", return_value=FakeStorage(payload)):
             asset, _upload = create_asset_upload(
                 course_id=course.public_id,
@@ -55,13 +69,57 @@ class TemplateAssetTests(TestCase):
                 actor=owner,
                 expected_version=version.row_version,
                 purpose="BUILD_CONTEXT",
-                file_name="context.tar",
-                media_type="application/x-tar",
+                file_name="context.tar.gz",
+                media_type="application/gzip",
                 size_bytes=len(payload),
                 digest_sha256=hashlib.sha256(payload).hexdigest(),
                 context=context(owner),
             )
         self.assertEqual(asset.purpose, "BUILD_CONTEXT")
+
+    def test_build_context_rejects_non_gzip_tar_declaration(self) -> None:
+        owner, course, template, version = create_template_version(suffix="build-context-format")
+        with self.assertRaises(TemplateUploadInvalid):
+            create_asset_upload(
+                course_id=course.public_id,
+                template_id=template.public_id,
+                version_id=version.public_id,
+                actor=owner,
+                expected_version=version.row_version,
+                purpose="BUILD_CONTEXT",
+                file_name="context.tar",
+                media_type="application/x-tar",
+                size_bytes=10,
+                digest_sha256="a" * 64,
+                context=context(owner),
+            )
+
+    def test_build_context_scan_requires_a_valid_gzip_tar(self) -> None:
+        owner, course, template, version = create_template_version(suffix="build-context-scan")
+        payload = b"not a gzip tar"
+        storage = FakeStorage(payload, media_type="application/gzip")
+        with patch("apps.labtemplates.assets.object_storage", return_value=storage):
+            asset, _upload = create_asset_upload(
+                course_id=course.public_id,
+                template_id=template.public_id,
+                version_id=version.public_id,
+                actor=owner,
+                expected_version=version.row_version,
+                purpose="BUILD_CONTEXT",
+                file_name="context.tgz",
+                media_type="application/gzip",
+                size_bytes=len(payload),
+                digest_sha256=hashlib.sha256(payload).hexdigest(),
+                context=context(owner),
+            )
+        with (
+            patch("apps.labtemplates.assets.object_storage", return_value=storage),
+            patch("apps.labtemplates.assets.ClamAVScanner", return_value=ContentScanner()),
+        ):
+            changed = scan_and_attach_asset(asset_id=asset.public_id, trace_id="g" * 32)
+        self.assertEqual(changed.scan_status, ObjectAsset.ScanStatus.FAILED)
+        self.assertEqual(changed.failure_code, "ASSET_VALIDATION_FAILED")
+        self.assertTrue(storage.deleted)
 
     def test_clean_tests_asset_is_scanned_without_foreign_key_attachment(self) -> None:
         payload = b'{"cases": []}'

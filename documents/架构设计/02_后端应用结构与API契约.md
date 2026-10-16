@@ -56,7 +56,7 @@ tests/              模型、service、API、权限和并发测试
 三个站点将本站 `/api/v2/*` 反向代理到共享 Django。网关根据已匹配的 Host 覆盖写入可信头：
 
 ```text
-user.example.edu    → X-Portal: USER
+student.example.edu    → X-Portal: USER
 teacher.example.edu → X-Portal: TEACHING
 admin.example.edu   → X-Portal: PLATFORM
 ```

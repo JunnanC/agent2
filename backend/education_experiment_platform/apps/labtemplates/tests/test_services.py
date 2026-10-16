@@ -1,12 +1,12 @@
 import inspect
 from unittest.mock import patch
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from apps.core.errors import RowVersionConflict
 from apps.core.models import ObjectAsset
 from apps.governance.models import ResourceProfile
-from apps.provisioning.adapters import fake_runtime, reset_fake_runtime
+from apps.provisioning.adapters import RuntimeAdapterFailure, fake_runtime, reset_fake_runtime
 
 from ..errors import TemplateStateConflict, TemplateValidationError
 from ..image_services import (
@@ -70,6 +70,180 @@ class TemplateServiceTests(TestCase):
         self.assertNotIn("super-secret", str(image.build_args_masked))
         self.assertNotIn("super-secret", image.build_args_sealed)
 
+    def test_image_reference_is_normalized_and_strictly_validated(self) -> None:
+        owner, _course, _template, version = create_template_version(suffix="image-reference")
+        image = create_experiment_image(
+            template_version=version,
+            source_type=ExperimentImage.SourceType.EXTERNAL_REFERENCE,
+            registry=" REGISTRY.EXAMPLE.EDU:5000 ",
+            repository="Labs/External",
+            requested_tag=" v1.0 ",
+            actor=owner,
+            context=context(owner, "image-reference"),
+        )
+        self.assertEqual(image.registry, "registry.example.edu:5000")
+        self.assertEqual(image.repository, "labs/external")
+        self.assertEqual(image.requested_tag, "v1.0")
+        invalid = (
+            "https://registry.example.edu",
+            "registry.example.edu/path",
+            "user@registry.example.edu",
+            "registry.example.edu:bad",
+            "registry.example.edu:65536",
+            "registry..example.edu",
+        )
+        for registry in invalid:
+            with self.subTest(registry=registry), self.assertRaises(TemplateValidationError):
+                create_experiment_image(
+                    template_version=version,
+                    source_type=ExperimentImage.SourceType.EXTERNAL_REFERENCE,
+                    registry=registry,
+                    repository="labs/external",
+                    requested_tag="v1",
+                    actor=owner,
+                    context=context(owner, "image-invalid"),
+                )
+        for repository, tag in (("labs/external:latest", "v1"), ("labs/external", "bad/tag")):
+            with self.subTest(repository=repository, tag=tag), self.assertRaises(
+                TemplateValidationError
+            ):
+                create_experiment_image(
+                    template_version=version,
+                    source_type=ExperimentImage.SourceType.EXTERNAL_REFERENCE,
+                    registry="registry.example.edu",
+                    repository=repository,
+                    requested_tag=tag,
+                    actor=owner,
+                    context=context(owner, "image-invalid-ref"),
+                )
+
+    def test_image_registry_allowlist_is_fail_closed_when_configured(self) -> None:
+        owner, _course, _template, version = create_template_version(suffix="image-allowlist")
+        with (
+            override_settings(EXPERIMENT_IMAGE_REGISTRY_ALLOWLIST=("registry.example.edu",)),
+            self.assertRaises(TemplateValidationError),
+        ):
+            create_experiment_image(
+                template_version=version,
+                source_type=ExperimentImage.SourceType.EXTERNAL_REFERENCE,
+                registry="other.example.edu",
+                repository="labs/external",
+                requested_tag="v1",
+                actor=owner,
+                context=context(owner, "image-allowlist"),
+            )
+
+    def test_resolve_external_digest_preserves_runtime_failure_code_and_retryable(self) -> None:
+        owner, _course, _template, version = create_template_version(suffix="image-failure-map")
+        image = create_experiment_image(
+            template_version=version,
+            source_type=ExperimentImage.SourceType.EXTERNAL_REFERENCE,
+            registry="registry.example.edu",
+            repository="labs/external",
+            requested_tag="v1",
+            actor=owner,
+            context=context(owner, "image-failure"),
+        )
+
+        class FailingRuntime:
+            def __init__(self, stage: str, failure: RuntimeAdapterFailure) -> None:
+                self.stage = stage
+                self.failure = failure
+
+            def build_image(self, **_kwargs: object) -> dict[str, str]:
+                if self.stage == "build":
+                    raise self.failure
+                return {"digest": "sha256:" + "a" * 64}
+
+            def resolve_image(self, **_kwargs: object) -> dict[str, str]:
+                if self.stage == "resolve":
+                    raise self.failure
+                return {"digest": "sha256:" + "a" * 64}
+
+            def validate_image(self, **_kwargs: object) -> dict[str, bool]:
+                if self.stage == "validate":
+                    raise self.failure
+                return {"valid": True}
+
+        with self.assertRaises(RuntimeAdapterFailure) as raised:
+            resolve_external_digest(
+                image_id=image.public_id,
+                runtime=FailingRuntime(
+                    "resolve", RuntimeAdapterFailure("RUNTIME_IMAGE_PULL_FAILED", retryable=True)
+                ),
+            )
+        self.assertEqual(raised.exception.code, "RUNTIME_IMAGE_PULL_FAILED")
+        self.assertTrue(raised.exception.retryable)
+        image.refresh_from_db()
+        self.assertEqual(image.error_code, "RUNTIME_IMAGE_PULL_FAILED")
+
+        image = create_experiment_image(
+            template_version=version,
+            source_type=ExperimentImage.SourceType.EXTERNAL_REFERENCE,
+            registry="registry.example.edu",
+            repository="labs/validate",
+            requested_tag="v1",
+            actor=owner,
+            context=context(owner, "image-validate"),
+        )
+        with self.assertRaises(RuntimeAdapterFailure) as raised:
+            resolve_external_digest(
+                image_id=image.public_id,
+                runtime=FailingRuntime(
+                    "validate",
+                    RuntimeAdapterFailure("RUNTIME_IMAGE_VALIDATE_FAILED", retryable=False),
+                ),
+            )
+        self.assertEqual(raised.exception.code, "RUNTIME_IMAGE_VALIDATE_FAILED")
+        self.assertFalse(raised.exception.retryable)
+
+    def test_prepare_build_failure_preserves_runtime_failure_metadata(self) -> None:
+        owner, _course, _template, version = create_template_version(suffix="image-build-failure")
+        context_asset = ObjectAsset.objects.create(
+            bucket="test-assets",
+            object_key="contexts/context.tgz",
+            object_version="v1",
+            digest_sha256="c" * 64,
+            size_bytes=1,
+            media_type="application/gzip",
+            original_name="context.tgz",
+            owner_type="TEMPLATE_VERSION",
+            owner_ref=version.public_id,
+            purpose="BUILD_CONTEXT",
+            scan_status=ObjectAsset.ScanStatus.CLEAN,
+            status=ObjectAsset.Status.ACTIVE,
+        )
+        image = create_experiment_image(
+            template_version=version,
+            source_type=ExperimentImage.SourceType.BUILD_CONTEXT,
+            registry="registry.example.edu",
+            repository="labs/build",
+            requested_tag="v1",
+            build_context_asset_id=context_asset.public_id,
+            actor=owner,
+            context=context(owner, "image-build-failure"),
+        )
+
+        class FailingBuildRuntime:
+            def build_image(self, **_kwargs: object) -> dict[str, str]:
+                raise RuntimeAdapterFailure("RUNTIME_IMAGE_BUILD_FAILED", retryable=True)
+
+            def resolve_image(self, **_kwargs: object) -> dict[str, str]:
+                return {"digest": "sha256:" + "a" * 64}
+
+            def validate_image(self, **_kwargs: object) -> dict[str, bool]:
+                return {"valid": True}
+
+        with patch(
+            "apps.labtemplates.image_services._build_context_archive", return_value=b"context"
+        ):
+            prepared = prepare_experiment_image(
+                image_id=image.public_id, runtime=FailingBuildRuntime()
+            )
+        self.assertEqual(prepared.status, ExperimentImage.Status.FAILED)
+        self.assertEqual(prepared.error_code, "RUNTIME_IMAGE_BUILD_FAILED")
+        self.assertTrue(prepared._runtime_failure.retryable)
+
     def test_external_digest_uses_supplied_runtime_and_maps_missing_image(self) -> None:
         owner, _course, _template, version = create_template_version(suffix="image-runtime")
         image = create_experiment_image(
@@ -114,7 +288,7 @@ class TemplateServiceTests(TestCase):
         self.assertEqual(prepared.status, ExperimentImage.Status.PENDING_APPROVAL)
         self.assertTrue(prepared.resolved_digest.startswith("sha256:"))
         self.assertFalse(prepared.image_asset.is_ready)
-        self.assertIs(prepare_experiment_image(image_id=image.public_id).pk, prepared.pk)
+        self.assertEqual(prepare_experiment_image(image_id=image.public_id).pk, prepared.pk)
 
     def test_build_context_rejects_unscanned_asset_without_runtime_call(self) -> None:
         owner, _course, _template, version = create_template_version(suffix="image-build")

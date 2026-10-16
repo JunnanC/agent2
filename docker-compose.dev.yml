@@ -20,9 +20,9 @@ x-app-environment: &app-environment
   DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-unsafe-compose-key-change-me}
   IDENTITY_HMAC_KEY: ${IDENTITY_HMAC_KEY:-unsafe-local-identity-hmac-key-change-me}
   COURSE_INVITATION_HMAC_KEY: ${COURSE_INVITATION_HMAC_KEY:-unsafe-local-course-invitation-hmac-key-change-me}
-  DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1,django,user.localhost,teacher.localhost,admin.localhost,api.localhost,user.example.edu,teacher.example.edu,admin.example.edu,api.example.edu
-  DJANGO_TRUSTED_ORIGINS: http://user.localhost:${ENTRY_PORT:-8080},http://teacher.localhost:${ENTRY_PORT:-8080},http://admin.localhost:${ENTRY_PORT:-8080}
-  WORKSPACE_ALLOWED_ORIGINS: http://user.localhost:${ENTRY_PORT:-8080}
+  DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1,django,student.localhost,teacher.localhost,admin.localhost,api.localhost,student.example.edu,teacher.example.edu,admin.example.edu,api.example.edu
+  DJANGO_TRUSTED_ORIGINS: http://student.localhost:${ENTRY_PORT:-8080},http://teacher.localhost:${ENTRY_PORT:-8080},http://admin.localhost:${ENTRY_PORT:-8080}
+  WORKSPACE_ALLOWED_ORIGINS: http://student.localhost:${ENTRY_PORT:-8080}
   WORKSPACE_INTERNAL_KEY: ${WORKSPACE_INTERNAL_KEY:-unsafe-local-workspace-internal-key}
   WORKSPACE_UPSTREAM_HMAC_KEY: ${WORKSPACE_UPSTREAM_HMAC_KEY:-unsafe-local-workspace-upstream-hmac-key}
   WORKSPACE_AUTHORITY_URL: ${WORKSPACE_AUTHORITY_URL:-http://django:8000}
@@ -56,6 +56,8 @@ x-app-environment: &app-environment
   LOG_LEVEL: INFO
   SWARM_DOCKER_HOST: ${SWARM_DOCKER_HOST:-unix:///var/run/docker.sock}
   SWARM_RUNTIME_NETWORK: ${SWARM_RUNTIME_NETWORK:-edu-runtime}
+  RUNTIME_MODE: ${RUNTIME_MODE:-local}
+  RUNTIME_ADAPTER_CODE: ${RUNTIME_ADAPTER_CODE:-runtime/local-docker}
   LOCAL_RUNTIME_IMAGE: ${LOCAL_RUNTIME_IMAGE:-edu-platform-algorithm-workspace:local}
   LOCAL_RUNTIME_NETWORK: ${LOCAL_RUNTIME_NETWORK:-edu-platform-p14_runtime}
   LOCAL_DOCKER_HOST: ${LOCAL_DOCKER_HOST:-unix:///var/run/docker.sock}
@@ -180,7 +182,7 @@ services:
     restart: "no"
 
   minio:
-    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
+    image: ${MINIO_IMAGE:-bitnamilegacy/minio:latest}
     command: server /data --console-address :9001
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-edu-platform}
@@ -191,7 +193,7 @@ services:
       - "127.0.0.1:${MINIO_API_PORT:-9000}:9000"
       - "127.0.0.1:${MINIO_CONSOLE_PORT:-9001}:9001"
     healthcheck:
-      test: ["CMD", "mc", "ready", "local"]
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:9000/minio/health/live"]
       interval: 5s
       timeout: 5s
       retries: 20
@@ -201,7 +203,7 @@ services:
         limits: { memory: 768M }
 
   minio-init:
-    image: quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z
+    image: ${MINIO_CLIENT_IMAGE:-bitnamilegacy/minio-client:latest}
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-edu-platform}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-local-minio-password}
@@ -277,7 +279,11 @@ services:
 
   django:
     build: *backend-build
-    environment: *app-environment
+    environment:
+      <<: *app-environment
+      PROJECT_ROOT: /workspace
+    volumes:
+      - .:/workspace:ro
     networks: [app, data]
     depends_on:
       mysql-grants: { condition: service_completed_successfully }
@@ -315,7 +321,7 @@ services:
   runtime-worker:
     profiles: ["p14"]
     build: *backend-build
-    command: ["celery", "-A", "education_experiment_platform", "worker", "--loglevel=INFO", "--concurrency=${RUNTIME_WORKER_CONCURRENCY:-2}", "--queues=q_provision,q_archive,q_compensate"]
+    command: ["celery", "-A", "education_experiment_platform", "worker", "--loglevel=INFO", "--concurrency=${RUNTIME_WORKER_CONCURRENCY:-2}", "--queues=q_provision,q_archive,q_compensate,q_workspace_storage"]
     environment: *app-environment
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
@@ -329,27 +335,6 @@ services:
     deploy:
       resources:
         reservations: { cpus: "0.25", memory: 256M }
-        limits: { cpus: "1.00", memory: 768M }
-      update_config: { parallelism: 1, order: stop-first, failure_action: rollback }
-
-  workspace-storage-worker:
-    profiles: ["p14"]
-    build: *backend-build
-    command: ["celery", "-A", "education_experiment_platform", "worker", "--loglevel=INFO", "--concurrency=${WORKSPACE_STORAGE_WORKER_CONCURRENCY:-2}", "--queues=q_workspace_storage"]
-    environment: *app-environment
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-    group_add:
-      - "${DOCKER_SOCKET_GID:-0}"
-    networks: [app, data, runtime]
-    depends_on:
-      mysql-grants: { condition: service_completed_successfully }
-      redis: { condition: service_healthy }
-      clamav: { condition: service_healthy }
-    logging: *fluentd-logging
-    deploy:
-      resources:
-        reservations: { cpus: "0.10", memory: 256M }
         limits: { cpus: "1.00", memory: 768M }
       update_config: { parallelism: 1, order: stop-first, failure_action: rollback }
 
@@ -397,6 +382,8 @@ services:
         PYTHON_BASE_IMAGE: m.daocloud.io/docker.io/library/python:3.14.0-slim-bookworm@sha256:9bbb8720ae0a24a6ca8dd678bfdf57818fe70caf54c52a53ec01d8db43405056
     image: ${LOCAL_RUNTIME_IMAGE:-edu-platform-algorithm-workspace:local}
     networks: [runtime]
+    secrets:
+      - workspace_upstream_token
     read_only: true
     tmpfs: [/tmp]
     deploy:
@@ -510,7 +497,7 @@ services:
       dockerfile: infrastructure/nginx/Dockerfile
       args:
         NODE_BASE_IMAGE: ${NODE_BASE_IMAGE:-public.ecr.aws/docker/library/node:24-alpine}
-        NGINX_BASE_IMAGE: ${NGINX_BASE_IMAGE:-m.daocloud.io/docker.io/library/nginx:1.29-alpine}
+        NGINX_BASE_IMAGE: ${NGINX_BASE_IMAGE:-nginx:1.29-alpine}
         APP_VERSION: ${APP_VERSION:-0.15.0-p15}
         OPENAPI_REVISION: ${OPENAPI_REVISION:-v2-p15}
         GIT_REVISION: ${GIT_REVISION:-development}
@@ -523,7 +510,7 @@ services:
       kong: { condition: service_healthy }
       fluent-bit: { condition: service_started }
     healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/health", "--header=Host: user.localhost"]
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/health", "--header=Host: student.localhost"]
       interval: 5s
       timeout: 3s
       retries: 20
@@ -558,3 +545,9 @@ volumes:
   clamav-data: {}
   fluent-bit-buffer: {}
   prometheus-data: {}
+
+
+
+secrets:
+  workspace_upstream_token:
+    file: ./secrets/workspace_upstream_token

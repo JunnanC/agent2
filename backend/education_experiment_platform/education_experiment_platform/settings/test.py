@@ -6,7 +6,7 @@ ALLOWED_HOSTS = [
     "testserver",
     "localhost",
     "127.0.0.1",
-    "user.localhost",
+    "student.localhost",
     "teacher.localhost",
     "admin.localhost",
 ]

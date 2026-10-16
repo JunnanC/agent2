@@ -1,12 +1,23 @@
 from unittest.mock import patch
 
+from django.db import connection
 from django.test import Client, TestCase
+from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
 from apps.accounts.tests.helpers import create_user
 from apps.core.models import IdempotencyRecord
+from apps.labtemplates.models import ExperimentImage
 
-from ..models import ExperimentTask, PublicationAudience, TaskPublication
+from ..models import (
+    ExperimentTask,
+    PublicationAudience,
+    PublicationChapter,
+    PublicationTask,
+    TaskPublication,
+)
+from ..selectors import publication_for_course
+from ..serializers import publication_data
 from ..services import publish_publication
 from .helpers import context, create_domain, create_draft_publication, create_enrollment
 
@@ -19,6 +30,19 @@ class ExperimentApiTests(TestCase):
     def setUp(self) -> None:
         self.owner, self.course, self.template_version, self.rubric_version = create_domain(
             suffix="p06-api"
+        )
+        ExperimentImage.objects.create(
+            template_version=self.template_version,
+            source_type=ExperimentImage.SourceType.EXTERNAL_REFERENCE,
+            registry=self.template_version.image.registry,
+            repository=self.template_version.image.repository,
+            requested_tag=self.template_version.image.display_tag or "stable",
+            resolved_digest=self.template_version.image.digest,
+            image_asset=self.template_version.image,
+            status=ExperimentImage.Status.READY,
+            scan_status=ExperimentImage.ScanStatus.CLEAN,
+            trace_id="p06-api-image".ljust(32, "0"),
+            created_by=self.owner,
         )
         self.enrollment = create_enrollment(self.course, suffix="p06-api-student")
         self.publication = create_draft_publication(
@@ -153,6 +177,55 @@ class ExperimentApiTests(TestCase):
         self.assertEqual(replay.status_code, 201, replay.content)
         self.assertEqual(replay["X-Idempotent-Replayed"], "true")
         self.assertEqual(ExperimentTask.objects.filter(publication=self.publication).count(), 1)
+
+    def test_publish_api_returns_nested_immutable_publication_snapshot(self) -> None:
+        client, csrf = self._client(portal="TEACHING", identifier=self.owner.email)
+        url = (
+            f"/api/v2/teaching/courses/{self.course.public_id}/experiments/"
+            f"{self.publication.public_id}/publish"
+        )
+        response = client.post(
+            url,
+            {},
+            content_type="application/json",
+            HTTP_X_CSRFTOKEN=csrf,
+            HTTP_X_PORTAL="TEACHING",
+            HTTP_IF_MATCH=f'"{self.publication.row_version}"',
+            HTTP_IDEMPOTENCY_KEY="p06-nested-publish",
+            **PROXY_HEADERS,
+        )
+        self.assertEqual(response.status_code, 201, response.content)
+        data = response.json()["data"]
+        self.assertTrue(data["template_digest"])
+        self.assertTrue(data["publication_digest"])
+        self.assertEqual(len(data["chapters"]), 1)
+        self.assertEqual(len(data["chapters"][0]["tasks"]), 1)
+        self.assertEqual(
+            data["chapters"][0]["tasks"][0]["image_digest"],
+            self.template_version.image.digest,
+        )
+        self.assertEqual(PublicationChapter.objects.filter(publication=self.publication).count(), 1)
+        self.assertEqual(PublicationTask.objects.count(), 1)
+
+    def test_publication_selector_preloads_nested_response_data(self) -> None:
+        published, _ = publish_publication(
+            course_id=self.course.public_id,
+            publication_id=self.publication.public_id,
+            actor=self.owner,
+            expected_version=self.publication.row_version,
+            selected_ids=[],
+            context=context(self.owner),
+        )
+        item = publication_for_course(
+            actor=self.owner,
+            course_id=self.course.public_id,
+            publication_id=published.public_id,
+        )
+        with CaptureQueriesContext(connection) as queries:
+            data = publication_data(item)
+        self.assertEqual(len(queries), 0)
+        self.assertEqual(len(data["chapters"]), 1)
+        self.assertEqual(len(data["chapters"][0]["tasks"]), 1)
 
     def test_student_scope_hides_another_students_task(self) -> None:
         published, _ = publish_publication(

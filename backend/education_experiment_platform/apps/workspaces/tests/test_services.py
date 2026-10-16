@@ -136,7 +136,7 @@ class WorkspaceSessionServiceTests(TestCase):
             snapshot.pop(field, None)
         ExperimentTask.objects.filter(pk=self.task.pk).update(resource_profile_snapshot=snapshot)
         ResourceProfile.objects.filter(pk=self.task.resource_profile_id).update(
-            public_id="profile-mutated-after-snapshot",
+            public_id="profile-mutated-after",
             cpu_millicores=8000,
             memory_mb=16384,
             cpu_request_millicores=4000,
@@ -171,6 +171,13 @@ class WorkspaceSessionServiceTests(TestCase):
         self.assertNotEqual(session.token_hash, token)
         self.assertNotIn(token, session.token_hash)
         require_workspace_session(session=session, token=token, task_id=self.task.public_id)
+
+    def test_runtime_provisioning_creates_a_reusable_workspace_session(self) -> None:
+        session = WorkspaceSession.objects.get(task=self.task)
+
+        self.assertEqual(session.status, WorkspaceSession.Status.ACTIVE)
+        self.assertEqual(session.instance_id, self.task.provisioning_instance.pk)
+        self.assertEqual(session.capabilities["terminal"], True)
 
     def test_storage_job_contract_rejects_fake_runtime_without_creating_a_row(self) -> None:
         _task, session, token = enter_task(

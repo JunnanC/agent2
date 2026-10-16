@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Edu Agent Platform · 交互原型</title>
+<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="workflow-enhancements.css">
+<link rel="stylesheet" href="student-course.css">
+<script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+</head>
+<body>
+<div class="app-shell">
+  <header class="topbar">
+    <div class="brand-lockup">
+      <span class="brand-mark"><i data-lucide="layers-3"></i></span>
+      <span class="brand-name">Edu Agent Platform</span>
+      <span class="context-dot"></span>
+      <span class="context-label" id="domain">student.edu.local</span>
+    </div>
+    <nav class="primary-nav" id="nav" aria-label="一级导航"></nav>
+    <div class="topbar-actions">
+      <select id="portalSelect" class="portal-switch" aria-label="切换门户">
+        <option value="student">学生门户</option>
+        <option value="teacher">教师门户</option>
+        <option value="admin">平台管理</option>
+      </select>
+      <button class="icon-btn" onclick="toast('暂无新通知')" aria-label="通知"><i data-lucide="bell"></i></button>
+      <div class="profile-menu-wrap">
+        <button class="profile-trigger" id="profileMenuButton" type="button" onclick="toggleProfileDrawer()" aria-label="打开个人菜单" aria-haspopup="true" aria-expanded="false">
+          <span class="avatar" id="avatar">林</span>
+          <span class="profile-trigger-text"><strong id="userName">林知夏</strong><small id="userRole">学生 · 计算机网络</small></span>
+          <i data-lucide="chevron-down"></i>
+        </button>
+        <div class="profile-popover" id="profilePopover" role="menu" hidden>
+          <div class="profile-popover-heading"><strong id="profilePopoverName">林知夏</strong><small id="profilePopoverRole">学生 · 计算机网络</small></div>
+          <button type="button" role="menuitem" data-profile-action="settings"><i data-lucide="user-round-cog"></i><span>个人设置</span></button>
+          <button type="button" role="menuitem" data-profile-action="help"><i data-lucide="circle-help"></i><span>帮助中心</span></button>
+          <button type="button" role="menuitem" data-profile-action="feedback"><i data-lucide="message-square-text"></i><span>意见反馈</span></button>
+        </div>
+      </div>
+    </div>
+  </header>
+  <main class="main-content">
+    <section class="screen active" id="student-home"></section>
+    <section class="screen" id="student-courses"></section>
+    <section class="screen" id="student-course-detail"></section>
+    <section class="screen" id="student-join-courses"></section>
+    <section class="screen" id="student-tasks"></section>
+    <section class="screen" id="student-task-detail"></section>
+    <section class="screen" id="student-notifications"></section>
+    <section class="screen" id="teacher-home"></section>
+    <section class="screen" id="teacher-courses"></section>
+    <section class="screen" id="teacher-enrollments"></section>
+    <section class="screen" id="teacher-templates"></section>
+    <section class="screen" id="template-editor"></section>
+    <section class="screen" id="teacher-publishing"></section>
+    <section class="screen" id="teacher-progress"></section>
+    <section class="screen" id="teacher-analytics"></section>
+    <section class="screen" id="teacher-reviews"></section>
+    <section class="screen" id="admin-home"></section>
+    <section class="screen" id="admin-governance"></section>
+    <section class="screen" id="admin-resources"></section>
+    <section class="screen" id="admin-incidents"></section>
+    <section class="screen" id="admin-audit"></section>
+    <section class="screen" id="settings"></section>
+  </main>
+</div>
+<div id="modalRoot"></div>
+<div class="toast" id="toast"></div>
+<script src="app.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded',()=>{
+  const mountTeacherReportTemplate=()=>{
+    const reportPanel=document.querySelector('#ed-report');
+    if(!reportPanel||reportPanel.querySelector('.teacher-report-template'))return;
+    const template=document.createElement('section');
+    template.className='teacher-report-template';
+    template.innerHTML='<label class="form-label" for="teacherReportTemplate">学生实验报告模板</label><p class="subtle">每行一项内容，以 # 开头的行会显示为小标题；可用 {{chapter}} 自动插入当前阶段名称。</p><textarea class="field" id="teacherReportTemplate" rows="9"></textarea><div class="teacher-template-actions"><span class="subtle" id="teacherTemplateStatus">模板尚未保存</span><button class="btn sm" type="button" id="saveTeacherTemplate">保存报告模板</button></div>';
+    const input=template.querySelector('#teacherReportTemplate');
+    const defaultTemplate='# 实验目标与任务\n请简述本阶段目标与任务要求。\n# 操作过程与关键结果\n请记录关键步骤、命令与输出。\n# 问题分析与修复方案\n请说明定位过程和修复方法。\n# 验证结果与总结\n请填写验证结果和本阶段结论。';
+    try{input.value=localStorage.getItem('edu-agent-report-template')||defaultTemplate}catch{input.value=defaultTemplate}
+    const save=()=>{try{localStorage.setItem('edu-agent-report-template',input.value);template.querySelector('#teacherTemplateStatus').textContent='已保存，学生工作台将使用此模板'}catch{template.querySelector('#teacherTemplateStatus').textContent='浏览器未允许本地保存'}};
+    input.addEventListener('input',()=>{template.querySelector('#teacherTemplateStatus').textContent='有未保存的修改'});
+    template.querySelector('#saveTeacherTemplate').addEventListener('click',save);
+    reportPanel.insertBefore(template,reportPanel.querySelector('.item'));
+  };
+  mountTeacherReportTemplate();
+  setTimeout(mountTeacherReportTemplate,0);
+  new MutationObserver(mountTeacherReportTemplate).observe(document.querySelector('#template-editor')||document.body,{childList:true,subtree:true});
+});
+</script>
+</body>
+</html>

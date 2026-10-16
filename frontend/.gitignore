@@ -1,6 +1,5 @@
 node_modules/
 dist/
-.vite/
-.env
+*.tsbuildinfo
 .env.local
-*.log
+.env.*.local

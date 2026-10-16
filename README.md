@@ -12,12 +12,12 @@ Greenfield implementation of the teaching cloud experiment platform. The working
 
 ```powershell
 Copy-Item .env.example .env
-docker compose -f docker-compose.dev.yml up --build
+docker compose --profile p14 -f docker-compose.dev.yml up --build
 ```
 
 The edge entry point listens on port `8080`. Use the hostnames below so portal cookies and trusted host mapping remain isolated:
 
-- `http://user.localhost:8080`
+- `http://student.localhost:8080`
 - `http://teacher.localhost:8080`
 - `http://admin.localhost:8080`
 - `http://api.localhost:8080` (machine API only; no web application)

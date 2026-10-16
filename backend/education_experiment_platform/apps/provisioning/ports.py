@@ -16,6 +16,8 @@ class RuntimeSpec:
     cpu_millicores: int
     memory_mb: int
     disk_gb: int
+    cpu_limit_millicores: int = 0
+    memory_limit_mb: int = 0
     network_policy: Mapping[str, object] = field(default_factory=dict)
     workspace_capabilities: Mapping[str, object] = field(default_factory=dict)
     ttl_seconds: int = 0
@@ -29,6 +31,14 @@ class RuntimeSpec:
         registry = self.image_registry.rstrip("/")
         repository = self.image_repository.lstrip("/")
         return f"{registry}/{repository}@{self.image_digest}"
+
+    @property
+    def cpu_request_millicores(self) -> int:
+        return self.cpu_millicores
+
+    @property
+    def memory_request_mb(self) -> int:
+        return self.memory_mb
 
 
 @dataclass(frozen=True)

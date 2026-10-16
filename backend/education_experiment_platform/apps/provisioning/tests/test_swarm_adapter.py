@@ -6,6 +6,7 @@ from ..adapters import (
     KIND_LABEL,
     MANAGED_LABEL,
     RUNTIME_KIND,
+    DockerLocalAdapter,
     DockerSwarmAdapter,
     RuntimeAdapterFailure,
 )
@@ -22,6 +23,14 @@ class FakeDockerClient:
         self.pulled: list[str] = []
         self.built: list[dict[str, Any]] = []
         self.pushed: list[str] = []
+        self.build_consumed = False
+        self.build_consumed_when_pushed: bool | None = None
+        self.push_output: list[dict[str, Any]] = [
+            {"aux": {"Digest": "sha256:" + "b" * 64}}
+        ]
+        self.repo_digests = [f"registry.example.edu/labs/build@sha256:{'b' * 64}"]
+        self.image_id = "sha256:" + "c" * 64
+        self.inspect_error: Exception | None = None
 
     def ping(self) -> bool:
         return True
@@ -32,17 +41,26 @@ class FakeDockerClient:
     def pull(self, image_ref: str) -> None:
         self.pulled.append(image_ref)
 
-    def build(self, **kwargs: Any) -> list[dict[str, Any]]:
+    def build(self, **kwargs: Any) -> Any:
         self.built.append(kwargs)
-        return [{"stream": "built"}]
 
-    def push(self, image_ref: str, *, decode: bool = True) -> list[dict[str, Any]]:
+        def output() -> Any:
+            yield {"stream": "built"}
+            self.build_consumed = True
+
+        return output()
+
+    def push(self, image_ref: str, *, decode: bool = True) -> Any:
         del decode
+        self.build_consumed_when_pushed = self.build_consumed
         self.pushed.append(image_ref)
-        return [{"aux": {"Digest": "sha256:" + "b" * 64}}]
+        return iter(self.push_output)
 
     def inspect_image(self, reference: str) -> dict[str, Any]:
-        return {"RepoDigests": [f"{reference.split(':', 1)[0]}@sha256:{'b' * 64}"], "Id": ""}
+        del reference
+        if self.inspect_error is not None:
+            raise self.inspect_error
+        return {"RepoDigests": self.repo_digests, "Id": self.image_id}
 
     def networks(self, *, names: list[str]) -> list[dict[str, Any]]:
         return [item for item in self.network_values if item["Name"] in names]
@@ -147,9 +165,15 @@ class DockerSwarmAdapterTests(SimpleTestCase):
         self.adapter = DockerSwarmAdapter(client=self.client, config={"boot_timeout": 0})
 
     def test_create_is_digest_pinned_restricted_and_idempotent(self) -> None:
-        spec = runtime_spec()
+        spec = runtime_spec(
+            cpu_millicores=500,
+            memory_mb=1024,
+            cpu_limit_millicores=1500,
+            memory_limit_mb=2048,
+        )
         self.adapter.preflight(spec)
         self.adapter.prepare_image(spec)
+        self.assertEqual(self.client.pulled, [])
         first = self.adapter.create(spec, "request-1")
         second = self.adapter.create(spec, "request-1")
 
@@ -160,7 +184,10 @@ class DockerSwarmAdapterTests(SimpleTestCase):
         self.assertEqual(task["ContainerSpec"]["Image"], spec.image_ref)
         self.assertTrue(task["ContainerSpec"]["Privileges"]["NoNewPrivileges"])
         self.assertEqual(task["Placement"]["Constraints"], ["node.labels.edu.role.runtime == true"])
-        self.assertEqual(task["Resources"]["Limits"]["NanoCPUs"], 500_000_000)
+        self.assertEqual(task["Resources"]["Limits"]["NanoCPUs"], 1_500_000_000)
+        self.assertEqual(task["Resources"]["Limits"]["MemoryBytes"], 2048 * 1024 * 1024)
+        self.assertEqual(task["Resources"]["Reservations"]["NanoCPUs"], 500_000_000)
+        self.assertEqual(task["Resources"]["Reservations"]["MemoryBytes"], 1024 * 1024 * 1024)
         self.assertNotIn("ports", request)
         self.assertNotIn("email", str(request).casefold())
         self.assertEqual(self.adapter.status(first.external_id), "READY")
@@ -239,4 +266,89 @@ class DockerSwarmAdapterTests(SimpleTestCase):
             build_args={"MODE": "test"},
         )
         self.assertEqual(self.client.pushed, ["registry.example.edu/labs/build:v1"])
+        self.assertTrue(self.client.build_consumed_when_pushed)
+        self.assertEqual(result["digest"], "sha256:" + "b" * 64)
+
+    def test_push_stream_error_is_mapped_to_runtime_image_push_failed(self) -> None:
+        self.client.push_output = [{"errorDetail": {"message": "denied"}}]
+
+        with self.assertRaises(RuntimeAdapterFailure) as raised:
+            self.adapter.build_image(
+                registry="registry.example.edu",
+                repository="labs/build",
+                tag="v1",
+                context={"archive": b"archive"},
+                build_args={},
+            )
+
+        self.assertEqual(raised.exception.code, "RUNTIME_IMAGE_PUSH_FAILED")
+        self.assertTrue(self.client.build_consumed_when_pushed)
+
+    def test_push_digest_is_preferred_over_local_repo_digest(self) -> None:
+        push_digest = "sha256:" + "d" * 64
+        self.client.push_output = [{"digest": push_digest}]
+
+        result = self.adapter.build_image(
+            registry="registry.example.edu",
+            repository="labs/build",
+            tag="v1",
+            context={"archive": b"archive"},
+            build_args={},
+        )
+
+        self.assertEqual(result["digest"], push_digest)
+
+    def test_swarm_build_does_not_fall_back_to_local_image_id(self) -> None:
+        self.client.push_output = [{"status": "pushed"}]
+        self.client.repo_digests = []
+
+        with self.assertRaises(RuntimeAdapterFailure) as raised:
+            self.adapter.build_image(
+                registry="registry.example.edu",
+                repository="labs/build",
+                tag="v1",
+                context={"archive": b"archive"},
+                build_args={},
+            )
+
+        self.assertEqual(raised.exception.code, "RUNTIME_IMAGE_DIGEST_UNAVAILABLE")
+
+    def test_swarm_resolve_does_not_fall_back_to_local_image_id(self) -> None:
+        self.client.repo_digests = []
+
+        with self.assertRaises(RuntimeAdapterFailure) as raised:
+            self.adapter.resolve_image(
+                registry="registry.example.edu",
+                repository="labs/build",
+                tag="v1",
+            )
+
+        self.assertEqual(self.client.pulled, ["registry.example.edu/labs/build:v1"])
+        self.assertEqual(raised.exception.code, "RUNTIME_IMAGE_DIGEST_UNAVAILABLE")
+
+    def test_swarm_resolve_maps_inspect_failure_without_leaking_cause(self) -> None:
+        self.client.inspect_error = RuntimeError("registry credentials leaked")
+
+        with self.assertRaises(RuntimeAdapterFailure) as raised:
+            self.adapter.resolve_image(
+                registry="registry.example.edu",
+                repository="labs/build",
+                tag="v1",
+            )
+
+        self.assertEqual(raised.exception.code, "RUNTIME_IMAGE_DIGEST_UNAVAILABLE")
+        self.assertNotIn("registry credentials leaked", str(raised.exception))
+
+    def test_local_build_consumes_generator_and_keeps_local_digest_fallback(self) -> None:
+        adapter = DockerLocalAdapter(client=self.client)
+
+        result = adapter.build_image(
+            registry="registry.example.edu",
+            repository="labs/build",
+            tag="v1",
+            context={"archive": b"archive"},
+            build_args={},
+        )
+
+        self.assertTrue(self.client.build_consumed)
         self.assertEqual(result["digest"], "sha256:" + "b" * 64)

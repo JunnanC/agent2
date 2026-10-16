@@ -12,6 +12,7 @@ from redis import Redis
 
 from .audit import append_failure
 from .concurrency import compare_and_swap
+from .identifiers import normalize_trace_id
 from .models import OutboxDelivery, OutboxEvent
 from .redaction import redact
 
@@ -36,7 +37,7 @@ def append_outbox_event(
         aggregate_type=aggregate_type,
         aggregate_ref=aggregate_ref,
         payload=redact(payload),
-        trace_id=trace_id,
+        trace_id=normalize_trace_id(trace_id),
     )
     for destination in destinations:
         OutboxDelivery.objects.create(event=event, destination=destination)

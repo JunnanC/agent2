@@ -1,5 +1,7 @@
+import gzip
 import hashlib
 import re
+import tarfile
 import tempfile
 import zipfile
 from pathlib import PurePath
@@ -64,10 +66,8 @@ ALLOWED_FILES = {
         ".tgz": "application/gzip",
     },
     "BUILD_CONTEXT": {
-        ".zip": "application/zip",
-        ".tar": "application/x-tar",
-        ".gz": "application/gzip",
         ".tgz": "application/gzip",
+        ".tar.gz": "application/gzip",
     },
 }
 DIGEST_PATTERN = re.compile(r"^[0-9a-f]{64}$")
@@ -80,13 +80,20 @@ def _safe_name(value: str) -> str:
     return name
 
 
+def _asset_suffix(file_name: str) -> str:
+    lowered_name = file_name.casefold()
+    if lowered_name.endswith(".tar.gz"):
+        return ".tar.gz"
+    return PurePath(lowered_name).suffix
+
+
 def _validate_declaration(
     *, purpose: str, file_name: str, media_type: str, size_bytes: int, digest_sha256: str
 ) -> str:
     if purpose not in PURPOSE_FIELDS:
         raise TemplateUploadInvalid(detail={"purpose": "unsupported"})
     clean_name = _safe_name(file_name)
-    suffix = PurePath(clean_name).suffix.casefold()
+    suffix = _asset_suffix(clean_name)
     expected_media_type = ALLOWED_FILES[purpose].get(suffix)
     if expected_media_type is None or media_type != expected_media_type:
         raise TemplateUploadInvalid(detail={"media_type": "extension_and_declared_type_mismatch"})
@@ -249,13 +256,29 @@ def complete_asset_upload(
 
 
 def _magic_matches(asset: ObjectAsset, stream: Any) -> bool:
-    suffix = PurePath(asset.original_name).suffix.casefold()
+    suffix = _asset_suffix(asset.original_name)
     head = stream.read(512)
     stream.seek(0)
     if suffix == ".pdf":
         return head.startswith(b"%PDF-")
-    if suffix in {".gz", ".tgz"}:
-        return head.startswith(b"\x1f\x8b")
+    if suffix in {".gz", ".tgz", ".tar.gz"}:
+        if not head.startswith(b"\x1f\x8b"):
+            return False
+        if suffix == ".gz":
+            return True
+        stream.seek(0)
+        try:
+            with (
+                gzip.GzipFile(fileobj=stream, mode="rb") as decompressed,
+                tarfile.open(fileobj=decompressed, mode="r|") as archive,
+            ):
+                for _member in archive:
+                    pass
+        except (EOFError, OSError, tarfile.TarError):
+            return False
+        finally:
+            stream.seek(0)
+        return True
     if suffix == ".tar":
         return len(head) >= 262 and head[257:262] == b"ustar"
     if suffix in {".zip", ".docx"}:

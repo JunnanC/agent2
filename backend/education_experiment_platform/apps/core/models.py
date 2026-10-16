@@ -3,7 +3,7 @@ import uuid
 from django.db import models
 
 from .errors import ImmutableRecordError
-from .identifiers import new_ulid
+from .identifiers import new_ulid, normalize_trace_id
 
 
 class AppendOnlyQuerySet(models.QuerySet):
@@ -38,6 +38,8 @@ class VersionedModel(models.Model):
     def save(self, *args: object, **kwargs: object) -> None:
         if not self._state.adding:
             raise RuntimeError("Versioned rows must be changed through compare-and-swap services")
+        if hasattr(self, "trace_id"):
+            self.trace_id = normalize_trace_id(self.trace_id)
         super().save(*args, **kwargs)
 
     def delete(self, *args: object, **kwargs: object) -> tuple[int, dict[str, int]]:
@@ -55,6 +57,8 @@ class AppendOnlyModel(models.Model):
     def save(self, *args: object, **kwargs: object) -> None:
         if not self._state.adding:
             raise ImmutableRecordError()
+        if hasattr(self, "trace_id"):
+            self.trace_id = normalize_trace_id(self.trace_id)
         super().save(*args, **kwargs)
 
     def delete(self, *args: object, **kwargs: object) -> tuple[int, dict[str, int]]:

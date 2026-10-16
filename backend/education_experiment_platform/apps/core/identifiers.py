@@ -1,3 +1,4 @@
+import hashlib
 import secrets
 import time
 
@@ -13,3 +14,12 @@ def new_ulid() -> str:
         encoded[index] = CROCKFORD_BASE32[value & 31]
         value >>= 5
     return "".join(encoded)
+
+
+def normalize_trace_id(value: object) -> str:
+    """Keep internal trace identifiers within the 32-character storage contract."""
+
+    trace_id = str(value or "")
+    if len(trace_id) <= 32:
+        return trace_id
+    return hashlib.sha256(trace_id.encode("utf-8")).hexdigest()[:32]

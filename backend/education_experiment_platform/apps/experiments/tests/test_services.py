@@ -8,7 +8,8 @@ from apps.core.models import OutboxEvent
 from apps.courses.models import Chapter, Course, Enrollment
 from apps.courses.tests.helpers import create_draft_course, create_teacher
 from apps.governance.models import RuntimeAdapter
-from apps.labtemplates.models import TemplateVersion
+from apps.labtemplates.models import ExperimentImage, TemplateChapter, TemplateTask, TemplateVersion
+from apps.provisioning.errors import ProvisioningConfigurationError
 
 from ..errors import (
     PublicationPrerequisiteBlocked,
@@ -19,6 +20,8 @@ from ..errors import (
 from ..models import (
     ExperimentTask,
     PublicationAudience,
+    PublicationChapter,
+    PublicationTask,
     TaskExtensionDecision,
     TaskPublication,
     TaskStateTransition,
@@ -28,10 +31,12 @@ from ..services import (
     assign_late_enrollment_task,
     decide_extension,
     execute_publication_assignment,
+    precheck_template_version,
     prerequisite_blockers_for_publication,
     publish_publication,
     request_extension,
     start_task,
+    start_task_runtime,
     transition_task,
     update_publication,
     withdraw_publication,
@@ -42,6 +47,19 @@ from .helpers import context, create_domain, create_draft_publication, create_en
 class ExperimentServiceTests(TestCase):
     def setUp(self) -> None:
         self.owner, self.course, self.template_version, self.rubric_version = create_domain()
+        ExperimentImage.objects.create(
+            template_version=self.template_version,
+            source_type=ExperimentImage.SourceType.EXTERNAL_REFERENCE,
+            registry=self.template_version.image.registry,
+            repository=self.template_version.image.repository,
+            requested_tag=self.template_version.image.display_tag or "stable",
+            resolved_digest=self.template_version.image.digest,
+            image_asset=self.template_version.image,
+            status=ExperimentImage.Status.READY,
+            scan_status=ExperimentImage.ScanStatus.CLEAN,
+            trace_id="p06-test".ljust(32, "0"),
+            created_by=self.owner,
+        )
         self.enrollment = create_enrollment(self.course)
         self.publication = create_draft_publication(
             owner=self.owner,
@@ -69,6 +87,18 @@ class ExperimentServiceTests(TestCase):
         self.assertEqual(ExperimentTask.objects.filter(publication=published).count(), 1)
         self.assertEqual(TaskStateTransition.objects.filter(task__publication=published).count(), 1)
         self.assertTrue(OutboxEvent.objects.filter(event_type="experiment.task_assigned").exists())
+
+    def test_student_runtime_entry_rejects_mutable_runtime_overrides(self) -> None:
+        published = self._publish()
+        task = ExperimentTask.objects.get(publication=published)
+
+        with self.assertRaises(ProvisioningConfigurationError):
+            start_task_runtime(
+                task_id=task.public_id,
+                actor=task.student,
+                context=context(task.student, portal="USER"),
+                payload={"image": "mutable:latest", "cpu_millicores": 100},
+            )
 
     def test_publish_freezes_template_execution_and_runtime_inputs(self) -> None:
         published = self._publish()
@@ -115,6 +145,182 @@ class ExperimentServiceTests(TestCase):
             publication_snapshot.template_spec_digest, original["template_spec_digest"]
         )
         self.assertEqual(publication_snapshot.runtime_adapter_id, original["runtime_adapter_id"])
+
+    def test_publish_copies_ordered_immutable_chapter_and_task_snapshots(self) -> None:
+        published = self._publish()
+        chapter = PublicationChapter.objects.get(publication=published)
+        task = PublicationTask.objects.get(publication_chapter=chapter)
+        source_chapter = published.template_version.chapters.first()
+        source_task = source_chapter.tasks.first()
+        self.assertEqual(chapter.source_chapter_id, source_chapter.public_id)
+        self.assertEqual(task.source_task_id, source_task.public_id)
+        self.assertEqual(task.image_digest, published.image_digest)
+        self.assertEqual(task.resource_profile_snapshot["cpu_request_millicores"], 2000)
+        self.assertEqual(task.execution_snapshot["execution_spec"]["entrypoint"], "main.py")
+        self.assertTrue(published.template_digest)
+        self.assertTrue(published.publication_digest)
+
+        TemplateChapter.objects.filter(pk=published.template_version.chapters.first().pk).update(
+            title="Changed after publication"
+        )
+        TemplateTask.objects.filter(
+            pk=published.template_version.chapters.first().tasks.first().pk
+        ).update(title="Changed task after publication")
+        chapter.refresh_from_db()
+        task.refresh_from_db()
+        self.assertEqual(chapter.title, "Introduction")
+        self.assertEqual(task.title, "First task")
+
+    def test_precheck_rejects_draft_chapter_and_task_rows(self) -> None:
+        chapter = TemplateChapter.objects.get(template_version=self.template_version)
+        TemplateChapter.objects.filter(pk=chapter.pk).update(status=TemplateChapter.Status.DRAFT)
+        with self.assertRaises(PublicationValidationError) as chapter_error:
+            precheck_template_version(template_version=self.template_version)
+        self.assertEqual(
+            chapter_error.exception.detail["chapters"]["not_published"],
+            [chapter.public_id],
+        )
+
+        TemplateChapter.objects.filter(pk=chapter.pk).update(status=TemplateChapter.Status.PUBLISHED)
+        task = TemplateTask.objects.get(chapter=chapter)
+        TemplateTask.objects.filter(pk=task.pk).update(status=TemplateTask.Status.DRAFT)
+        with self.assertRaises(PublicationValidationError) as task_error:
+            precheck_template_version(template_version=self.template_version)
+        self.assertEqual(
+            task_error.exception.detail["chapter_tasks"][chapter.public_id]["not_published"],
+            [task.public_id],
+        )
+
+    def test_precheck_merges_task_execution_override_and_rejects_invalid_spec(self) -> None:
+        task = TemplateTask.objects.get(chapter__template_version=self.template_version)
+        TemplateTask.objects.filter(pk=task.pk).update(
+            execution_spec={"entrypoint": "task.py"}
+        )
+        content = precheck_template_version(template_version=self.template_version)
+        normalized = content["chapters"][0]["tasks"][0]["execution_snapshot"]["execution_spec"]
+        self.assertEqual(normalized["entrypoint"], "task.py")
+        self.assertEqual(normalized["language"], self.template_version.execution_spec["language"])
+        self.assertEqual(
+            normalized["tests_asset"], self.template_version.execution_spec["tests_asset"]
+        )
+
+        TemplateTask.objects.filter(pk=task.pk).update(execution_spec={"entrypoint": "bad.txt"})
+        with self.assertRaises(PublicationValidationError) as error:
+            precheck_template_version(template_version=self.template_version)
+        self.assertIn(task.public_id, error.exception.detail["execution_spec"])
+
+    def test_template_digest_changes_when_runtime_adapter_config_changes(self) -> None:
+        before = precheck_template_version(template_version=self.template_version)
+        RuntimeAdapter.objects.filter(pk=self.template_version.runtime_adapter_id).update(
+            config_ref="runtime/changed-config"
+        )
+        self.template_version.refresh_from_db()
+        after = precheck_template_version(template_version=self.template_version)
+        self.assertNotEqual(before["template_digest"], after["template_digest"])
+
+    def test_selected_audience_order_does_not_change_publication_digest(self) -> None:
+        first_student = self.enrollment
+        second_student = create_enrollment(self.course, suffix="p06-selected-second")
+        first = create_draft_publication(
+            owner=self.owner,
+            course=self.course,
+            template_version=self.template_version,
+            rubric_version=self.rubric_version,
+            audience_mode=TaskPublication.AudienceMode.SELECTED,
+        )
+        second = create_draft_publication(
+            owner=self.owner,
+            course=self.course,
+            template_version=self.template_version,
+            rubric_version=self.rubric_version,
+            audience_mode=TaskPublication.AudienceMode.SELECTED,
+        )
+        fixed_start = timezone.now() - timezone.timedelta(minutes=5)
+        fixed_end = fixed_start + timezone.timedelta(days=2)
+        fixed_deadline = fixed_start + timezone.timedelta(days=1)
+        TaskPublication.objects.filter(pk__in=[first.pk, second.pk]).update(
+            window_start=fixed_start,
+            window_end=fixed_end,
+            assignment_deadline=fixed_deadline,
+        )
+        first.refresh_from_db()
+        second.refresh_from_db()
+        first_published, _ = publish_publication(
+            course_id=self.course.public_id,
+            publication_id=first.public_id,
+            actor=self.owner,
+            expected_version=first.row_version,
+            selected_ids=[first_student.public_id, second_student.public_id],
+            context=context(self.owner),
+        )
+        second_published, _ = publish_publication(
+            course_id=self.course.public_id,
+            publication_id=second.public_id,
+            actor=self.owner,
+            expected_version=second.row_version,
+            selected_ids=[second_student.public_id, first_student.public_id],
+            context=context(self.owner),
+        )
+        self.assertEqual(first_published.publication_digest, second_published.publication_digest)
+
+    def test_precheck_rejects_missing_content_or_unready_image(self) -> None:
+        version = TemplateVersion.objects.create(
+            template=self.template_version.template,
+            version_no=99,
+            status=TemplateVersion.Status.PUBLISHED,
+            runtime_type=self.template_version.runtime_type,
+            runtime_adapter=self.template_version.runtime_adapter,
+            image=self.template_version.image,
+            resource_profile=self.template_version.resource_profile,
+            execution_spec=self.template_version.execution_spec,
+            spec_digest="d" * 64,
+            created_by=self.owner,
+            published_by=self.owner,
+            published_at=timezone.now(),
+        )
+        image = self.template_version.image
+        ExperimentImage.objects.create(
+            template_version=version,
+            source_type=ExperimentImage.SourceType.EXTERNAL_REFERENCE,
+            registry=image.registry,
+            repository=image.repository,
+            requested_tag=image.display_tag or "stable",
+            resolved_digest=image.digest,
+            image_asset=image,
+            status=ExperimentImage.Status.READY,
+            scan_status=ExperimentImage.ScanStatus.CLEAN,
+            trace_id="p06-missing".ljust(32, "0"),
+            created_by=self.owner,
+        )
+        with self.assertRaises(PublicationValidationError) as task_error:
+            precheck_template_version(template_version=version)
+        self.assertIn("chapters", task_error.exception.detail)
+
+        chapter = TemplateChapter.objects.create(
+            template_version=version,
+            title="Missing task chapter",
+            sort_order=1,
+            status=TemplateChapter.Status.PUBLISHED,
+            resource_profile=version.resource_profile,
+        )
+        with self.assertRaises(PublicationValidationError) as task_error:
+            precheck_template_version(template_version=version)
+        self.assertIn("chapter_tasks", task_error.exception.detail)
+
+        TemplateTask.objects.create(
+            chapter=chapter,
+            title="Restored task",
+            task_type="PRACTICE",
+            sort_order=1,
+            status=TemplateTask.Status.PUBLISHED,
+            resource_profile=version.resource_profile,
+        )
+        ExperimentImage.objects.filter(template_version=version).update(
+            status=ExperimentImage.Status.FAILED
+        )
+        with self.assertRaises(PublicationValidationError) as image_error:
+            precheck_template_version(template_version=version)
+        self.assertEqual(image_error.exception.detail["image"], "READY_REQUIRED")
 
     @override_settings(P06_PUBLICATION_SYNC_LIMIT=1)
     @patch("apps.experiments.tasks.assign_publication_tasks.delay")

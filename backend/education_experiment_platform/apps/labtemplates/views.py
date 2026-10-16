@@ -36,6 +36,7 @@ from .serializers import (
     AutoCheckRulesResponseSerializer,
     AutoCheckRulesWriteSerializer,
     ExperimentImageCreateSerializer,
+    ExperimentImageEventsResponseSerializer,
     ExperimentImageListResponseSerializer,
     ExperimentImagePrepareSerializer,
     ExperimentImageResponseSerializer,
@@ -319,6 +320,11 @@ class ExperimentImageRetireView(APIView):
 class ExperimentImageEventsView(APIView):
     permission_classes = [IsTeachingPortal]
 
+    @extend_schema(
+        operation_id="teaching_experiment_images_events",
+        responses={200: ExperimentImageEventsResponseSerializer},
+        extensions={"x-portals": ["TEACHING"]},
+    )
     def get(self, request: HttpRequest, course_id: str, image_id: str) -> Response:
         from apps.core.models import OutboxEvent
 
