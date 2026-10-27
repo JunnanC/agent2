@@ -190,11 +190,6 @@ urlpatterns = [
         name="question-answer-create",
     ),
     path(
-        "teaching/courses/<str:course_id>/<str:resource>",
-        TeachingContentCollectionView.as_view(),
-        name="teaching-content-collection",
-    ),
-    path(
         "teaching/courses/<str:course_id>/chapters/<str:chapter_id>/<str:status>",
         TeachingChapterStatusView.as_view(),
         name="teaching-chapter-status",
@@ -263,5 +258,12 @@ urlpatterns = [
         "teaching/courses/<str:course_id>/chapters/<str:chapter_id>/prerequisites",
         TeachingChapterPrerequisiteView.as_view(),
         name="teaching-chapter-prerequisites",
+    ),
+    # KEPT LAST: this dynamic two-segment catch-all must not shadow the
+    # specific resources above (invitations, copy-jobs, prerequisites...).
+    path(
+        "teaching/courses/<str:course_id>/<str:resource>",
+        TeachingContentCollectionView.as_view(),
+        name="teaching-content-collection",
     ),
 ]

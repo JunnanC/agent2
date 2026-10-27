@@ -171,7 +171,24 @@ def _new_token() -> tuple[str, str, str]:
 
 
 def _session_capabilities(task: ExperimentTask) -> dict[str, bool]:
-    declared = task.template_version.workspace_capabilities or {}
+    declared: dict[str, object] = {}
+    execution_spec = task.execution_spec if isinstance(task.execution_spec, dict) else {}
+    runtime_snapshot = execution_spec.get("_runtime")
+    if isinstance(runtime_snapshot, dict):
+        declared = runtime_snapshot.get("workspace_capabilities") or {}
+    if not declared and isinstance(execution_spec.get("workspace_capabilities"), dict):
+        declared = execution_spec["workspace_capabilities"]
+    if not declared:
+        publication_execution = task.publication.execution_spec
+        runtime_snapshot = (
+            publication_execution.get("_runtime")
+            if isinstance(publication_execution, dict)
+            else None
+        )
+        if isinstance(runtime_snapshot, dict):
+            declared = runtime_snapshot.get("workspace_capabilities") or {}
+    if not declared:
+        declared = task.template_version.workspace_capabilities or {}
     return {name: bool(declared.get(name, False)) for name in WORKSPACE_CAPABILITIES}
 
 
@@ -186,6 +203,14 @@ def _task_for_actor(*, task_id: str, actor: User) -> ExperimentTask:
         )
     except ExperimentTask.DoesNotExist as exc:
         raise ResourceNotFound() from exc
+
+
+def task_has_active_test_rules(task: ExperimentTask) -> bool:
+    """Whether the frozen template declares any active auto-check (test) rules.
+
+    任务模板没有声明测试用例时,提交报告不应要求存在执行运行结果。
+    """
+    return task.template_version.auto_check_rules.filter(is_active=True).exists()
 
 
 def _assert_enterable(task: ExperimentTask) -> None:
@@ -276,6 +301,7 @@ def issue_session(
                 "status": WorkspaceSession.Status.ACTIVE,
                 "revoked_at": None,
                 "revoke_reason": "",
+                "instance": instance,
             },
         )
         session = changed  # type: ignore[assignment]
@@ -1107,12 +1133,16 @@ EXECUTION_TERMINAL_STATUSES = frozenset(
 
 def _execution_rules(task: ExperimentTask) -> tuple[dict[str, Any], list[str], str]:
     execution_spec = dict(task.execution_spec or {})
-    if not execution_spec:
-        execution_spec = dict(task.template_version.execution_spec or {})
+    command: list[str] = []
     try:
         command = list(build_execution_command(execution_spec))
-    except Exception:  # noqa: BLE001 - legacy FakeRuntime rows have no execution spec
-        command = []
+    except Exception:  # noqa: BLE001 - publication frozen specs may carry legacy overlays
+        try:
+            command = list(
+                build_execution_command(dict(task.template_version.execution_spec or {}))
+            )
+        except Exception:  # noqa: BLE001 - legacy FakeRuntime rows have no execution spec
+            command = []
     summary: dict[str, Any] = {
         "language": execution_spec.get("language", ""),
         "entrypoint": execution_spec.get("entrypoint", ""),
@@ -1376,6 +1406,7 @@ def execute_execution_run(*, execution_run_id: str, trace_id: str = "") -> Works
         summary = dict(run.execution_rule_summary or {})
         command = [str(value) for value in summary.get("command", [])]
         source = b""
+        tests = b""
         adapter = runtime_for_driver(
             driver,
             config_ref=task.runtime_adapter_config_ref
@@ -1388,10 +1419,27 @@ def execute_execution_run(*, execution_run_id: str, trace_id: str = "") -> Works
                 version_id=run.snapshot.asset.object_version,
             )
             source = stored.body.read() if hasattr(stored.body, "read") else b""
+            tests_asset_id = str(summary.get("tests_asset", ""))
+            if tests_asset_id:
+                from apps.core.models import ObjectAsset
+
+                tests_asset = ObjectAsset.objects.filter(public_id=tests_asset_id).first()
+                if tests_asset is not None:
+                    tests_stored = object_storage().open_object(
+                        bucket=tests_asset.bucket,
+                        object_key=tests_asset.object_key,
+                        version_id=tests_asset.object_version,
+                    )
+                    tests = (
+                        tests_stored.body.read()
+                        if hasattr(tests_stored.body, "read")
+                        else b""
+                    )
         result: RuntimeExecutionResult = adapter.execute(
             spec=_runtime_spec_for_execution(task, trace_id=run.trace_id),
             command=command,
             source=source,
+            tests=tests,
             timeout_seconds=int(summary.get("timeout_seconds", 0) or 0),
             memory_mb=int(summary.get("memory_mb", 0) or 0),
             cpu_millicores=int(summary.get("cpu_millicores", 0) or 0),

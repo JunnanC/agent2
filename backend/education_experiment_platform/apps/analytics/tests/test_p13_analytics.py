@@ -2,10 +2,12 @@ from datetime import timedelta
 
 from django.test import TestCase
 from django.utils import timezone
+from rest_framework.test import APIRequestFactory, force_authenticate
 
 from apps.accounts.tests.helpers import create_user, grant_teacher
 from apps.analytics.models import CourseDaily, CourseQualitySnapshot, StudentRiskSignal
 from apps.analytics.services import rebuild_course_analytics, resolve_risk_signal
+from apps.analytics.views import TeachingAnalyticsSeriesView
 from apps.core.errors import RowVersionConflict
 from apps.courses.services import ActorContext
 from apps.courses.tests.helpers import create_draft_course
@@ -28,6 +30,22 @@ class AnalyticsProjectionTests(TestCase):
         self.assertEqual(daily.projection_version, "p13-v1")
         self.assertTrue(daily.source_cursor == "" or "|" in daily.source_cursor)
         self.assertEqual(quality.metrics["task_total"], 0)
+
+    def test_series_endpoint_returns_recent_daily_projections(self) -> None:
+        self.assertEqual(rebuild_course_analytics(course_id=self.course.public_id), 1)
+        request = APIRequestFactory().get(
+            f"/api/v2/teaching/courses/{self.course.public_id}/analytics/series?days=7"
+        )
+        force_authenticate(request, user=self.teacher)
+        request.portal = "TEACHING"  # type: ignore[attr-defined]
+        request.trace_id = "p13-series-test"  # type: ignore[attr-defined]
+        response = TeachingAnalyticsSeriesView.as_view()(request, course_id=self.course.public_id)
+        self.assertEqual(response.status_code, 200, response.data)
+        expected_date = CourseDaily.objects.get(course=self.course).period_start
+        series = response.data["data"]["series"]
+        self.assertEqual(len(series), 1)
+        self.assertEqual(str(series[0]["period_start"]), expected_date.isoformat())
+        self.assertEqual(series[0]["metrics"]["task_total"], 0)
 
     def test_teacher_can_resolve_risk_with_cas_and_stale_version_is_rejected(self) -> None:
         signal = StudentRiskSignal.objects.create(

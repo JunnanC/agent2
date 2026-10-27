@@ -9,6 +9,7 @@ from django.utils import timezone
 from apps.core.audit import append_audit, hash_client_ip
 from apps.core.concurrency import compare_and_swap
 from apps.core.errors import ResourceNotFound, RowVersionConflict
+from apps.core.identifiers import normalize_trace_id
 from apps.core.models import ObjectAsset
 from apps.core.outbox import append_outbox_event, enqueue_relay_after_commit
 
@@ -46,6 +47,9 @@ class ActorContext:
     trace_id: str
     client_ip: str = ""
     user_agent: str = ""
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "trace_id", normalize_trace_id(self.trace_id))
 
 
 def _audit(

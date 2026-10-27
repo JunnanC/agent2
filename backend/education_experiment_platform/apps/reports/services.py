@@ -29,6 +29,7 @@ from apps.courses.services import ActorContext
 from apps.experiments.models import ExperimentTask
 from apps.experiments.services import transition_task
 from apps.workspaces.models import WorkspaceExecutionRun, WorkspaceSnapshot
+from apps.workspaces.services import task_has_active_test_rules
 
 from . import events
 from .errors import (
@@ -227,8 +228,11 @@ def _latest_execution_for_submission(
     submitting an older passing run while a newer run is still queued or points at
     a newer snapshot.  All copied fields are later written to the append-only report
     version, so this check is the only live run read needed during submission.
-    """
 
+    任务模板未声明任何测试用例且不存在执行运行时,提交不要求运行,沿用兼容
+    路径生成执行凭据(snapshot 级幂等),避免把"检查点型实验"卡在无测试可运行
+    的状态;已有真实运行(即使无规则)仍以真实运行为准。
+    """
     run = (
         WorkspaceExecutionRun.objects.select_related(
             "task",
@@ -243,6 +247,8 @@ def _latest_execution_for_submission(
         .first()
     )
     if run is None:
+        if not task_has_active_test_rules(task):
+            return _legacy_fake_execution(task=task, snapshot=snapshot)
         driver = task.runtime_adapter_driver or (
             task.runtime_adapter.driver if task.runtime_adapter_id else "FAKE"
         )

@@ -28,6 +28,14 @@ class AcademicTerm(VersionedModel):
     ends_at = models.DateTimeField()
     status = models.CharField(max_length=16, choices=Status.choices, default=Status.UPCOMING)
     is_current = models.BooleanField(default=False)
+    current_slot = models.GeneratedField(
+        expression=models.Case(
+            models.When(is_current=True, then=models.Value(1)),
+            default=models.Value(None),
+        ),
+        output_field=models.PositiveSmallIntegerField(null=True),
+        db_persist=True,
+    )
 
     class Meta:
         db_table = "courses_academic_term"
@@ -45,8 +53,7 @@ class AcademicTerm(VersionedModel):
                 name="courses_term_current_status_ck",
             ),
             models.UniqueConstraint(
-                fields=("is_current",),
-                condition=models.Q(is_current=True),
+                fields=("current_slot",),
                 name="courses_term_one_current_uniq",
             ),
         ]

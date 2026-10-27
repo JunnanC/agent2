@@ -9,8 +9,8 @@ services:
     write_timeout: 60000
     retries: 0
     routes:
-      - name: user-browser-api
-        hosts: [user.localhost, user.example.edu]
+      - name: student-browser-api
+        hosts: [student.localhost, student.example.edu]
         paths: [/api/v2]
         strip_path: false
         preserve_host: true
@@ -87,8 +87,8 @@ services:
     write_timeout: 60000
     retries: 0
     routes:
-      - name: user-events
-        hosts: [user.localhost, user.example.edu]
+      - name: student-events
+        hosts: [student.localhost, student.example.edu]
         paths: [/api/v2/events/stream]
         strip_path: false
         preserve_host: true
@@ -97,26 +97,6 @@ services:
             config:
               remove: { headers: [X-Portal, X-Auth-Context, X-Client-Id, X-Scopes, X-Proxy-Context] }
               add: { headers: ["X-Portal:USER", "X-Proxy-Context:ingress-v1"] }
-      - name: teacher-events
-        hosts: [teacher.localhost, teacher.example.edu]
-        paths: [/api/v2/events/stream]
-        strip_path: false
-        preserve_host: true
-        plugins:
-          - name: request-transformer
-            config:
-              remove: { headers: [X-Portal, X-Auth-Context, X-Client-Id, X-Scopes, X-Proxy-Context] }
-              add: { headers: ["X-Portal:TEACHING", "X-Proxy-Context:ingress-v1"] }
-      - name: admin-events
-        hosts: [admin.localhost, admin.example.edu]
-        paths: [/api/v2/events/stream]
-        strip_path: false
-        preserve_host: true
-        plugins:
-          - name: request-transformer
-            config:
-              remove: { headers: [X-Portal, X-Auth-Context, X-Client-Id, X-Scopes, X-Proxy-Context] }
-              add: { headers: ["X-Portal:PLATFORM", "X-Proxy-Context:ingress-v1"] }
 
   # Keep the historical service identifier for protocol timeout contracts;
   # the upstream is the dedicated gateway process, never Django or a runtime.
@@ -127,8 +107,8 @@ services:
     write_timeout: 600000
     retries: 0
     routes:
-      - name: user-workspace
-        hosts: [user.localhost, user.example.edu]
+      - name: student-workspace
+        hosts: [student.localhost, student.example.edu]
         paths: [/workspace]
         strip_path: false
         preserve_host: true
@@ -144,8 +124,8 @@ services:
     write_timeout: 300000
     retries: 0
     routes:
-      - name: user-files
-        hosts: [user.localhost, user.example.edu]
+      - name: student-files
+        hosts: [student.localhost, student.example.edu]
         paths: [/files]
         strip_path: false
         preserve_host: true

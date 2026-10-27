@@ -3,7 +3,12 @@ from typing import Any
 
 from django.conf import settings
 from django.http import HttpRequest
-from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, extend_schema
+from drf_spectacular.utils import (
+    OpenApiParameter,
+    OpenApiResponse,
+    extend_schema,
+    extend_schema_view,
+)
 from rest_framework.parsers import MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -18,7 +23,7 @@ from apps.courses.services import ActorContext
 from apps.experiments.serializers import task_data
 from apps.experiments.services import allowed_actions
 
-from .models import WorkspaceSession, WorkspaceStorageJob
+from .models import WorkspaceExecutionRun, WorkspaceSession, WorkspaceStorageJob
 from .permissions import require_workspace_session
 from .selectors import (
     active_session_for_user,
@@ -35,6 +40,7 @@ from .selectors import (
 )
 from .serializers import (
     CheckpointWriteSerializer,
+    ExecutionRunCreateSerializer,
     OperationEventSerializer,
     WorkbenchSerializer,
     WorkspaceCheckpointListSerializer,
@@ -59,6 +65,7 @@ from .services import (
     enter_task,
     issue_session,
     renew_session,
+    request_execution_run,
     restore_checkpoint,
     revoke_session,
     save_snapshot,
@@ -380,8 +387,8 @@ class UserWorkspaceSnapshotView(APIView):
     serializer_class = WorkspaceSnapshotSerializer
 
     @extend_schema(
-        operation_id="tasks_execution_runs_list",
-        parameters=[WORKSPACE_TOKEN],
+        operation_id="tasks_workspace_snapshot_save",
+        parameters=[WORKSPACE_TOKEN, IDEMPOTENCY_KEY],
         tags=["workspaces"],
         responses={200: WorkspaceSnapshotSerializer, 202: WorkspaceStorageJobSerializer},
         extensions={"x-portals": ["USER"]},
@@ -462,7 +469,11 @@ class UserCheckpointListCreateView(APIView):
                 task_id=task_id,
                 actor=request.user,
                 token=_workspace_token(request),
-                name=serializer.validated_data.get("name", ""),
+                name=str(
+                    serializer.validated_data.get("name")
+                    or serializer.validated_data.get("label")
+                    or ""
+                ),
                 context=_context(request),
             )
             item = (
@@ -544,16 +555,26 @@ class UserOperationReplayView(APIView):
         return _cursor_page(request, rows, key="occurred_at")
 
 
-class UserExecutionRunListView(APIView):
-    permission_classes = [IsUserPortal]
-
-    @extend_schema(
-        operation_id="tasks_execution_run_retrieve",
+@extend_schema_view(
+    get=extend_schema(
+        operation_id="tasks_execution_runs_list",
         parameters=[WORKSPACE_TOKEN],
         responses=WorkspaceExecutionRunListSerializer,
         tags=["workspaces"],
         extensions={"x-portals": ["USER"]},
-    )
+    ),
+    post=extend_schema(
+        operation_id="tasks_execution_runs_create",
+        parameters=[WORKSPACE_TOKEN, IDEMPOTENCY_KEY],
+        request=ExecutionRunCreateSerializer,
+        responses={201: WorkspaceExecutionRunSerializer},
+        tags=["workspaces"],
+        extensions={"x-portals": ["USER"]},
+    ),
+)
+class UserExecutionRunListView(APIView):
+    permission_classes = [IsUserPortal]
+
     def get(self, request: HttpRequest, task_id: str) -> Response:
         task_for_user(actor=request.user, task_id=task_id)
         session = active_session_for_user(actor=request.user, task_id=task_id)
@@ -565,6 +586,32 @@ class UserExecutionRunListView(APIView):
             for item in execution_runs_for_user(actor=request.user, task_id=task_id)[:100]
         ]
         return _response(request, {"items": rows})
+
+    def post(self, request: HttpRequest, task_id: str) -> Response:
+        serializer = ExecutionRunCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        def operation() -> StoredResponse:
+            task_for_user(actor=request.user, task_id=task_id)
+            session = active_session_for_user(actor=request.user, task_id=task_id)
+            token = _workspace_token(request)
+            require_workspace_session(
+                session=session, token=token, task_id=task_id
+            )
+            run = request_execution_run(
+                session=session,
+                token=token,
+                actor=request.user,
+                arguments=dict(serializer.validated_data),
+                request_key=str(getattr(request, "idempotency_key", "")),
+                context=_context(request),
+            )
+            run = WorkspaceExecutionRun.objects.select_related("snapshot").get(pk=run.pk)
+            return StoredResponse(
+                201, _body(request, execution_run_data(run)), {}
+            )
+
+        return _idempotent(request, payload=dict(serializer.validated_data), operation=operation)
 
 
 class UserExecutionRunDetailView(APIView):

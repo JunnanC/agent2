@@ -84,6 +84,7 @@ GRANT SELECT, INSERT, UPDATE ON \`${MYSQL_DATABASE}\`.courses_enrollment_import_
 GRANT SELECT, INSERT, UPDATE ON \`${MYSQL_DATABASE}\`.courses_enrollment_import_item TO '${MYSQL_APP_USER}'@'%';
 GRANT SELECT, INSERT, UPDATE ON \`${MYSQL_DATABASE}\`.courses_copy_job TO '${MYSQL_APP_USER}'@'%';
 GRANT SELECT, INSERT ON \`${MYSQL_DATABASE}\`.courses_copy_item TO '${MYSQL_APP_USER}'@'%';
+GRANT SELECT, INSERT, UPDATE ON \`${MYSQL_DATABASE}\`.courses_academic_term TO '${MYSQL_APP_USER}'@'%';
 GRANT SELECT, INSERT, UPDATE ON \`${MYSQL_DATABASE}\`.governance_runtime_adapter TO '${MYSQL_APP_USER}'@'%';
 GRANT SELECT, INSERT, UPDATE ON \`${MYSQL_DATABASE}\`.governance_image_asset TO '${MYSQL_APP_USER}'@'%';
 GRANT SELECT, INSERT, UPDATE ON \`${MYSQL_DATABASE}\`.governance_resource_profile TO '${MYSQL_APP_USER}'@'%';
@@ -95,6 +96,11 @@ GRANT SELECT, INSERT, UPDATE ON \`${MYSQL_DATABASE}\`.labtemplates_template TO '
 GRANT SELECT, INSERT, UPDATE ON \`${MYSQL_DATABASE}\`.labtemplates_template_version TO '${MYSQL_APP_USER}'@'%';
 GRANT SELECT, INSERT, UPDATE ON \`${MYSQL_DATABASE}\`.labtemplates_auto_check_rule TO '${MYSQL_APP_USER}'@'%';
 GRANT SELECT, INSERT, UPDATE ON \`${MYSQL_DATABASE}\`.labtemplates_template_precheck_run TO '${MYSQL_APP_USER}'@'%';
+GRANT SELECT, INSERT, UPDATE ON \`${MYSQL_DATABASE}\`.labtemplates_template_chapter TO '${MYSQL_APP_USER}'@'%';
+GRANT SELECT, INSERT, UPDATE ON \`${MYSQL_DATABASE}\`.labtemplates_template_task TO '${MYSQL_APP_USER}'@'%';
+GRANT SELECT, INSERT, UPDATE ON \`${MYSQL_DATABASE}\`.labtemplates_experiment_image TO '${MYSQL_APP_USER}'@'%';
+GRANT SELECT, INSERT, UPDATE ON \`${MYSQL_DATABASE}\`.labtemplates_image_build_job TO '${MYSQL_APP_USER}'@'%';
+GRANT SELECT, INSERT, UPDATE ON \`${MYSQL_DATABASE}\`.labtemplates_legacy_template_migration TO '${MYSQL_APP_USER}'@'%';
 GRANT SELECT, INSERT, UPDATE ON \`${MYSQL_DATABASE}\`.reviews_rubric TO '${MYSQL_APP_USER}'@'%';
 GRANT SELECT, INSERT, UPDATE ON \`${MYSQL_DATABASE}\`.reviews_rubric_version TO '${MYSQL_APP_USER}'@'%';
 GRANT SELECT, INSERT, UPDATE ON \`${MYSQL_DATABASE}\`.reviews_rubric_criterion TO '${MYSQL_APP_USER}'@'%';
@@ -112,11 +118,14 @@ GRANT SELECT, INSERT ON \`${MYSQL_DATABASE}\`.experiments_publication_audience T
 GRANT SELECT, INSERT ON \`${MYSQL_DATABASE}\`.experiments_publication_prerequisite TO '${MYSQL_APP_USER}'@'%';
 GRANT SELECT, INSERT, UPDATE ON \`${MYSQL_DATABASE}\`.experiments_experiment_task TO '${MYSQL_APP_USER}'@'%';
 GRANT SELECT, INSERT ON \`${MYSQL_DATABASE}\`.experiments_task_state_transition TO '${MYSQL_APP_USER}'@'%';
+GRANT SELECT, INSERT ON \`${MYSQL_DATABASE}\`.experiments_publication_chapter TO '${MYSQL_APP_USER}'@'%';
+GRANT SELECT, INSERT ON \`${MYSQL_DATABASE}\`.experiments_publication_task TO '${MYSQL_APP_USER}'@'%';
 GRANT SELECT, INSERT, UPDATE ON \`${MYSQL_DATABASE}\`.experiments_task_extension_request TO '${MYSQL_APP_USER}'@'%';
 GRANT SELECT, INSERT ON \`${MYSQL_DATABASE}\`.experiments_task_extension_decision TO '${MYSQL_APP_USER}'@'%';
 GRANT SELECT, INSERT, UPDATE ON \`${MYSQL_DATABASE}\`.provisioning_instance TO '${MYSQL_APP_USER}'@'%';
 GRANT SELECT, INSERT, UPDATE ON \`${MYSQL_DATABASE}\`.provisioning_job TO '${MYSQL_APP_USER}'@'%';
 GRANT SELECT, INSERT ON \`${MYSQL_DATABASE}\`.provisioning_stage_event TO '${MYSQL_APP_USER}'@'%';
+GRANT SELECT, INSERT, UPDATE ON \`${MYSQL_DATABASE}\`.provisioning_runtime_capacity_reservation TO '${MYSQL_APP_USER}'@'%';
 GRANT SELECT, INSERT, UPDATE ON \`${MYSQL_DATABASE}\`.workspaces_workspace_session TO '${MYSQL_APP_USER}'@'%';
 GRANT SELECT, INSERT ON \`${MYSQL_DATABASE}\`.workspaces_workspace_snapshot TO '${MYSQL_APP_USER}'@'%';
 GRANT SELECT, INSERT ON \`${MYSQL_DATABASE}\`.workspaces_workspace_autosave_log TO '${MYSQL_APP_USER}'@'%';

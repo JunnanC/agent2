@@ -35,7 +35,9 @@ from .selectors import (
 from .serializers import (
     AutoCheckRulesResponseSerializer,
     AutoCheckRulesWriteSerializer,
+    ExecutionSpecSaveSerializer,
     ExperimentImageCreateSerializer,
+    ExperimentImageEventsResponseSerializer,
     ExperimentImageListResponseSerializer,
     ExperimentImagePrepareSerializer,
     ExperimentImageResponseSerializer,
@@ -75,11 +77,13 @@ from .services import (
     create_task,
     create_template,
     create_version,
+    delete_template,
     publish_version,
     reorder_chapters,
     reorder_tasks,
     replace_rules,
     request_precheck,
+    save_execution_spec,
     update_chapter,
     update_task,
     update_template,
@@ -319,6 +323,11 @@ class ExperimentImageRetireView(APIView):
 class ExperimentImageEventsView(APIView):
     permission_classes = [IsTeachingPortal]
 
+    @extend_schema(
+        operation_id="teaching_experiment_images_events",
+        responses={200: ExperimentImageEventsResponseSerializer},
+        extensions={"x-portals": ["TEACHING"]},
+    )
     def get(self, request: HttpRequest, course_id: str, image_id: str) -> Response:
         from apps.core.models import OutboxEvent
 
@@ -414,6 +423,22 @@ class TemplateDetailView(APIView):
             actor=request.user,
             expected_version=parse_if_match(request.headers.get("If-Match")),
             changes=serializer.validated_data,
+            context=_ctx(request),
+        )
+        return _response(request, template_data(item), etag=item.row_version)
+
+    @extend_schema(
+        operation_id="teaching_templates_delete",
+        responses={200: TemplateResponseSerializer},
+        parameters=[IF_MATCH],
+        extensions={"x-portals": ["TEACHING"]},
+    )
+    def delete(self, request: HttpRequest, course_id: str, template_id: str) -> Response:
+        item = delete_template(
+            course_id=course_id,
+            template_id=template_id,
+            actor=request.user,
+            expected_version=parse_if_match(request.headers.get("If-Match")),
             context=_ctx(request),
         )
         return _response(request, template_data(item), etag=item.row_version)
@@ -949,6 +974,34 @@ class PublishVersionView(VersionActionView):
 @extend_schema_view(post=extend_schema(operation_id="teaching_template_versions_withdraw"))
 class WithdrawVersionView(VersionActionView):
     action = "withdraw"
+
+
+class ExecutionSpecSaveView(APIView):
+    permission_classes = [IsTeachingPortal]
+
+    @extend_schema(
+        operation_id="teaching_template_execution_spec_save",
+        request=ExecutionSpecSaveSerializer,
+        responses={200: TemplateVersionResponseSerializer},
+        parameters=[IF_MATCH, IDEMPOTENCY_KEY],
+        extensions={"x-portals": ["TEACHING"]},
+    )
+    def post(self, request: HttpRequest, course_id: str, version_id: str) -> Response:
+        serializer = ExecutionSpecSaveSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        item = save_execution_spec(
+            course_id=course_id,
+            template_id=version_for_course(
+                actor=request.user, course_id=course_id, version_id=version_id
+            ).template.public_id,
+            version_id=version_id,
+            actor=request.user,
+            expected_version=parse_if_match(request.headers.get("If-Match")),
+            spec=dict(serializer.validated_data),
+            tests_json=str(serializer.validated_data["tests_json"]),
+            context=_ctx(request),
+        )
+        return _response(request, version_data(item), etag=item.row_version)
 
 
 @extend_schema_view(post=extend_schema(operation_id="teaching_template_versions_clone"))

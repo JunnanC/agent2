@@ -29,6 +29,13 @@ KIND_LABEL = "edu.platform.kind"
 RUNTIME_KIND = "student-runtime"
 CAPACITY_KIND = "shared-prewarm"
 NAME_PATTERN = re.compile(r"[^a-z0-9-]+")
+IMAGE_DIGEST_PATTERN = re.compile(r"^sha256:[0-9a-f]{64}$")
+IMAGE_REGISTRY_PATTERN = re.compile(
+    r"^[a-z0-9](?:[a-z0-9.-]{0,251}[a-z0-9])?(?::[0-9]{1,5})?$"
+)
+IMAGE_REPOSITORY_COMPONENT_PATTERN = re.compile(
+    r"^[a-z0-9]+(?:(?:[._]|__|[-]+)[a-z0-9]+)*$"
+)
 
 
 class RuntimeAdapterFailure(RuntimeError):
@@ -143,6 +150,59 @@ def _extract_workspace_archive(archive_bytes: bytes, relative_path: str, max_byt
 
 class FakeRuntimeFailure(RuntimeAdapterFailure):
     pass
+
+
+def _consume_docker_stream(stream: Any, error_code: str) -> list[Any]:
+    if isinstance(stream, (bytes, bytearray, Mapping)):
+        stream = (stream,)
+    consumed: list[Any] = []
+    try:
+        for item in stream or ():
+            if isinstance(item, (bytes, bytearray)):
+                with suppress(UnicodeDecodeError, json.JSONDecodeError):
+                    item = json.loads(bytes(item).decode())
+            if isinstance(item, Mapping) and (item.get("error") or item.get("errorDetail")):
+                raise RuntimeAdapterFailure(error_code)
+            consumed.append(item)
+    except RuntimeAdapterFailure:
+        raise
+    except Exception as exc:
+        raise RuntimeAdapterFailure(error_code) from exc
+    return consumed
+
+
+def _docker_registry_image_result(output: Any, client: Any, reference: str) -> Mapping[str, Any]:
+    digest = ""
+    for item in output or ():
+        if isinstance(item, Mapping):
+            aux = item.get("aux")
+            candidates = [
+                aux.get("Digest") if isinstance(aux, Mapping) else None,
+                item.get("digest"),
+            ]
+            for candidate in candidates:
+                value = str(candidate or "")
+                if re.fullmatch(r"sha256:[0-9a-f]{64}", value):
+                    digest = value
+                    break
+            if digest:
+                break
+    if not digest:
+        try:
+            inspected = client.inspect_image(reference)
+        except Exception:
+            raise RuntimeAdapterFailure(
+                "RUNTIME_IMAGE_DIGEST_UNAVAILABLE", retryable=False
+            ) from None
+        repo_digests = inspected.get("RepoDigests") or [] if isinstance(inspected, Mapping) else []
+        for repo_digest in repo_digests:
+            candidate = str(repo_digest).rsplit("@", 1)[-1]
+            if re.fullmatch(r"sha256:[0-9a-f]{64}", candidate):
+                digest = candidate
+                break
+    if not digest:
+        raise RuntimeAdapterFailure("RUNTIME_IMAGE_DIGEST_UNAVAILABLE", retryable=False)
+    return {"digest": digest, "logs": "docker image operation completed"}
 
 
 def _docker_image_result(output: Any, client: Any, reference: str) -> Mapping[str, Any]:
@@ -281,6 +341,9 @@ class FakeRuntimeAdapter:
                 "service_name": "fake-runtime",
                 "task_id": spec.task_id,
                 "course_id": spec.course_id,
+                "student_id": spec.student_id,
+                "instance_id": spec.instance_public_id,
+                "config_ref": "runtime/fake",
                 "workspace_port": spec.workspace_port,
             },
         )
@@ -416,6 +479,7 @@ class FakeRuntimeAdapter:
         memory_mb: int,
         cpu_millicores: int,
         network_mode: str,
+        tests: bytes = b"",
     ) -> RuntimeExecutionResult:
         """Return the deterministic compatibility result used by P07/P08.
 
@@ -423,7 +487,7 @@ class FakeRuntimeAdapter:
         service still records the same immutable run shape used by Docker adapters.
         """
 
-        del spec, command, source, timeout_seconds, memory_mb, cpu_millicores, network_mode
+        del spec, command, source, timeout_seconds, memory_mb, cpu_millicores, network_mode, tests
         return RuntimeExecutionResult(
             status="PASSED",
             stdout="FakeRuntime execution accepted",
@@ -461,6 +525,8 @@ class DockerLocalProtocolStub(FakeRuntimeAdapter):
                 "service_name": "docker-local-stub",
                 "task_id": spec.task_id,
                 "course_id": spec.course_id,
+                "student_id": spec.student_id,
+                "instance_id": spec.instance_public_id,
                 "workspace_port": spec.workspace_port,
             },
         )
@@ -554,8 +620,9 @@ class DockerLocalProtocolStub(FakeRuntimeAdapter):
         memory_mb: int,
         cpu_millicores: int,
         network_mode: str,
+        tests: bytes = b"",
     ) -> RuntimeExecutionResult:
-        del spec, command, source, timeout_seconds, memory_mb, cpu_millicores, network_mode
+        del spec, command, source, timeout_seconds, memory_mb, cpu_millicores, network_mode, tests
         return RuntimeExecutionResult(
             status="PASSED",
             stdout="DockerLocal protocol stub execution accepted",
@@ -697,7 +764,9 @@ class DockerLocalAdapter(DockerLocalProtocolStub):
             "student_id": spec.student_id,
             "image_ref": spec.image_ref,
             "cpu_millicores": spec.cpu_millicores,
+            "cpu_limit_millicores": spec.cpu_limit_millicores,
             "memory_mb": spec.memory_mb,
+            "memory_limit_mb": spec.memory_limit_mb,
             "disk_gb": spec.disk_gb,
             "network_policy": dict(spec.network_policy),
             "workspace_capabilities": dict(spec.workspace_capabilities),
@@ -709,10 +778,53 @@ class DockerLocalAdapter(DockerLocalProtocolStub):
         ).hexdigest()
 
     def _image_ref(self, spec: RuntimeSpec) -> str:
-        # A local image is deliberately tag-based: unlike Swarm, the local
-        # adapter is used after the image was built into the local Engine.
-        configured = self.config.get("image") or getattr(settings, "LOCAL_RUNTIME_IMAGE", "")
-        return str(configured) or spec.image_ref
+        configured = str(self.config.get("image") or "").strip()
+        if configured:
+            return configured
+        if spec.image_registry == "local":
+            return f"{spec.image_repository}@{spec.image_digest}"
+        return spec.image_ref
+
+    @staticmethod
+    def _resource_limits(spec: RuntimeSpec) -> tuple[int, int]:
+        cpu_limit = spec.cpu_limit_millicores or spec.cpu_millicores
+        memory_limit = spec.memory_limit_mb or spec.memory_mb
+        if (
+            spec.cpu_millicores < 1
+            or cpu_limit < 1
+            or spec.cpu_millicores > cpu_limit
+            or spec.memory_mb < 1
+            or memory_limit < 1
+            or spec.memory_mb > memory_limit
+        ):
+            raise RuntimeAdapterFailure("RUNTIME_RESOURCE_LIMIT_INVALID", retryable=False)
+        return cpu_limit, memory_limit
+
+    def _validate_image_and_resources(self, spec: RuntimeSpec) -> None:
+        registry = spec.image_registry.strip().lower()
+        repository = spec.image_repository.strip().lower()
+        if (
+            registry != spec.image_registry
+            or repository != spec.image_repository
+            or not IMAGE_REGISTRY_PATTERN.fullmatch(registry)
+            or not repository
+            or len(repository) > 255
+            or not all(
+                IMAGE_REPOSITORY_COMPONENT_PATTERN.fullmatch(component)
+                for component in repository.split("/")
+            )
+            or not IMAGE_DIGEST_PATTERN.fullmatch(spec.image_digest)
+        ):
+            raise RuntimeAdapterFailure("RUNTIME_IMAGE_REFERENCE_INVALID", retryable=False)
+        self._resource_limits(spec)
+
+    def _owns_managed_resource(self, labels: Mapping[str, object], kind: str) -> bool:
+        config_ref = str(labels.get("edu.platform.config_ref") or "")
+        return (
+            labels.get(MANAGED_LABEL) == "true"
+            and labels.get(KIND_LABEL) == kind
+            and config_ref == self.config_ref
+        )
 
     def _network_name(self) -> str:
         return str(
@@ -794,7 +906,7 @@ class DockerLocalAdapter(DockerLocalProtocolStub):
             "read_only": read_only,
             "cap_drop": ["ALL"],
             "security_opt": ["no-new-privileges:true"],
-            "tmpfs": {"/tmp": "rw,noexec,nosuid,size=64m"},
+            "tmpfs": {"/tmp": "rw,noexec,nosuid,size=128m,uid=10001,gid=10001"},
         }
         if network_mode:
             kwargs["network_mode"] = network_mode
@@ -834,6 +946,7 @@ class DockerLocalAdapter(DockerLocalProtocolStub):
                 "task_id": str(labels.get("edu.platform.task", "")),
                 "course_id": str(labels.get("edu.platform.course", "")),
                 "student_id": str(labels.get("edu.platform.student", "")),
+                "instance_id": str(labels.get("edu.platform.instance", "")),
                 "workspace_port": port,
                 "managed": labels.get(MANAGED_LABEL) == "true",
                 "kind": labels.get(KIND_LABEL, ""),
@@ -847,6 +960,7 @@ class DockerLocalAdapter(DockerLocalProtocolStub):
     def preflight(self, spec: RuntimeSpec) -> RuntimeResult:
         if spec.runtime_type != "CONTAINER":
             raise RuntimeAdapterFailure("RUNTIME_TYPE_UNSUPPORTED", retryable=False)
+        self._validate_image_and_resources(spec)
         if not 1 <= spec.workspace_port <= 65535 or not spec.healthcheck_path.startswith("/"):
             raise RuntimeAdapterFailure("RUNTIME_WORKSPACE_CONTRACT_INVALID", retryable=False)
         if spec.network_policy.get("mode", "DENY_ALL") != "DENY_ALL":
@@ -877,14 +991,17 @@ class DockerLocalAdapter(DockerLocalProtocolStub):
         reference = f"{registry.rstrip('/')}/{repository.lstrip('/')}:{tag}"
         output = self._call(
             "RUNTIME_IMAGE_BUILD_FAILED",
-            lambda: self.client.build(
-                fileobj=io.BytesIO(bytes(archive)),
-                custom_context=True,
-                encoding="gzip",
-                tag=reference,
-                buildargs=dict(build_args),
-                rm=True,
-                decode=True,
+            lambda: _consume_docker_stream(
+                self.client.build(
+                    fileobj=io.BytesIO(bytes(archive)),
+                    custom_context=True,
+                    encoding="gzip",
+                    tag=reference,
+                    buildargs=dict(build_args),
+                    rm=True,
+                    decode=True,
+                ),
+                "RUNTIME_IMAGE_BUILD_FAILED",
             ),
         )
         return _docker_image_result(output, self.client, reference)
@@ -915,6 +1032,7 @@ class DockerLocalAdapter(DockerLocalProtocolStub):
                         "label": [
                             f"{MANAGED_LABEL}=true",
                             f"{KIND_LABEL}={RUNTIME_KIND}",
+                            f"edu.platform.config_ref={self.config_ref}",
                             f"edu.platform.idempotency={self._idempotency_digest(idempotency_key)}",
                         ]
                     },
@@ -994,6 +1112,7 @@ class DockerLocalAdapter(DockerLocalProtocolStub):
         )
         if not upstream_token:
             raise RuntimeAdapterFailure("RUNTIME_UPSTREAM_TOKEN_UNAVAILABLE", retryable=False)
+        cpu_limit, memory_limit = self._resource_limits(spec)
         labels = self._labels(
             kind=RUNTIME_KIND,
             spec=spec,
@@ -1027,8 +1146,8 @@ class DockerLocalAdapter(DockerLocalProtocolStub):
                 lambda: self.client.create_networking_config({network_id: endpoint_config}),
             )
             host_config = self._host_config(
-                memory_mb=spec.memory_mb,
-                cpu_millicores=spec.cpu_millicores,
+                memory_mb=memory_limit,
+                cpu_millicores=cpu_limit,
                 volume_name=volume_name,
                 extra_binds={
                     secret_volume_name: {
@@ -1064,12 +1183,17 @@ class DockerLocalAdapter(DockerLocalProtocolStub):
             return self._container_result(inspected)
         except RuntimeAdapterFailure as exc:
             if container_id:
-                inspected = self._inspect(container_id)
+                try:
+                    inspected = self._inspect(container_id)
+                except RuntimeAdapterFailure:
+                    inspected = None
                 if inspected is not None:
                     result = self._container_result(inspected)
                     raise RuntimeAdapterFailure(
                         exc.code, retryable=exc.retryable, partial=True, result=result
                     ) from exc
+                with suppress(Exception):
+                    self.client.remove_container(container_id, force=True, v=False)
             with suppress(RuntimeAdapterFailure):
                 self._remove_managed_volume(volume_name)
             with suppress(RuntimeAdapterFailure):
@@ -1083,6 +1207,7 @@ class DockerLocalAdapter(DockerLocalProtocolStub):
             raise RuntimeAdapterFailure("RUNTIME_CREATE_FAILED") from exc
 
     def create(self, spec: RuntimeSpec, idempotency_key: str) -> RuntimeResult:
+        self._validate_image_and_resources(spec)
         existing = self._existing(idempotency_key)
         if existing:
             result = self._container_result(existing[0])
@@ -1101,8 +1226,19 @@ class DockerLocalAdapter(DockerLocalProtocolStub):
     def _inspect(self, external_id: str) -> dict[str, object] | None:
         try:
             return dict(self.client.inspect_container(external_id))
-        except Exception:
-            return None
+        except Exception as exc:
+            if self._is_not_found(exc):
+                return None
+            raise RuntimeAdapterFailure("RUNTIME_CONTAINER_QUERY_FAILED") from exc
+
+    @staticmethod
+    def _is_not_found(exc: Exception) -> bool:
+        status_code = getattr(exc, "status_code", None)
+        return (
+            status_code == 404
+            or type(exc).__name__.casefold() == "notfound"
+            or "not found" in str(exc).casefold()
+        )
 
     def status(self, external_id: str) -> str:
         timeout = _config_int(self.config.get("boot_timeout", 60))
@@ -1149,7 +1285,7 @@ class DockerLocalAdapter(DockerLocalProtocolStub):
         config = config_value if isinstance(config_value, Mapping) else {}
         labels_value = config.get("Labels") or container.get("Labels")
         labels = dict(labels_value) if isinstance(labels_value, Mapping) else {}
-        if labels.get(MANAGED_LABEL) != "true" or labels.get(KIND_LABEL) != RUNTIME_KIND:
+        if not self._owns_managed_resource(labels, RUNTIME_KIND):
             raise RuntimeAdapterFailure("RUNTIME_RESOURCE_NOT_MANAGED", retryable=False)
         state_value = container.get("State")
         state = state_value if isinstance(state_value, Mapping) else {}
@@ -1234,26 +1370,34 @@ class DockerLocalAdapter(DockerLocalProtocolStub):
         del idempotency_key
         container = self._inspect(external_id)
         if container is None:
+            secret_volume_name = self._secret_volumes.get(external_id, "")
+            if secret_volume_name:
+                self._remove_managed_secret_volume(secret_volume_name)
+                self._secret_volumes.pop(external_id, None)
             return
         config_value = container.get("Config")
         config = config_value if isinstance(config_value, Mapping) else {}
         labels_value = config.get("Labels") or container.get("Labels")
         labels = dict(labels_value) if isinstance(labels_value, Mapping) else {}
-        if labels.get(MANAGED_LABEL) != "true" or labels.get(KIND_LABEL) != RUNTIME_KIND:
+        if not self._owns_managed_resource(labels, RUNTIME_KIND):
             raise RuntimeAdapterFailure("RUNTIME_RESOURCE_NOT_MANAGED", retryable=False)
         volume_name = self._volume_name_from_container(container)
         if volume_name:
             self._retain_workspace_volume(
                 volume_name, task_id=str(labels.get("edu.platform.task") or "")
             )
+        mounted_secret = self._secret_volume_name_from_container(container)
+        secret_volume_name = mounted_secret or self._secret_volumes.get(external_id, "")
         self._call(
             "RUNTIME_DESTROY_FAILED",
             lambda: self.client.remove_container(external_id, force=True, v=False),
         )
-        mounted_secret = self._secret_volume_name_from_container(container)
-        secret_volume_name = mounted_secret or self._secret_volumes.get(external_id, "")
         if secret_volume_name:
-            self._remove_managed_secret_volume(secret_volume_name)
+            try:
+                self._remove_managed_secret_volume(secret_volume_name)
+            except RuntimeAdapterFailure:
+                self._secret_volumes[external_id] = secret_volume_name
+                raise
         self._secret_volumes.pop(external_id, None)
 
     def _retain_workspace_volume(self, volume_name: str, *, task_id: str) -> None:
@@ -1262,13 +1406,9 @@ class DockerLocalAdapter(DockerLocalProtocolStub):
         except Exception as exc:
             raise RuntimeAdapterFailure("RUNTIME_VOLUME_RETENTION_FAILED") from exc
         labels = dict(volume.get("Labels") or {})
-        if (
-            labels.get(MANAGED_LABEL) != "true"
-            or labels.get(KIND_LABEL) != "volume"
-            or labels.get("edu.platform.config_ref") != self.config_ref
-            or not task_id
-            or labels.get("edu.platform.task") != task_id
-        ):
+        if not self._owns_managed_resource(labels, "volume") or not task_id or labels.get(
+            "edu.platform.task"
+        ) != task_id:
             raise RuntimeAdapterFailure("RUNTIME_RESOURCE_NOT_MANAGED", retryable=False)
         update_volume = getattr(self.client, "update_volume", None)
         if not callable(update_volume):
@@ -1307,10 +1447,12 @@ class DockerLocalAdapter(DockerLocalProtocolStub):
     def _remove_managed_volume(self, volume_name: str) -> bool:
         try:
             volume = self.client.inspect_volume(volume_name)
-        except Exception:
-            return False
+        except Exception as exc:
+            if self._is_not_found(exc):
+                return False
+            raise RuntimeAdapterFailure("RUNTIME_RESOURCE_QUERY_FAILED") from exc
         labels = dict(volume.get("Labels") or {})
-        if labels.get(MANAGED_LABEL) != "true" or labels.get(KIND_LABEL) != "volume":
+        if not self._owns_managed_resource(labels, "volume"):
             raise RuntimeAdapterFailure("RUNTIME_RESOURCE_NOT_MANAGED", retryable=False)
         self._call(
             "RUNTIME_RESOURCE_DESTROY_FAILED",
@@ -1323,10 +1465,12 @@ class DockerLocalAdapter(DockerLocalProtocolStub):
             return False
         try:
             volume = self.client.inspect_volume(volume_name)
-        except Exception:
-            return False
+        except Exception as exc:
+            if self._is_not_found(exc):
+                return False
+            raise RuntimeAdapterFailure("RUNTIME_RESOURCE_QUERY_FAILED") from exc
         labels = dict(volume.get("Labels") or {})
-        if labels.get(MANAGED_LABEL) != "true" or labels.get(KIND_LABEL) != "workspace-secret":
+        if not self._owns_managed_resource(labels, "workspace-secret"):
             raise RuntimeAdapterFailure("RUNTIME_RESOURCE_NOT_MANAGED", retryable=False)
         self._call(
             "RUNTIME_RESOURCE_DESTROY_FAILED",
@@ -1347,7 +1491,13 @@ class DockerLocalAdapter(DockerLocalProtocolStub):
             "RUNTIME_CONTAINER_QUERY_FAILED",
             lambda: self.client.containers(
                 all=True,
-                filters={"label": [f"{MANAGED_LABEL}=true", f"{KIND_LABEL}={RUNTIME_KIND}"]},
+                filters={
+                    "label": [
+                        f"{MANAGED_LABEL}=true",
+                        f"{KIND_LABEL}={RUNTIME_KIND}",
+                        f"edu.platform.config_ref={self.config_ref}",
+                    ]
+                },
             ),
         )
         result: list[RuntimeInventoryItem] = []
@@ -1819,12 +1969,13 @@ print(
         memory_mb: int,
         cpu_millicores: int,
         network_mode: str,
+        tests: bytes = b"",
     ) -> RuntimeExecutionResult:
         return self._run_container(
             spec=spec,
             command=command,
             source=source,
-            tests=b"",
+            tests=tests,
             timeout_seconds=timeout_seconds,
             memory_mb=memory_mb,
             cpu_millicores=cpu_millicores,
@@ -1843,7 +1994,10 @@ print(
         )
         for container in containers:
             labels = dict(container.get("Labels") or {})
-            if labels.get(KIND_LABEL) not in {"judge", "judge-stager"}:
+            kind = str(labels.get(KIND_LABEL) or "")
+            if kind not in {"judge", "judge-stager"} or not self._owns_managed_resource(
+                labels, kind
+            ):
                 continue
             container_id = str(container.get("Id") or "")
             if container_id:
@@ -1860,7 +2014,12 @@ print(
             "RUNTIME_RESOURCE_QUERY_FAILED",
             lambda: self.client.containers(
                 all=True,
-                filters={"label": [f"{MANAGED_LABEL}=true"]},
+                filters={
+                    "label": [
+                        f"{MANAGED_LABEL}=true",
+                        f"edu.platform.config_ref={self.config_ref}",
+                    ]
+                },
             ),
         )
         for container in containers:
@@ -1888,7 +2047,13 @@ print(
         volumes = self._call(
             "RUNTIME_RESOURCE_QUERY_FAILED",
             lambda: self.client.volumes(
-                filters={"label": [f"{MANAGED_LABEL}=true", f"{KIND_LABEL}=volume"]}
+                filters={
+                    "label": [
+                        f"{MANAGED_LABEL}=true",
+                        f"{KIND_LABEL}=volume",
+                        f"edu.platform.config_ref={self.config_ref}",
+                    ]
+                }
             ),
         )
         for volume in (volumes.get("Volumes") or []) if isinstance(volumes, Mapping) else []:
@@ -1931,8 +2096,15 @@ print(
 class DockerSwarmAdapter:
     """Docker Engine API adapter. Only runtime workers may receive its credentials."""
 
-    def __init__(self, *, client: Any | None = None, config: Mapping[str, object] | None = None):
+    def __init__(
+        self,
+        *,
+        client: Any | None = None,
+        config: Mapping[str, object] | None = None,
+        config_ref: str = "runtime/swarm",
+    ):
         self.config = dict(config or {})
+        self.config_ref = config_ref.strip() or "runtime/swarm"
         self.client = client or self._build_client()
         self._service_secrets: dict[str, str] = {}
 
@@ -1989,7 +2161,9 @@ class DockerSwarmAdapter:
             "student_id": spec.student_id,
             "image_ref": spec.image_ref,
             "cpu_millicores": spec.cpu_millicores,
+            "cpu_limit_millicores": spec.cpu_limit_millicores,
             "memory_mb": spec.memory_mb,
+            "memory_limit_mb": spec.memory_limit_mb,
             "disk_gb": spec.disk_gb,
             "network_policy": dict(spec.network_policy),
             "workspace_capabilities": dict(spec.workspace_capabilities),
@@ -2077,9 +2251,7 @@ class DockerSwarmAdapter:
         )
 
     def prepare_image(self, spec: RuntimeSpec) -> None:
-        if bool(self.config.get("skip_manager_pull", False)):
-            return
-        self._call("RUNTIME_IMAGE_PULL_FAILED", lambda: self.client.pull(spec.image_ref))
+        del spec
 
     def build_image(
         self,
@@ -2096,26 +2268,32 @@ class DockerSwarmAdapter:
         reference = f"{registry.rstrip('/')}/{repository.lstrip('/')}:{tag}"
         self._call(
             "RUNTIME_IMAGE_BUILD_FAILED",
-            lambda: self.client.build(
-                fileobj=io.BytesIO(bytes(archive)),
-                custom_context=True,
-                encoding="gzip",
-                tag=reference,
-                buildargs=dict(build_args),
-                rm=True,
-                decode=True,
+            lambda: _consume_docker_stream(
+                self.client.build(
+                    fileobj=io.BytesIO(bytes(archive)),
+                    custom_context=True,
+                    encoding="gzip",
+                    tag=reference,
+                    buildargs=dict(build_args),
+                    rm=True,
+                    decode=True,
+                ),
+                "RUNTIME_IMAGE_BUILD_FAILED",
             ),
         )
-        self._call(
+        push_output = self._call(
             "RUNTIME_IMAGE_PUSH_FAILED",
-            lambda: self.client.push(reference, decode=True),
+            lambda: _consume_docker_stream(
+                self.client.push(reference, decode=True),
+                "RUNTIME_IMAGE_PUSH_FAILED",
+            ),
         )
-        return _docker_image_result((), self.client, reference)
+        return _docker_registry_image_result(push_output, self.client, reference)
 
     def resolve_image(self, *, registry: str, repository: str, tag: str) -> Mapping[str, Any]:
         reference = f"{registry.rstrip('/')}/{repository.lstrip('/')}:{tag}"
         self._call("RUNTIME_IMAGE_PULL_FAILED", lambda: self.client.pull(reference))
-        return _docker_image_result((), self.client, reference)
+        return _docker_registry_image_result((), self.client, reference)
 
     def validate_image(self, *, digest: str) -> Mapping[str, Any]:
         inspected = self._call(
@@ -2157,6 +2335,11 @@ class DockerSwarmAdapter:
                 "driver": "DOCKER_SWARM",
                 "service_id": external_id,
                 "service_name": name,
+                "task_id": str(labels.get("edu.platform.task", "")),
+                "course_id": str(labels.get("edu.platform.course", "")),
+                "student_id": str(labels.get("edu.platform.student", "")),
+                "instance_id": str(labels.get("edu.platform.instance", "")),
+                "config_ref": self.config_ref,
                 "spec_digest": str(labels.get("edu.platform.spec_digest", "")),
                 "workspace_port": port,
                 "managed": True,
@@ -2184,6 +2367,7 @@ class DockerSwarmAdapter:
             "edu.platform.idempotency": idempotency_digest,
             "edu.platform.spec_digest": spec_digest,
             "edu.platform.instance": spec.instance_public_id,
+            "edu.platform.config_ref": self.config_ref,
             "edu.platform.service_name": service_name,
             "edu.platform.workspace_port": str(spec.workspace_port),
             "edu.platform.expires_at": str(int(time.time()) + max(spec.ttl_seconds, 0)),
@@ -2237,8 +2421,9 @@ class DockerSwarmAdapter:
             },
             "Resources": {
                 "Limits": {
-                    "NanoCPUs": spec.cpu_millicores * 1_000_000,
-                    "MemoryBytes": spec.memory_mb * 1024 * 1024,
+                    "NanoCPUs": (spec.cpu_limit_millicores or spec.cpu_millicores)
+                    * 1_000_000,
+                    "MemoryBytes": (spec.memory_limit_mb or spec.memory_mb) * 1024 * 1024,
                 },
                 "Reservations": {
                     "NanoCPUs": spec.cpu_millicores * 1_000_000,
@@ -2695,6 +2880,7 @@ class DockerSwarmAdapter:
         memory_mb: int,
         cpu_millicores: int,
         network_mode: str,
+        tests: bytes = b"",
     ) -> RuntimeExecutionResult:
         """P14-S supplies the one-shot judge implementation.
 
@@ -2702,7 +2888,7 @@ class DockerSwarmAdapter:
         real-driver request without accidentally falling back to an unrestricted shell.
         """
 
-        del spec, command, source, timeout_seconds, memory_mb, cpu_millicores, network_mode
+        del spec, command, source, timeout_seconds, memory_mb, cpu_millicores, network_mode, tests
         raise RuntimeAdapterFailure("RUNTIME_EXECUTION_NOT_IMPLEMENTED", retryable=False)
 
 
@@ -2759,7 +2945,7 @@ def runtime_for_driver(driver: str, *, config_ref: str = "") -> RuntimeAdapter:
     if driver == "FAKE":
         return _fake_runtime
     if driver == "DOCKER_LOCAL":
-        if str(getattr(settings, "LOCAL_RUNTIME_MODE", "STUB")).upper() == "REAL":
+        if str(getattr(settings, "LOCAL_RUNTIME_MODE", "REAL")).upper() == "REAL":
             clean_ref = config_ref.strip()
             if not clean_ref:
                 raise RuntimeAdapterFailure("RUNTIME_CONFIG_INVALID", retryable=False)
@@ -2774,14 +2960,14 @@ def runtime_for_driver(driver: str, *, config_ref: str = "") -> RuntimeAdapter:
     if driver == "DOCKER_SWARM":
         configs = settings.RUNTIME_ADAPTER_CONFIGS
         config = configs.get(config_ref, {}) if isinstance(configs, Mapping) else {}
-        return DockerSwarmAdapter(config=config)
+        return DockerSwarmAdapter(config=config, config_ref=config_ref)
     raise RuntimeAdapterFailure("RUNTIME_ADAPTER_NOT_IMPLEMENTED", retryable=False)
 
 
 def runtime_adapter_for(code: str) -> RuntimeAdapter:
     """Resolve the configured runtime mode without exposing driver details to callers."""
 
-    mode = str(getattr(settings, "RUNTIME_MODE", "fake")).strip().lower()
+    mode = str(getattr(settings, "RUNTIME_MODE", "local")).strip().lower()
     clean_code = (code or str(getattr(settings, "RUNTIME_ADAPTER_CODE", ""))).strip()
     if mode not in {"fake", "local", "swarm"}:
         raise RuntimeAdapterFailure("RUNTIME_MODE_INVALID", retryable=False)
@@ -2801,4 +2987,4 @@ def runtime_adapter_for(code: str) -> RuntimeAdapter:
             adapter = DockerLocalAdapter(config=config, config_ref=clean_code)
             _docker_local_adapters[clean_code] = adapter
         return adapter
-    return DockerSwarmAdapter(config=config)
+    return DockerSwarmAdapter(config=config, config_ref=clean_code)

@@ -102,8 +102,9 @@ def main() -> None:
     assert health_headers.get("Cache-Control") == "no-store"
 
     for rejected_token in (None, "incorrect-upstream-token"):
-        status, _, body, _ = fetch("/webide/", rejected_token)
-        assert status == 403, (rejected_token, status, body[:200])
+        for protected_path in ("/webide/", "/terminal/"):
+            status, _, body, _ = fetch(protected_path, rejected_token)
+            assert status == 403, (protected_path, rejected_token, status, body[:200])
 
     redirect_status, redirect_headers, _, _ = fetch("/webide", token, follow_redirects=False)
     assert redirect_status == 308
@@ -132,14 +133,25 @@ def main() -> None:
     websocket_status = websocket_upgrade("/webide/websocket", token)
     assert websocket_status == http.client.SWITCHING_PROTOCOLS, websocket_status
 
-    for unsupported in ("/notebook/", "/terminal/", "/preview/"):
+    for unsupported in ("/notebook/", "/preview/"):
         unsupported_status, _, _, _ = fetch(unsupported, token)
         assert unsupported_status == 404, (unsupported, unsupported_status)
+
+    terminal_status, terminal_headers, terminal_html, _ = fetch("/terminal/", token)
+    assert terminal_status == 200, (terminal_status, terminal_html[:200])
+    assert terminal_headers.get("Content-Type", "").startswith("text/html"), terminal_headers
+    decoded_terminal = terminal_html.decode("utf-8", errors="replace")
+    assert "<title>ttyd - Terminal</title>" in decoded_terminal, decoded_terminal[:200]
+    assert "new WebSocket" in decoded_terminal
+
+    terminal_ws_status = websocket_upgrade("/terminal/ws", token)
+    assert terminal_ws_status == http.client.SWITCHING_PROTOCOLS, terminal_ws_status
 
     assert os.geteuid() == 10001
     assert sys.version_info[:3] == (3, 14, 0), sys.version
     assert_listener(8080, "00000000:1F90")
     assert_listener(3000, "0100007F:0BB8")
+    assert_listener(7681, "0100007F:1E01")
 
     with open("/workspace/main.py", "w", encoding="utf-8") as handle:
         handle.write("print('p16-b')\n")
@@ -156,13 +168,15 @@ def main() -> None:
     print(
         json.dumps(
             {
-                "capabilities": {"webide": True, "notebook": False, "terminal": False, "preview": False},
+                "capabilities": {"webide": True, "notebook": False, "terminal": True, "preview": False},
                 "health": "passed",
                 "http": "passed",
                 "non_root_uid": os.geteuid(),
                 "python": ".".join(str(part) for part in sys.version_info[:3]),
                 "read_only_rootfs": "passed",
                 "static_asset": asset_path,
+                "terminal_http": "passed",
+                "terminal_websocket": "passed",
                 "websocket": "passed",
             },
             sort_keys=True,

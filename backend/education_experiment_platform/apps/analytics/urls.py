@@ -11,6 +11,7 @@ from .views import (
     TeachingAnalyticsResourceCostView,
     TeachingAnalyticsRiskSignalDetailView,
     TeachingAnalyticsRiskSignalView,
+    TeachingAnalyticsSeriesView,
     UserAnalyticsRecommendationView,
     UserAnalyticsRiskSignalView,
 )
@@ -21,6 +22,10 @@ urlpatterns = [
     path(
         "teaching/courses/<str:course_id>/analytics/overview",
         TeachingAnalyticsOverviewView.as_view(),
+    ),
+    path(
+        "teaching/courses/<str:course_id>/analytics/series",
+        TeachingAnalyticsSeriesView.as_view(),
     ),
     path(
         "teaching/courses/<str:course_id>/analytics/risk-signals",

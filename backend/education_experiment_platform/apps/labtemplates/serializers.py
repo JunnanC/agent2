@@ -3,6 +3,8 @@ from rest_framework import serializers
 
 from apps.core.models import ObjectAsset
 
+from .errors import TemplateValidationError
+from .image_services import normalize_image_reference
 from .models import (
     AutoCheckRule,
     ExperimentImage,
@@ -25,22 +27,6 @@ class ExecutionSpecSerializer(serializers.Serializer):
     comparator = serializers.ChoiceField(choices=("token",))
     tests_asset = serializers.CharField(max_length=26)
     network_mode = serializers.ChoiceField(choices=("DENY_ALL",))
-
-    def validate(self, attrs: dict[str, object]) -> dict[str, object]:
-        expected = {
-            "language",
-            "entrypoint",
-            "timeout_seconds",
-            "memory_mb",
-            "cpu_millicores",
-            "comparator",
-            "tests_asset",
-            "network_mode",
-        }
-        unknown = set(self.initial_data) - expected
-        if unknown:
-            raise serializers.ValidationError({"unknown": sorted(unknown)})
-        return attrs
 
 
 class TemplateWriteSerializer(serializers.Serializer):
@@ -70,6 +56,22 @@ class TemplateVersionWriteSerializer(serializers.Serializer):
     report_policy = serializers.DictField(required=False)
     review_policy = serializers.DictField(required=False)
     retention_days = serializers.IntegerField(min_value=1, max_value=3650, required=False)
+
+    def validate(self, attrs: dict[str, object]) -> dict[str, object]:
+        unknown = set(self.initial_data) - set(self.fields)
+        if unknown:
+            raise serializers.ValidationError({"unknown": sorted(unknown)})
+        execution_spec = self.initial_data.get("execution_spec")
+        if isinstance(execution_spec, dict):
+            spec_unknown = set(execution_spec) - {
+                "language", "entrypoint", "timeout_seconds", "memory_mb",
+                "cpu_millicores", "comparator", "tests_asset", "network_mode",
+            }
+            if spec_unknown:
+                raise serializers.ValidationError(
+                    {"execution_spec": {"unknown": sorted(spec_unknown)}}
+                )
+        return attrs
 
 
 class AutoCheckRuleWriteSerializer(serializers.Serializer):
@@ -114,6 +116,19 @@ class ReorderWriteSerializer(serializers.Serializer):
     ids = serializers.ListField(child=serializers.CharField(max_length=26), allow_empty=False)
 
 
+class ExecutionSpecSaveSerializer(serializers.Serializer):
+    tests_json = serializers.CharField()
+    language = serializers.ChoiceField(choices=("python",))
+    entrypoint = serializers.RegexField(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,126}\.py$", max_length=128)
+    timeout_seconds = serializers.IntegerField(
+        min_value=1, max_value=settings.TEMPLATE_CHECK_TIMEOUT_MAX_SECONDS
+    )
+    memory_mb = serializers.IntegerField(min_value=1)
+    cpu_millicores = serializers.IntegerField(min_value=1)
+    comparator = serializers.ChoiceField(choices=("token",))
+    network_mode = serializers.ChoiceField(choices=("DENY_ALL",))
+
+
 class TemplateAssetCreateSerializer(serializers.Serializer):
     version_id = serializers.CharField(max_length=26)
     purpose = serializers.ChoiceField(
@@ -133,6 +148,22 @@ class ExperimentImageCreateSerializer(serializers.Serializer):
     requested_tag = serializers.CharField(max_length=128)
     build_context_asset_id = serializers.CharField(max_length=26, required=False)
     build_args = serializers.DictField(required=False)
+
+    def validate(self, attrs: dict[str, object]) -> dict[str, object]:
+        try:
+            registry, repository, requested_tag = normalize_image_reference(
+                registry=attrs.get("registry", ""),
+                repository=attrs.get("repository"),
+                requested_tag=attrs.get("requested_tag"),
+            )
+        except TemplateValidationError as exc:
+            raise serializers.ValidationError(exc.detail) from exc
+        attrs.update(
+            registry=registry,
+            repository=repository,
+            requested_tag=requested_tag,
+        )
+        return attrs
 
 
 class ExperimentImageDataSerializer(serializers.Serializer):
@@ -165,6 +196,18 @@ class ExperimentImagePrepareSerializer(serializers.Serializer):
 
 class ExperimentImageListResponseSerializer(serializers.Serializer):
     data = ExperimentImageDataSerializer(many=True)
+    meta = serializers.DictField()
+
+
+class ExperimentImageEventSerializer(serializers.Serializer):
+    event_type = serializers.CharField()
+    payload = serializers.DictField()
+    trace_id = serializers.CharField()
+    created_at = serializers.DateTimeField()
+
+
+class ExperimentImageEventsResponseSerializer(serializers.Serializer):
+    data = ExperimentImageEventSerializer(many=True)
     meta = serializers.DictField()
 
 

@@ -1,4 +1,5 @@
 import hashlib
+import ipaddress
 import json
 import re
 from collections.abc import Mapping
@@ -42,6 +43,10 @@ class ExperimentImageRuntime(Protocol):
 
 
 _DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
+_REGISTRY_LABEL = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$")
+_REGISTRY_PORT = re.compile(r"^[0-9]{1,5}$")
+_REPOSITORY_COMPONENT = re.compile(r"^[a-z0-9]+(?:(?:[._]|__|[-]+)[a-z0-9]+)*$")
+_TAG = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$")
 _SECRET_KEY = re.compile(
     r"(?i)(secret|token|password|passwd|credential|authorization|cookie|private|api[_-]?key)"
 )
@@ -108,6 +113,106 @@ def build_args_digest(value: Mapping[str, Any]) -> str:
     ).hexdigest()
 
 
+def _invalid_reference(field: str, reason: str) -> TemplateValidationError:
+    return TemplateValidationError(detail={field: reason})
+
+
+def _normalize_registry_syntax(value: Any) -> str:
+    if not isinstance(value, str):
+        raise _invalid_reference("registry", "invalid")
+    registry = value.strip().lower()
+    if (
+        not registry
+        or any(char.isspace() for char in registry)
+        or "://" in registry
+        or "/" in registry
+        or "\\" in registry
+        or "@" in registry
+    ):
+        raise _invalid_reference("registry", "invalid")
+
+    host = registry
+    port = ""
+    if registry.startswith("["):
+        closing = registry.find("]")
+        if closing < 0:
+            raise _invalid_reference("registry", "invalid_host")
+        host = registry[1:closing]
+        suffix = registry[closing + 1 :]
+        if suffix:
+            if not suffix.startswith(":"):
+                raise _invalid_reference("registry", "invalid_host")
+            port = suffix[1:]
+        try:
+            ipaddress.IPv6Address(host)
+        except ValueError as exc:
+            raise _invalid_reference("registry", "invalid_host") from exc
+    else:
+        if registry.count(":") > 1:
+            raise _invalid_reference("registry", "invalid_host")
+        if ":" in registry:
+            host, port = registry.rsplit(":", 1)
+        if not host or not (
+            len(host) <= 253
+            and all(_REGISTRY_LABEL.fullmatch(label) for label in host.split("."))
+        ):
+            raise _invalid_reference("registry", "invalid_host")
+
+    if port:
+        if not _REGISTRY_PORT.fullmatch(port) or not 1 <= int(port) <= 65535:
+            raise _invalid_reference("registry", "invalid_port")
+    elif registry.endswith(":"):
+        raise _invalid_reference("registry", "invalid_port")
+    return registry
+
+
+def _configured_registry_allowlist() -> set[str] | None:
+    configured = getattr(settings, "EXPERIMENT_IMAGE_REGISTRY_ALLOWLIST", None)
+    if configured is None:
+        return None
+    if isinstance(configured, str):
+        configured = tuple(item for item in configured.split(",") if item.strip())
+    if not isinstance(configured, (list, tuple, set, frozenset)):
+        return set()
+    allowed: set[str] = set()
+    for item in configured:
+        try:
+            allowed.add(_normalize_registry_syntax(item))
+        except TemplateValidationError:
+            return set()
+    return allowed
+
+
+def normalize_image_reference(
+    *, registry: Any, repository: Any, requested_tag: Any
+) -> tuple[str, str, str]:
+    normalized_registry = _normalize_registry_syntax(registry)
+    allowlist = _configured_registry_allowlist()
+    if allowlist is not None and normalized_registry not in allowlist:
+        raise _invalid_reference("registry", "not_allowed")
+
+    if not isinstance(repository, str):
+        raise _invalid_reference("repository", "invalid")
+    normalized_repository = repository.strip().lower()
+    if (
+        not normalized_repository
+        or len(normalized_repository) > 255
+        or any(char.isspace() for char in normalized_repository)
+        or not all(
+            _REPOSITORY_COMPONENT.fullmatch(component)
+            for component in normalized_repository.split("/")
+        )
+    ):
+        raise _invalid_reference("repository", "invalid")
+
+    if not isinstance(requested_tag, str):
+        raise _invalid_reference("requested_tag", "invalid")
+    normalized_tag = requested_tag.strip()
+    if not _TAG.fullmatch(normalized_tag):
+        raise _invalid_reference("requested_tag", "invalid")
+    return normalized_registry, normalized_repository, normalized_tag
+
+
 def validate_prepare_build_args(*, image: ExperimentImage, build_args: Mapping[str, Any]) -> None:
     stored = _unseal_build_args(image.build_args_sealed)
     if build_args_digest(build_args) != build_args_digest(stored):
@@ -164,8 +269,9 @@ def create_experiment_image(
 ) -> ExperimentImage:
     if source_type not in ExperimentImage.SourceType.values:
         raise TemplateValidationError(detail={"source_type": "unsupported"})
-    if not registry.strip():
-        raise TemplateValidationError(detail={"registry": "required"})
+    registry, repository, requested_tag = normalize_image_reference(
+        registry=registry, repository=repository, requested_tag=requested_tag
+    )
     version = template_version or TemplateVersion.objects.get(
         public_id=template_version_id or version_id
     )
@@ -185,9 +291,9 @@ def create_experiment_image(
     image = ExperimentImage.objects.create(
         template_version=version,
         source_type=source_type,
-        registry=registry.strip(),
-        repository=repository.strip(),
-        requested_tag=requested_tag.strip(),
+        registry=registry,
+        repository=repository,
+        requested_tag=requested_tag,
         build_context_asset=asset,
         build_args_masked=_masked(dict(build_args or {})),
         build_args_sealed=_seal_build_args(dict(build_args or {})),
@@ -369,6 +475,7 @@ def prepare_experiment_image(
         latest = ExperimentImage.objects.get(pk=image.pk)
         if latest.status == ExperimentImage.Status.READY:
             return latest
+        runtime_failure = exc if isinstance(exc, RuntimeAdapterFailure) else None
         code = getattr(exc, "code", "IMAGE_PREPARATION_FAILED")
         image = _image_changes(
             latest,
@@ -379,6 +486,8 @@ def prepare_experiment_image(
                 "logs_masked": "",
             },
         )
+        if runtime_failure is not None:
+            image._runtime_failure = runtime_failure
         compare_and_swap(
             ImageBuildJob,
             pk=job.pk,
@@ -396,7 +505,7 @@ def prepare_experiment_image(
             error_code=code,
             message=str(_masked(str(exc), secrets)),
             detail={},
-            retryable=False,
+            retryable=bool(getattr(exc, "retryable", False)),
             trace_id=trace_id,
         )
         return image
@@ -463,6 +572,14 @@ def resolve_external_digest(
     adapter = image.template_version.runtime_adapter
     probe = runtime or _runtime(adapter)
     prepared = prepare_experiment_image(image_id=image_id, runtime=probe)
+    if prepared.status == ExperimentImage.Status.FAILED:
+        failure = getattr(prepared, "_runtime_failure", None)
+        if isinstance(failure, RuntimeAdapterFailure):
+            raise failure
+        raise RuntimeAdapterFailure(
+            prepared.error_code or "IMAGE_PREPARATION_FAILED",
+            retryable=prepared.error_code.endswith("_FAILED"),
+        )
     if not _DIGEST.fullmatch(prepared.resolved_digest):
         raise RuntimeAdapterFailure("RUNTIME_IMAGE_DIGEST_INVALID", retryable=False)
     validation = probe.validate_image(digest=prepared.resolved_digest)

@@ -20,7 +20,7 @@ if ($existingContainers -or $existingVolumes) {
     throw "Compose project '$ProjectName' already owns containers or volumes. Choose a fresh project name."
 }
 
-$names = @('APP_VERSION', 'OPENAPI_REVISION', 'ENTRY_PORT', 'APP_NETWORK_SUBNET', 'FLUENTD_HOST_PORT', 'MINIO_API_PORT', 'MINIO_CONSOLE_PORT', 'PROMETHEUS_PORT', 'P02_E2E_PASSWORD', 'USER_WEB_URL', 'TEACHER_WEB_URL', 'ADMIN_WEB_URL')
+$names = @('APP_VERSION', 'OPENAPI_REVISION', 'ENTRY_PORT', 'APP_NETWORK_SUBNET', 'FLUENTD_HOST_PORT', 'MINIO_API_PORT', 'MINIO_CONSOLE_PORT', 'PROMETHEUS_PORT', 'P02_E2E_PASSWORD', 'STUDENT_WEB_URL', 'TEACHER_WEB_URL', 'ADMIN_WEB_URL')
 $previous = @{}
 foreach ($name in $names) { $previous[$name] = [Environment]::GetEnvironmentVariable($name) }
 $env:APP_VERSION = '0.11.0-p11'
@@ -46,13 +46,13 @@ try {
 
     Invoke-P11Compose -StepArguments @('up', '--build', '--detach') -FailureMessage 'P11 full local edge stack failed to start.'
     $env:P02_E2E_PASSWORD = $seedPassword
-    $env:USER_WEB_URL = 'http://user.localhost:18110'
+    $env:STUDENT_WEB_URL = 'http://student.localhost:18110'
     $env:TEACHER_WEB_URL = 'http://teacher.localhost:18110'
     $env:ADMIN_WEB_URL = 'http://admin.localhost:18110'
     $ready = $false
     for ($attempt = 0; $attempt -lt 60; $attempt++) {
         try {
-            $health = & curl.exe --noproxy '*' --silent --show-error --max-time 5 "$($env:USER_WEB_URL)/api/v2/health" | Out-String
+            $health = & curl.exe --noproxy '*' --silent --show-error --max-time 5 "$($env:STUDENT_WEB_URL)/api/v2/health" | Out-String
             if ($LASTEXITCODE -eq 0 -and $health -match '"openapi_revision"\s*:\s*"v2-p11"') { $ready = $true; break }
         } catch { }
         Start-Sleep -Seconds 2
@@ -61,7 +61,7 @@ try {
 
     Push-Location "$root\frontend"
     try {
-        & npx.cmd playwright test e2e/p11.spec.ts --project=user-web --project=teacher-web --project=admin-web --workers=1
+        & npx.cmd playwright test e2e/p11.spec.ts --project=student-web --project=teacher-web --project=admin-web --workers=1
         if ($LASTEXITCODE -ne 0) { throw 'P11 three-portal Playwright verification failed.' }
     } finally { Pop-Location }
     Write-Output 'P11 isolated Compose, MySQL, MinIO, Celery, FakeRuntime, edge, and three-portal Playwright checks passed.'

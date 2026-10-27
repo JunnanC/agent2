@@ -20,7 +20,7 @@ FROM ${NGINX_BASE_IMAGE}
 COPY infrastructure/nginx/nginx.prod.conf /etc/nginx/nginx.conf.template
 COPY infrastructure/nginx/docker-entrypoint.prod.sh /usr/local/bin/docker-entrypoint.prod.sh
 RUN chmod 0755 /usr/local/bin/docker-entrypoint.prod.sh
-COPY --from=frontend /workspace/dist/user-web /srv/user-web
+COPY --from=frontend /workspace/dist/student-web /srv/student-web
 COPY --from=frontend /workspace/dist/teacher-web /srv/teacher-web
 COPY --from=frontend /workspace/dist/admin-web /srv/admin-web
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint.prod.sh"]

@@ -33,6 +33,7 @@ from .selectors import (
 )
 from .serializers import (
     CheckResponseSerializer,
+    ContextResponseSerializer,
     CourseCreateSerializer,
     CourseListResponseSerializer,
     CourseResponseSerializer,
@@ -171,7 +172,11 @@ class ContextView(APIView):
 
     permission_classes = [Permission]
 
-    @extend_schema(operation_id="context_retrieve", tags=["context"])
+    @extend_schema(
+        operation_id="context_retrieve",
+        responses={200: ContextResponseSerializer},
+        tags=["context"],
+    )
     def get(self, request: HttpRequest) -> Response:
         from .services import current_academic_term
 

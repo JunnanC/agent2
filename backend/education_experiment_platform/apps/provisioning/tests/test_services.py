@@ -5,7 +5,7 @@ from django.utils import timezone
 
 from apps.accounts.models import User
 from apps.courses.services import ActorContext
-from apps.experiments.models import ExperimentTask
+from apps.experiments.models import ExperimentTask, PublicationTask
 from apps.experiments.services import publish_publication
 from apps.experiments.tests.helpers import context as experiment_context
 from apps.experiments.tests.helpers import (
@@ -15,6 +15,7 @@ from apps.experiments.tests.helpers import (
 )
 from apps.governance.errors import QuotaExceeded
 from apps.governance.models import Quota, QuotaReservation, RuntimeAdapter
+from apps.workspaces.models import WorkspaceSession
 
 from ..adapters import (
     docker_local_protocol_stub,
@@ -22,7 +23,7 @@ from ..adapters import (
     reset_docker_local_protocol_stub,
     reset_fake_runtime,
 )
-from ..errors import ProvisioningStateConflict
+from ..errors import ProvisioningConfigurationError, ProvisioningStateConflict
 from ..models import (
     ProvisioningInstance,
     ProvisioningJob,
@@ -31,6 +32,7 @@ from ..models import (
 )
 from ..selectors import job_for_user
 from ..services import (
+    _runtime_spec,
     cancel_queued_provisioning,
     compensate_provisioning,
     enabled_runtime_inventory,
@@ -300,6 +302,99 @@ class ProvisioningServiceTests(TestCase):
         self.assertTrue(instance.external_metadata["managed"])
         self.assertEqual(instance.external_metadata["service_name"], "fake-runtime")
         self.assertEqual(instance.external_metadata["workspace_port"], 8080)
+        session = WorkspaceSession.objects.get(task=self.task)
+        self.assertEqual(session.status, WorkspaceSession.Status.ACTIVE)
+        self.assertEqual(session.instance_id, instance.pk)
+
+    def test_runtime_spec_is_digest_only_and_uses_frozen_resource_limits(self) -> None:
+        spec = _runtime_spec(self.task, trace_id="snapshot-spec")
+
+        self.assertRegex(spec.image_ref, r"^registry\.example\.edu/.+@sha256:[0-9a-f]{64}$")
+        self.assertEqual(
+            spec.cpu_millicores,
+            self.task.resource_profile_snapshot["cpu_request_millicores"],
+        )
+        self.assertEqual(
+            spec.cpu_limit_millicores,
+            self.task.resource_profile_snapshot["cpu_limit_millicores"],
+        )
+        self.assertEqual(
+            spec.memory_limit_mb,
+            self.task.resource_profile_snapshot["memory_limit_mb"],
+        )
+
+    def test_multiple_publication_tasks_use_publication_frozen_runtime_snapshot(self) -> None:
+        first = PublicationTask.objects.get(
+            publication_chapter__publication=self.publication
+        )
+        PublicationTask.objects.create(
+            publication_chapter=first.publication_chapter,
+            source_task_id="01SECOND-PUBLICATION-TASK",
+            title="Second task",
+            task_type="PRACTICE",
+            sort_order=2,
+            image_digest=first.image_digest,
+            resource_profile_snapshot=first.resource_profile_snapshot,
+            execution_snapshot={
+                **first.execution_snapshot,
+                "network_policy": {"mode": "ALLOWLIST", "policy_ref": "second"},
+            },
+        )
+        spec = _runtime_spec(self.task, trace_id="multi-task-snapshot")
+        self.assertEqual(spec.network_policy["mode"], "DENY_ALL")
+
+    def test_student_runtime_rejects_image_resource_and_adapter_overrides(self) -> None:
+        with self.assertRaises(ProvisioningConfigurationError) as raised:
+            start_provisioning(
+                task_id=self.task.public_id,
+                actor=self.task.student,
+                expected_version=self.task.row_version,
+                context=self.context,
+                overrides={
+                    "image_digest": "sha256:" + "f" * 64,
+                    "cpu_limit_millicores": 9000,
+                    "memory_mb": 16384,
+                    "runtime_adapter_driver": "DOCKER_SWARM",
+                },
+            )
+
+        self.assertEqual(
+            raised.exception.detail["runtime_overrides_forbidden"],
+            [
+                "cpu_limit_millicores",
+                "image_digest",
+                "memory_mb",
+                "runtime_adapter_driver",
+            ],
+        )
+        self.assertFalse(ProvisioningJob.objects.filter(task=self.task).exists())
+
+    def test_active_student_runtime_start_reuses_job_and_capacity_reservation(self) -> None:
+        first = self._start()
+        self.task.refresh_from_db()
+        _, replay = start_provisioning(
+            task_id=self.task.public_id,
+            actor=self.task.student,
+            expected_version=self.task.row_version,
+            context=self.context,
+        )
+
+        self.assertEqual(replay.pk, first.pk)
+        self.assertEqual(ProvisioningJob.objects.filter(task=self.task).count(), 1)
+        self.assertEqual(
+            QuotaReservation.objects.filter(subject_ref=self.task.public_id).count(), 1
+        )
+
+    def test_create_failure_releases_quota_and_runtime_capacity(self) -> None:
+        fake_runtime().failures[ProvisioningJob.Stage.CREATE] = "FAKE_CREATE_FAILED"
+        job = self._start()
+        failed = execute_provisioning_job(job_id=job.public_id)
+
+        failed.reservation.refresh_from_db()
+        binding = RuntimeCapacityReservation.objects.get(reservation=failed.reservation)
+        self.assertEqual(failed.status, ProvisioningJob.Status.FAILED)
+        self.assertEqual(failed.reservation.status, QuotaReservation.Status.RELEASED)
+        self.assertEqual(binding.status, RuntimeCapacityReservation.Status.RELEASED)
 
     def test_each_fake_failure_records_failed_stage_and_retryable_failure(self) -> None:
         for index, stage in enumerate(ProvisioningJob.Stage.values):

@@ -11,6 +11,22 @@ from .helpers import create_draft_course, create_teacher
 
 
 class CourseModelTests(TestCase):
+    def test_current_term_uses_a_nullable_generated_slot_for_portable_uniqueness(self) -> None:
+        current = AcademicTerm.objects.get(is_current=True)
+        closed = AcademicTerm.objects.create(
+            code="2025-FALL",
+            name="Fall 2025",
+            starts_at=timezone.now() - timedelta(days=365),
+            ends_at=timezone.now() - timedelta(days=180),
+            status=AcademicTerm.Status.CLOSED,
+            is_current=False,
+        )
+
+        current.refresh_from_db()
+        closed.refresh_from_db()
+        self.assertEqual(current.current_slot, 1)
+        self.assertIsNone(closed.current_slot)
+
     def test_only_one_academic_term_can_be_current(self) -> None:
         self.assertEqual(AcademicTerm.objects.filter(is_current=True).count(), 1)
 

@@ -16,6 +16,8 @@ from .views import (
     UserTaskExtensionListView,
     UserTaskExtensionRequestView,
     UserTaskListView,
+    UserTaskStartView,
+    UserTaskStopView,
     UserTaskTransitionsView,
     WithdrawPublicationView,
 )
@@ -24,6 +26,7 @@ urlpatterns = [
     path("me/dashboard", UserDashboardView.as_view(), name="me-dashboard"),
     path("tasks", UserTaskListView.as_view(), name="tasks"),
     path("tasks/<str:task_id>", UserTaskDetailView.as_view(), name="task-detail"),
+    path("tasks/<str:task_id>/start", UserTaskStartView.as_view(), name="task-start"),
     path(
         "tasks/<str:task_id>/transitions",
         UserTaskTransitionsView.as_view(),
@@ -38,6 +41,11 @@ urlpatterns = [
         "tasks/<str:task_id>/extension-requests",
         UserTaskExtensionRequestView.as_view(),
         name="task-extension-request",
+    ),
+    path(
+        "student/task-runtimes/<str:runtime_id>/stop",
+        UserTaskStopView.as_view(),
+        name="student-task-runtime-stop",
     ),
     path(
         "teaching/courses/<str:course_id>/experiments",

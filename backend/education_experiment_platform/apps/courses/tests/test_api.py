@@ -180,6 +180,19 @@ class CourseApiTests(TestCase):
         response = Client().get("/api/v2/context", HTTP_X_PORTAL="USER", **PROXY_HEADERS)
         self.assertIn(response.status_code, (401, 403))
 
+    def test_openapi_describes_context_response(self) -> None:
+        response = Client().get(
+            "/api/v2/schema",
+            HTTP_X_PORTAL="USER",
+            **PROXY_HEADERS,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        document = yaml.safe_load(response.content)
+        context_response = document["paths"]["/api/v2/context"]["get"]["responses"]["200"]
+        self.assertIn("content", context_response)
+        self.assertIn("application/json", context_response["content"])
+
     def test_platform_context_returns_role_without_course_memberships(self) -> None:
         admin_client = Client(enforce_csrf_checks=True)
         self._login(admin_client, portal="PLATFORM", identifier=self.admin.email)

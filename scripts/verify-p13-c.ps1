@@ -55,14 +55,14 @@ try {
         if ($LASTEXITCODE -ne 0) { throw 'P13-C frontend ESLint failed.' }
         & npx.cmd vitest run
         if ($LASTEXITCODE -ne 0) { throw 'P13-C frontend tests failed.' }
-        & npx.cmd tsc -p apps/user-web/tsconfig.json --noEmit
-        if ($LASTEXITCODE -ne 0) { throw 'P13-C user-web typecheck failed.' }
+        & npx.cmd tsc -p apps/student-web/tsconfig.json --noEmit
+        if ($LASTEXITCODE -ne 0) { throw 'P13-C student-web typecheck failed.' }
         & npx.cmd tsc -p apps/teacher-web/tsconfig.json --noEmit
         if ($LASTEXITCODE -ne 0) { throw 'P13-C teacher-web typecheck failed.' }
         & npx.cmd tsc -p apps/admin-web/tsconfig.json --noEmit
         if ($LASTEXITCODE -ne 0) { throw 'P13-C admin-web typecheck failed.' }
         & npm.cmd run build:user
-        if ($LASTEXITCODE -ne 0) { throw 'P13-C user-web build failed.' }
+        if ($LASTEXITCODE -ne 0) { throw 'P13-C student-web build failed.' }
         & npm.cmd run build:teacher
         if ($LASTEXITCODE -ne 0) { throw 'P13-C teacher-web build failed.' }
         & npm.cmd run build:admin

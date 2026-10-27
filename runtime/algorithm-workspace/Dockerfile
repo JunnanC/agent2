@@ -3,6 +3,11 @@
 ARG GO_BUILDER_IMAGE=m.daocloud.io/docker.io/library/golang:1.25.1-alpine3.22@sha256:546671046d6f9f786c24b83111ba1801b736ee4b01b23db33e4f3eb41d4f8883
 ARG PYTHON_BASE_IMAGE=m.daocloud.io/docker.io/library/python:3.14.0-slim-bookworm@sha256:9bbb8720ae0a24a6ca8dd678bfdf57818fe70caf54c52a53ec01d8db43405056
 
+# ttyd is statically linked and its digest is pinned against the official
+# SHA256SUMS asset of the 1.7.7 release (release-asset cross-verified).
+ARG TTYD_VERSION=1.7.7
+ARG TTYD_SHA256=8a217c968aba172e0dbf3f34447218dc015bc4d5e59bf51db2f2cd12b7be4f55
+
 FROM ${GO_BUILDER_IMAGE} AS router-builder
 WORKDIR /src
 COPY router/go.mod router/main.go router/main_test.go ./
@@ -21,16 +26,26 @@ RUN mkdir -p /opt/code-server \
     && tar -xzf /tmp/code-server.tar.gz --strip-components=1 -C /opt/code-server \
     && /opt/code-server/bin/code-server --version | grep -F "${CODE_SERVER_VERSION}"
 
+FROM ${PYTHON_BASE_IMAGE} AS ttyd-downloader
+ARG TTYD_VERSION
+ARG TTYD_SHA256
+ADD --checksum=sha256:${TTYD_SHA256} \
+    https://github.com/tsl0922/ttyd/releases/download/${TTYD_VERSION}/ttyd.x86_64 \
+    /usr/local/bin/ttyd
+RUN chmod 0755 /usr/local/bin/ttyd && echo "${TTYD_VERSION}" | grep -F "$(ttyd --version | awk '{print $3}' | cut -d- -f1)"
+
 FROM ${PYTHON_BASE_IMAGE}
 ARG CODE_SERVER_VERSION=4.104.2
+ARG TTYD_VERSION=1.7.7
 
 LABEL org.opencontainers.image.title="Education Algorithm Workspace" \
       org.opencontainers.image.description="Isolated Python workspace with code-server and an authenticated internal router" \
       org.opencontainers.image.version="p16-b" \
       org.opencontainers.image.source="https://github.com/JunnanC/agent2" \
       edu.platform.code-server.version="${CODE_SERVER_VERSION}" \
+      edu.platform.ttyd.version="${TTYD_VERSION}" \
       edu.platform.python.version="3.14.0" \
-      edu.platform.workspace.capabilities="webide,snapshot,checkpoint" \
+      edu.platform.workspace.capabilities="webide,terminal,snapshot,checkpoint" \
       edu.platform.workspace.contract="p16-b"
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -43,6 +58,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     EXTENSIONS_GALLERY='{"serviceUrl":""}' \
     WORKSPACE_UPSTREAM_TOKEN_FILE=/run/secrets/workspace_upstream_token \
     WORKSPACE_CODE_SERVER_URL=http://127.0.0.1:3000 \
+    WORKSPACE_TERMINAL_URL=http://127.0.0.1:7681 \
     WORKSPACE_ROUTER_ADDR=0.0.0.0:8080
 
 RUN groupadd --gid 10001 workspace \
@@ -54,6 +70,7 @@ RUN groupadd --gid 10001 workspace \
     && chmod 0444 /opt/workspace-extensions/extensions.json
 
 COPY --from=code-server-downloader /opt/code-server /opt/code-server
+COPY --from=ttyd-downloader /usr/local/bin/ttyd /usr/local/bin/ttyd
 COPY --from=router-builder /out/workspace-router /usr/local/bin/workspace-router
 COPY entrypoint.sh /usr/local/bin/workspace-entrypoint
 COPY settings.json /opt/workspace-config/User/settings.json

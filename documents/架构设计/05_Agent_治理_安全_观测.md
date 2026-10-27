@@ -1,7 +1,7 @@
 # 05 Agent、治理、安全与观测
 
 > 上游：`00`～`04`  
-> 状态：目标治理设计
+> 状态：目标治理设计基线；已实现能力与真实模型、外部依赖及生产环境的待验收范围见 [项目现状快照](../项目现状快照_2026-10-15.md)。
 
 ## 一、Agent 子系统
 
@@ -132,7 +132,7 @@ frame-ancestors 'none'
 form-action 'self'
 ```
 
-工作区 iframe/连接能力按 user-web 的具体功能添加最小来源，不能把宽松策略复制到 teacher/admin。启用 HSTS、`X-Content-Type-Options: nosniff`、合理的 Referrer-Policy 和 Permissions-Policy。
+工作区 iframe/连接能力按 student-web 的具体功能添加最小来源，不能把宽松策略复制到 teacher/admin。启用 HSTS、`X-Content-Type-Options: nosniff`、合理的 Referrer-Policy 和 Permissions-Policy。
 
 ### 管理端加强
 

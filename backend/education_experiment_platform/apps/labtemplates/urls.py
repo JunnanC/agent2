@@ -3,6 +3,7 @@ from django.urls import path
 from .views import (
     AutoCheckRuleView,
     CloneVersionView,
+    ExecutionSpecSaveView,
     ExperimentImageCollectionView,
     ExperimentImageDetailView,
     ExperimentImageEventsView,
@@ -106,6 +107,10 @@ urlpatterns = [
     path(
         "teaching/courses/<str:course_id>/template-versions/<str:version_id>/precheck",
         PrecheckView.as_view(),
+    ),
+    path(
+        "teaching/courses/<str:course_id>/template-versions/<str:version_id>/execution-spec",
+        ExecutionSpecSaveView.as_view(),
     ),
     path(
         "teaching/courses/<str:course_id>/template-versions/<str:version_id>/precheck-runs",

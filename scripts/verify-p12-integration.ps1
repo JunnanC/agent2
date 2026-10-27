@@ -13,7 +13,7 @@ $existingContainers = & docker @compose ps --all --quiet
 $existingVolumes = & docker volume ls --quiet --filter "label=com.docker.compose.project=$ProjectName"
 if ($existingContainers -or $existingVolumes) { throw "Compose project '$ProjectName' already owns containers or volumes. Choose a fresh project name." }
 
-$names = @('APP_VERSION', 'OPENAPI_REVISION', 'ENTRY_PORT', 'APP_NETWORK_SUBNET', 'FLUENTD_HOST_PORT', 'MINIO_API_PORT', 'MINIO_CONSOLE_PORT', 'PROMETHEUS_PORT', 'P02_E2E_PASSWORD', 'USER_WEB_URL', 'TEACHER_WEB_URL', 'ADMIN_WEB_URL')
+$names = @('APP_VERSION', 'OPENAPI_REVISION', 'ENTRY_PORT', 'APP_NETWORK_SUBNET', 'FLUENTD_HOST_PORT', 'MINIO_API_PORT', 'MINIO_CONSOLE_PORT', 'PROMETHEUS_PORT', 'P02_E2E_PASSWORD', 'STUDENT_WEB_URL', 'TEACHER_WEB_URL', 'ADMIN_WEB_URL')
 $previous = @{}
 foreach ($name in $names) { $previous[$name] = [Environment]::GetEnvironmentVariable($name) }
 $env:APP_VERSION = '0.12.0-p12'; $env:OPENAPI_REVISION = 'v2-p12'; $env:ENTRY_PORT = '18120'; $env:APP_NETWORK_SUBNET = '172.33.212.0/24'; $env:FLUENTD_HOST_PORT = '24234'; $env:MINIO_API_PORT = '19141'; $env:MINIO_CONSOLE_PORT = '19142'; $env:PROMETHEUS_PORT = '19121'
@@ -26,11 +26,11 @@ try {
     Invoke-P12Compose -StepArguments @('exec', '-T', '-e', "P02_E2E_PASSWORD=$seedPassword", 'django', 'python', 'manage.py', 'seed_p02_e2e') -FailureMessage 'P12 account seed failed.'
     foreach ($seed in @('seed_p03_e2e', 'seed_governance_defaults', 'seed_p04_e2e', 'seed_p05_e2e', 'seed_p06_e2e', 'seed_p07_e2e', 'seed_p08_e2e', 'seed_p10_e2e', 'seed_p11_e2e', 'seed_p12_e2e')) { Invoke-P12Compose -StepArguments @('exec', '-T', 'django', 'python', 'manage.py', $seed) -FailureMessage "P12 prerequisite seed failed: $seed" }
     Invoke-P12Compose -StepArguments @('up', '--build', '--detach') -FailureMessage 'P12 full local edge stack failed to start.'
-    $env:P02_E2E_PASSWORD = $seedPassword; $env:USER_WEB_URL = 'http://user.localhost:18120'; $env:TEACHER_WEB_URL = 'http://teacher.localhost:18120'; $env:ADMIN_WEB_URL = 'http://admin.localhost:18120'
+    $env:P02_E2E_PASSWORD = $seedPassword; $env:STUDENT_WEB_URL = 'http://student.localhost:18120'; $env:TEACHER_WEB_URL = 'http://teacher.localhost:18120'; $env:ADMIN_WEB_URL = 'http://admin.localhost:18120'
     $ready = $false
-    for ($attempt = 0; $attempt -lt 60; $attempt++) { try { $health = & curl.exe --noproxy '*' --silent --show-error --max-time 5 "$($env:USER_WEB_URL)/api/v2/health" | Out-String; if ($LASTEXITCODE -eq 0 -and $health -match '"openapi_revision"\s*:\s*"v2-p12"') { $ready = $true; break } } catch { }; Start-Sleep -Seconds 2 }
+    for ($attempt = 0; $attempt -lt 60; $attempt++) { try { $health = & curl.exe --noproxy '*' --silent --show-error --max-time 5 "$($env:STUDENT_WEB_URL)/api/v2/health" | Out-String; if ($LASTEXITCODE -eq 0 -and $health -match '"openapi_revision"\s*:\s*"v2-p12"') { $ready = $true; break } } catch { }; Start-Sleep -Seconds 2 }
     if (-not $ready) { throw 'P12 local edge stack did not become ready.' }
-    Push-Location "$root\frontend"; try { & npx.cmd playwright test e2e/p12.spec.ts --project=user-web --project=teacher-web --project=admin-web --workers=1; if ($LASTEXITCODE -ne 0) { throw 'P12 three-portal Playwright verification failed.' } } finally { Pop-Location }
+    Push-Location "$root\frontend"; try { & npx.cmd playwright test e2e/p12.spec.ts --project=student-web --project=teacher-web --project=admin-web --workers=1; if ($LASTEXITCODE -ne 0) { throw 'P12 three-portal Playwright verification failed.' } } finally { Pop-Location }
     Write-Output 'P12 isolated Compose, MySQL, MinIO, ClamAV, Celery, edge, and three-portal checks passed.'
 } finally {
     foreach ($name in $previous.Keys) { $value = $previous[$name]; if ($null -eq $value) { Remove-Item "Env:$name" -ErrorAction SilentlyContinue } else { Set-Item "Env:$name" $value } }

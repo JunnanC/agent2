@@ -124,8 +124,26 @@ class WorkspaceExecutionRunListSerializer(serializers.Serializer):
     items = WorkspaceExecutionRunSerializer(many=True)
 
 
+class ExecutionRunCreateSerializer(serializers.Serializer):
+    """Write contract for the student REST create-execution-run endpoint.
+
+    v1 evaluates the whole test asset for every run; ``test_keys`` and
+    ``snapshot_id`` are accepted for API compatibility, and ``snapshot_id``
+    is forwarded to the execution service as the evaluated snapshot.
+    """
+
+    snapshot_id = serializers.CharField(required=False, allow_blank=False, max_length=32)
+    test_keys = serializers.ListField(
+        child=serializers.CharField(max_length=64),
+        required=False,
+        allow_empty=False,
+        max_length=64,
+    )
+
+
 class CheckpointWriteSerializer(serializers.Serializer):
     name = serializers.CharField(max_length=180, required=False, allow_blank=True)
+    label = serializers.CharField(max_length=180, required=False, allow_blank=True)
 
 
 class WorkspaceOperationSerializer(serializers.Serializer):

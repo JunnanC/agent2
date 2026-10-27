@@ -5,7 +5,12 @@ from django.db import migrations, models
 from django.utils import timezone
 
 from apps.core.identifiers import new_ulid
-from apps.courses.models import current_term_default
+
+
+def migration_current_term_default() -> int:
+    from apps.courses.models import AcademicTerm
+
+    return AcademicTerm.objects.only("pk").get(is_current=True).pk
 
 
 def create_legacy_term(apps, schema_editor):
@@ -108,7 +113,7 @@ class Migration(migrations.Migration):
             model_name="course",
             name="term",
             field=models.ForeignKey(
-                default=current_term_default,
+                default=migration_current_term_default,
                 on_delete=django.db.models.deletion.PROTECT,
                 related_name="courses",
                 to="courses.academicterm",

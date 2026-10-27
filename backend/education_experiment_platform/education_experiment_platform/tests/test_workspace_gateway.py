@@ -12,10 +12,21 @@ from education_experiment_platform.workspace_gateway import (
     _origin_allowed,
     _workspace_path,
     application,
+    request_has_body,
 )
 
 
 class WorkspaceGatewayContractTests(SimpleTestCase):
+    def test_request_has_body_matches_framing(self) -> None:
+        # 空 body 的 GET:不能向上游转发空 chunked 帧(ttyd/libwebsockets 会静默断开)
+        self.assertFalse(request_has_body({}))
+        self.assertFalse(request_has_body({b"content-length": b" 0 "}))
+        # 显式实体头
+        self.assertTrue(request_has_body({b"content-length": b"42"}))
+        self.assertTrue(request_has_body({b"transfer-encoding": b"chunked"}))
+        # 非法 content-length 按有实体处理
+        self.assertTrue(request_has_body({b"content-length": b"garbage"}))
+
     def test_workspace_path_only_accepts_session_and_known_capability_shape(self) -> None:
         self.assertEqual(
             _workspace_path("/workspace/session-1/webide/index.html"),
@@ -24,19 +35,19 @@ class WorkspaceGatewayContractTests(SimpleTestCase):
         with self.assertRaises(GatewayDenied):
             _workspace_path("/api/v2/tasks/task-1")
 
-    @override_settings(WORKSPACE_ALLOWED_ORIGINS=["https://user.example.edu"])
+    @override_settings(WORKSPACE_ALLOWED_ORIGINS=["https://student.example.edu"])
     def test_origin_is_allowlisted_and_cross_site_without_origin_is_denied(self) -> None:
-        allowed = {b"origin": b"https://user.example.edu", b"host": b"user.example.edu"}
-        denied = {b"origin": b"https://evil.example", b"host": b"user.example.edu"}
+        allowed = {b"origin": b"https://student.example.edu", b"host": b"student.example.edu"}
+        denied = {b"origin": b"https://evil.example", b"host": b"student.example.edu"}
         cross_site = {
-            b"host": b"user.example.edu",
+            b"host": b"student.example.edu",
             b"sec-fetch-site": b"cross-site",
         }
         self.assertTrue(_origin_allowed({}, allowed))
         self.assertFalse(_origin_allowed({}, denied))
         self.assertFalse(_origin_allowed({}, cross_site))
 
-    @override_settings(WORKSPACE_ALLOWED_ORIGINS=["https://user.example.edu"])
+    @override_settings(WORKSPACE_ALLOWED_ORIGINS=["https://student.example.edu"])
     def test_asgi_application_rejects_bad_origin_before_authority_call(self) -> None:
         sent: list[dict[str, object]] = []
 
@@ -51,7 +62,7 @@ class WorkspaceGatewayContractTests(SimpleTestCase):
             "method": "GET",
             "path": "/workspace/session-1/webide/",
             "headers": [
-                (b"host", b"user.example.edu"),
+                (b"host", b"student.example.edu"),
                 (b"origin", b"https://evil.example"),
             ],
             "query_string": b"",

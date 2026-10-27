@@ -13,6 +13,7 @@ from apps.core.compensation import (
 )
 from apps.core.errors import IdempotencyKeyReused
 from apps.core.idempotency import PrincipalScope, StoredResponse, execute_idempotent
+from apps.core.identifiers import normalize_trace_id
 from apps.core.models import (
     AuditLog,
     CompensationTask,
@@ -60,6 +61,33 @@ class CaptureTraceTask(TraceTask):
 
 
 class CoreServiceTests(TestCase):
+    def test_trace_ids_longer_than_storage_contract_are_hashed_deterministically(self) -> None:
+        oversized = "runtime-failure-" + "x" * 64
+
+        self.assertEqual(len(normalize_trace_id(oversized)), 32)
+        self.assertEqual(normalize_trace_id(oversized), normalize_trace_id(oversized))
+
+        audit = append_audit(
+            actor_ref="actor-1",
+            actor_portal="WORKER",
+            actor_context={},
+            action="test.trace",
+            target_type="test",
+            target_ref="trace",
+            result="SUCCEEDED",
+            trace_id=oversized,
+        )
+        event = append_outbox_event(
+            event_type="test.trace",
+            aggregate_type="test",
+            aggregate_ref="trace",
+            payload={},
+            trace_id=oversized,
+        )
+
+        self.assertEqual(audit.trace_id, normalize_trace_id(oversized))
+        self.assertEqual(event.trace_id, normalize_trace_id(oversized))
+
     def test_idempotency_replays_exact_response_without_repeating_operation(self) -> None:
         calls = 0
 

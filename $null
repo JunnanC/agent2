@@ -1,0 +1,116 @@
+ConvertFrom-Json : ����Ķ�����Ч��ӦΪ��:����}���� (5243): {"data":[{"public_id":"01M5KQY52K79PHBQGFQKFGZWBG","course_id"
+:"01M5J8F44C53HMRKHWXE9D7DM8","template_version_id":"01M5KB87CE2TQ6EPBN2XPKEM4G","rubric_version_id":"01M5J8F9GMN68SR82
+Q5E50NYMR","template_spec_digest":"6197e451ebbb4c9edacd9051b3fc3a18b19b3254ad20a306972a78d3ccdf9705","template_digest":
+null,"publication_digest":null,"execution_spec":{"language":"python","memory_mb":256,"comparator":"token","entrypoint":
+"main.py","tests_asset":"01M5KFRXB4E7CE86EN5ATVG5CH","network_mode":"DENY_ALL","cpu_millicores":500,"timeout_seconds":1
+0},"runtime_adapter_id":"01M5J8F43RZXA02DWXAAGS3YC4","runtime_adapter_driver":"FAKE","runtime_adapter_config_ref":"loca
+l-demo-fake-runtime","image_id":"01M5J8F5SFD52SVAX8VBAVNQJK","image_digest":"sha256:08080808080808080808080808080808080
+80808080808080808080808080808","resource_profile_id":"01M5J8F43WAEQ62PVEBMKBY365","resource_profile_snapshot":{"public_
+id":"01M5J8F43WAEQ62PVEBMKBY365","code":"DEMO-STD-2C-4G","runtime_type":"CONTAINER","cpu_millicores":2000,"memory_mb":4
+096,"disk_gb":20,"network_mode":"DENY_ALL"},"title":"1","description":"1","audience_mode":"ALL_ACTIVE","late_enrollment
+_policy":"DO_NOT_ASSIGN","window_start":"2026-10-23T06:42:00Z","window_end":"2026-10-31T06:42:00Z","assignment_deadline
+":null,"report_required":true,"review_mode":"MANUAL","status":"DRAFT","audience_count":0,"publication_error":{},"row_ve
+rsion":1,"allowed_actions":["publish"],"prerequisites":[],"chapters":[{"public_id":"01M5KB9HSC7SQYJF28CCK6C8NZ","source
+_chapter_id":null,"title":"绗竴绔?鐜鍑嗗","description":"probe","learning_objectives":[],"sort_order"
+:1,"snapshot":true,"tasks":[]},{"public_id":"01M5KD0WT7KGCTBAYQ835M86XG","source_chapter_id":null,"title":"1","descript
+ion":"1","learning_objectives":[],"sort_order":2,"snapshot":true,"tasks":[{"public_id":"01M5KD1C26F2P27DEF9FM0NDK1","so
+urce_task_id":null,"title":"1","description":"1","instructions":"","task_type":"","sort_order":1,"image_digest":"","res
+ource_profile_snapshot":{},"execution_snapshot":{},"submission_policy":{"required":true},"grading_policy":{"mode":"MANU
+AL"}}]}]},{"public_id":"01M5KQREW3ENVSVZZ3134NH8GY","course_id":"01M5J8F44C53HMRKHWXE9D7DM8","template_version_id":"01M
+5KB87CE2TQ6EPBN2XPKEM4G","rubric_version_id":"01M5J8F9GMN68SR82Q5E50NYMR","template_spec_digest":"6197e451ebbb4c9edacd9
+051b3fc3a18b19b3254ad20a306972a78d3ccdf9705","template_digest":null,"publication_digest":null,"execution_spec":{"langua
+ge":"python","memory_mb":256,"comparator":"token","entrypoint":"main.py","tests_asset":"01M5KFRXB4E7CE86EN5ATVG5CH","ne
+twork_mode":"DENY_ALL","cpu_millicores":500,"timeout_seconds":10},"runtime_adapter_id":"01M5J8F43RZXA02DWXAAGS3YC4","ru
+ntime_adapter_driver":"FAKE","runtime_adapter_config_ref":"local-demo-fake-runtime","image_id":"01M5J8F5SFD52SVAX8VBAVN
+QJK","image_digest":"sha256:0808080808080808080808080808080808080808080808080808080808080808","resource_profile_id":"01
+M5J8F43WAEQ62PVEBMKBY365","resource_profile_snapshot":{"public_id":"01M5J8F43WAEQ62PVEBMKBY365","code":"DEMO-STD-2C-4G"
+,"runtime_type":"CONTAINER","cpu_millicores":2000,"memory_mb":4096,"disk_gb":20,"network_mode":"DENY_ALL"},"title":"�
+�㈤拡鍙戝竷-ALL_ACTIVE","description":"probe","audience_mode":"ALL_ACTIVE","late_enrollment_policy":"DO_NOT_ASSIGN"
+,"window_start":"2026-10-23T08:00:00Z","window_end":"2026-10-30T08:00:00Z","assignment_deadline":null,"report_required"
+:true,"review_mode":"MANUAL","status":"DRAFT","audience_count":0,"publication_error":{},"row_version":1,"allowed_action
+s":["publish"],"prerequisites":[],"chapters":[{"public_id":"01M5KB9HSC7SQYJF28CCK6C8NZ","source_chapter_id":null,"title
+":"绗竴绔?鐜鍑嗗","description":"probe","learning_objectives":[],"sort_order":1,"snapshot":true,"task
+s":[]},{"public_id":"01M5KD0WT7KGCTBAYQ835M86XG","source_chapter_id":null,"title":"1","description":"1","learning_objec
+tives":[],"sort_order":2,"snapshot":true,"tasks":[{"public_id":"01M5KD1C26F2P27DEF9FM0NDK1","source_task_id":null,"titl
+e":"1","description":"1","instructions":"","task_type":"","sort_order":1,"image_digest":"","resource_profile_snapshot":
+{},"execution_snapshot":{},"submission_policy":{"required":true},"grading_policy":{"mode":"MANUAL"}}]}]},{"public_id":"
+01M5J8FA0H3HNN3DQEANE2MTBT","course_id":"01M5J8F44C53HMRKHWXE9D7DM8","template_version_id":"01M5J8F8VTE0SHQ1RDB264AGQ0"
+,"rubric_version_id":"01M5J8F9GMN68SR82Q5E50NYMR","template_spec_digest":"f1e9cae6fd4c47255b6f845222d3e8c285e65f093bb8b
+e9785b1acb69eb0f7fb","template_digest":null,"publication_digest":null,"execution_spec":{"language":"python","memory_mb"
+:256,"comparator":"token","entrypoint":"main.py","tests_asset":"01M5J8F8W4S9A6F6QMSTE2DW17","network_mode":"DENY_ALL","
+cpu_millicores":500,"timeout_seconds":10},"runtime_adapter_id":"01M5J8F43RZXA02DWXAAGS3YC4","runtime_adapter_driver":"F
+AKE","runtime_adapter_config_ref":"local-demo-fake-runtime","image_id":"01M5J8F5SFD52SVAX8VBAVNQJK","image_digest":"sha
+256:0808080808080808080808080808080808080808080808080808080808080808","resource_profile_id":"01M5J8F43WAEQ62PVEBMKBY365
+","resource_profile_snapshot":{"public_id":"01M5J8F43WAEQ62PVEBMKBY365","code":"DEMO-STD-2C-4G","runtime_type":"CONTAIN
+ER","cpu_millicores":2000,"memory_mb":4096,"disk_gb":20,"network_mode":"DENY_ALL"},"title":"演示实验�?,"descriptio
+n":"演示数据集发布：任务窗口与评阅全流程�?,"audience_mode":"ALL_ACTIVE","late_enrollment_policy":"ASS
+IGN_UNTIL_DEADLINE","window_start":"2026-10-22T15:52:54.404492Z","window_end":"2026-10-29T16:52:54.404492Z","assignment
+_deadline":"2026-10-27T16:52:54.404492Z","report_required":true,"review_mode":"MANUAL_WITH_AUTO_CHECK","status":"DRAFT"
+,"audience_count":0,"publication_error":{},"row_version":1,"allowed_actions":["publish"],"prerequisites":[],"chapters":
+[{"public_id":"01M5J8F8XJGYSNW64PNF0D2GKX","source_chapter_id":null,"title":"演示实验内容","description":"在容�
+�工作台完成演示算法任务并提交报告�?,"learning_objectives":["熟悉实验平台工作�?,"完成一次�
+��动检�?],"sort_order":1,"snapshot":true,"tasks":[{"public_id":"01M5J8F8XRDT87KJQEEF44ZSV1","source_task_id":null,"ti
+tle":"演示实验任务","description":"演示任务：容器工作台内完成算法练习�?,"instructions":"按指�
+�说明编辑代码、保存快照并运行自动检查�?,"task_type":"ALGORITHM","sort_order":1,"image_digest":"","resour
+ce_profile_snapshot":{},"execution_snapshot":{},"submission_policy":{"required":true},"grading_policy":{"mode":"MANUAL"
+}}]}]},{"public_id":"01M5J8F9TJJX0YZC3MK7EE960E","course_id":"01M5J8F44C53HMRKHWXE9D7DM8","template_version_id":"01M5J8
+F8VTE0SHQ1RDB264AGQ0","rubric_version_id":"01M5J8F9GMN68SR82Q5E50NYMR","template_spec_digest":"f1e9cae6fd4c47255b6f8452
+22d3e8c285e65f093bb8be9785b1acb69eb0f7fb","template_digest":"a56850a1423d6391d6c7defa28abe95968d464d940b4514e928804f3a1
+e6aab9","publication_digest":"78ab4472d5acf4ca773f307593f0fef263c587715f4db68166251467c16d30cc","execution_spec":{"_run
+time":{"network_policy":{"mode":"DENY_ALL","privileged":false},"workspace_capabilities":{"webide":true,"preview":true,"
+snapshot":true,"terminal":true,"checkpoint":true,"require_gateway":true}},"language":"python","memory_mb":256,"comparat
+or":"token","entrypoint":"main.py","tests_asset":"01M5J8F8W4S9A6F6QMSTE2DW17","network_mode":"DENY_ALL","cpu_millicores
+":500,"timeout_seconds":10},"runtime_adapter_id":"01M5J8F43RZXA02DWXAAGS3YC4","runtime_adapter_driver":"FAKE","runtime_
+adapter_config_ref":"local-demo-fake-runtime","image_id":"01M5J8F5SFD52SVAX8VBAVNQJK","image_digest":"sha256:0808080808
+080808080808080808080808080808080808080808080808080808","resource_profile_id":"01M5J8F43WAEQ62PVEBMKBY365","resource_pr
+ofile_snapshot":{"code":"DEMO-STD-2C-4G","disk_gb":20,"memory_mb":4096,"public_id":"01M5J8F43WAEQ62PVEBMKBY365","networ
+k_mode":"DENY_ALL","runtime_type":"CONTAINER","currency_code":"CNY","cpu_millicores":2000,"memory_limit_mb":4096,"memor
+y_request_mb":1024,"cost_minor_per_hour":0,"cpu_limit_millicores":2000,"cpu_request_millicores":500},"title":"演示�
+�验一","description":"演示数据集发布：任务窗口与评阅全流程�?,"audience_mode":"ALL_ACTIVE","late_enr
+ollment_policy":"ASSIGN_UNTIL_DEADLINE","window_start":"2026-10-22T15:52:54.221191Z","window_end":"2026-10-29T16:52:54.
+221191Z","assignment_deadline":"2026-10-27T16:52:54.221191Z","report_required":true,"review_mode":"MANUAL_WITH_AUTO_CHE
+CK","status":"PUBLISHED","audience_count":30,"publication_error":{},"row_version":2,"allowed_actions":["withdraw","clos
+e"],"prerequisites":[],"chapters":[{"public_id":"01M5J8F9V9JQZ829TTW84MZQC2","source_chapter_id":"01M5J8F8XJGYSNW64PNF0
+D2GKX","title":"演示实验内容","description":"在容器工作台完成演示算法任务并提交报告�?,"learning
+_objectives":["熟悉实验平台工作�?,"完成一次自动检�?],"sort_order":1,"snapshot":{"resource_profile_snapsh
+ot":{"code":"DEMO-STD-2C-4G","disk_gb":20,"memory_mb":4096,"public_id":"01M5J8F43WAEQ62PVEBMKBY365","network_mode":"DEN
+Y_ALL","runtime_type":"CONTAINER","currency_code":"CNY","cpu_millicores":2000,"memory_limit_mb":4096,"memory_request_mb
+":1024,"cost_minor_per_hour":0,"cpu_limit_millicores":2000,"cpu_request_millicores":500}},"tasks":[{"public_id":"01M5J8
+F9VBH571316NDEGBAM70","source_task_id":"01M5J8F8XRDT87KJQEEF44ZSV1","title":"演示实验任务","description":"演示
+任务：容器工作台内完成算法练习�?,"instructions":"按指导说明编辑代码、保存快照并运行自动�
+�查�?,"task_type":"ALGORITHM","sort_order":1,"image_digest":"sha256:0808080808080808080808080808080808080808080808080
+808080808080808","resource_profile_snapshot":{"code":"DEMO-STD-2C-4G","disk_gb":20,"memory_mb":4096,"public_id":"01M5J8
+F43WAEQ62PVEBMKBY365","network_mode":"DENY_ALL","runtime_type":"CONTAINER","currency_code":"CNY","cpu_millicores":2000,
+"memory_limit_mb":4096,"memory_request_mb":1024,"cost_minor_per_hour":0,"cpu_limit_millicores":2000,"cpu_request_millic
+ores":500},"execution_snapshot":{"report_policy":{"required":true},"review_policy":{"mode":"MANUAL_WITH_AUTO_CHECK"},"e
+xecution_spec":{"language":"python","memory_mb":256,"comparator":"token","entrypoint":"main.py","tests_asset":"01M5J8F8
+W4S9A6F6QMSTE2DW17","network_mode":"DENY_ALL","cpu_millicores":500,"timeout_seconds":10},"network_policy":{"mode":"DENY
+_ALL","privileged":false},"workspace_capabilities":{"webide":true,"preview":true,"snapshot":true,"terminal":true,"check
+point":true,"require_gateway":true}},"submission_policy":{},"grading_policy":{}}]}]}],"meta":{"trace_id":"a5559b35577cb
+c4ddbd9bc7ab58852b5"}}
+����λ�� C:\Users\zlw\AppData\Local\Temp\commandcode\D--all-of-project-edu-agent-platform\2986605f-29e1-46e8-80ab-c478d
+404b76a\scratchpad\pub_final3.ps1:35 �ַ�: 21
++ $pubs = ($pubsRaw | ConvertFrom-Json).data
++                     ~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (:) [ConvertFrom-Json], ArgumentException
+    + FullyQualifiedErrorId : System.ArgumentException,Microsoft.PowerShell.Commands.ConvertFromJsonCommand
+ 
+ConvertFrom-Json : ����Ķ�����Ч��ӦΪ��:����}���� (103): {"error":{"code":"METHOD_NOT_ALLOWED","message":"请求无法�
+�理","detail":{"detail":"方法 “POST�?不被允许�?},"trace_id":"9b1fe1f0e7ed2567586ca9cfc308e155","retryable":fal
+se}}
+����λ�� C:\Users\zlw\AppData\Local\Temp\commandcode\D--all-of-project-edu-agent-platform\2986605f-29e1-46e8-80ab-c478d
+404b76a\scratchpad\pub_final3.ps1:40 �ַ�: 53
++ $resp = (Get-Content "$env:TEMP\pub_p2.json" -Raw | ConvertFrom-Json)
++                                                     ~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (:) [ConvertFrom-Json], ArgumentException
+    + FullyQualifiedErrorId : System.ArgumentException,Microsoft.PowerShell.Commands.ConvertFromJsonCommand
+ 
+ConvertFrom-Json : ����Ķ�����Ч��ӦΪ��:����}���� (60): {"error":{"code":"RESOURCE_NOT_FOUND","message":"资源不存�?
+,"detail":{},"trace_id":"549aa27fa1eeb8c1ca858782b4495054","retryable":false}}
+����λ�� C:\Users\zlw\AppData\Local\Temp\commandcode\D--all-of-project-edu-agent-platform\2986605f-29e1-46e8-80ab-c478d
+404b76a\scratchpad\pub_final3.ps1:43 �ַ�: 37
++ Write-Output "TASKS=$((($tasksAll | ConvertFrom-Json).data).Count)"
++                                     ~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (:) [ConvertFrom-Json], ArgumentException
+    + FullyQualifiedErrorId : System.ArgumentException,Microsoft.PowerShell.Commands.ConvertFromJsonCommand
+ 

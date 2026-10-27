@@ -1,5 +1,6 @@
 TEMPLATE_CREATED = "labtemplate.created"
 TEMPLATE_UPDATED = "labtemplate.updated"
+TEMPLATE_DELETED = "labtemplate.deleted"
 VERSION_CREATED = "labtemplate.version_created"
 VERSION_UPDATED = "labtemplate.version_updated"
 RULES_UPDATED = "labtemplate.rules_updated"

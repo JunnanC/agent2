@@ -1,4 +1,7 @@
+from datetime import timedelta
+
 from django.db.models import QuerySet
+from django.utils import timezone
 
 from apps.accounts.models import User
 from apps.core.errors import ResourceNotFound
@@ -25,6 +28,43 @@ def task_for_user(*, actor: User, task_id: str) -> ExperimentTask:
         ).get(public_id=task_id, student=actor)
     except ExperimentTask.DoesNotExist as exc:
         raise ResourceNotFound() from exc
+
+
+def weekly_study_minutes_for_student(*, student: User) -> dict[str, object]:
+    """Aggregate per-day judge-run minutes for the current (Mon-based) week."""
+
+    local_now = timezone.localtime(timezone.now())
+    monday = (
+        local_now - timedelta(days=local_now.weekday())
+    ).replace(hour=0, minute=0, second=0, microsecond=0)
+    last_monday = monday - timedelta(days=7)
+    next_monday = monday + timedelta(days=7)
+    runs = (
+        WorkspaceExecutionRun.objects.filter(
+            task__student=student,
+            started_at__isnull=False,
+            started_at__gte=last_monday,
+            started_at__lt=next_monday,
+        )
+        .exclude(status=WorkspaceExecutionRun.Status.REJECTED)
+        .only("started_at", "duration_ms", "status")
+    )
+    minutes_by_day = [0] * 7
+    last_week_minutes = 0
+    for run in runs:
+        local_started = timezone.localtime(run.started_at)
+        minutes = round((run.duration_ms or 0) / 60000)
+        if local_started < monday:
+            last_week_minutes += minutes
+            continue
+        minutes_by_day[(local_started - monday).days] += minutes
+    total_minutes = sum(minutes_by_day)
+    return {
+        "minutes_by_day": minutes_by_day,
+        "total_minutes": total_minutes,
+        "last_week_minutes": last_week_minutes,
+        "has_records": bool(total_minutes or last_week_minutes),
+    }
 
 
 def workbench_task_for_user(*, actor: User, task_id: str) -> ExperimentTask:
