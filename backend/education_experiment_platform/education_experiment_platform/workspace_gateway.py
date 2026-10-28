@@ -280,7 +280,10 @@ async def _proxy_websocket(
                 task.result()
     except Exception:
         logger.exception(
-            "workspace websocket proxy failed session=%s capability=%s tail=%s", scope.get("workspace_session", ""), capability, tail
+            "workspace websocket proxy failed session=%s capability=%s tail=%s",
+            scope.get("workspace_session", ""),
+            capability,
+            tail,
         )
         await send({"type": "websocket.close", "code": 1011})
 

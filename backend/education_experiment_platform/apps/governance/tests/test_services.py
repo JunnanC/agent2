@@ -24,9 +24,9 @@ from ..services import (
     decide_image,
     effective_resource_profile,
     release_reservation,
-    resolve_image_digest,
     reresolve_image_digest,
     reserve_quota,
+    resolve_image_digest,
     transition_resource_profile,
     update_image_scan,
     validate_resource_profile,
@@ -576,7 +576,7 @@ class ImageDigestResolutionTests(TestCase):
             reason="scan before approve",
             context=self.context,
         )
-        approved = decide_image(
+        decide_image(
             image_id=image.public_id,
             actor=self.admin,
             expected_version=scanned.row_version,

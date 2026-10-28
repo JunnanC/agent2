@@ -6,7 +6,7 @@ from apps.core.models import FailureRecord
 
 from ..models import ImageAsset, RuntimeAdapter
 from ..services import ActorContext, create_image
-from ..tasks import resolve_image_digest_task, reresolve_image_digest_task
+from ..tasks import reresolve_image_digest_task, resolve_image_digest_task
 from .helpers import create_governance_admin
 
 
@@ -44,7 +44,9 @@ class ImageDigestResolutionTaskTests(TestCase):
         image.refresh_from_db()
         self.assertTrue((image.digest or "").startswith("sha256:"))
         self.assertFalse(
-            FailureRecord.objects.filter(subject_type="IMAGE_ASSET", subject_ref=image.public_id).exists()
+            FailureRecord.objects.filter(
+                subject_type="IMAGE_ASSET", subject_ref=image.public_id
+            ).exists()
         )
 
     def test_task_failure_after_retries_writes_failure_record(self) -> None:
@@ -98,7 +100,9 @@ class ImageDigestResolutionTaskTests(TestCase):
         self.assertEqual(image.digest, "sha256:" + "a" * 64)
         self.assertEqual(image.approval_status, ImageAsset.ApprovalStatus.PENDING)
         self.assertFalse(
-            FailureRecord.objects.filter(subject_type="IMAGE_ASSET", subject_ref=image.public_id).exists()
+            FailureRecord.objects.filter(
+                subject_type="IMAGE_ASSET", subject_ref=image.public_id
+            ).exists()
         )
 
     def test_reresolve_task_failure_writes_failure_record(self) -> None:

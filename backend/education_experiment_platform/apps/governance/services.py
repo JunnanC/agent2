@@ -673,7 +673,9 @@ def resolve_image_digest(
         changed = compare_and_swap(
             ImageAsset,
             pk=image.pk,
-            expected_version=expected_version if expected_version is not None else image.row_version,
+            expected_version=(
+                expected_version if expected_version is not None else image.row_version
+            ),
             changes={"digest": digest, "change_reason": reason.strip()},
         )
     except IntegrityError as exc:
@@ -744,7 +746,9 @@ def reresolve_image_digest(
         return image
     duplicate = ImageAsset.objects.exclude(pk=image.pk).filter(digest=digest).first()
     if duplicate is not None:
-        raise GovernanceStateConflict(detail={"digest": digest, "duplicate_of": duplicate.public_id})
+        raise GovernanceStateConflict(
+            detail={"digest": digest, "duplicate_of": duplicate.public_id}
+        )
     changed: ImageAsset
     try:
         changed = compare_and_swap(

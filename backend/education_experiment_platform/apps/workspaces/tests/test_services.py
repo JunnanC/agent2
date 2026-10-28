@@ -631,7 +631,7 @@ class WorkspaceSessionServiceTests(TestCase):
             purpose="WORKSPACE_SNAPSHOT",
             scan_status=ObjectAsset.ScanStatus.CLEAN,
         )
-        snapshot = WorkspaceSnapshot.objects.create(
+        WorkspaceSnapshot.objects.create(
             task=self.task,
             session=session,
             asset=asset,

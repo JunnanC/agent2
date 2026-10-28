@@ -268,7 +268,7 @@ class GovernanceApiTests(TestCase):
             HTTP_X_CSRFTOKEN=csrf,
             HTTP_X_PORTAL="PLATFORM",
             HTTP_IDEMPOTENCY_KEY="image-catalog-resolve-stale",
-            HTTP_IF_MATCH='"{expected_version}"'.format(expected_version=999),
+            HTTP_IF_MATCH=f'"{999}"',
             **PROXY_HEADERS,
         )
         self.assertEqual(stale_match.status_code, 412, stale_match.content)

@@ -16,16 +16,16 @@ from apps.provisioning.adapters import RuntimeAdapterFailure
 from apps.provisioning.ports import RuntimeSpec
 from apps.provisioning.services import _runtime_adapter_for_row
 
+from .errors import GovernanceStateConflict, GovernanceValidationError
 from .metrics import RUNTIME_ADAPTER_CAPACITY, RUNTIME_ADAPTER_HEALTH
 from .models import QuotaReservation, RuntimeAdapter
-from .errors import GovernanceStateConflict, GovernanceValidationError
 from .services import (
     ActorContext,
     expire_reservations,
     rebuild_quota_cache,
     record_runtime_health,
-    resolve_image_digest,
     reresolve_image_digest,
+    resolve_image_digest,
 )
 
 
