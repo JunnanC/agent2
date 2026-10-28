@@ -1,3 +1,4 @@
+import time
 from unittest.mock import patch
 
 from django.test import Client, TestCase
@@ -191,3 +192,249 @@ class GovernanceApiTests(TestCase):
                 "memory_limit_mb": 2048,
             },
         )
+
+    def _create_enabled_fake_runtime(self, code: str) -> RuntimeAdapter:
+        return RuntimeAdapter.objects.create(
+            code=code,
+            name="Fake runtime",
+            runtime_type=RuntimeAdapter.RuntimeType.CONTAINER,
+            driver=RuntimeAdapter.Driver.FAKE,
+            status=RuntimeAdapter.Status.ENABLED,
+        )
+
+    def test_platform_image_resolve_enqueues_worker_task(self) -> None:
+        self._create_enabled_fake_runtime("CATALOG-FAKE")
+        admin_client = Client(enforce_csrf_checks=True)
+        csrf = self._login(admin_client, portal="PLATFORM", identifier=self.admin.email)
+        created = admin_client.post(
+            "/api/v2/platform/images",
+            {
+                "registry": "docker.io",
+                "repository": "library/ubuntu",
+                "display_tag": "22.04",
+                "risk_level": "LOW",
+                "reason": "catalog import",
+            },
+            content_type="application/json",
+            HTTP_X_CSRFTOKEN=csrf,
+            HTTP_X_PORTAL="PLATFORM",
+            HTTP_IDEMPOTENCY_KEY="image-catalog-create",
+            **PROXY_HEADERS,
+        )
+        self.assertEqual(created.status_code, 201, created.content)
+        image = created.json()["data"]
+        self.assertIsNone(image["digest"])
+        self.assertEqual(image["approval_status"], "PENDING")
+        image_id = image["public_id"]
+
+        with (
+            patch("apps.governance.views.resolve_image_digest_task.delay") as delayed,
+            self.captureOnCommitCallbacks(execute=True) as callbacks,
+        ):
+            accepted = admin_client.post(
+                f"/api/v2/platform/images/{image_id}/resolve",
+                {},
+                content_type="application/json",
+                HTTP_X_CSRFTOKEN=csrf,
+                HTTP_X_PORTAL="PLATFORM",
+                HTTP_IDEMPOTENCY_KEY="image-catalog-resolve",
+                HTTP_IF_MATCH=created["ETag"],
+                **PROXY_HEADERS,
+            )
+            self.assertEqual(accepted.status_code, 202, accepted.content)
+            self.assertIsNone(accepted.json()["data"]["digest"])
+        self.assertEqual(len(callbacks), 1)
+        delayed.assert_called_once()
+        self.assertEqual(delayed.call_args.args[0], image_id)
+        self.assertTrue(delayed.call_args.args[1])
+
+        replay = admin_client.post(
+            f"/api/v2/platform/images/{image_id}/resolve",
+            {},
+            content_type="application/json",
+            HTTP_X_CSRFTOKEN=csrf,
+            HTTP_X_PORTAL="PLATFORM",
+            HTTP_IDEMPOTENCY_KEY="image-catalog-resolve",
+            HTTP_IF_MATCH=created["ETag"],
+            **PROXY_HEADERS,
+        )
+        self.assertEqual(replay.status_code, 202)
+        self.assertEqual(replay["X-Idempotent-Replayed"], "true")
+
+        stale_match = admin_client.post(
+            f"/api/v2/platform/images/{image_id}/resolve",
+            {},
+            content_type="application/json",
+            HTTP_X_CSRFTOKEN=csrf,
+            HTTP_X_PORTAL="PLATFORM",
+            HTTP_IDEMPOTENCY_KEY="image-catalog-resolve-stale",
+            HTTP_IF_MATCH='"{expected_version}"'.format(expected_version=999),
+            **PROXY_HEADERS,
+        )
+        self.assertEqual(stale_match.status_code, 412, stale_match.content)
+
+    def test_platform_image_scan_and_approval_lifecycle(self) -> None:
+        admin_client = Client(enforce_csrf_checks=True)
+        csrf = self._login(admin_client, portal="PLATFORM", identifier=self.admin.email)
+        created = admin_client.post(
+            "/api/v2/platform/images",
+            {
+                "registry": "docker.io",
+                "repository": "library/python",
+                "display_tag": "3.13",
+                "digest": "sha256:" + "f" * 64,
+                "risk_level": "LOW",
+                "reason": "catalog import with digest",
+            },
+            content_type="application/json",
+            HTTP_X_CSRFTOKEN=csrf,
+            HTTP_X_PORTAL="PLATFORM",
+            HTTP_IDEMPOTENCY_KEY="image-lifecycle-create",
+            **PROXY_HEADERS,
+        )
+        self.assertEqual(created.status_code, 201, created.content)
+        image_id = created.json()["data"]["public_id"]
+
+        blocked = admin_client.post(
+            f"/api/v2/platform/images/{image_id}/decide",
+            {"decision": "APPROVED"},
+            content_type="application/json",
+            HTTP_X_CSRFTOKEN=csrf,
+            HTTP_X_PORTAL="PLATFORM",
+            HTTP_IDEMPOTENCY_KEY="image-lifecycle-decide-scan",
+            HTTP_IF_MATCH=created["ETag"],
+            **PROXY_HEADERS,
+        )
+        self.assertEqual(blocked.status_code, 409, blocked.content)
+
+        missing_ref = admin_client.patch(
+            f"/api/v2/platform/images/{image_id}",
+            {"scan_status": "CLEAN", "risk_level": "LOW", "reason": "clean scan"},
+            content_type="application/json",
+            HTTP_X_CSRFTOKEN=csrf,
+            HTTP_X_PORTAL="PLATFORM",
+            HTTP_IF_MATCH=created["ETag"],
+            **PROXY_HEADERS,
+        )
+        self.assertEqual(missing_ref.status_code, 200, missing_ref.content)
+        self.assertEqual(missing_ref.json()["data"]["scan_status"], "CLEAN")
+
+        approved = admin_client.post(
+            f"/api/v2/platform/images/{image_id}/decide",
+            {"decision": "APPROVED"},
+            content_type="application/json",
+            HTTP_X_CSRFTOKEN=csrf,
+            HTTP_X_PORTAL="PLATFORM",
+            HTTP_IDEMPOTENCY_KEY="image-lifecycle-decide-approve",
+            HTTP_IF_MATCH=missing_ref["ETag"],
+            **PROXY_HEADERS,
+        )
+        self.assertEqual(approved.status_code, 200, approved.content)
+        self.assertEqual(approved.json()["data"]["approval_status"], "APPROVED")
+
+    def test_platform_image_reresolve_enqueues_worker_task(self) -> None:
+        self._create_enabled_fake_runtime("CATALOG-RERESOLVE-FAKE")
+        admin_client = Client(enforce_csrf_checks=True)
+        csrf = self._login(admin_client, portal="PLATFORM", identifier=self.admin.email)
+        created = admin_client.post(
+            "/api/v2/platform/images",
+            {
+                "registry": "docker.io",
+                "repository": "library/ubuntu",
+                "display_tag": "22.04",
+                "digest": "sha256:" + "b" * 64,
+                "risk_level": "LOW",
+                "reason": "catalog import with digest",
+            },
+            content_type="application/json",
+            HTTP_X_CSRFTOKEN=csrf,
+            HTTP_X_PORTAL="PLATFORM",
+            HTTP_IDEMPOTENCY_KEY="image-reresolve-create",
+            **PROXY_HEADERS,
+        )
+        self.assertEqual(created.status_code, 201, created.content)
+        image_id = created.json()["data"]["public_id"]
+
+        with (
+            patch("apps.governance.views.reresolve_image_digest_task.delay") as delayed,
+            self.captureOnCommitCallbacks(execute=True) as callbacks,
+        ):
+            accepted = admin_client.post(
+                f"/api/v2/platform/images/{image_id}/re-resolve",
+                {"reason": "docker image rebuilt"},
+                content_type="application/json",
+                HTTP_X_CSRFTOKEN=csrf,
+                HTTP_X_PORTAL="PLATFORM",
+                HTTP_IDEMPOTENCY_KEY="image-reresolve-dispatch",
+                HTTP_IF_MATCH=created["ETag"],
+                **PROXY_HEADERS,
+            )
+            self.assertEqual(accepted.status_code, 202, accepted.content)
+        self.assertEqual(len(callbacks), 1)
+        delayed.assert_called_once()
+        self.assertEqual(delayed.call_args.args[0], image_id)
+
+        unresolved = admin_client.post(
+            "/api/v2/platform/images",
+            {
+                "registry": "docker.io",
+                "repository": "library/python",
+                "display_tag": "3.13",
+                "risk_level": "LOW",
+                "reason": "catalog import without digest",
+            },
+            content_type="application/json",
+            HTTP_X_CSRFTOKEN=csrf,
+            HTTP_X_PORTAL="PLATFORM",
+            HTTP_IDEMPOTENCY_KEY="image-reresolve-create-unresolved",
+            **PROXY_HEADERS,
+        )
+        self.assertEqual(unresolved.status_code, 201, unresolved.content)
+        blocked = admin_client.post(
+            f"/api/v2/platform/images/{unresolved.json()['data']['public_id']}/re-resolve",
+            {},
+            content_type="application/json",
+            HTTP_X_CSRFTOKEN=csrf,
+            HTTP_X_PORTAL="PLATFORM",
+            HTTP_IDEMPOTENCY_KEY="image-reresolve-blocked",
+            HTTP_IF_MATCH=unresolved["ETag"],
+            **PROXY_HEADERS,
+        )
+        self.assertEqual(blocked.status_code, 409, blocked.content)
+        self.assertEqual(
+            blocked.json()["error"]["detail"], {"digest": "first_resolution_required"}
+        )
+
+    def test_platform_image_requires_recent_auth_for_resolve(self) -> None:
+        self._create_enabled_fake_runtime("CATALOG-RECENT-FAKE")
+        admin_client = Client(enforce_csrf_checks=True)
+        csrf = self._login(admin_client, portal="PLATFORM", identifier=self.admin.email)
+        created = admin_client.post(
+            "/api/v2/platform/images",
+            {
+                "registry": "docker.io",
+                "repository": "library/python",
+                "display_tag": "3.13",
+                "risk_level": "LOW",
+                "reason": "catalog import",
+            },
+            content_type="application/json",
+            HTTP_X_CSRFTOKEN=csrf,
+            HTTP_X_PORTAL="PLATFORM",
+            HTTP_IDEMPOTENCY_KEY="image-recent-create",
+            **PROXY_HEADERS,
+        )
+        self.assertEqual(created.status_code, 201, created.content)
+        image_id = created.json()["data"]["public_id"]
+        with patch("apps.governance.views.time.time", return_value=int(time.time()) + 10_000):
+            expired = admin_client.post(
+                f"/api/v2/platform/images/{image_id}/resolve",
+                {},
+                content_type="application/json",
+                HTTP_X_CSRFTOKEN=csrf,
+                HTTP_X_PORTAL="PLATFORM",
+                HTTP_IDEMPOTENCY_KEY="image-recent-resolve",
+                HTTP_IF_MATCH=created["ETag"],
+                **PROXY_HEADERS,
+            )
+        self.assertEqual(expired.status_code, 403, expired.content)

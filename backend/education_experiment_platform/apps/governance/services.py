@@ -17,6 +17,7 @@ from apps.core.errors import ResourceNotFound, RowVersionConflict
 from apps.core.identifiers import normalize_trace_id
 from apps.core.outbox import append_outbox_event, enqueue_relay_after_commit
 from apps.courses.models import Course
+from apps.provisioning.adapters import RuntimeAdapterFailure, runtime_for_driver
 
 from . import events
 from .errors import (
@@ -420,12 +421,13 @@ def create_image(
     registry: str,
     repository: str,
     display_tag: str,
-    digest: str,
+    digest: str = "",
     risk_level: str,
     reason: str,
     context: ActorContext,
 ) -> ImageAsset:
-    if not DIGEST_RE.fullmatch(digest):
+    clean_digest = digest.strip()
+    if clean_digest and not DIGEST_RE.fullmatch(clean_digest):
         raise GovernanceValidationError(detail={"digest": "sha256_required"})
     if risk_level not in ImageAsset.RiskLevel.values:
         raise GovernanceValidationError(detail={"risk_level": risk_level})
@@ -434,7 +436,7 @@ def create_image(
             registry=registry.strip().lower(),
             repository=repository.strip(),
             display_tag=display_tag.strip(),
-            digest=digest,
+            digest=clean_digest or None,
             risk_level=risk_level,
             change_reason=_reason(reason),
         )
@@ -530,6 +532,8 @@ def decide_image(
         and image.scan_status != ImageAsset.ScanStatus.CLEAN
     ):
         raise ImageNotApproved(detail={"scan_status": image.scan_status})
+    if decision == ImageAsset.ApprovalStatus.APPROVED and not image.digest:
+        raise GovernanceValidationError(detail={"digest": "required"})
     changed = compare_and_swap(
         ImageAsset,
         pk=image.pk,
@@ -538,7 +542,7 @@ def decide_image(
             "approval_status": decision,
             "approved_by": actor,
             "approved_at": timezone.now(),
-            "change_reason": _reason(reason),
+            "change_reason": reason.strip(),
         },
     )
     _audit(
@@ -555,6 +559,233 @@ def decide_image(
         aggregate_type="image_asset",
         aggregate_ref=image.public_id,
         payload={"image_id": image.public_id, "approval_status": changed.approval_status},
+    )
+    return changed  # type: ignore[return-value]
+
+
+_IMAGE_RESOLVE_DRIVER_PRIORITY = (
+    RuntimeAdapter.Driver.DOCKER_LOCAL,
+    RuntimeAdapter.Driver.DOCKER_SWARM,
+    RuntimeAdapter.Driver.FAKE,
+)
+
+
+def active_container_adapter() -> RuntimeAdapter:
+    enabled = RuntimeAdapter.objects.filter(
+        status=RuntimeAdapter.Status.ENABLED,
+        runtime_type=RuntimeAdapter.RuntimeType.CONTAINER,
+    )
+    for driver in _IMAGE_RESOLVE_DRIVER_PRIORITY:
+        match = enabled.filter(driver=driver).order_by("code").first()
+        if match is not None:
+            return match
+    raise GovernanceValidationError(detail={"adapter": "no_active_runtime"})
+
+
+def _reject_duplicate_image(
+    image: ImageAsset,
+    *,
+    digest: str,
+    duplicate_of: ImageAsset,
+    expected_version: int | None,
+    context: ActorContext,
+) -> ImageAsset:
+    """目录里已存在同一 digest 的镜像：重复项置为 REJECTED 并指回已批准镜像。"""
+    rejected = compare_and_swap(
+        ImageAsset,
+        pk=image.pk,
+        expected_version=expected_version if expected_version is not None else image.row_version,
+        changes={
+            "approval_status": ImageAsset.ApprovalStatus.REJECTED,
+            "change_reason": f"duplicate_content_of:{duplicate_of.public_id}",
+        },
+    )
+    _audit(
+        context,
+        action="governance.image.resolve_digest",
+        target_type="image_asset",
+        target_ref=image.public_id,
+        before={"approval_status": image.approval_status},
+        after={
+            "digest": digest,
+            "approval_status": ImageAsset.ApprovalStatus.REJECTED,
+            "duplicate_of": duplicate_of.public_id,
+        },
+    )
+    _event(
+        context,
+        event_type=events.IMAGE_CHANGED,
+        aggregate_type="image_asset",
+        aggregate_ref=image.public_id,
+        payload={
+            "image_id": image.public_id,
+            "approval_status": ImageAsset.ApprovalStatus.REJECTED,
+            "duplicate_of": duplicate_of.public_id,
+        },
+    )
+    return rejected
+
+
+@transaction.atomic
+def resolve_image_digest(
+    *,
+    image_id: str,
+    context: ActorContext,
+    reason: str = "",
+    expected_version: int | None = None,
+    allow_resolved: bool = False,
+) -> ImageAsset:
+    try:
+        image = ImageAsset.objects.select_for_update().get(public_id=image_id)
+    except ImageAsset.DoesNotExist as exc:
+        raise ResourceNotFound() from exc
+    if image.approval_status == ImageAsset.ApprovalStatus.RETIRED:
+        raise GovernanceStateConflict(detail={"approval_status": image.approval_status})
+    if image.digest:
+        if not allow_resolved:
+            raise GovernanceStateConflict(detail={"digest": "already_resolved"})
+        return image
+    adapter = active_container_adapter()
+    tag = image.display_tag.strip() or "latest"
+    try:
+        runtime = runtime_for_driver(adapter.driver, config_ref=adapter.config_ref)
+        resolved = runtime.resolve_image(
+            registry=image.registry, repository=image.repository, tag=tag
+        )
+    except RuntimeAdapterFailure as exc:
+        raise GovernanceStateConflict(
+            detail={"runtime": exc.code, "reason": str(getattr(exc, "__cause__", None) or exc)}
+        ) from exc
+    digest = str(resolved.get("digest") or "")
+    if not DIGEST_RE.fullmatch(digest):
+        raise GovernanceStateConflict(detail={"digest": "invalid_from_runtime"})
+
+    existing = ImageAsset.objects.exclude(pk=image.pk).filter(digest=digest).first()
+    if existing is not None:
+        return _reject_duplicate_image(
+            image,
+            digest=digest,
+            duplicate_of=existing,
+            expected_version=expected_version,
+            context=context,
+        )
+    try:
+        changed = compare_and_swap(
+            ImageAsset,
+            pk=image.pk,
+            expected_version=expected_version if expected_version is not None else image.row_version,
+            changes={"digest": digest, "change_reason": reason.strip()},
+        )
+    except IntegrityError as exc:
+        duplicate = ImageAsset.objects.filter(digest=digest).exclude(pk=image.pk).first()
+        if duplicate is None:
+            raise GovernanceStateConflict(detail={"digest": digest}) from exc
+        return _reject_duplicate_image(
+            image,
+            digest=digest,
+            duplicate_of=duplicate,
+            expected_version=expected_version,
+            context=context,
+        )
+    _audit(
+        context,
+        action="governance.image.resolve_digest",
+        target_type="image_asset",
+        target_ref=image.public_id,
+        before={"digest": None},
+        after={"digest": digest},
+    )
+    _event(
+        context,
+        event_type=events.IMAGE_CHANGED,
+        aggregate_type="image_asset",
+        aggregate_ref=image.public_id,
+        payload={"image_id": image.public_id, "digest": changed.digest},
+    )
+    return changed  # type: ignore[return-value]
+
+
+@transaction.atomic
+def reresolve_image_digest(
+    *,
+    image_id: str,
+    context: ActorContext,
+    reason: str = "",
+) -> ImageAsset:
+    """镜像在运行时重建后摘要漂移的重新解析。
+
+    与首次解析不同:摘要已存在的资产也允许重新按 (registry, repository, tag)
+    向运行时查询当前摘要。摘要未变化 → 幂等返回;变化 → 刷新摘要,并把
+    scan/approval 状态诚实回落到 PENDING(旧摘要上的扫描与审批不再覆盖新内容),
+    由管理员重新扫描、重新批准。
+    """
+
+    try:
+        image = ImageAsset.objects.select_for_update().get(public_id=image_id)
+    except ImageAsset.DoesNotExist as exc:
+        raise ResourceNotFound() from exc
+    if image.approval_status == ImageAsset.ApprovalStatus.RETIRED:
+        raise GovernanceStateConflict(detail={"approval_status": image.approval_status})
+    if not image.digest:
+        return resolve_image_digest(image_id=image_id, context=context, reason=reason)
+    adapter = active_container_adapter()
+    tag = image.display_tag.strip() or "latest"
+    try:
+        runtime = runtime_for_driver(adapter.driver, config_ref=adapter.config_ref)
+        resolved = runtime.resolve_image(
+            registry=image.registry, repository=image.repository, tag=tag
+        )
+    except RuntimeAdapterFailure as exc:
+        raise GovernanceStateConflict(detail={"runtime": exc.code}) from exc
+    digest = str(resolved.get("digest") or "")
+    if not DIGEST_RE.fullmatch(digest):
+        raise GovernanceStateConflict(detail={"digest": "invalid_from_runtime"})
+    if digest == image.digest:
+        return image
+    duplicate = ImageAsset.objects.exclude(pk=image.pk).filter(digest=digest).first()
+    if duplicate is not None:
+        raise GovernanceStateConflict(detail={"digest": digest, "duplicate_of": duplicate.public_id})
+    changed: ImageAsset
+    try:
+        changed = compare_and_swap(
+            ImageAsset,
+            pk=image.pk,
+            expected_version=image.row_version,
+            changes={
+                "digest": digest,
+                "scan_status": ImageAsset.ScanStatus.PENDING,
+                "approval_status": ImageAsset.ApprovalStatus.PENDING,
+                "scanned_at": None,
+                "approved_by": None,
+                "approved_at": None,
+                "change_reason": reason.strip() or "reresolve_after_runtime_rebuild",
+            },
+        )  # type: ignore[assignment]
+    except IntegrityError as exc:
+        racer = ImageAsset.objects.filter(digest=digest).exclude(pk=image.pk).first()
+        if racer is None:
+            raise GovernanceStateConflict(detail={"digest": digest}) from exc
+        raise GovernanceStateConflict(
+            detail={"digest": digest, "duplicate_of": racer.public_id}
+        ) from exc
+    _audit(
+        context,
+        action="governance.image.reresolve_digest",
+        target_type="image_asset",
+        target_ref=image.public_id,
+        before={"digest": image.digest, "approval_status": image.approval_status},
+        after={
+            "digest": digest,
+            "approval_status": ImageAsset.ApprovalStatus.PENDING,
+            "scan_status": ImageAsset.ScanStatus.PENDING,
+        },
+    )
+    _event(
+        context,
+        event_type=events.IMAGE_CHANGED,
+        aggregate_type="image_asset",
+        aggregate_ref=image.public_id,
+        payload={"image_id": image.public_id, "digest": digest, "reresolved": True},
     )
     return changed  # type: ignore[return-value]
 

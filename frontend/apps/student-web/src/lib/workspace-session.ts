@@ -15,6 +15,34 @@ export interface StoredWorkspaceSession {
 
 const storeKey = (taskId: string): string => `edu.workspace.${taskId}`;
 
+/** 工作台可声明的能力键(与后端 _session_capabilities 推导口径一致)。 */
+export const WORKSPACE_CAPABILITY_KEYS = [
+  "webide",
+  "notebook",
+  "terminal",
+  "preview",
+  "snapshot",
+  "checkpoint",
+] as const;
+
+/**
+ * 会话快照能力是否与后端约定的能力声明一致。
+ * 不一致(如教师给模板补 terminal、或旧载荷缺键)时,工作台应重新 enter 轮换会话;
+ * 一致则不轮换,避免对"模板本来就未声明 terminal"的任务反复建会话。
+ */
+export function sessionCapabilitiesStale(
+  sessionCaps: Record<string, unknown> | undefined | null,
+  templateCaps: Record<string, unknown> | undefined | null,
+): boolean {
+  if (!sessionCaps) return true;
+  if (templateCaps == null) return false;
+  return WORKSPACE_CAPABILITY_KEYS.some((key) => {
+    const declared = templateCaps[key] === true;
+    const stored = (sessionCaps as Record<string, unknown>)[key];
+    return (typeof stored === "boolean" ? stored : false) !== declared;
+  });
+}
+
 export function readWorkspaceSession(taskId: string): StoredWorkspaceSession | null {
   try {
     const raw = sessionStorage.getItem(storeKey(taskId));
@@ -35,7 +63,9 @@ export function readWorkspaceSession(taskId: string): StoredWorkspaceSession | n
       capabilities:
         parsed.capabilities && typeof parsed.capabilities === "object"
           ? Object.fromEntries(
-              Object.entries(parsed.capabilities).filter((entry): entry is [string, boolean] => entry[1] === true),
+              Object.entries(parsed.capabilities).filter(
+                (entry): entry is [string, boolean] => typeof entry[1] === "boolean",
+              ),
             )
           : undefined,
     };

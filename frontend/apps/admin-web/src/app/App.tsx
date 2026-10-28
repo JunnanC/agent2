@@ -10,6 +10,7 @@ import { Home } from "@/pages/home";
 import { Users } from "@/pages/users";
 import { Governance } from "@/pages/governance";
 import { Resources } from "@/pages/resources";
+import { Images } from "@/pages/images";
 import { Incidents } from "@/pages/incidents";
 import { Audit } from "@/pages/audit";
 import { Agents } from "@/pages/agents";
@@ -28,6 +29,7 @@ export function App(): JSX.Element {
               <Route path="/users" element={<Users />} />
               <Route path="/governance" element={<Governance />} />
               <Route path="/resources" element={<Resources />} />
+              <Route path="/images" element={<Images />} />
               <Route path="/incidents" element={<Incidents />} />
               <Route path="/audit" element={<Audit />} />
               <Route path="/agents" element={<Agents />} />

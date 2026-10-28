@@ -561,6 +561,56 @@
                 }
             }
         },
+        "/api/v2/auth/session/step-up": {
+            "post": {
+                "operationId": "api_v2_auth_session_step_up_create",
+                "tags": [
+                    "auth"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/SessionStepUpInput"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/SessionStepUpInput"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/SessionStepUpInput"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/SessionStepUpResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                },
+                "x-portals": [
+                    "USER",
+                    "TEACHING",
+                    "PLATFORM"
+                ]
+            }
+        },
         "/api/v2/context": {
             "get": {
                 "operationId": "context_retrieve",
@@ -3302,6 +3352,157 @@
                 ],
                 "responses": {
                     "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ImageResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                },
+                "x-portals": [
+                    "PLATFORM"
+                ]
+            }
+        },
+        "/api/v2/platform/images/{image_id}/re-resolve": {
+            "post": {
+                "operationId": "platform_images_reresolve",
+                "description": "对已解析摘要的镜像重新向运行时查询当前摘要(如镜像被重建)。",
+                "parameters": [
+                    {
+                        "in": "header",
+                        "name": "Idempotency-Key",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "Stable key for one user intent.",
+                        "required": true
+                    },
+                    {
+                        "in": "header",
+                        "name": "If-Match",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "Quoted row version ETag.",
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "image_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "platform-governance"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ImageReResolve"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ImageReResolve"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ImageReResolve"
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ImageResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                },
+                "x-portals": [
+                    "PLATFORM"
+                ]
+            }
+        },
+        "/api/v2/platform/images/{image_id}/resolve": {
+            "post": {
+                "operationId": "platform_images_resolve",
+                "parameters": [
+                    {
+                        "in": "header",
+                        "name": "Idempotency-Key",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "Stable key for one user intent.",
+                        "required": true
+                    },
+                    {
+                        "in": "header",
+                        "name": "If-Match",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "Quoted row version ETag.",
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "image_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "platform-governance"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ImageResolve"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ImageResolve"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ImageResolve"
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "202": {
                         "content": {
                             "application/json": {
                                 "schema": {
@@ -14862,6 +15063,88 @@
                 ]
             }
         },
+        "/api/v2/teaching/courses/{course_id}/template-versions/{version_id}/execution-spec": {
+            "post": {
+                "operationId": "teaching_template_execution_spec_save",
+                "parameters": [
+                    {
+                        "in": "header",
+                        "name": "Idempotency-Key",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "header",
+                        "name": "If-Match",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "course_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "version_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "api"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ExecutionSpecSave"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ExecutionSpecSave"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ExecutionSpecSave"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/TemplateVersionResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                },
+                "x-portals": [
+                    "TEACHING"
+                ]
+            }
+        },
         "/api/v2/teaching/courses/{course_id}/template-versions/{version_id}/precheck": {
             "post": {
                 "operationId": "teaching_template_precheck_create",
@@ -15311,6 +15594,58 @@
                         }
                     }
                 },
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/TemplateResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                },
+                "x-portals": [
+                    "TEACHING"
+                ]
+            },
+            "delete": {
+                "operationId": "teaching_templates_delete",
+                "parameters": [
+                    {
+                        "in": "header",
+                        "name": "If-Match",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "course_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "template_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "api"
+                ],
                 "security": [
                     {
                         "portalSession": []
@@ -18239,7 +18574,7 @@
                         "maxLength": 26
                     },
                     "network_mode": {
-                        "$ref": "#/components/schemas/ExecutionSpecNetworkModeEnum"
+                        "$ref": "#/components/schemas/NetworkModeEc7Enum"
                     }
                 },
                 "required": [
@@ -18253,12 +18588,50 @@
                     "timeout_seconds"
                 ]
             },
-            "ExecutionSpecNetworkModeEnum": {
-                "enum": [
-                    "DENY_ALL"
-                ],
-                "type": "string",
-                "description": "* `DENY_ALL` - DENY_ALL"
+            "ExecutionSpecSave": {
+                "type": "object",
+                "properties": {
+                    "tests_json": {
+                        "type": "string"
+                    },
+                    "language": {
+                        "$ref": "#/components/schemas/LanguageEnum"
+                    },
+                    "entrypoint": {
+                        "type": "string",
+                        "maxLength": 128,
+                        "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,126}\\.py$"
+                    },
+                    "timeout_seconds": {
+                        "type": "integer",
+                        "maximum": 300,
+                        "minimum": 1
+                    },
+                    "memory_mb": {
+                        "type": "integer",
+                        "minimum": 1
+                    },
+                    "cpu_millicores": {
+                        "type": "integer",
+                        "minimum": 1
+                    },
+                    "comparator": {
+                        "$ref": "#/components/schemas/ComparatorEnum"
+                    },
+                    "network_mode": {
+                        "$ref": "#/components/schemas/NetworkModeEc7Enum"
+                    }
+                },
+                "required": [
+                    "comparator",
+                    "cpu_millicores",
+                    "entrypoint",
+                    "language",
+                    "memory_mb",
+                    "network_mode",
+                    "tests_json",
+                    "timeout_seconds"
+                ]
             },
             "ExperimentImageCreate": {
                 "type": "object",
@@ -18864,7 +19237,6 @@
                     }
                 },
                 "required": [
-                    "digest",
                     "reason",
                     "registry",
                     "repository",
@@ -18943,8 +19315,7 @@
                     }
                 },
                 "required": [
-                    "decision",
-                    "reason"
+                    "decision"
                 ]
             },
             "ImageListResponse": {
@@ -18964,6 +19335,24 @@
                     "data",
                     "meta"
                 ]
+            },
+            "ImageReResolve": {
+                "type": "object",
+                "properties": {
+                    "reason": {
+                        "type": "string",
+                        "maxLength": 500
+                    }
+                }
+            },
+            "ImageResolve": {
+                "type": "object",
+                "properties": {
+                    "reason": {
+                        "type": "string",
+                        "maxLength": 500
+                    }
+                }
             },
             "ImageResponse": {
                 "type": "object",
@@ -19324,6 +19713,13 @@
                     "model_name",
                     "provider"
                 ]
+            },
+            "NetworkModeEc7Enum": {
+                "enum": [
+                    "DENY_ALL"
+                ],
+                "type": "string",
+                "description": "* `DENY_ALL` - DENY_ALL"
             },
             "OperationEvent": {
                 "type": "object",
@@ -22770,6 +23166,50 @@
                 ],
                 "type": "string",
                 "description": "* `CONTAINER` - Container\n* `VM` - Vm"
+            },
+            "SessionStepUpData": {
+                "type": "object",
+                "properties": {
+                    "recent": {
+                        "type": "boolean"
+                    },
+                    "authenticated_at": {
+                        "type": "string",
+                        "format": "date-time"
+                    }
+                },
+                "required": [
+                    "authenticated_at",
+                    "recent"
+                ]
+            },
+            "SessionStepUpInput": {
+                "type": "object",
+                "properties": {
+                    "password": {
+                        "type": "string",
+                        "writeOnly": true,
+                        "maxLength": 256
+                    }
+                },
+                "required": [
+                    "password"
+                ]
+            },
+            "SessionStepUpResponse": {
+                "type": "object",
+                "properties": {
+                    "data": {
+                        "$ref": "#/components/schemas/SessionStepUpData"
+                    },
+                    "meta": {
+                        "$ref": "#/components/schemas/AccountTraceMeta"
+                    }
+                },
+                "required": [
+                    "data",
+                    "meta"
+                ]
             },
             "SessionWrite": {
                 "type": "object",

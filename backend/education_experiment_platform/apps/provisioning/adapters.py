@@ -1008,8 +1008,14 @@ class DockerLocalAdapter(DockerLocalProtocolStub):
 
     def resolve_image(self, *, registry: str, repository: str, tag: str) -> Mapping[str, Any]:
         reference = f"{registry.rstrip('/')}/{repository.lstrip('/')}:{tag}"
-        self._call("RUNTIME_IMAGE_PULL_FAILED", lambda: self.client.pull(reference))
-        return _docker_image_result((), self.client, reference)
+
+        def _pull_and_resolve() -> Mapping[str, Any]:
+            output = _consume_docker_stream(
+                self.client.pull(reference), "RUNTIME_IMAGE_PULL_FAILED"
+            )
+            return _docker_image_result(output, self.client, reference)
+
+        return self._call("RUNTIME_IMAGE_PULL_FAILED", _pull_and_resolve)
 
     def validate_image(self, *, digest: str) -> Mapping[str, Any]:
         inspected = self._call(
@@ -2292,8 +2298,14 @@ class DockerSwarmAdapter:
 
     def resolve_image(self, *, registry: str, repository: str, tag: str) -> Mapping[str, Any]:
         reference = f"{registry.rstrip('/')}/{repository.lstrip('/')}:{tag}"
-        self._call("RUNTIME_IMAGE_PULL_FAILED", lambda: self.client.pull(reference))
-        return _docker_registry_image_result((), self.client, reference)
+
+        def _pull_and_resolve() -> Mapping[str, Any]:
+            output = _consume_docker_stream(
+                self.client.pull(reference), "RUNTIME_IMAGE_PULL_FAILED"
+            )
+            return _docker_registry_image_result(output, self.client, reference)
+
+        return self._call("RUNTIME_IMAGE_PULL_FAILED", _pull_and_resolve)
 
     def validate_image(self, *, digest: str) -> Mapping[str, Any]:
         inspected = self._call(

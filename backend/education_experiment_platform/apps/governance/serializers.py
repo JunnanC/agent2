@@ -36,9 +36,17 @@ class ImageCreateSerializer(serializers.Serializer):
     registry = serializers.CharField(max_length=255)
     repository = serializers.CharField(max_length=255)
     display_tag = serializers.CharField(max_length=128, required=False, allow_blank=True)
-    digest = serializers.CharField(max_length=71)
+    digest = serializers.CharField(max_length=71, required=False, allow_blank=True)
     risk_level = serializers.ChoiceField(choices=ImageAsset.RiskLevel.choices)
     reason = serializers.CharField(max_length=500)
+
+
+class ImageResolveSerializer(serializers.Serializer):
+    reason = serializers.CharField(max_length=500, required=False, allow_blank=True)
+
+
+class ImageReResolveSerializer(serializers.Serializer):
+    reason = serializers.CharField(max_length=500, required=False, allow_blank=True)
 
 
 class ImageScanSerializer(serializers.Serializer):
@@ -50,7 +58,7 @@ class ImageScanSerializer(serializers.Serializer):
 
 class ImageDecisionSerializer(serializers.Serializer):
     decision = serializers.CharField(max_length=16)
-    reason = serializers.CharField(max_length=500)
+    reason = serializers.CharField(max_length=500, required=False, allow_blank=True)
 
 
 class ResourceProfileCreateSerializer(serializers.Serializer):

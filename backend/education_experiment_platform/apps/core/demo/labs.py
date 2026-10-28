@@ -50,6 +50,15 @@ DEMO_TEMPLATE_NAME: Final[str] = "演示容器实验模板"
 DEMO_RUBRIC_NAME: Final[str] = "演示评分量规"
 TESTS_ASSET_BUCKET: Final[str] = "demo-assets"
 
+DEMO_WORKSPACE_CAPABILITIES: Final[dict[str, bool]] = {
+    "require_gateway": True,
+    "webide": True,
+    "terminal": True,
+    "preview": True,
+    "snapshot": True,
+    "checkpoint": True,
+}
+
 AUTO_CHECK_RULE: Final[dict[str, object]] = {
     "position": 1,
     "checker_type": "PYTEST",
@@ -121,19 +130,35 @@ def _version_payload(
         "resource_profile_id": profile.public_id,
         "dependencies": [{"name": "pytest", "version": "8"}],
         "network_policy": {"mode": "DENY_ALL", "privileged": False},
-        "workspace_capabilities": {
-            "require_gateway": True,
-            "webide": True,
-            "terminal": True,
-            "preview": True,
-            "snapshot": True,
-            "checkpoint": True,
-        },
+        "workspace_capabilities": dict(DEMO_WORKSPACE_CAPABILITIES),
         "material_version_ids": [],
         "report_policy": {"required": True},
         "review_policy": {"mode": "MANUAL_WITH_AUTO_CHECK"},
         "retention_days": 30,
     }
+
+
+def _reconcile_demo_capabilities(version: TemplateVersion, counts: Counter[str]) -> None:
+    """幂等升级已存在的演示版本能力声明。
+
+    旧种子的版本可能缺 terminal/preview 等键(真实运行时镜像具备这些能力);
+    与运行适配器 seed 一样走原地升级:改变能力后同步刷新 spec_digest,
+    让后续发布冻结的快照与模板保持一致。
+    """
+
+    caps = dict(version.workspace_capabilities or {})
+    if caps == DEMO_WORKSPACE_CAPABILITIES:
+        return
+    TemplateVersion.objects.filter(pk=version.pk).update(
+        workspace_capabilities=dict(DEMO_WORKSPACE_CAPABILITIES)
+    )
+    version.refresh_from_db()
+    if version.spec_digest:
+        TemplateVersion.objects.filter(pk=version.pk).update(
+            spec_digest=compute_spec_digest(version)
+        )
+        version.refresh_from_db()
+    counts["labs.VersionCapabilitiesReconciled"] += 1
 
 
 def _ensure_published_version(
@@ -145,6 +170,7 @@ def _ensure_published_version(
     counts: Counter[str],
 ) -> TemplateVersion:
     if version.status == TemplateVersion.Status.PUBLISHED:
+        _reconcile_demo_capabilities(version, counts)
         return version
     tests_asset = _ensure_tests_asset(version, counts)
     if not version.execution_spec:

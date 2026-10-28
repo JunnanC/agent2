@@ -104,6 +104,10 @@ def authenticate_credentials(identifier: str, password: str) -> User:
     return user
 
 
+def verify_session_password(user: User, password: str) -> bool:
+    return check_password(password, user.password)
+
+
 @transaction.atomic
 def record_login(user: User, *, expected_version: int) -> User:
     return compare_and_swap(

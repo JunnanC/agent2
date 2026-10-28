@@ -10,6 +10,7 @@ const ADMIN_NAV: Array<NavEntry | NavGroupEntry> = [
   { label: "用户与授权", path: "/users" },
   { label: "治理工作", path: "/governance" },
   { label: "资源治理", path: "/resources" },
+  { label: "镜像目录", path: "/images" },
   { label: "Agent 治理", path: "/agents" },
   { label: "异常中心", path: "/incidents" },
   { label: "异常与审计", path: "/audit" },

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useParams } from "react-router-dom";
 import DOMPurify from "dompurify";
@@ -43,12 +43,15 @@ export function Reviews() {
     enabled: Boolean(selected),
   });
 
-  const [scores, setScores] = useState<Record<string, number>>({});
+  const [scores, setScores] = useState<Record<string, string>>({});
   const [annotation, setAnnotation] = useState("");
+
+  const filledScoreEntries = Object.entries(scores).filter(([, text]) => text.trim() !== "");
+  const invalidScores = filledScoreEntries.some(([, text]) => !Number.isFinite(Number(text)));
 
   const saveScores = useMutation({
     mutationFn: async (review: ReviewDetail) => {
-      const payload = Object.entries(scores).map(([criterion, score]) => ({ criterion, score }));
+      const payload = filledScoreEntries.map(([criterionId, text]) => ({ criterion_id: criterionId, score: Number(text) }));
       return teachingApi.saveCriterionScores(courseId, review.public_id, { scores: payload }, review.row_version);
     },
     onSuccess: () => {
@@ -65,7 +68,16 @@ export function Reviews() {
   });
 
   const addAnnotation = useMutation({
-    mutationFn: (review: ReviewDetail) => teachingApi.addAnnotation(courseId, review.public_id, { body: annotation.trim() }, review.row_version),
+    /* 批注锚定报告全文：REPORT_TEXT 锚点要求合法 TEXT_RANGE 且落在报告长度内 */
+    mutationFn: (review: ReviewDetail) => {
+      const reportId = review.submission?.report_id ?? "";
+      const reportLength = review.submission?.report_markdown?.length ?? 0;
+      return teachingApi.addAnnotation(courseId, review.public_id, {
+        body: annotation.trim(),
+        target_ref: reportId,
+        anchor: { kind: "TEXT_RANGE", start: 0, end: reportLength },
+      }, review.row_version);
+    },
     onSuccess: () => {
       toast.notify("批注已保存");
       setAnnotation("");
@@ -85,6 +97,10 @@ export function Reviews() {
     onError: (error) => {
       if (error instanceof ApiError && error.payload?.code === "SIMILARITY_UNAVAILABLE") {
         toast.notify("相似度服务暂不可用，无法完成决策", "error");
+      } else if (error instanceof ApiError && error.payload?.code === "AUTO_CHECK_PENDING") {
+        toast.notify("自动检查尚未完成，请稍后重试", "error");
+      } else if (error instanceof ApiError && error.payload?.code === "REVIEW_VALIDATION_ERROR") {
+        toast.notify("请先为每个评分标准保存评分，再进行决策", "error");
       } else {
         toast.notify(apiErrorMessage(error), "error");
       }
@@ -99,6 +115,19 @@ export function Reviews() {
 
   const detailData: ReviewDetail | undefined = detail.data;
   const [evidence, setEvidence] = useState<EvidenceView>(null);
+
+  /* 详情载入/刷新时用服务端已存分数重置本地输入（同时避免切换学生后残留上一份打分） */
+  useEffect(() => {
+    if (!detailData) {
+      setScores({});
+      return;
+    }
+    const saved: Record<string, string> = {};
+    for (const criterion of detailData.rubric?.criteria ?? []) {
+      if (criterion.score != null) saved[criterion.public_id] = String(criterion.score);
+    }
+    setScores(saved);
+  }, [detailData]);
   const resolveTaskId = (): string => detailData?.task_id ?? selected?.task_id ?? "";
 
   const previewMutation = useMutation({
@@ -207,19 +236,30 @@ export function Reviews() {
             <div className="review-section" style={{ marginBottom: 12 }}>
               <div className="panel-title"><h3>Rubric 评分</h3><span className="status blue">criterion-scores</span></div>
               {(detailData.rubric?.criteria ?? []).map((criterion) => (
-                <label className="score-row" key={criterion.title}>
+                <label className="score-row" key={criterion.public_id}>
                   <span style={{ minWidth: 0 }}>
                     <strong>{criterion.title}</strong>
                     <small>{criterion.description}</small>
                   </span>
-                  <select className="field" value={String(scores[criterion.title] ?? "")}
-                    onChange={(event) => setScores((prev) => ({ ...prev, [criterion.title]: Number(event.target.value) }))}>
-                    <option value="">未评分</option>
-                    {[60, 70, 80, 90, 100].map((score) => <option key={score} value={score}>{score} 分</option>)}
-                  </select>
+                  <input className="field" type="number" inputMode="decimal" step="any"
+                    min={0} max={criterion.max_score}
+                    placeholder={`0 ~ ${criterion.max_score} 分`}
+                    aria-label={`${criterion.title}（满分 ${criterion.max_score} 分）`}
+                    value={scores[criterion.public_id] ?? ""}
+                    onChange={(event) => {
+                      const text = event.target.value;
+                      setScores((prev) => {
+                        const next = { ...prev };
+                        if (text.trim() === "") delete next[criterion.public_id];
+                        else next[criterion.public_id] = text;
+                        return next;
+                      });
+                    }} />
                 </label>
               ))}
-              <Button size="sm" disabled={saveScores.isPending || !detailData.rubric?.criteria?.length}
+              <Button size="sm" disabled={saveScores.isPending || !detailData.rubric?.criteria?.length
+                  || invalidScores || filledScoreEntries.length === 0}
+                title={invalidScores ? "评分必须是数字" : "先填写分数再保存"}
                 onClick={() => saveScores.mutate(detailData)}>
                 {saveScores.isPending ? "保存中…" : "保存评分"}
               </Button>
@@ -228,8 +268,10 @@ export function Reviews() {
             <div className="review-section" style={{ marginBottom: 12 }}>
               <label className="form-label" htmlFor="review-annotation">报告批注</label>
               <textarea id="review-annotation" className="field" rows={3} value={annotation} onChange={(event) => setAnnotation(event.target.value)} />
-              <Button size="sm" disabled={!annotation.trim() || addAnnotation.isPending} onClick={() => addAnnotation.mutate(detailData)}>
-                {addAnnotation.isPending ? "保存中…" : "添加批注"}
+              <Button size="sm" disabled={!annotation.trim() || !detailData.submission?.report_id
+                  || (detailData.submission?.report_markdown?.length ?? 0) === 0 || addAnnotation.isPending}
+                onClick={() => addAnnotation.mutate(detailData)}>
+                {!detailData.submission?.report_id ? "仅支持批注报告提交" : addAnnotation.isPending ? "保存中…" : "添加批注"}
               </Button>
               <div className="annotation-list section" style={{ marginTop: 6 }}>
                 {(detailData.annotations ?? []).filter((item) => !item.revoked).map((item) => (

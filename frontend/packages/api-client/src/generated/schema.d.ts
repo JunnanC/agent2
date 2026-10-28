@@ -212,6 +212,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v2/auth/session/step-up": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["api_v2_auth_session_step_up_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v2/context": {
         parameters: {
             query?: never;
@@ -1105,6 +1121,39 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["platform_images_decide"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/platform/images/{image_id}/re-resolve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description 对已解析摘要的镜像重新向运行时查询当前摘要(如镜像被重建)。 */
+        post: operations["platform_images_reresolve"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/platform/images/{image_id}/resolve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["platform_images_resolve"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3959,6 +4008,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v2/teaching/courses/{course_id}/template-versions/{version_id}/execution-spec": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["teaching_template_execution_spec_save"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v2/teaching/courses/{course_id}/template-versions/{version_id}/precheck": {
         parameters: {
             query?: never;
@@ -4049,7 +4114,7 @@ export interface paths {
         get: operations["teaching_templates_retrieve"];
         put?: never;
         post?: never;
-        delete?: never;
+        delete: operations["teaching_templates_delete"];
         options?: never;
         head?: never;
         patch: operations["teaching_templates_update"];
@@ -4961,13 +5026,18 @@ export interface components {
             cpu_millicores: number;
             comparator: components["schemas"]["ComparatorEnum"];
             tests_asset: string;
-            network_mode: components["schemas"]["ExecutionSpecNetworkModeEnum"];
+            network_mode: components["schemas"]["NetworkModeEc7Enum"];
         };
-        /**
-         * @description * `DENY_ALL` - DENY_ALL
-         * @enum {string}
-         */
-        ExecutionSpecNetworkModeEnum: "DENY_ALL";
+        ExecutionSpecSave: {
+            tests_json: string;
+            language: components["schemas"]["LanguageEnum"];
+            entrypoint: string;
+            timeout_seconds: number;
+            memory_mb: number;
+            cpu_millicores: number;
+            comparator: components["schemas"]["ComparatorEnum"];
+            network_mode: components["schemas"]["NetworkModeEc7Enum"];
+        };
         ExperimentImageCreate: {
             template_version_id: string;
             source_type: components["schemas"]["ExperimentImageSourceTypeEnum"];
@@ -5168,7 +5238,7 @@ export interface components {
             registry: string;
             repository: string;
             display_tag?: string;
-            digest: string;
+            digest?: string;
             risk_level: components["schemas"]["RiskLevelEnum"];
             reason: string;
         };
@@ -5190,11 +5260,17 @@ export interface components {
         };
         ImageDecision: {
             decision: string;
-            reason: string;
+            reason?: string;
         };
         ImageListResponse: {
             data: components["schemas"]["ImageData"][];
             meta: components["schemas"]["GovernancePageMeta"];
+        };
+        ImageReResolve: {
+            reason?: string;
+        };
+        ImageResolve: {
+            reason?: string;
         };
         ImageResponse: {
             data: components["schemas"]["ImageData"];
@@ -5308,6 +5384,11 @@ export interface components {
             /** @default 0 */
             cost_per_1k_output_minor: number;
         };
+        /**
+         * @description * `DENY_ALL` - DENY_ALL
+         * @enum {string}
+         */
+        NetworkModeEc7Enum: "DENY_ALL";
         OperationEvent: {
             public_id: string;
             task_id: string;
@@ -6391,6 +6472,18 @@ export interface components {
          * @enum {string}
          */
         RuntimeTypeEnum: "CONTAINER" | "VM";
+        SessionStepUpData: {
+            recent: boolean;
+            /** Format: date-time */
+            authenticated_at: string;
+        };
+        SessionStepUpInput: {
+            password: string;
+        };
+        SessionStepUpResponse: {
+            data: components["schemas"]["SessionStepUpData"];
+            meta: components["schemas"]["AccountTraceMeta"];
+        };
         SessionWrite: {
             mode: components["schemas"]["AgentModeEnum"];
         };
@@ -7613,6 +7706,31 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    api_v2_auth_session_step_up_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SessionStepUpInput"];
+                "application/x-www-form-urlencoded": components["schemas"]["SessionStepUpInput"];
+                "multipart/form-data": components["schemas"]["SessionStepUpInput"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionStepUpResponse"];
+                };
             };
         };
     };
@@ -9163,6 +9281,70 @@ export interface operations {
         };
         responses: {
             200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageResponse"];
+                };
+            };
+        };
+    };
+    platform_images_reresolve: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Stable key for one user intent. */
+                "Idempotency-Key": string;
+                /** @description Quoted row version ETag. */
+                "If-Match": string;
+            };
+            path: {
+                image_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ImageReResolve"];
+                "application/x-www-form-urlencoded": components["schemas"]["ImageReResolve"];
+                "multipart/form-data": components["schemas"]["ImageReResolve"];
+            };
+        };
+        responses: {
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageResponse"];
+                };
+            };
+        };
+    };
+    platform_images_resolve: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Stable key for one user intent. */
+                "Idempotency-Key": string;
+                /** @description Quoted row version ETag. */
+                "If-Match": string;
+            };
+            path: {
+                image_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ImageResolve"];
+                "application/x-www-form-urlencoded": components["schemas"]["ImageResolve"];
+                "multipart/form-data": components["schemas"]["ImageResolve"];
+            };
+        };
+        responses: {
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -14822,6 +15004,37 @@ export interface operations {
             };
         };
     };
+    teaching_template_execution_spec_save: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+                "If-Match": string;
+            };
+            path: {
+                course_id: string;
+                version_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExecutionSpecSave"];
+                "application/x-www-form-urlencoded": components["schemas"]["ExecutionSpecSave"];
+                "multipart/form-data": components["schemas"]["ExecutionSpecSave"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TemplateVersionResponse"];
+                };
+            };
+        };
+    };
     teaching_template_precheck_create: {
         parameters: {
             query?: never;
@@ -14989,6 +15202,30 @@ export interface operations {
         parameters: {
             query?: never;
             header?: never;
+            path: {
+                course_id: string;
+                template_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TemplateResponse"];
+                };
+            };
+        };
+    };
+    teaching_templates_delete: {
+        parameters: {
+            query?: never;
+            header: {
+                "If-Match": string;
+            };
             path: {
                 course_id: string;
                 template_id: string;

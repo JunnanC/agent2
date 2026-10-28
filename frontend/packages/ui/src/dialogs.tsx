@@ -6,16 +6,20 @@ import { Button } from "./controls";
 function useModalFocus(open: boolean, onClose: () => void) {
   const containerRef = useRef<HTMLDivElement>(null);
   const previouslyFocused = useRef<HTMLElement | null>(null);
+  /* onClose 用 ref 存：页面常传内联函数，若作为依赖会让本 effect 在每次父级重渲染时重跑，
+     反复抢焦点并把弹窗/抽屉滚动位置拉回顶部 */
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
   useEffect(() => {
     if (!open) return;
     previouslyFocused.current = document.activeElement as HTMLElement | null;
     const container = containerRef.current;
-    container?.querySelector<HTMLElement>("button, input, select, textarea, [tabindex]")?.focus();
+    container?.querySelector<HTMLElement>("button, input, select, textarea, [tabindex]")?.focus({ preventScroll: true });
     document.body.style.overflow = "hidden";
 
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") { onClose(); return; }
+      if (event.key === "Escape") { onCloseRef.current(); return; }
       if (event.key !== "Tab" || !container) return;
       const focusable = container.querySelectorAll<HTMLElement>(
         "button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex='-1'])",
@@ -25,9 +29,9 @@ function useModalFocus(open: boolean, onClose: () => void) {
       const last = focusable[focusable.length - 1];
       if (first == null || last == null) return;
       if (event.shiftKey && (document.activeElement === first)) {
-        event.preventDefault(); last.focus();
+        event.preventDefault(); last.focus({ preventScroll: true });
       } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault(); first.focus();
+        event.preventDefault(); first.focus({ preventScroll: true });
       }
     };
     document.addEventListener("keydown", onKeyDown);
@@ -36,7 +40,7 @@ function useModalFocus(open: boolean, onClose: () => void) {
       document.body.style.overflow = "";
       previouslyFocused.current?.focus();
     };
-  }, [open, onClose]);
+  }, [open]);
 
   return containerRef;
 }

@@ -7,6 +7,7 @@ from collections import Counter
 from datetime import timedelta
 from typing import Final
 
+from django.conf import settings
 from django.utils import timezone
 
 from apps.accounts.models import User
@@ -84,14 +85,32 @@ def ensure_academic_terms(ctx: BuildContext, counts: Counter[str]) -> AcademicTe
     return current
 
 
+def _demo_adapter_spec() -> dict[str, str]:
+    """REAL 模式下演示数据集使用真实本地 Docker 运行时，STUB 下保持 Fake。"""
+    if str(getattr(settings, "LOCAL_RUNTIME_MODE", "REAL")).upper() != "STUB":
+        return {
+            "driver": RuntimeAdapter.Driver.DOCKER_LOCAL,
+            "name": "本地 Docker 运行时",
+            "config_ref": "runtime/local-docker",
+            "change_reason": "演示数据集切换到真实本地 Docker 运行时",
+        }
+    return {
+        "driver": RuntimeAdapter.Driver.FAKE,
+        "name": "演示本地 Fake 运行时",
+        "config_ref": "local-demo-fake-runtime",
+        "change_reason": "演示数据集运行时",
+    }
+
+
 def ensure_runtime_catalog(ctx: BuildContext, admin: User, counts: Counter[str]) -> RuntimeAdapter:
+    spec = _demo_adapter_spec()
     adapter = RuntimeAdapter.objects.filter(code=DEMO_ADAPTER_CODE).first()
     if adapter is None:
         adapter = RuntimeAdapter.objects.create(
             code=DEMO_ADAPTER_CODE,
-            name="演示本地 Fake 运行时",
+            name=spec["name"],
             runtime_type=RuntimeAdapter.RuntimeType.CONTAINER,
-            driver=RuntimeAdapter.Driver.FAKE,
+            driver=spec["driver"],
             status=RuntimeAdapter.Status.ENABLED,
             health_status=RuntimeAdapter.HealthStatus.HEALTHY,
             node_count=1,
@@ -99,9 +118,24 @@ def ensure_runtime_catalog(ctx: BuildContext, admin: User, counts: Counter[str])
             available_cpu_millicores=400000,
             capacity_memory_mb=800000,
             available_memory_mb=800000,
-            config_ref="local-demo-fake-runtime",
+            config_ref=spec["config_ref"],
             last_health_at=timezone.now(),
-            change_reason="演示数据集运行时",
+            change_reason=spec["change_reason"],
+        )
+        counts["governance.RuntimeAdapter"] += 1
+    elif adapter.driver != spec["driver"] or adapter.config_ref != spec["config_ref"]:
+        from apps.core.concurrency import compare_and_swap
+
+        adapter = compare_and_swap(
+            RuntimeAdapter,
+            pk=adapter.pk,
+            expected_version=adapter.row_version,
+            changes={
+                "driver": spec["driver"],
+                "name": spec["name"],
+                "config_ref": spec["config_ref"],
+                "change_reason": spec["change_reason"],
+            },
         )
         counts["governance.RuntimeAdapter"] += 1
     profile = ResourceProfile.objects.filter(code=DEMO_PROFILE_CODE).first()

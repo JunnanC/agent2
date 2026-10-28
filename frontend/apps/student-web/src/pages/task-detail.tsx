@@ -11,6 +11,16 @@ import { actionLabel, formatDateTime, taskStatusLabel, taskStatusTone } from "@/
 
 const WORKFLOW_STATUS_ORDER = ["ASSIGNED", "PROVISIONING", "READY", "IN_PROGRESS", "REPORT_DRAFT", "SUBMITTED", "UNDER_REVIEW", "COMPLETED"];
 
+/* 工作区准备流水线的六个阶段(与后端 ProvisioningJob.Stage 对应) */
+const STAGE_LABELS: Record<string, string> = {
+  QUOTA_CHECK: "配额检查",
+  IMAGE_PREPARE: "镜像准备",
+  CREATE: "创建工作区",
+  NETWORK_ATTACH: "挂载运行时网络",
+  BOOT_PROBE: "启动探活",
+  WORKSPACE_READY: "工作区就绪",
+};
+
 export function TaskDetail() {
   const { taskId = "" } = useParams();
   const navigate = useNavigate();
@@ -92,13 +102,31 @@ export function TaskDetail() {
       : status === "failed" || status === "FAILED" ? "failed"
         : status === "running" || status === "RUNNING" ? "running" : "pending";
 
-  const jobStages = (): { key: string; label: string; state: JobStage["state"] }[] => {
-    const job = provisioning.data as { status?: string; stages?: Array<{ name?: string; status?: string }> } | null;
-    return (job?.stages ?? []).map((stage, index) => ({
+  const jobStages = (): { key: string; label: string; state: JobStage["state"]; detail?: string }[] => {
+    const job = provisioning.data as
+      | { status?: string; stages?: Array<{ stage?: string; name?: string; status?: string; error_code?: string }> }
+      | null;
+    /* 后端 stages 是逐条事件行(STARTED/PASSED/FAILED),按阶段去重取最新状态,保证行数=可见阶段数 */
+    const latest = new Map<string, { stage?: string; name?: string; status?: string; error_code?: string }>();
+    for (const stage of job?.stages ?? []) {
+      latest.set(stage.stage ?? `event-${latest.size}`, stage);
+    }
+    return [...latest.values()].map((stage, index) => ({
       key: String(index),
-      label: stage.name ?? `阶段 ${index + 1}`,
+      label: STAGE_LABELS[stage.stage ?? ""] ?? stage.name ?? `阶段 ${index + 1}`,
       state: stageProgressState(stage.status),
+      detail: stage.error_code || undefined,
     }));
+  };
+
+  /* 失败原因:任务行 current_failure 为空时,取 provisioning job 挂的失败记录(error_code + message) */
+  const failureReasonText = (): string | undefined => {
+    const taskFailure = current?.current_failure;
+    const jobFailure = (provisioning.data as { failure?: { message?: string; error_code?: string } | null } | null)?.failure;
+    const message = jobFailure?.message || taskFailure?.message || "";
+    const code = jobFailure?.error_code || taskFailure?.code || "";
+    if (message && code && !message.includes(code)) return `${message}（${code}）`;
+    return message || (code || undefined);
   };
 
   // 弹窗流程：任务就绪后自动进入工作台；job 成功但任务仍为 PROVISIONING 时先热刷新任务
@@ -211,7 +239,7 @@ export function TaskDetail() {
             <AsyncJobProgress
               status={jobProgressState(provisioning.data?.["status"] as string | undefined)}
               stages={jobStages()}
-              failureReason={current.current_failure?.message}
+              failureReason={failureReasonText()}
               onRetry={() => { void provisioning.refetch(); }}
             />
           </RequestStateView>
@@ -296,7 +324,7 @@ export function TaskDetail() {
                 : "submitted"
             }
             stages={jobStages()}
-            failureReason={current.current_failure?.message}
+            failureReason={failureReasonText()}
             onRetry={current.status === "FAILED" ? () => actionMutation.mutate({ action: "retry" }) : undefined}
           />
         ) : (

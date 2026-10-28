@@ -118,4 +118,5 @@ frontend/l_*.json
 # Generated deployment configuration and local evidence
 infrastructure/kong/kong.rendered.yml
 outputs/
+.presentation-build/
 evidence/p16/*/

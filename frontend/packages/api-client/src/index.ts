@@ -2,7 +2,7 @@ import { newIdempotencyKey, request } from "@edu/auth-client";
 import type { EnvelopeSuccess } from "@edu/auth-client";
 import type {
   Anomaly, Announcement, CalendarEvent, Checkpoint, CheckpointList, Chapter, Compensation, Course,
-  Enrollment, ExecutionRun, ImportJob, Instance as InstanceData, Invitation, Material, Me,
+  Enrollment, ExecutionRun, ImageCreateInput, ImageScanReportInput, ImportJob, Instance as InstanceData, Invitation, Material, Me,
   ModelRoute, NotificationItem, OperationLog, OperationsOverview, PlatformImage, PlatformUser,
   PortalContext, PrecheckRun, Publication, Quota, ReportDraft, ResourceProfile, ReviewDetail,
   ReviewSummary, Rubric, RuntimeAdapter, StudentDashboard, Task, TeachingCourseList, Template,
@@ -92,11 +92,24 @@ function normalizeWorkbenchAggregate(data: WorkbenchAggregate | undefined | null
   } else {
     testsList = undefined;
   }
+  const rawTemplate = (data as { template?: unknown }).template;
+  let templateCaps: Record<string, boolean> | null = null;
+  if (rawTemplate != null && typeof rawTemplate === "object") {
+    const rawCaps = (rawTemplate as { workspace_capabilities?: unknown }).workspace_capabilities;
+    if (rawCaps != null && typeof rawCaps === "object") {
+      templateCaps = Object.fromEntries(
+        Object.entries(rawCaps as Record<string, unknown>)
+          .filter((entry) => typeof entry[1] === "boolean")
+          .map((entry) => [entry[0], entry[1] as boolean]),
+      );
+    }
+  }
   return {
     ...data,
     task: data.task ? normalizeTask(data.task) : (data.task as never),
     chapters,
     tests: testsList,
+    template_caps: templateCaps,
   };
 }
 
@@ -140,6 +153,14 @@ export const meApi = {
     request<NotificationItem[]>("/notifications", { query }).then(toList),
   markNotificationRead: (id: string) =>
     request(`/notifications/${id}/read`, { method: "POST", body: {} }).then((r) => r.data),
+
+  /* 平台端敏感写操作要求"近期认证"：提交密码刷新会话认证时间 */
+  stepUpSession: (password: string, reuseKey?: string) =>
+    request<{ recent: boolean; authenticated_at?: string }>("/auth/session/step-up", {
+      method: "POST",
+      body: { password },
+      idempotencyKey: reuseKey ?? newIdempotencyKey(),
+    }).then((r) => r.data),
 };
 
 /* ══════════ 学生端 ══════════ */
@@ -246,6 +267,8 @@ export interface WorkbenchAggregate {
   current_chapter?: { public_id: string; title: string; instructions?: string[] } | null;
   tests?: Array<{ key?: string; name: string; description?: string }>;
   capabilities?: string[];
+  /** 模板锁定的工作区能力声明(布尔开关,后端 template.workspace_capabilities) */
+  template_caps?: Record<string, boolean> | null;
 }
 
 export const workspaceApi = {
@@ -347,7 +370,7 @@ export const workspaceApi = {
 export const reportApi = {
   draft: (taskId: string) => request<ReportDraft>(`/tasks/${taskId}/report-draft`).then((r) => r.data),
 
-  saveDraft: (taskId: string, payload: { body_html?: string; body_markdown?: string; snapshot_digest?: string | null }, ifMatch?: string | null) =>
+  saveDraft: (taskId: string, payload: { body_markdown: string }, ifMatch?: string | null) =>
     request<ReportDraft>(`/tasks/${taskId}/report-draft`, {
       method: "PUT", body: payload, idempotencyKey: newIdempotencyKey(), ifMatch,
     }),
@@ -368,9 +391,9 @@ export const reportApi = {
       method: "POST", body: {}, idempotencyKey: reuseKey ?? newIdempotencyKey(),
     }).then((r) => r.data),
 
-  submitReport: (taskId: string, reuseKey?: string) =>
+  submitReport: (taskId: string, reuseKey?: string, ifMatch?: string | number | null) =>
     request<Record<string, unknown>>(`/tasks/${taskId}/submit-report`, {
-      method: "POST", body: {}, idempotencyKey: reuseKey ?? newIdempotencyKey(),
+      method: "POST", body: {}, idempotencyKey: reuseKey ?? newIdempotencyKey(), ifMatch,
     }).then((r) => r.data),
 
   reviewResult: (taskId: string) =>
@@ -378,6 +401,52 @@ export const reportApi = {
 };
 
 /* ══════════ 教师端 ══════════ */
+
+/* ══════════ 评审详情归一 ══════════ */
+
+function escapeReportHtml(value: string): string {
+  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+/* 后端 review_detail_data 契约：
+ - 评分标准在 scores.criteria（rubric/{version}/criteria），后端没有 rubric 字段；criteria 里同条目回带已存 score
+ - submission 是 { kind, version | artifact }，报告正文在 version.body_markdown（markdown 而非 html）
+ - annotations 用 public_id/status；status != ACTIVE 视为已撤销 */
+function normalizeReviewDetail(raw: unknown): ReviewDetail {
+  const base = (raw ?? {}) as Record<string, unknown>;
+  const scores = base["scores"] as { criteria?: Array<Record<string, unknown>> } | undefined;
+  const submission = base["submission"] as { version?: Record<string, unknown> | null } | undefined;
+  const reportVersion = submission?.["version"] as Record<string, unknown> | null | undefined;
+  const reportMarkdown = typeof reportVersion?.["body_markdown"] === "string" ? reportVersion["body_markdown"] : "";
+  const criteria = (scores?.["criteria"] ?? []) as Array<Record<string, unknown>>;
+  const annotations = (base["annotations"] ?? []) as Array<Record<string, unknown>>;
+  return {
+    ...(base as unknown as ReviewDetail),
+    rubric: {
+      criteria: criteria.map((row) => ({
+        public_id: String(row["public_id"] ?? ""),
+        title: String(row["title"] ?? ""),
+        description: row["description"] != null ? String(row["description"]) : undefined,
+        max_score: Number(row["max_score"] ?? 0),
+        score: row["score"] != null ? Number(row["score"]) : null,
+      })),
+    },
+    scores: criteria
+      .filter((row) => row["score"] != null)
+      .map((row) => ({ criterion_id: String(row["public_id"] ?? ""), score: Number(row["score"]) })),
+    submission: {
+      report_id: reportVersion?.["public_id"] != null ? String(reportVersion["public_id"]) : undefined,
+      report_html: reportMarkdown ? `<pre>${escapeReportHtml(reportMarkdown)}</pre>` : undefined,
+      report_markdown: reportMarkdown || undefined,
+    },
+    annotations: annotations.map((row) => ({
+      id: String(row["public_id"] ?? ""),
+      body: String(row["body"] ?? ""),
+      revoked: row["status"] !== "ACTIVE",
+    })),
+    row_version: String(base["row_version"] ?? ""),
+  };
+}
 
 export const teachingApi = {
   courses: (query?: { page?: number; page_size?: number }) =>
@@ -404,7 +473,13 @@ export const teachingApi = {
 
   reviewEnrollment: (courseId: string, enrollmentId: string, payload: { decision: "approve" | "reject"; decision_note?: string }, ifMatch: string, reuseKey?: string) =>
     request<Enrollment>(`/teaching/courses/${courseId}/enrollments/${enrollmentId}/review`, {
-      method: "POST", body: payload, idempotencyKey: reuseKey ?? newIdempotencyKey(), ifMatch,
+      method: "POST",
+      // 后端 EnrollmentReviewSerializer 仅收大写 APPROVE/REJECT，备注字段为 note
+      body: {
+        decision: payload.decision.toUpperCase(),
+        ...(payload.decision_note != null ? { note: payload.decision_note } : {}),
+      },
+      idempotencyKey: reuseKey ?? newIdempotencyKey(), ifMatch,
     }).then((r) => r.data),
 
   imports: {
@@ -598,16 +673,21 @@ export const teachingApi = {
     request<Rubric[]>(`/teaching/courses/${courseId}/rubrics`).then(toList),
 
   review: (courseId: string, reviewId: string) =>
-    request<ReviewDetail>(`/teaching/courses/${courseId}/reviews/${reviewId}`).then((r) => r.data),
+    request<unknown>(`/teaching/courses/${courseId}/reviews/${reviewId}`)
+      .then((r) => r.data)
+      .then(normalizeReviewDetail),
 
-  saveCriterionScores: (courseId: string, reviewId: string, payload: { scores: Array<{ criterion: string; score: number }> }, ifMatch?: string, reuseKey?: string) =>
+  saveCriterionScores: (courseId: string, reviewId: string, payload: { scores: Array<{ criterion_id: string; score: number; note?: string }> }, ifMatch?: string, reuseKey?: string) =>
     request<ReviewDetail>(`/teaching/courses/${courseId}/reviews/${reviewId}/criterion-scores`, {
       method: "PUT", body: payload, idempotencyKey: reuseKey ?? newIdempotencyKey(), ifMatch,
     }).then((r) => r.data),
 
-  addAnnotation: (courseId: string, reviewId: string, payload: { body: string }, ifMatch: string, reuseKey?: string) =>
-    request<ReviewDetail>(`/teaching/courses/${courseId}/reviews/${reviewId}/annotations`, {
-      method: "POST", body: payload, idempotencyKey: reuseKey ?? newIdempotencyKey(), ifMatch,
+  addAnnotation: (courseId: string, reviewId: string, payload: { body: string; target_ref: string; anchor: Record<string, unknown> }, ifMatch: string, reuseKey?: string) =>
+    request<unknown>(`/teaching/courses/${courseId}/reviews/${reviewId}/annotations`, {
+      method: "POST",
+      // 契约 AnnotationWriteSerializer：target_type/target_ref/anchor 必填
+      body: { target_type: "REPORT_TEXT", target_ref: payload.target_ref, anchor: payload.anchor, body: payload.body },
+      idempotencyKey: reuseKey ?? newIdempotencyKey(), ifMatch,
     }).then((r) => r.data),
 
   revokeAnnotation: (courseId: string, annotationId: string, ifMatch: string, reuseKey?: string) =>
@@ -617,7 +697,13 @@ export const teachingApi = {
 
   decideReview: (courseId: string, reviewId: string, payload: { decision: "approve" | "return"; note?: string }, ifMatch: string, reuseKey?: string) =>
     request<ReviewDetail>(`/teaching/courses/${courseId}/reviews/${reviewId}/decide`, {
-      method: "POST", body: payload, idempotencyKey: reuseKey ?? newIdempotencyKey(), ifMatch,
+      method: "POST",
+      // 后端 ReviewDecisionEnum 仅收大写 APPROVE/REJECT；页面语义 return(退回修改)对应 REJECT
+      body: {
+        decision: payload.decision === "approve" ? "APPROVE" : "REJECT",
+        ...(payload.note ? { feedback: payload.note } : {}),
+      },
+      idempotencyKey: reuseKey ?? newIdempotencyKey(), ifMatch,
     }).then((r) => r.data),
 
   startSimilarityRun: (courseId: string, taskId: string, reuseKey?: string) =>
@@ -653,7 +739,13 @@ export const platformApi = {
 
   reviewVerification: (id: string, payload: { decision: "approve" | "reject"; note?: string }, ifMatch: string, reuseKey?: string) =>
     request<Verification>(`/platform/verifications/${id}/review`, {
-      method: "POST", body: payload, idempotencyKey: reuseKey ?? newIdempotencyKey(), ifMatch,
+      method: "POST",
+      // 后端 IdentityReviewSerializer 仅收大写 APPROVE/REJECT，备注字段为 reason
+      body: {
+        decision: payload.decision.toUpperCase(),
+        ...(payload.note != null ? { reason: payload.note } : {}),
+      },
+      idempotencyKey: reuseKey ?? newIdempotencyKey(), ifMatch,
     }).then((r) => r.data),
 
   governanceAlerts: (query?: { page?: number; page_size?: number; level?: string }) =>
@@ -678,7 +770,55 @@ export const platformApi = {
 
   decideImage: (imageId: string, payload: { decision: "approve" | "reject"; note?: string }, ifMatch: string, reuseKey?: string) =>
     request<PlatformImage>(`/platform/images/${imageId}/decide`, {
-      method: "POST", body: payload, idempotencyKey: reuseKey ?? newIdempotencyKey(), ifMatch,
+      method: "POST",
+      // 后端 decide_image 仅收大写 APPROVED/REJECTED，备注字段为 reason
+      body: {
+        decision: payload.decision === "approve" ? "APPROVED" : "REJECTED",
+        ...(payload.note != null ? { reason: payload.note } : {}),
+      },
+      idempotencyKey: reuseKey ?? newIdempotencyKey(), ifMatch,
+    }).then((r) => r.data),
+
+  createImage: (payload: ImageCreateInput, reuseKey?: string) =>
+    request<PlatformImage>("/platform/images", {
+      method: "POST",
+      body: {
+        registry: payload.registry,
+        repository: payload.repository,
+        ...(payload.display_tag ? { display_tag: payload.display_tag } : {}),
+        ...(payload.digest ? { digest: payload.digest } : {}),
+        risk_level: payload.risk_level,
+        reason: payload.reason,
+      },
+      idempotencyKey: reuseKey ?? newIdempotencyKey(),
+    }).then((r) => r.data),
+
+  resolveImage: (imageId: string, ifMatch: string, reuseKey?: string) =>
+    request<PlatformImage>(`/platform/images/${imageId}/resolve`, {
+      method: "POST",
+      body: {},
+      idempotencyKey: reuseKey ?? newIdempotencyKey(), ifMatch,
+    }).then((r) => r.data),
+
+  /* 镜像在运行时重建后摘要漂移:重新向运行时解析当前摘要(后台任务) */
+  reResolveImage: (imageId: string, ifMatch: string, reuseKey?: string) =>
+    request<PlatformImage>(`/platform/images/${imageId}/re-resolve`, {
+      method: "POST",
+      body: {},
+      idempotencyKey: reuseKey ?? newIdempotencyKey(), ifMatch,
+    }).then((r) => r.data),
+
+  reportImageScan: (imageId: string, payload: ImageScanReportInput, ifMatch: string, reuseKey?: string) =>
+    request<PlatformImage>(`/platform/images/${imageId}`, {
+      method: "PATCH",
+      // 后端仅收大写 CLEAN/INFECTED/FAILED
+      body: {
+        scan_status: payload.scan_status.toUpperCase(),
+        ...(payload.scan_report_ref ? { scan_report_ref: payload.scan_report_ref } : {}),
+        risk_level: payload.risk_level,
+        reason: payload.reason,
+      },
+      idempotencyKey: reuseKey ?? newIdempotencyKey(), ifMatch,
     }).then((r) => r.data),
 
   resourceProfiles: (query?: { page?: number; page_size?: number; status?: string }) =>

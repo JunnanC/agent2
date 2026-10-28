@@ -5,7 +5,8 @@ import { ApiError } from "@edu/auth-client";
 import { reportApi, taskApi, workspaceApi } from "@edu/api-client";
 import type { ExecutionRun, ReportDraft, WorkbenchAggregate } from "@edu/api-client";
 import { keys } from "@edu/query-keys";
-import { readWorkspaceSession, storeWorkspaceSession, type StoredWorkspaceSession } from "@/lib/workspace-session";
+import { readWorkspaceSession, sessionCapabilitiesStale, storeWorkspaceSession, type StoredWorkspaceSession } from "@/lib/workspace-session";
+import { htmlToMarkdown, markdownToHtml } from "@/lib/report-format";
 import {
   AsyncJobProgress, Button, EmptyState, Icon, LoadingState, Modal, RichTextEditor,
   Splitter, useToast,
@@ -76,7 +77,7 @@ export function Workbench() {
   useEffect(() => {
     if (draftQuery.data && draftBase == null) {
       setDraftBase(draftQuery.data);
-      if (!draftRef.current) setDraftHtml(draftQuery.data.body_html ?? "");
+      if (!draftRef.current) setDraftHtml(markdownToHtml(draftQuery.data.body_markdown ?? ""));
       setSaveStatus({ label: "已保存", tone: "good" });
     }
   }, [draftQuery.data, draftBase]);
@@ -101,7 +102,7 @@ export function Workbench() {
     try {
       const result = await reportApi.saveDraft(
         taskId,
-        { body_html: draftRef.current, snapshot_digest: draftBase?.snapshot_digest ?? null },
+        { body_markdown: htmlToMarkdown(draftRef.current) },
         draftBase?.row_version ?? null,
       );
       setDraftBase(result.data);
@@ -132,8 +133,11 @@ export function Workbench() {
   });
 
   const restoreCheckpoint = useMutation({
-    mutationFn: (checkpointId: string) =>
-      workspaceApi.restoreCheckpoint(taskId, checkpointId, checkpoints.data?.sessionRowVersion ?? "", workspaceToken),
+    /* If-Match 锁的是会话 row_version，恢复会推进会话版本；先取最新列表再恢复，避免 428/412 */
+    mutationFn: async (checkpointId: string) => {
+      const list = await workspaceApi.checkpoints(taskId, workspaceToken);
+      return workspaceApi.restoreCheckpoint(taskId, checkpointId, list.sessionRowVersion, workspaceToken);
+    },
     onSuccess: () => {
       toast.notify("检查点已恢复");
       void checkpoints.refetch();
@@ -168,11 +172,14 @@ export function Workbench() {
   const aggregateTaskStatus = taskDetail.data?.status ?? workbench.data?.task?.status;
   const aggregateAllowed = taskDetail.data?.allowed_actions ?? workbench.data?.task?.allowed_actions ?? [];
   /* 会话快照过期判定:
-     - 老载荷缺 capabilities 键或 terminal 能力键(能力声明变更前后都会出现)
+     - 老载荷缺 capabilities 键(重建会话)
+     - 与聚合里模板锁定的能力声明不一致(教师补充 terminal 等情形,重入轮换刷新)
      - expires_at 已过(重新进入会轮换新 token) */
   const storedSessionStale = storedSession != null
-    && (storedSession.capabilities == null
-      || storedSession.capabilities["terminal"] === undefined
+    && (sessionCapabilitiesStale(
+          storedSession.capabilities,
+          (workbench.data as WorkbenchAggregate | undefined)?.template_caps,
+        )
       || (storedSession.expires_at != null
         && new Date(storedSession.expires_at).getTime() <= Date.now()));
   useEffect(() => {
@@ -208,7 +215,11 @@ export function Workbench() {
   }, [executionRuns.data]);
 
   const submitReport = useMutation({
-    mutationFn: () => reportApi.submitReport(taskId),
+    /* If-Match 锁的是任务 row_version；保存草稿会推进任务状态，缓存里的版本会过期，提交前现取最新 */
+    mutationFn: async () => {
+      const latest = await taskApi.detail(taskId);
+      return reportApi.submitReport(taskId, undefined, latest.row_version);
+    },
     onSuccess: () => {
       toast.notify("报告已提交，等待教师评审");
       setSubmitOpen(false);
@@ -216,8 +227,11 @@ export function Workbench() {
       void workbench.refetch();
     },
     onError: (error) => {
-      const payload = (error as { payload?: { message?: string } }).payload;
-      toast.notify(payload?.message ?? "提交失败", "error");
+      if (error instanceof ApiError && error.kind === "conflict") {
+        void taskDetail.refetch();
+        void workbench.refetch();
+      }
+      toast.notify(serializeError(error), "error");
     },
   });
 

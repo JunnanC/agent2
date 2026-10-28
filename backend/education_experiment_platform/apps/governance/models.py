@@ -139,7 +139,13 @@ class ImageAsset(GovernanceModel):
     registry = models.CharField(max_length=255)
     repository = models.CharField(max_length=255)
     display_tag = models.CharField(max_length=128, blank=True, default="")
-    digest = models.CharField(max_length=71, unique=True, db_collation="ascii_bin")
+    digest = models.CharField(
+        max_length=71,
+        unique=True,
+        db_collation="ascii_bin",
+        null=True,
+        blank=True,
+    )
     scan_status = models.CharField(
         max_length=16,
         choices=ScanStatus.choices,

@@ -280,3 +280,57 @@ class AccountApiTests(TestCase):
         )
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.json()["error"]["code"], "PROXY_CONTEXT_UNTRUSTED")
+
+    def test_session_step_up_rejects_wrong_password_and_accepts_correct_one(self) -> None:
+        from django.contrib.sessions.backends.db import SessionStore
+
+        client = Client(enforce_csrf_checks=True)
+        with (
+            patch("apps.accounts.views.check_login_rate_limit", return_value="rate-key"),
+            patch("apps.accounts.views.clear_login_rate_limit"),
+        ):
+            self.assertEqual(self._login(client, "USER").status_code, 200)
+            csrf = client.cookies["csrftoken"].value
+
+            wrong = client.post(
+                "/api/v2/auth/session/step-up",
+                {"password": "wrong-password"},
+                content_type="application/json",
+                HTTP_X_CSRFTOKEN=csrf,
+                HTTP_X_PORTAL="USER",
+                HTTP_IDEMPOTENCY_KEY="step-up-wrong",
+                **PROXY_HEADERS,
+            )
+            accepted = client.post(
+                "/api/v2/auth/session/step-up",
+                {"password": self.password},
+                content_type="application/json",
+                HTTP_X_CSRFTOKEN=client.cookies["csrftoken"].value,
+                HTTP_X_PORTAL="USER",
+                HTTP_IDEMPOTENCY_KEY="step-up-ok",
+                **PROXY_HEADERS,
+            )
+        self.assertEqual(wrong.status_code, 401)
+        self.assertEqual(wrong.json()["error"]["code"], "INVALID_CREDENTIALS")
+        self.assertEqual(accepted.status_code, 200)
+        self.assertTrue(accepted.json()["data"]["recent"])
+
+        session_key = client.cookies["sessionid"].value
+        session = SessionStore(session_key=session_key)
+        auth_time = session.get("account_auth_time")
+        self.assertIsInstance(auth_time, int)
+        self.assertGreater(auth_time, 0)
+
+    def test_session_step_up_requires_authentication(self) -> None:
+        client = Client(enforce_csrf_checks=True)
+        token = self._csrf(client, "USER")
+        response = client.post(
+            "/api/v2/auth/session/step-up",
+            {"password": self.password},
+            content_type="application/json",
+            HTTP_X_CSRFTOKEN=token,
+            HTTP_X_PORTAL="USER",
+            HTTP_IDEMPOTENCY_KEY="step-up-anon",
+            **PROXY_HEADERS,
+        )
+        self.assertEqual(response.status_code, 401)

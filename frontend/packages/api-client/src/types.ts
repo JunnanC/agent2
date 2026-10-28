@@ -210,7 +210,6 @@ export interface ReportAttachment {
 export interface ReportDraft {
   public_id: string;
   task_id: string;
-  body_html?: string | null;
   body_markdown?: string | null;
   snapshot_digest?: string | null;
   status: string;
@@ -235,9 +234,19 @@ export interface ReviewSummary {
 }
 
 export interface ReviewDetail extends ReviewSummary {
-  submission?: { report_html?: string; submitted_at?: Iso8601; attachments?: ReportAttachment[] };
-  rubric?: { criteria: Array<{ key?: string; title: string; description?: string; max_score: number }> };
-  scores?: Array<{ criterion: string; score: number }>;
+  submission?: {
+    report_id?: string;
+    report_html?: string;
+    /** 批注锚点(TEXT_RANGE)所需：报告 markdown 全文 */
+    report_markdown?: string;
+    submitted_at?: Iso8601;
+    attachments?: ReportAttachment[];
+  };
+  rubric?: {
+    criteria: Array<{ public_id: string; key?: string; title: string; description?: string; max_score: number; score?: number | null }>;
+  };
+  /** criterion_id 为评测标准 public_id（CriterionScoreWriteItemSerializer 契约） */
+  scores?: Array<{ criterion_id: string; score: number; note?: string }>;
   annotations?: Array<{ id: string; body: string; created_at?: Iso8601; revoked?: boolean }>;
 }
 
@@ -391,6 +400,22 @@ export interface PlatformImage {
   scanned_at?: Iso8601 | null;
   approved_at?: Iso8601 | null;
   row_version: string;
+}
+
+export interface ImageCreateInput {
+  registry: string;
+  repository: string;
+  display_tag?: string;
+  digest?: string;
+  risk_level: "LOW" | "MEDIUM" | "HIGH";
+  reason: string;
+}
+
+export interface ImageScanReportInput {
+  scan_status: "CLEAN" | "INFECTED" | "FAILED";
+  scan_report_ref?: string;
+  risk_level: "LOW" | "MEDIUM" | "HIGH";
+  reason: string;
 }
 
 export interface ResourceProfile {

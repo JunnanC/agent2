@@ -212,6 +212,7 @@ CELERY_TASK_ROUTES = {
     "apps.provisioning.*": {"queue": "q_provision"},
     "apps.core.relay_outbox": {"queue": "q_relay"},
     "apps.governance.probe_runtime_adapters": {"queue": "q_provision"},
+    "apps.governance.resolve_image_digest": {"queue": "q_provision"},
     "apps.core.run_compensations": {"queue": "q_compensate"},
     "apps.archives.*": {"queue": "q_archive"},
     "apps.agents.*": {"queue": "q_agent"},

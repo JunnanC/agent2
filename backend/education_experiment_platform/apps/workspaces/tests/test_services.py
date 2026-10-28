@@ -180,6 +180,25 @@ class WorkspaceSessionServiceTests(TestCase):
         self.assertEqual(session.instance_id, self.task.provisioning_instance.pk)
         self.assertEqual(session.capabilities["terminal"], True)
 
+    def test_enter_refreshes_stale_session_capabilities(self) -> None:
+        """能力是派投影:发布后声明变化(教师补 terminal)时,重入应刷新旧会话快照。"""
+
+        session = WorkspaceSession.objects.get(task=self.task)
+        self.assertEqual(session.capabilities["terminal"], True)
+        WorkspaceSession.objects.filter(pk=session.pk).update(
+            capabilities={**session.capabilities, "terminal": False}
+        )
+
+        _task, refreshed, _token = enter_task(
+            task_id=self.task.public_id,
+            actor=self.task.student,
+            expected_version=self.task.row_version,
+            context=self.context,
+        )
+
+        self.assertEqual(refreshed.public_id, session.public_id)
+        self.assertTrue(refreshed.capabilities["terminal"])
+
     def test_storage_job_contract_rejects_fake_runtime_without_creating_a_row(self) -> None:
         _task, session, token = enter_task(
             task_id=self.task.public_id,

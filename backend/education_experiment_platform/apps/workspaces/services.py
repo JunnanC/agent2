@@ -289,20 +289,27 @@ def issue_session(
     now = timezone.now()
     expiry = now + timedelta(seconds=_ttl_seconds())
     if active is not None:
+        rotated: dict[str, object] = {
+            "jti": jti,
+            "token_hash": digest,
+            "expires_at": expiry,
+            "last_seen_at": now,
+            "status": WorkspaceSession.Status.ACTIVE,
+            "revoked_at": None,
+            "revoke_reason": "",
+            "instance": instance,
+        }
+        # 能力是派投影:enter 已允许 IN_PROGRESS 等"仅轮换会话"路径重入,
+        # 若模板/快照能力在此期间变化(如教师补充 terminal 声明),重算会话能力,
+        # 否则旧会话会永远带着过期能力快照。
+        fresh_capabilities = _session_capabilities(task)
+        if dict(active.capabilities or {}) != fresh_capabilities:
+            rotated["capabilities"] = fresh_capabilities
         changed = compare_and_swap(
             WorkspaceSession,
             pk=active.pk,
             expected_version=active.row_version,
-            changes={
-                "jti": jti,
-                "token_hash": digest,
-                "expires_at": expiry,
-                "last_seen_at": now,
-                "status": WorkspaceSession.Status.ACTIVE,
-                "revoked_at": None,
-                "revoke_reason": "",
-                "instance": instance,
-            },
+            changes=rotated,
         )
         session = changed  # type: ignore[assignment]
     else:
@@ -325,16 +332,20 @@ def issue_session(
             active = WorkspaceSession.objects.select_for_update().get(
                 task=task, active_marker=f"{task.public_id}:ACTIVE"
             )
+            raced_rotation: dict[str, object] = {
+                "jti": jti,
+                "token_hash": digest,
+                "expires_at": expiry,
+                "last_seen_at": now,
+            }
+            raced_capabilities = _session_capabilities(task)
+            if dict(active.capabilities or {}) != raced_capabilities:
+                raced_rotation["capabilities"] = raced_capabilities
             session = compare_and_swap(
                 WorkspaceSession,
                 pk=active.pk,
                 expected_version=active.row_version,
-                changes={
-                    "jti": jti,
-                    "token_hash": digest,
-                    "expires_at": expiry,
-                    "last_seen_at": now,
-                },
+                changes=raced_rotation,
             )
     _audit(
         context=context,
