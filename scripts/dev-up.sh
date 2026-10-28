@@ -21,10 +21,10 @@ source "$ROOT_DIR/.env"
 set +a
 
 cd "$ROOT_DIR"
-docker compose --env-file "$ROOT_DIR/.env" -f "$ROOT_DIR/docker-compose.dev.yml" up -d --build
+docker compose --profile p14 --env-file "$ROOT_DIR/.env" -f "$ROOT_DIR/docker-compose.dev.yml" up -d --build
 
 deadline=$((SECONDS + HEALTH_TIMEOUT_SECONDS))
-until curl --fail --silent --max-time 2 "http://user.localhost:${ENTRY_PORT:-8080}/api/v2/health" >/dev/null; do
+until curl --fail --silent --max-time 2 "http://student.localhost:${ENTRY_PORT:-8080}/api/v2/health" >/dev/null; do
   if (( SECONDS >= deadline )); then
     echo "Backend health check timed out after ${HEALTH_TIMEOUT_SECONDS}s" >&2
     exit 1
@@ -32,4 +32,4 @@ until curl --fail --silent --max-time 2 "http://user.localhost:${ENTRY_PORT:-808
   sleep 2
 done
 
-echo "Local environment is ready: http://user.localhost:${ENTRY_PORT:-8080}"
+echo "Local environment is ready: http://student.localhost:${ENTRY_PORT:-8080}"

@@ -7,6 +7,8 @@ from .views import (
     ImageDecisionView,
     ImageDetailView,
     ImageListView,
+    ImageReResolveView,
+    ImageResolveView,
     PlatformAlertListView,
     PlatformUsageView,
     PolicyListView,
@@ -29,6 +31,8 @@ urlpatterns = [
     path("platform/images", ImageListView.as_view()),
     path("platform/images/<str:image_id>", ImageDetailView.as_view()),
     path("platform/images/<str:image_id>/decide", ImageDecisionView.as_view()),
+    path("platform/images/<str:image_id>/resolve", ImageResolveView.as_view()),
+    path("platform/images/<str:image_id>/re-resolve", ImageReResolveView.as_view()),
     path("platform/resource-profiles", ResourceProfileListView.as_view()),
     path(
         "platform/resource-profiles/<str:profile_id>",

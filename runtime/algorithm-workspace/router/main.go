@@ -19,18 +19,28 @@ import (
 )
 
 const (
-	defaultListenAddress = "0.0.0.0:8080"
-	defaultTargetURL     = "http://127.0.0.1:3000"
-	defaultTokenFile     = "/run/secrets/workspace_upstream_token"
-	upstreamTokenHeader  = "X-Workspace-Upstream-Token"
-	webIDEPathPrefix     = "/webide"
+	defaultListenAddress   = "0.0.0.0:8080"
+	defaultWebIDEURL       = "http://127.0.0.1:3000"
+	defaultTerminalURL     = "http://127.0.0.1:7681"
+	defaultTokenFile       = "/run/secrets/workspace_upstream_token"
+	upstreamTokenHeader    = "X-Workspace-Upstream-Token"
+	webIDEPathPrefix       = "/webide"
+	terminalPathPrefix     = "/terminal"
+	responseBodyProbeLimit = 4096
 )
 
 type router struct {
-	proxy        *httputil.ReverseProxy
-	target       *url.URL
 	healthClient *http.Client
 	tokenDigest  [sha256.Size]byte
+	capabilities []*capabilityProxy
+}
+
+type capabilityProxy struct {
+	proxy       *httputil.ReverseProxy
+	target      *url.URL
+	pathPrefix  string
+	stripPrefix bool
+	healthProbe bool
 }
 
 func envOrDefault(name, fallback string) string {
@@ -53,19 +63,25 @@ func loadTokenDigest(path string) ([sha256.Size]byte, error) {
 	return sha256.Sum256([]byte(token)), nil
 }
 
-func newRouter(target *url.URL, tokenDigest [sha256.Size]byte) *router {
+/* newCapabilityProxy dispatches one /<prefix>/ capability route to an upstream tool.
+   The workspace gateway keeps the capability prefix (<prefix>/<tail>) in the upstream
+   path; webide strips it because code-server derives its base URL from
+   X-Forwarded-Prefix, terminal keeps it because ttyd is started with --base-path. */
+func newCapabilityProxy(target *url.URL, pathPrefix string, stripPrefix, healthProbe bool) *capabilityProxy {
 	proxy := httputil.NewSingleHostReverseProxy(target)
 	director := proxy.Director
 	proxy.Director = func(request *http.Request) {
 		incomingHost := request.Host
 		director(request)
-		request.URL.Path = strings.TrimPrefix(request.URL.Path, webIDEPathPrefix)
-		if request.URL.Path == "" {
-			request.URL.Path = "/"
+		if stripPrefix {
+			request.URL.Path = strings.TrimPrefix(request.URL.Path, pathPrefix)
+			if request.URL.Path == "" {
+				request.URL.Path = "/"
+			}
+			request.Header.Set("X-Forwarded-Prefix", pathPrefix)
 		}
 		request.Host = target.Host
 		request.Header.Set("X-Forwarded-Host", incomingHost)
-		request.Header.Set("X-Forwarded-Prefix", webIDEPathPrefix)
 		request.Header.Del(upstreamTokenHeader)
 	}
 	proxy.ModifyResponse = func(response *http.Response) error {
@@ -77,22 +93,23 @@ func newRouter(target *url.URL, tokenDigest [sha256.Size]byte) *router {
 			location.Scheme = ""
 			location.Host = ""
 		}
-		if !location.IsAbs() && strings.HasPrefix(location.Path, "/") && !strings.HasPrefix(location.Path, webIDEPathPrefix+"/") {
-			location.Path = webIDEPathPrefix + location.Path
+		if !location.IsAbs() && strings.HasPrefix(location.Path, "/") && !strings.HasPrefix(location.Path, pathPrefix+"/") {
+			location.Path = pathPrefix + location.Path
 			location.RawPath = ""
 		}
 		response.Header.Set("Location", location.String())
 		return nil
 	}
 	proxy.ErrorHandler = func(response http.ResponseWriter, _ *http.Request, err error) {
-		log.Printf("workspace upstream unavailable: %v", err)
+		log.Printf("workspace upstream unavailable (%s): %v", pathPrefix, err)
 		http.Error(response, "workspace unavailable", http.StatusBadGateway)
 	}
-	return &router{
-		proxy:        proxy,
-		target:       target,
-		healthClient: &http.Client{Timeout: 2 * time.Second},
-		tokenDigest:  tokenDigest,
+	return &capabilityProxy{
+		proxy:       proxy,
+		target:      target,
+		pathPrefix:  pathPrefix,
+		stripPrefix: stripPrefix,
+		healthProbe: healthProbe,
 	}
 }
 
@@ -101,29 +118,49 @@ func (handler *router) authorized(request *http.Request) bool {
 	return subtle.ConstantTimeCompare(presented[:], handler.tokenDigest[:]) == 1
 }
 
+func newRouter(webIDE, terminal *url.URL, tokenDigest [sha256.Size]byte) *router {
+	return &router{
+		healthClient: &http.Client{Timeout: 2 * time.Second},
+		tokenDigest:  tokenDigest,
+		capabilities: []*capabilityProxy{
+			newCapabilityProxy(webIDE, webIDEPathPrefix, true, true),
+			newCapabilityProxy(terminal, terminalPathPrefix, false, false),
+		},
+	}
+}
+
+func (handler *router) ready(target *url.URL) error {
+	probeRequest, err := http.NewRequestWithContext(context.Background(), http.MethodGet, target.String()+"/healthz", nil)
+	if err != nil {
+		return err
+	}
+	probeResponse, err := handler.healthClient.Do(probeRequest)
+	if err != nil {
+		return err
+	}
+	defer probeResponse.Body.Close()
+	_, _ = io.Copy(io.Discard, io.LimitReader(probeResponse.Body, responseBodyProbeLimit))
+	if probeResponse.StatusCode != http.StatusOK {
+		return fmt.Errorf("health endpoint returned %d", probeResponse.StatusCode)
+	}
+	return nil
+}
+
 func (handler *router) health(response http.ResponseWriter, request *http.Request) {
 	if request.Method != http.MethodGet && request.Method != http.MethodHead {
 		response.Header().Set("Allow", "GET, HEAD")
 		http.Error(response, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	probeURL := *handler.target
-	probeURL.Path = "/healthz"
-	probeRequest, err := http.NewRequestWithContext(request.Context(), http.MethodGet, probeURL.String(), nil)
-	if err != nil {
-		http.Error(response, "not ready", http.StatusServiceUnavailable)
-		return
-	}
-	probeResponse, err := handler.healthClient.Do(probeRequest)
-	if err != nil {
-		http.Error(response, "not ready", http.StatusServiceUnavailable)
-		return
-	}
-	defer probeResponse.Body.Close()
-	_, _ = io.Copy(io.Discard, io.LimitReader(probeResponse.Body, 4096))
-	if probeResponse.StatusCode != http.StatusOK {
-		http.Error(response, "not ready", http.StatusServiceUnavailable)
-		return
+	for _, capability := range handler.capabilities {
+		if !capability.healthProbe {
+			continue
+		}
+		if err := handler.ready(capability.target); err != nil {
+			log.Printf("workspace readiness check failed (%s): %v", capability.pathPrefix, err)
+			http.Error(response, "not ready", http.StatusServiceUnavailable)
+			return
+		}
 	}
 	response.Header().Set("Cache-Control", "no-store")
 	response.Header().Set("Content-Type", "text/plain; charset=utf-8")
@@ -134,12 +171,22 @@ func (handler *router) health(response http.ResponseWriter, request *http.Reques
 	}
 }
 
+func (handler *router) capability(path string) *capabilityProxy {
+	for _, candidate := range handler.capabilities {
+		if path == candidate.pathPrefix || strings.HasPrefix(path, candidate.pathPrefix+"/") {
+			return candidate
+		}
+	}
+	return nil
+}
+
 func (handler *router) ServeHTTP(response http.ResponseWriter, request *http.Request) {
 	if request.URL.Path == "/healthz" {
 		handler.health(response, request)
 		return
 	}
-	if request.URL.Path != webIDEPathPrefix && !strings.HasPrefix(request.URL.Path, webIDEPathPrefix+"/") {
+	capability := handler.capability(request.URL.Path)
+	if capability == nil {
 		http.NotFound(response, request)
 		return
 	}
@@ -147,11 +194,11 @@ func (handler *router) ServeHTTP(response http.ResponseWriter, request *http.Req
 		http.Error(response, "forbidden", http.StatusForbidden)
 		return
 	}
-	if request.URL.Path == webIDEPathPrefix {
-		http.Redirect(response, request, webIDEPathPrefix+"/", http.StatusPermanentRedirect)
+	if request.URL.Path == capability.pathPrefix {
+		http.Redirect(response, request, capability.pathPrefix+"/", http.StatusPermanentRedirect)
 		return
 	}
-	handler.proxy.ServeHTTP(response, request)
+	capability.proxy.ServeHTTP(response, request)
 }
 
 func probe() error {
@@ -167,10 +214,22 @@ func probe() error {
 	return nil
 }
 
-func run() error {
-	target, err := url.Parse(envOrDefault("WORKSPACE_CODE_SERVER_URL", defaultTargetURL))
+func parseTarget(name, fallback string) (*url.URL, error) {
+	target, err := url.Parse(envOrDefault(name, fallback))
 	if err != nil || target.Scheme != "http" || target.Host == "" || target.User != nil || target.Path != "" || target.RawQuery != "" || target.Fragment != "" {
-		return errors.New("WORKSPACE_CODE_SERVER_URL must be an http URL without credentials")
+		return nil, errors.New(name + " must be an http URL without credentials")
+	}
+	return target, nil
+}
+
+func run() error {
+	codeServer, err := parseTarget("WORKSPACE_CODE_SERVER_URL", defaultWebIDEURL)
+	if err != nil {
+		return err
+	}
+	terminal, err := parseTarget("WORKSPACE_TERMINAL_URL", defaultTerminalURL)
+	if err != nil {
+		return err
 	}
 	tokenDigest, err := loadTokenDigest(envOrDefault("WORKSPACE_UPSTREAM_TOKEN_FILE", defaultTokenFile))
 	if err != nil {
@@ -178,8 +237,8 @@ func run() error {
 	}
 
 	server := &http.Server{
-		Addr:              envOrDefault("WORKSPACE_ROUTER_ADDR", defaultListenAddress),
-		Handler:           newRouter(target, tokenDigest),
+		Addr:    envOrDefault("WORKSPACE_ROUTER_ADDR", defaultListenAddress),
+		Handler: newRouter(codeServer, terminal, tokenDigest),
 		ReadHeaderTimeout: 5 * time.Second,
 		IdleTimeout:       2 * time.Minute,
 		MaxHeaderBytes:    32 * 1024,

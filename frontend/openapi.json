@@ -561,6 +561,81 @@
                 }
             }
         },
+        "/api/v2/auth/session/step-up": {
+            "post": {
+                "operationId": "api_v2_auth_session_step_up_create",
+                "tags": [
+                    "auth"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/SessionStepUpInput"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/SessionStepUpInput"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/SessionStepUpInput"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/SessionStepUpResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                },
+                "x-portals": [
+                    "USER",
+                    "TEACHING",
+                    "PLATFORM"
+                ]
+            }
+        },
+        "/api/v2/context": {
+            "get": {
+                "operationId": "context_retrieve",
+                "tags": [
+                    "context"
+                ],
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ContextResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
         "/api/v2/courses": {
             "get": {
                 "operationId": "courses_list",
@@ -3292,6 +3367,157 @@
                 ]
             }
         },
+        "/api/v2/platform/images/{image_id}/re-resolve": {
+            "post": {
+                "operationId": "platform_images_reresolve",
+                "description": "对已解析摘要的镜像重新向运行时查询当前摘要(如镜像被重建)。",
+                "parameters": [
+                    {
+                        "in": "header",
+                        "name": "Idempotency-Key",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "Stable key for one user intent.",
+                        "required": true
+                    },
+                    {
+                        "in": "header",
+                        "name": "If-Match",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "Quoted row version ETag.",
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "image_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "platform-governance"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ImageReResolve"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ImageReResolve"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ImageReResolve"
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ImageResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                },
+                "x-portals": [
+                    "PLATFORM"
+                ]
+            }
+        },
+        "/api/v2/platform/images/{image_id}/resolve": {
+            "post": {
+                "operationId": "platform_images_resolve",
+                "parameters": [
+                    {
+                        "in": "header",
+                        "name": "Idempotency-Key",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "Stable key for one user intent.",
+                        "required": true
+                    },
+                    {
+                        "in": "header",
+                        "name": "If-Match",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "Quoted row version ETag.",
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "image_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "platform-governance"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ImageResolve"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ImageResolve"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ImageResolve"
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ImageResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                },
+                "x-portals": [
+                    "PLATFORM"
+                ]
+            }
+        },
         "/api/v2/platform/instances": {
             "get": {
                 "operationId": "platform_instances_list",
@@ -5997,6 +6223,60 @@
                 }
             }
         },
+        "/api/v2/student/task-runtimes/{runtime_id}/stop": {
+            "post": {
+                "operationId": "student_task_runtime_stop",
+                "parameters": [
+                    {
+                        "in": "header",
+                        "name": "Idempotency-Key",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "header",
+                        "name": "If-Match",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "runtime_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "api"
+                ],
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/GenericResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                },
+                "x-portals": [
+                    "USER"
+                ]
+            }
+        },
         "/api/v2/tasks": {
             "get": {
                 "operationId": "tasks_list",
@@ -6673,7 +6953,7 @@
         },
         "/api/v2/tasks/{task_id}/execution-runs": {
             "get": {
-                "operationId": "tasks_execution_run_retrieve",
+                "operationId": "tasks_execution_runs_list",
                 "parameters": [
                     {
                         "in": "header",
@@ -6706,6 +6986,77 @@
                             "application/json": {
                                 "schema": {
                                     "$ref": "#/components/schemas/WorkspaceExecutionRunList"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                },
+                "x-portals": [
+                    "USER"
+                ]
+            },
+            "post": {
+                "operationId": "tasks_execution_runs_create",
+                "parameters": [
+                    {
+                        "in": "header",
+                        "name": "Idempotency-Key",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "header",
+                        "name": "X-Workspace-Token",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "task_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "workspaces"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ExecutionRunCreate"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ExecutionRunCreate"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ExecutionRunCreate"
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/WorkspaceExecutionRun"
                                 }
                             }
                         },
@@ -7281,7 +7632,7 @@
                     }
                 ],
                 "tags": [
-                    "tasks"
+                    "api"
                 ],
                 "security": [
                     {
@@ -7293,7 +7644,7 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/ProvisioningActionResponse"
+                                    "$ref": "#/components/schemas/TaskData"
                                 }
                             }
                         },
@@ -7506,8 +7857,16 @@
         },
         "/api/v2/tasks/{task_id}/workspace-snapshot": {
             "put": {
-                "operationId": "tasks_execution_runs_list",
+                "operationId": "tasks_workspace_snapshot_save",
                 "parameters": [
+                    {
+                        "in": "header",
+                        "name": "Idempotency-Key",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
                     {
                         "in": "header",
                         "name": "X-Workspace-Token",
@@ -9631,6 +9990,45 @@
                 ]
             }
         },
+        "/api/v2/teaching/courses/{course_id}/analytics/series": {
+            "get": {
+                "operationId": "api_v2_teaching_courses_analytics_series_retrieve",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "course_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "query",
+                        "name": "days",
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "description": "返回最近 N 天的每日投影(默认 28,上限 90)"
+                    }
+                ],
+                "tags": [
+                    "teaching-analytics"
+                ],
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "No response body"
+                    }
+                },
+                "x-portals": [
+                    "TEACHING"
+                ]
+            }
+        },
         "/api/v2/teaching/courses/{course_id}/announcements/{announcement_id}/publish": {
             "post": {
                 "operationId": "teaching_announcement_publish",
@@ -10599,6 +10997,335 @@
                             "application/json": {
                                 "schema": {
                                     "$ref": "#/components/schemas/EnrollmentResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                },
+                "x-portals": [
+                    "TEACHING"
+                ]
+            }
+        },
+        "/api/v2/teaching/courses/{course_id}/experiment-images": {
+            "get": {
+                "operationId": "teaching_experiment_images_list",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "course_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "api"
+                ],
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ExperimentImageListResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                },
+                "x-portals": [
+                    "TEACHING"
+                ]
+            },
+            "post": {
+                "operationId": "teaching_experiment_images_create",
+                "parameters": [
+                    {
+                        "in": "header",
+                        "name": "Idempotency-Key",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "course_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "api"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ExperimentImageCreate"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ExperimentImageCreate"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ExperimentImageCreate"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ExperimentImageResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                },
+                "x-portals": [
+                    "TEACHING"
+                ]
+            }
+        },
+        "/api/v2/teaching/courses/{course_id}/experiment-images/{image_id}": {
+            "get": {
+                "operationId": "teaching_experiment_images_retrieve",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "course_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "image_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "api"
+                ],
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ExperimentImageResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                },
+                "x-portals": [
+                    "TEACHING"
+                ]
+            }
+        },
+        "/api/v2/teaching/courses/{course_id}/experiment-images/{image_id}/events": {
+            "get": {
+                "operationId": "teaching_experiment_images_events",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "course_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "image_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "api"
+                ],
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ExperimentImageEventsResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                },
+                "x-portals": [
+                    "TEACHING"
+                ]
+            }
+        },
+        "/api/v2/teaching/courses/{course_id}/experiment-images/{image_id}/prepare": {
+            "post": {
+                "operationId": "teaching_experiment_images_prepare",
+                "parameters": [
+                    {
+                        "in": "header",
+                        "name": "Idempotency-Key",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "header",
+                        "name": "If-Match",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "course_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "image_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "api"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ExperimentImagePrepare"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ExperimentImagePrepare"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ExperimentImagePrepare"
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ExperimentImageResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                },
+                "x-portals": [
+                    "TEACHING"
+                ]
+            }
+        },
+        "/api/v2/teaching/courses/{course_id}/experiment-images/{image_id}/retire": {
+            "post": {
+                "operationId": "teaching_experiment_images_retire",
+                "parameters": [
+                    {
+                        "in": "header",
+                        "name": "If-Match",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "course_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "image_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "api"
+                ],
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ExperimentImageResponse"
                                 }
                             }
                         },
@@ -13455,6 +14182,278 @@
                 ]
             }
         },
+        "/api/v2/teaching/courses/{course_id}/template-chapters/{chapter_id}": {
+            "patch": {
+                "operationId": "teaching_template_chapters_update",
+                "parameters": [
+                    {
+                        "in": "header",
+                        "name": "If-Match",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "chapter_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "course_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "api"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/PatchedTemplateChapterWrite"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/PatchedTemplateChapterWrite"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/PatchedTemplateChapterWrite"
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/TemplateChapterResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                },
+                "x-portals": [
+                    "TEACHING"
+                ]
+            }
+        },
+        "/api/v2/teaching/courses/{course_id}/template-chapters/{chapter_id}/tasks": {
+            "get": {
+                "operationId": "teaching_template_tasks_list",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "chapter_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "course_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "api"
+                ],
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/TemplateTaskListResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                },
+                "x-portals": [
+                    "TEACHING"
+                ]
+            },
+            "post": {
+                "operationId": "teaching_template_tasks_create",
+                "parameters": [
+                    {
+                        "in": "header",
+                        "name": "Idempotency-Key",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "header",
+                        "name": "If-Match",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "chapter_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "course_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "api"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/TemplateTaskWrite"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/TemplateTaskWrite"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/TemplateTaskWrite"
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/TemplateTaskResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                },
+                "x-portals": [
+                    "TEACHING"
+                ]
+            }
+        },
+        "/api/v2/teaching/courses/{course_id}/template-chapters/{chapter_id}/tasks/reorder": {
+            "post": {
+                "operationId": "teaching_template_tasks_reorder",
+                "parameters": [
+                    {
+                        "in": "header",
+                        "name": "If-Match",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "chapter_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "course_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "api"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ReorderWrite"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ReorderWrite"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ReorderWrite"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/TemplateVersionResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                },
+                "x-portals": [
+                    "TEACHING"
+                ]
+            }
+        },
         "/api/v2/teaching/courses/{course_id}/template-options": {
             "get": {
                 "operationId": "teaching_template_options",
@@ -13482,6 +14481,79 @@
                             "application/json": {
                                 "schema": {
                                     "$ref": "#/components/schemas/TemplateOptionsResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                },
+                "x-portals": [
+                    "TEACHING"
+                ]
+            }
+        },
+        "/api/v2/teaching/courses/{course_id}/template-tasks/{task_id}": {
+            "patch": {
+                "operationId": "teaching_template_tasks_update",
+                "parameters": [
+                    {
+                        "in": "header",
+                        "name": "If-Match",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "course_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "task_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "api"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/PatchedTemplateTaskWrite"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/PatchedTemplateTaskWrite"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/PatchedTemplateTaskWrite"
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/TemplateTaskResponse"
                                 }
                             }
                         },
@@ -13728,6 +14800,197 @@
                 ]
             }
         },
+        "/api/v2/teaching/courses/{course_id}/template-versions/{version_id}/chapters": {
+            "get": {
+                "operationId": "teaching_template_chapters_list",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "course_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "version_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "api"
+                ],
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/TemplateChapterListResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                },
+                "x-portals": [
+                    "TEACHING"
+                ]
+            },
+            "post": {
+                "operationId": "teaching_template_chapters_create",
+                "parameters": [
+                    {
+                        "in": "header",
+                        "name": "If-Match",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "course_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "version_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "api"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/TemplateChapterWrite"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/TemplateChapterWrite"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/TemplateChapterWrite"
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/TemplateChapterResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                },
+                "x-portals": [
+                    "TEACHING"
+                ]
+            }
+        },
+        "/api/v2/teaching/courses/{course_id}/template-versions/{version_id}/chapters/reorder": {
+            "post": {
+                "operationId": "teaching_template_chapters_reorder",
+                "parameters": [
+                    {
+                        "in": "header",
+                        "name": "If-Match",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "course_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "version_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "api"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ReorderWrite"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ReorderWrite"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ReorderWrite"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/TemplateVersionResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                },
+                "x-portals": [
+                    "TEACHING"
+                ]
+            }
+        },
         "/api/v2/teaching/courses/{course_id}/template-versions/{version_id}/clone": {
             "post": {
                 "operationId": "teaching_template_versions_clone",
@@ -13785,6 +15048,88 @@
                         "description": ""
                     },
                     "201": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/TemplateVersionResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                },
+                "x-portals": [
+                    "TEACHING"
+                ]
+            }
+        },
+        "/api/v2/teaching/courses/{course_id}/template-versions/{version_id}/execution-spec": {
+            "post": {
+                "operationId": "teaching_template_execution_spec_save",
+                "parameters": [
+                    {
+                        "in": "header",
+                        "name": "Idempotency-Key",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "header",
+                        "name": "If-Match",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "course_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "version_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "api"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ExecutionSpecSave"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ExecutionSpecSave"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ExecutionSpecSave"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
                         "content": {
                             "application/json": {
                                 "schema": {
@@ -14249,6 +15594,58 @@
                         }
                     }
                 },
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/TemplateResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                },
+                "x-portals": [
+                    "TEACHING"
+                ]
+            },
+            "delete": {
+                "operationId": "teaching_templates_delete",
+                "parameters": [
+                    {
+                        "in": "header",
+                        "name": "If-Match",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "course_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "template_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "api"
+                ],
                 "security": [
                     {
                         "portalSession": []
@@ -14900,7 +16297,7 @@
                         "minimum": 1
                     },
                     "status": {
-                        "$ref": "#/components/schemas/StatusE1dEnum"
+                        "$ref": "#/components/schemas/ActiveRevokedCodeStatusEnum"
                     }
                 },
                 "required": [
@@ -14926,7 +16323,7 @@
                         "type": "string"
                     },
                     "status": {
-                        "$ref": "#/components/schemas/StatusE1dEnum"
+                        "$ref": "#/components/schemas/ActiveRevokedCodeStatusEnum"
                     }
                 },
                 "required": [
@@ -14982,6 +16379,30 @@
                 ],
                 "type": "string",
                 "description": "* `UPSERT` - Upsert\n* `REVOKE` - Revoke"
+            },
+            "ActiveRetiredStatusEnum": {
+                "enum": [
+                    "ACTIVE",
+                    "RETIRED"
+                ],
+                "type": "string",
+                "description": "* `ACTIVE` - ACTIVE\n* `RETIRED` - RETIRED"
+            },
+            "ActiveRevokedCodeStatusEnum": {
+                "enum": [
+                    "ACTIVE",
+                    "REVOKED"
+                ],
+                "type": "string",
+                "description": "* `ACTIVE` - ACTIVE\n* `REVOKED` - REVOKED"
+            },
+            "ActiveRevokedStatusEnum": {
+                "enum": [
+                    "ACTIVE",
+                    "REVOKED"
+                ],
+                "type": "string",
+                "description": "* `ACTIVE` - Active\n* `REVOKED` - Revoked"
             },
             "AdminAssignmentData": {
                 "type": "object",
@@ -15077,6 +16498,25 @@
                     "data",
                     "meta"
                 ]
+            },
+            "AgentModeEnum": {
+                "enum": [
+                    "KNOWLEDGE_QA",
+                    "SOCRATIC_HINT",
+                    "DEBUG_ASSIST",
+                    "REPORT_COACH",
+                    "WORKSPACE_ASSIST"
+                ],
+                "type": "string",
+                "description": "* `KNOWLEDGE_QA` - KNOWLEDGE_QA\n* `SOCRATIC_HINT` - SOCRATIC_HINT\n* `DEBUG_ASSIST` - DEBUG_ASSIST\n* `REPORT_COACH` - REPORT_COACH\n* `WORKSPACE_ASSIST` - WORKSPACE_ASSIST"
+            },
+            "AgentReportStrategyEnum": {
+                "enum": [
+                    "REPORT",
+                    "COMPLETE"
+                ],
+                "type": "string",
+                "description": "* `REPORT` - REPORT\n* `COMPLETE` - COMPLETE"
             },
             "AgentResponseMeta": {
                 "type": "object",
@@ -15294,7 +16734,7 @@
                         "type": "string"
                     },
                     "target_type": {
-                        "$ref": "#/components/schemas/TargetTypeBeeEnum"
+                        "$ref": "#/components/schemas/ReviewTargetTypeEnum"
                     },
                     "target_ref": {
                         "type": "string"
@@ -15304,7 +16744,7 @@
                     },
                     "anchor": {},
                     "status": {
-                        "$ref": "#/components/schemas/AnnotationDataStatusEnum"
+                        "$ref": "#/components/schemas/ActiveRevokedStatusEnum"
                     },
                     "body": {
                         "type": "string"
@@ -15335,14 +16775,6 @@
                     "target_ref",
                     "target_type"
                 ]
-            },
-            "AnnotationDataStatusEnum": {
-                "enum": [
-                    "ACTIVE",
-                    "REVOKED"
-                ],
-                "type": "string",
-                "description": "* `ACTIVE` - Active\n* `REVOKED` - Revoked"
             },
             "AnnotationListResponse": {
                 "type": "object",
@@ -15427,7 +16859,7 @@
                 "type": "object",
                 "properties": {
                     "target_type": {
-                        "$ref": "#/components/schemas/TargetTypeBeeEnum"
+                        "$ref": "#/components/schemas/ReviewTargetTypeEnum"
                     },
                     "target_ref": {
                         "type": "string",
@@ -15609,6 +17041,14 @@
                     "meta"
                 ]
             },
+            "ArtifactKindEnum": {
+                "enum": [
+                    "REPORT",
+                    "SYSTEM_ARTIFACT"
+                ],
+                "type": "string",
+                "description": "* `REPORT` - REPORT\n* `SYSTEM_ARTIFACT` - SYSTEM_ARTIFACT"
+            },
             "AudienceModeEnum": {
                 "enum": [
                     "ALL_ACTIVE",
@@ -15640,7 +17080,7 @@
                         "type": "string"
                     },
                     "status": {
-                        "$ref": "#/components/schemas/StatusA0dEnum"
+                        "$ref": "#/components/schemas/AutoCheckStatusEnum"
                     },
                     "attempt_count": {
                         "type": "integer"
@@ -15842,6 +17282,19 @@
                     "rules"
                 ]
             },
+            "AutoCheckStatusEnum": {
+                "enum": [
+                    "QUEUED",
+                    "RUNNING",
+                    "PASSED",
+                    "FAILED",
+                    "TIMEOUT",
+                    "RESOURCE_EXCEEDED",
+                    "REJECTED"
+                ],
+                "type": "string",
+                "description": "* `QUEUED` - Queued\n* `RUNNING` - Running\n* `PASSED` - Passed\n* `FAILED` - Failed\n* `TIMEOUT` - Timeout\n* `RESOURCE_EXCEEDED` - Resource Exceeded\n* `REJECTED` - Rejected"
+            },
             "BlockerData": {
                 "type": "object",
                 "properties": {
@@ -15921,6 +17374,10 @@
                 "type": "object",
                 "properties": {
                     "name": {
+                        "type": "string",
+                        "maxLength": 180
+                    },
+                    "label": {
                         "type": "string",
                         "maxLength": 180
                     }
@@ -16092,6 +17549,95 @@
                 ],
                 "type": "string",
                 "description": "* `FILE` - FILE\n* `LINK` - LINK\n* `TEXT` - TEXT"
+            },
+            "ContextCourseData": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string"
+                    },
+                    "code": {
+                        "type": "string"
+                    },
+                    "title": {
+                        "type": "string"
+                    },
+                    "status": {
+                        "type": "string"
+                    },
+                    "staff_role": {
+                        "type": "string"
+                    },
+                    "enrollment_role": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "code",
+                    "id",
+                    "status",
+                    "title"
+                ]
+            },
+            "ContextData": {
+                "type": "object",
+                "properties": {
+                    "user_role": {
+                        "$ref": "#/components/schemas/UserRoleEnum"
+                    },
+                    "current_term": {
+                        "$ref": "#/components/schemas/ContextTermData"
+                    },
+                    "courses": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/ContextCourseData"
+                        }
+                    }
+                },
+                "required": [
+                    "courses",
+                    "current_term",
+                    "user_role"
+                ]
+            },
+            "ContextResponse": {
+                "type": "object",
+                "properties": {
+                    "data": {
+                        "$ref": "#/components/schemas/ContextData"
+                    },
+                    "meta": {
+                        "$ref": "#/components/schemas/CourseTraceMeta"
+                    }
+                },
+                "required": [
+                    "data",
+                    "meta"
+                ]
+            },
+            "ContextTermData": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string"
+                    },
+                    "code": {
+                        "type": "string"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "status": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "code",
+                    "id",
+                    "name",
+                    "status"
+                ]
             },
             "CopyWrite": {
                 "type": "object",
@@ -16303,6 +17849,14 @@
                     "title",
                     "visibility"
                 ]
+            },
+            "CourseEnrollmentDecisionEnum": {
+                "enum": [
+                    "APPROVE",
+                    "REJECT"
+                ],
+                "type": "string",
+                "description": "* `APPROVE` - APPROVE\n* `REJECT` - REJECT"
             },
             "CourseListResponse": {
                 "type": "object",
@@ -16539,6 +18093,9 @@
                         "type": "object",
                         "additionalProperties": {}
                     },
+                    "weekly_study": {
+                        "$ref": "#/components/schemas/WeeklyStudyData"
+                    },
                     "next_tasks": {
                         "type": "array",
                         "items": {
@@ -16548,16 +18105,9 @@
                 },
                 "required": [
                     "counts",
-                    "next_tasks"
+                    "next_tasks",
+                    "weekly_study"
                 ]
-            },
-            "Decision328Enum": {
-                "enum": [
-                    "APPROVE",
-                    "REJECT"
-                ],
-                "type": "string",
-                "description": "* `APPROVE` - APPROVE\n* `REJECT` - REJECT"
             },
             "DecisionData": {
                 "type": "object",
@@ -16566,7 +18116,7 @@
                         "type": "string"
                     },
                     "decision": {
-                        "$ref": "#/components/schemas/DecisionFb4Enum"
+                        "$ref": "#/components/schemas/ReviewDecisionEnum"
                     },
                     "score": {
                         "type": "string",
@@ -16613,14 +18163,6 @@
                     "score",
                     "trace_id"
                 ]
-            },
-            "DecisionFb4Enum": {
-                "enum": [
-                    "APPROVE",
-                    "REJECT"
-                ],
-                "type": "string",
-                "description": "* `APPROVE` - Approve\n* `REJECT` - Reject"
             },
             "DownloadGrantData": {
                 "type": "object",
@@ -16883,7 +18425,7 @@
                 "type": "object",
                 "properties": {
                     "decision": {
-                        "$ref": "#/components/schemas/Decision328Enum"
+                        "$ref": "#/components/schemas/CourseEnrollmentDecisionEnum"
                     },
                     "note": {
                         "type": "string",
@@ -16982,6 +18524,24 @@
                     "name"
                 ]
             },
+            "ExecutionRunCreate": {
+                "type": "object",
+                "description": "Write contract for the student REST create-execution-run endpoint.\n\nv1 evaluates the whole test asset for every run; ``test_keys`` and\n``snapshot_id`` are accepted for API compatibility, and ``snapshot_id``\nis forwarded to the execution service as the evaluated snapshot.",
+                "properties": {
+                    "snapshot_id": {
+                        "type": "string",
+                        "maxLength": 32
+                    },
+                    "test_keys": {
+                        "type": "array",
+                        "items": {
+                            "type": "string",
+                            "maxLength": 64
+                        },
+                        "maxItems": 64
+                    }
+                }
+            },
             "ExecutionSpec": {
                 "type": "object",
                 "properties": {
@@ -17014,7 +18574,7 @@
                         "maxLength": 26
                     },
                     "network_mode": {
-                        "$ref": "#/components/schemas/ExecutionSpecNetworkModeEnum"
+                        "$ref": "#/components/schemas/NetworkModeEc7Enum"
                     }
                 },
                 "required": [
@@ -17028,12 +18588,280 @@
                     "timeout_seconds"
                 ]
             },
-            "ExecutionSpecNetworkModeEnum": {
+            "ExecutionSpecSave": {
+                "type": "object",
+                "properties": {
+                    "tests_json": {
+                        "type": "string"
+                    },
+                    "language": {
+                        "$ref": "#/components/schemas/LanguageEnum"
+                    },
+                    "entrypoint": {
+                        "type": "string",
+                        "maxLength": 128,
+                        "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,126}\\.py$"
+                    },
+                    "timeout_seconds": {
+                        "type": "integer",
+                        "maximum": 300,
+                        "minimum": 1
+                    },
+                    "memory_mb": {
+                        "type": "integer",
+                        "minimum": 1
+                    },
+                    "cpu_millicores": {
+                        "type": "integer",
+                        "minimum": 1
+                    },
+                    "comparator": {
+                        "$ref": "#/components/schemas/ComparatorEnum"
+                    },
+                    "network_mode": {
+                        "$ref": "#/components/schemas/NetworkModeEc7Enum"
+                    }
+                },
+                "required": [
+                    "comparator",
+                    "cpu_millicores",
+                    "entrypoint",
+                    "language",
+                    "memory_mb",
+                    "network_mode",
+                    "tests_json",
+                    "timeout_seconds"
+                ]
+            },
+            "ExperimentImageCreate": {
+                "type": "object",
+                "properties": {
+                    "template_version_id": {
+                        "type": "string",
+                        "maxLength": 26
+                    },
+                    "source_type": {
+                        "$ref": "#/components/schemas/ExperimentImageSourceTypeEnum"
+                    },
+                    "registry": {
+                        "type": "string",
+                        "maxLength": 255
+                    },
+                    "repository": {
+                        "type": "string",
+                        "maxLength": 255
+                    },
+                    "requested_tag": {
+                        "type": "string",
+                        "maxLength": 128
+                    },
+                    "build_context_asset_id": {
+                        "type": "string",
+                        "maxLength": 26
+                    },
+                    "build_args": {
+                        "type": "object",
+                        "additionalProperties": {}
+                    }
+                },
+                "required": [
+                    "repository",
+                    "requested_tag",
+                    "source_type",
+                    "template_version_id"
+                ]
+            },
+            "ExperimentImageData": {
+                "type": "object",
+                "properties": {
+                    "public_id": {
+                        "type": "string"
+                    },
+                    "template_version_id": {
+                        "type": "string"
+                    },
+                    "source_type": {
+                        "$ref": "#/components/schemas/ExperimentImageSourceTypeEnum"
+                    },
+                    "registry": {
+                        "type": "string"
+                    },
+                    "repository": {
+                        "type": "string"
+                    },
+                    "requested_tag": {
+                        "type": "string"
+                    },
+                    "resolved_digest": {
+                        "type": "string"
+                    },
+                    "status": {
+                        "$ref": "#/components/schemas/ExperimentImageDataStatusEnum"
+                    },
+                    "scan_status": {
+                        "$ref": "#/components/schemas/ExperimentImageDataScanStatusEnum"
+                    },
+                    "image_asset_id": {
+                        "type": "string",
+                        "nullable": true
+                    },
+                    "build_context_asset_id": {
+                        "type": "string",
+                        "nullable": true
+                    },
+                    "validation_detail": {
+                        "type": "object",
+                        "additionalProperties": {}
+                    },
+                    "build_args": {
+                        "type": "object",
+                        "additionalProperties": {}
+                    },
+                    "logs": {
+                        "type": "string"
+                    },
+                    "error_code": {
+                        "type": "string"
+                    },
+                    "row_version": {
+                        "type": "integer"
+                    }
+                },
+                "required": [
+                    "build_args",
+                    "build_context_asset_id",
+                    "error_code",
+                    "image_asset_id",
+                    "logs",
+                    "public_id",
+                    "registry",
+                    "repository",
+                    "requested_tag",
+                    "resolved_digest",
+                    "row_version",
+                    "scan_status",
+                    "source_type",
+                    "status",
+                    "template_version_id",
+                    "validation_detail"
+                ]
+            },
+            "ExperimentImageDataScanStatusEnum": {
                 "enum": [
-                    "DENY_ALL"
+                    "PENDING",
+                    "CLEAN",
+                    "FAILED"
                 ],
                 "type": "string",
-                "description": "* `DENY_ALL` - DENY_ALL"
+                "description": "* `PENDING` - Pending\n* `CLEAN` - Clean\n* `FAILED` - Failed"
+            },
+            "ExperimentImageDataStatusEnum": {
+                "enum": [
+                    "QUEUED",
+                    "PREPARING",
+                    "PENDING_APPROVAL",
+                    "READY",
+                    "FAILED",
+                    "RETIRED"
+                ],
+                "type": "string",
+                "description": "* `QUEUED` - Queued\n* `PREPARING` - Preparing\n* `PENDING_APPROVAL` - Pending Approval\n* `READY` - Ready\n* `FAILED` - Failed\n* `RETIRED` - Retired"
+            },
+            "ExperimentImageEvent": {
+                "type": "object",
+                "properties": {
+                    "event_type": {
+                        "type": "string"
+                    },
+                    "payload": {
+                        "type": "object",
+                        "additionalProperties": {}
+                    },
+                    "trace_id": {
+                        "type": "string"
+                    },
+                    "created_at": {
+                        "type": "string",
+                        "format": "date-time"
+                    }
+                },
+                "required": [
+                    "created_at",
+                    "event_type",
+                    "payload",
+                    "trace_id"
+                ]
+            },
+            "ExperimentImageEventsResponse": {
+                "type": "object",
+                "properties": {
+                    "data": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/ExperimentImageEvent"
+                        }
+                    },
+                    "meta": {
+                        "type": "object",
+                        "additionalProperties": {}
+                    }
+                },
+                "required": [
+                    "data",
+                    "meta"
+                ]
+            },
+            "ExperimentImageListResponse": {
+                "type": "object",
+                "properties": {
+                    "data": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/ExperimentImageData"
+                        }
+                    },
+                    "meta": {
+                        "type": "object",
+                        "additionalProperties": {}
+                    }
+                },
+                "required": [
+                    "data",
+                    "meta"
+                ]
+            },
+            "ExperimentImagePrepare": {
+                "type": "object",
+                "properties": {
+                    "build_args": {
+                        "type": "object",
+                        "additionalProperties": {}
+                    }
+                }
+            },
+            "ExperimentImageResponse": {
+                "type": "object",
+                "properties": {
+                    "data": {
+                        "$ref": "#/components/schemas/ExperimentImageData"
+                    },
+                    "meta": {
+                        "type": "object",
+                        "additionalProperties": {}
+                    }
+                },
+                "required": [
+                    "data",
+                    "meta"
+                ]
+            },
+            "ExperimentImageSourceTypeEnum": {
+                "enum": [
+                    "BUILD_CONTEXT",
+                    "EXTERNAL_REFERENCE"
+                ],
+                "type": "string",
+                "description": "* `BUILD_CONTEXT` - Build Context\n* `EXTERNAL_REFERENCE` - External Reference"
             },
             "ExtensionData": {
                 "type": "object",
@@ -17331,7 +19159,7 @@
                 "type": "object",
                 "properties": {
                     "decision": {
-                        "$ref": "#/components/schemas/Decision328Enum"
+                        "$ref": "#/components/schemas/CourseEnrollmentDecisionEnum"
                     },
                     "reason": {
                         "type": "string",
@@ -17409,7 +19237,6 @@
                     }
                 },
                 "required": [
-                    "digest",
                     "reason",
                     "registry",
                     "repository",
@@ -17488,8 +19315,7 @@
                     }
                 },
                 "required": [
-                    "decision",
-                    "reason"
+                    "decision"
                 ]
             },
             "ImageListResponse": {
@@ -17510,6 +19336,24 @@
                     "meta"
                 ]
             },
+            "ImageReResolve": {
+                "type": "object",
+                "properties": {
+                    "reason": {
+                        "type": "string",
+                        "maxLength": 500
+                    }
+                }
+            },
+            "ImageResolve": {
+                "type": "object",
+                "properties": {
+                    "reason": {
+                        "type": "string",
+                        "maxLength": 500
+                    }
+                }
+            },
             "ImageResponse": {
                 "type": "object",
                 "properties": {
@@ -17524,6 +19368,16 @@
                     "data",
                     "meta"
                 ]
+            },
+            "ImageScanStatusEnum": {
+                "enum": [
+                    "PENDING",
+                    "CLEAN",
+                    "INFECTED",
+                    "FAILED"
+                ],
+                "type": "string",
+                "description": "* `PENDING` - Pending\n* `CLEAN` - Clean\n* `INFECTED` - Infected\n* `FAILED` - Failed"
             },
             "InstanceData": {
                 "type": "object",
@@ -17645,14 +19499,6 @@
                     "expires_at",
                     "max_uses"
                 ]
-            },
-            "KindAd6Enum": {
-                "enum": [
-                    "REPORT",
-                    "SYSTEM_ARTIFACT"
-                ],
-                "type": "string",
-                "description": "* `REPORT` - REPORT\n* `SYSTEM_ARTIFACT` - SYSTEM_ARTIFACT"
             },
             "KnowledgeBaseWrite": {
                 "type": "object",
@@ -17807,17 +19653,6 @@
                     "body"
                 ]
             },
-            "Mode1c3Enum": {
-                "enum": [
-                    "KNOWLEDGE_QA",
-                    "SOCRATIC_HINT",
-                    "DEBUG_ASSIST",
-                    "REPORT_COACH",
-                    "WORKSPACE_ASSIST"
-                ],
-                "type": "string",
-                "description": "* `KNOWLEDGE_QA` - KNOWLEDGE_QA\n* `SOCRATIC_HINT` - SOCRATIC_HINT\n* `DEBUG_ASSIST` - DEBUG_ASSIST\n* `REPORT_COACH` - REPORT_COACH\n* `WORKSPACE_ASSIST` - WORKSPACE_ASSIST"
-            },
             "ModelRouteWrite": {
                 "type": "object",
                 "properties": {
@@ -17879,24 +19714,12 @@
                     "provider"
                 ]
             },
-            "ModesEnum": {
+            "NetworkModeEc7Enum": {
                 "enum": [
-                    "KNOWLEDGE_QA",
-                    "SOCRATIC_HINT",
-                    "DEBUG_ASSIST",
-                    "REPORT_COACH",
-                    "WORKSPACE_ASSIST"
+                    "DENY_ALL"
                 ],
                 "type": "string",
-                "description": "* `KNOWLEDGE_QA` - KNOWLEDGE_QA\n* `SOCRATIC_HINT` - SOCRATIC_HINT\n* `DEBUG_ASSIST` - DEBUG_ASSIST\n* `REPORT_COACH` - REPORT_COACH\n* `WORKSPACE_ASSIST` - WORKSPACE_ASSIST"
-            },
-            "NetworkMode7ceEnum": {
-                "enum": [
-                    "DENY_ALL",
-                    "ALLOWLIST"
-                ],
-                "type": "string",
-                "description": "* `DENY_ALL` - Deny All\n* `ALLOWLIST` - Allowlist"
+                "description": "* `DENY_ALL` - DENY_ALL"
             },
             "OperationEvent": {
                 "type": "object",
@@ -18050,7 +19873,7 @@
                 "type": "object",
                 "properties": {
                     "scan_status": {
-                        "$ref": "#/components/schemas/ScanStatusEnum"
+                        "$ref": "#/components/schemas/ImageScanStatusEnum"
                     },
                     "scan_report_ref": {
                         "type": "string",
@@ -18102,7 +19925,7 @@
                         "minimum": 0
                     },
                     "status": {
-                        "$ref": "#/components/schemas/StatusB00Enum"
+                        "$ref": "#/components/schemas/ActiveRetiredStatusEnum"
                     }
                 }
             },
@@ -18278,7 +20101,7 @@
                         "maxLength": 120
                     },
                     "runtime_type": {
-                        "$ref": "#/components/schemas/RuntimeType467Enum"
+                        "$ref": "#/components/schemas/RuntimeTypeEnum"
                     },
                     "cpu_millicores": {
                         "type": "integer",
@@ -18288,12 +20111,28 @@
                         "type": "integer",
                         "minimum": 1
                     },
+                    "cpu_request_millicores": {
+                        "type": "integer",
+                        "minimum": 1
+                    },
+                    "cpu_limit_millicores": {
+                        "type": "integer",
+                        "minimum": 1
+                    },
+                    "memory_request_mb": {
+                        "type": "integer",
+                        "minimum": 1
+                    },
+                    "memory_limit_mb": {
+                        "type": "integer",
+                        "minimum": 1
+                    },
                     "disk_gb": {
                         "type": "integer",
                         "minimum": 1
                     },
                     "network_mode": {
-                        "$ref": "#/components/schemas/NetworkMode7ceEnum"
+                        "$ref": "#/components/schemas/RuntimeNetworkModeEnum"
                     },
                     "cost_minor_per_hour": {
                         "type": "integer",
@@ -18366,6 +20205,36 @@
                     }
                 }
             },
+            "PatchedTemplateChapterWrite": {
+                "type": "object",
+                "properties": {
+                    "title": {
+                        "type": "string",
+                        "maxLength": 160
+                    },
+                    "description": {
+                        "type": "string"
+                    },
+                    "learning_objectives": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "sort_order": {
+                        "type": "integer",
+                        "minimum": 1
+                    },
+                    "status": {
+                        "$ref": "#/components/schemas/RubricStatusEnum"
+                    },
+                    "resource_profile_id": {
+                        "type": "string",
+                        "nullable": true,
+                        "maxLength": 26
+                    }
+                }
+            },
             "PatchedTemplatePatch": {
                 "type": "object",
                 "properties": {
@@ -18379,6 +20248,49 @@
                     },
                     "description": {
                         "type": "string"
+                    }
+                }
+            },
+            "PatchedTemplateTaskWrite": {
+                "type": "object",
+                "properties": {
+                    "title": {
+                        "type": "string",
+                        "maxLength": 160
+                    },
+                    "description": {
+                        "type": "string"
+                    },
+                    "instructions": {
+                        "type": "string"
+                    },
+                    "task_type": {
+                        "type": "string",
+                        "maxLength": 64
+                    },
+                    "sort_order": {
+                        "type": "integer",
+                        "minimum": 1
+                    },
+                    "status": {
+                        "$ref": "#/components/schemas/RubricStatusEnum"
+                    },
+                    "execution_spec": {
+                        "type": "object",
+                        "additionalProperties": {}
+                    },
+                    "resource_profile_id": {
+                        "type": "string",
+                        "nullable": true,
+                        "maxLength": 26
+                    },
+                    "submission_policy": {
+                        "type": "object",
+                        "additionalProperties": {}
+                    },
+                    "grading_policy": {
+                        "type": "object",
+                        "additionalProperties": {}
                     }
                 }
             },
@@ -18473,7 +20385,7 @@
                         "minimum": 1
                     },
                     "status": {
-                        "$ref": "#/components/schemas/StatusB00Enum"
+                        "$ref": "#/components/schemas/ActiveRetiredStatusEnum"
                     }
                 }
             },
@@ -18765,7 +20677,7 @@
                     "modes": {
                         "type": "array",
                         "items": {
-                            "$ref": "#/components/schemas/ModesEnum"
+                            "$ref": "#/components/schemas/AgentModeEnum"
                         }
                     },
                     "model_route": {
@@ -18826,7 +20738,7 @@
                         "type": "string"
                     },
                     "status": {
-                        "$ref": "#/components/schemas/Status4f0Enum"
+                        "$ref": "#/components/schemas/WorkflowJobStatusEnum"
                     },
                     "events_channel": {
                         "type": "string"
@@ -18852,7 +20764,7 @@
                         "type": "string"
                     },
                     "status": {
-                        "$ref": "#/components/schemas/Status4f0Enum"
+                        "$ref": "#/components/schemas/WorkflowJobStatusEnum"
                     },
                     "current_stage": {
                         "type": "string"
@@ -18972,6 +20884,50 @@
                 "type": "string",
                 "description": "* `STARTED` - Started\n* `PASSED` - Passed\n* `FAILED` - Failed\n* `SKIPPED` - Skipped"
             },
+            "PublicationChapterSnapshot": {
+                "type": "object",
+                "properties": {
+                    "public_id": {
+                        "type": "string"
+                    },
+                    "source_chapter_id": {
+                        "type": "string"
+                    },
+                    "title": {
+                        "type": "string"
+                    },
+                    "description": {
+                        "type": "string"
+                    },
+                    "learning_objectives": {
+                        "type": "array",
+                        "items": {}
+                    },
+                    "sort_order": {
+                        "type": "integer"
+                    },
+                    "snapshot": {
+                        "type": "object",
+                        "additionalProperties": {}
+                    },
+                    "tasks": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/PublicationTaskSnapshot"
+                        }
+                    }
+                },
+                "required": [
+                    "description",
+                    "learning_objectives",
+                    "public_id",
+                    "snapshot",
+                    "sort_order",
+                    "source_chapter_id",
+                    "tasks",
+                    "title"
+                ]
+            },
             "PublicationData": {
                 "type": "object",
                 "properties": {
@@ -18988,6 +20944,14 @@
                         "type": "string"
                     },
                     "template_spec_digest": {
+                        "type": "string",
+                        "nullable": true
+                    },
+                    "template_digest": {
+                        "type": "string",
+                        "nullable": true
+                    },
+                    "publication_digest": {
                         "type": "string",
                         "nullable": true
                     },
@@ -19070,12 +21034,19 @@
                     },
                     "row_version": {
                         "type": "integer"
+                    },
+                    "chapters": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/PublicationChapterSnapshot"
+                        }
                     }
                 },
                 "required": [
                     "assignment_deadline",
                     "audience_count",
                     "audience_mode",
+                    "chapters",
                     "course_id",
                     "description",
                     "execution_spec",
@@ -19084,6 +21055,7 @@
                     "late_enrollment_policy",
                     "prerequisites",
                     "public_id",
+                    "publication_digest",
                     "publication_error",
                     "report_required",
                     "resource_profile_id",
@@ -19095,6 +21067,7 @@
                     "runtime_adapter_driver",
                     "runtime_adapter_id",
                     "status",
+                    "template_digest",
                     "template_spec_digest",
                     "template_version_id",
                     "title",
@@ -19125,6 +21098,65 @@
                         }
                     }
                 }
+            },
+            "PublicationTaskSnapshot": {
+                "type": "object",
+                "properties": {
+                    "public_id": {
+                        "type": "string"
+                    },
+                    "source_task_id": {
+                        "type": "string"
+                    },
+                    "title": {
+                        "type": "string"
+                    },
+                    "description": {
+                        "type": "string"
+                    },
+                    "instructions": {
+                        "type": "string"
+                    },
+                    "task_type": {
+                        "type": "string"
+                    },
+                    "sort_order": {
+                        "type": "integer"
+                    },
+                    "image_digest": {
+                        "type": "string"
+                    },
+                    "resource_profile_snapshot": {
+                        "type": "object",
+                        "additionalProperties": {}
+                    },
+                    "execution_snapshot": {
+                        "type": "object",
+                        "additionalProperties": {}
+                    },
+                    "submission_policy": {
+                        "type": "object",
+                        "additionalProperties": {}
+                    },
+                    "grading_policy": {
+                        "type": "object",
+                        "additionalProperties": {}
+                    }
+                },
+                "required": [
+                    "description",
+                    "execution_snapshot",
+                    "grading_policy",
+                    "image_digest",
+                    "instructions",
+                    "public_id",
+                    "resource_profile_snapshot",
+                    "sort_order",
+                    "source_task_id",
+                    "submission_policy",
+                    "task_type",
+                    "title"
+                ]
             },
             "PublicationWrite": {
                 "type": "object",
@@ -19186,15 +21218,25 @@
                     "window_start"
                 ]
             },
+            "PurgeLifecycleStatusEnum": {
+                "enum": [
+                    "ACTIVE",
+                    "PURGE_PENDING",
+                    "PURGED"
+                ],
+                "type": "string",
+                "description": "* `ACTIVE` - Active\n* `PURGE_PENDING` - Purge Pending\n* `PURGED` - Purged"
+            },
             "PurposeEnum": {
                 "enum": [
                     "MANUAL",
                     "STARTER",
                     "REPORT_TEMPLATE",
-                    "TESTS"
+                    "TESTS",
+                    "BUILD_CONTEXT"
                 ],
                 "type": "string",
-                "description": "* `MANUAL` - MANUAL\n* `STARTER` - STARTER\n* `REPORT_TEMPLATE` - REPORT_TEMPLATE\n* `TESTS` - TESTS"
+                "description": "* `MANUAL` - MANUAL\n* `STARTER` - STARTER\n* `REPORT_TEMPLATE` - REPORT_TEMPLATE\n* `TESTS` - TESTS\n* `BUILD_CONTEXT` - BUILD_CONTEXT"
             },
             "QualificationData": {
                 "type": "object",
@@ -19536,6 +21578,21 @@
                     "reason"
                 ]
             },
+            "ReorderWrite": {
+                "type": "object",
+                "properties": {
+                    "ids": {
+                        "type": "array",
+                        "items": {
+                            "type": "string",
+                            "maxLength": 26
+                        }
+                    }
+                },
+                "required": [
+                    "ids"
+                ]
+            },
             "ReportAttachmentCreate": {
                 "type": "object",
                 "properties": {
@@ -19582,10 +21639,10 @@
                         "type": "string"
                     },
                     "scan_status": {
-                        "$ref": "#/components/schemas/ScanStatusEnum"
+                        "$ref": "#/components/schemas/ImageScanStatusEnum"
                     },
                     "status": {
-                        "$ref": "#/components/schemas/StatusFdcEnum"
+                        "$ref": "#/components/schemas/PurgeLifecycleStatusEnum"
                     },
                     "failure_code": {
                         "type": "string"
@@ -19776,7 +21833,7 @@
                 "type": "object",
                 "properties": {
                     "kind": {
-                        "$ref": "#/components/schemas/KindAd6Enum"
+                        "$ref": "#/components/schemas/ArtifactKindEnum"
                     },
                     "task_id": {
                         "type": "string"
@@ -19819,7 +21876,7 @@
                         "type": "string"
                     },
                     "scan_status": {
-                        "$ref": "#/components/schemas/ScanStatusEnum"
+                        "$ref": "#/components/schemas/ImageScanStatusEnum"
                     },
                     "failure_code": {
                         "type": "string"
@@ -19857,14 +21914,6 @@
                     "counts",
                     "items"
                 ]
-            },
-            "ReportStrategyEnum": {
-                "enum": [
-                    "REPORT",
-                    "COMPLETE"
-                ],
-                "type": "string",
-                "description": "* `REPORT` - REPORT\n* `COMPLETE` - COMPLETE"
             },
             "ReportVersionAttachmentData": {
                 "type": "object",
@@ -20047,7 +22096,7 @@
                         "maxLength": 120
                     },
                     "runtime_type": {
-                        "$ref": "#/components/schemas/RuntimeType467Enum"
+                        "$ref": "#/components/schemas/RuntimeTypeEnum"
                     },
                     "cpu_millicores": {
                         "type": "integer",
@@ -20057,12 +22106,28 @@
                         "type": "integer",
                         "minimum": 1
                     },
+                    "cpu_request_millicores": {
+                        "type": "integer",
+                        "minimum": 1
+                    },
+                    "cpu_limit_millicores": {
+                        "type": "integer",
+                        "minimum": 1
+                    },
+                    "memory_request_mb": {
+                        "type": "integer",
+                        "minimum": 1
+                    },
+                    "memory_limit_mb": {
+                        "type": "integer",
+                        "minimum": 1
+                    },
                     "disk_gb": {
                         "type": "integer",
                         "minimum": 1
                     },
                     "network_mode": {
-                        "$ref": "#/components/schemas/NetworkMode7ceEnum"
+                        "$ref": "#/components/schemas/RuntimeNetworkModeEnum"
                     },
                     "cost_minor_per_hour": {
                         "type": "integer",
@@ -20115,6 +22180,18 @@
                     "memory_mb": {
                         "type": "integer"
                     },
+                    "cpu_request_millicores": {
+                        "type": "integer"
+                    },
+                    "cpu_limit_millicores": {
+                        "type": "integer"
+                    },
+                    "memory_request_mb": {
+                        "type": "integer"
+                    },
+                    "memory_limit_mb": {
+                        "type": "integer"
+                    },
                     "disk_gb": {
                         "type": "integer"
                     },
@@ -20134,10 +22211,14 @@
                 "required": [
                     "code",
                     "cost_minor_per_hour",
+                    "cpu_limit_millicores",
                     "cpu_millicores",
+                    "cpu_request_millicores",
                     "currency_code",
                     "disk_gb",
+                    "memory_limit_mb",
                     "memory_mb",
+                    "memory_request_mb",
                     "name",
                     "network_mode",
                     "public_id",
@@ -20244,6 +22325,14 @@
                     "meta"
                 ]
             },
+            "ReviewDecisionEnum": {
+                "enum": [
+                    "APPROVE",
+                    "REJECT"
+                ],
+                "type": "string",
+                "description": "* `APPROVE` - Approve\n* `REJECT` - Reject"
+            },
             "ReviewDecisionResponse": {
                 "type": "object",
                 "properties": {
@@ -20264,7 +22353,7 @@
                 "type": "object",
                 "properties": {
                     "decision": {
-                        "$ref": "#/components/schemas/DecisionFb4Enum"
+                        "$ref": "#/components/schemas/ReviewDecisionEnum"
                     },
                     "score": {
                         "type": "string",
@@ -20306,7 +22395,7 @@
                         "type": "integer"
                     },
                     "status": {
-                        "$ref": "#/components/schemas/Status7feEnum"
+                        "$ref": "#/components/schemas/ReviewWorkflowStatusEnum"
                     },
                     "target_kind": {
                         "type": "string"
@@ -20416,7 +22505,7 @@
                         "type": "integer"
                     },
                     "status": {
-                        "$ref": "#/components/schemas/Status7feEnum"
+                        "$ref": "#/components/schemas/ReviewWorkflowStatusEnum"
                     },
                     "target_kind": {
                         "type": "string"
@@ -20570,7 +22659,7 @@
                         "type": "integer"
                     },
                     "status": {
-                        "$ref": "#/components/schemas/Status7feEnum"
+                        "$ref": "#/components/schemas/ReviewWorkflowStatusEnum"
                     },
                     "scores": {
                         "allOf": [
@@ -20603,6 +22692,25 @@
                     "scores",
                     "status"
                 ]
+            },
+            "ReviewTargetTypeEnum": {
+                "enum": [
+                    "REPORT_TEXT",
+                    "ATTACHMENT",
+                    "WORKSPACE_SNAPSHOT",
+                    "SYSTEM_ARTIFACT"
+                ],
+                "type": "string",
+                "description": "* `REPORT_TEXT` - Report Text\n* `ATTACHMENT` - Attachment\n* `WORKSPACE_SNAPSHOT` - Workspace Snapshot\n* `SYSTEM_ARTIFACT` - System Artifact"
+            },
+            "ReviewWorkflowStatusEnum": {
+                "enum": [
+                    "PENDING",
+                    "IN_REVIEW",
+                    "DECIDED"
+                ],
+                "type": "string",
+                "description": "* `PENDING` - Pending\n* `IN_REVIEW` - In Review\n* `DECIDED` - Decided"
             },
             "RiskEnum": {
                 "enum": [
@@ -20703,7 +22811,7 @@
                         "type": "string"
                     },
                     "status": {
-                        "$ref": "#/components/schemas/Status9b1Enum"
+                        "$ref": "#/components/schemas/RubricStatusEnum"
                     },
                     "current_version_id": {
                         "type": "string",
@@ -20759,6 +22867,14 @@
                     "meta"
                 ]
             },
+            "RubricStatusEnum": {
+                "enum": [
+                    "DRAFT",
+                    "PUBLISHED"
+                ],
+                "type": "string",
+                "description": "* `DRAFT` - Draft\n* `PUBLISHED` - Published"
+            },
             "RubricVersionCreate": {
                 "type": "object",
                 "properties": {
@@ -20811,7 +22927,7 @@
                         "pattern": "^-?\\d{0,7}(?:\\.\\d{0,2})?$"
                     },
                     "status": {
-                        "$ref": "#/components/schemas/Status9b1Enum"
+                        "$ref": "#/components/schemas/RubricStatusEnum"
                     },
                     "published_at": {
                         "type": "string",
@@ -20903,7 +23019,7 @@
                         "maxLength": 120
                     },
                     "runtime_type": {
-                        "$ref": "#/components/schemas/RuntimeType467Enum"
+                        "$ref": "#/components/schemas/RuntimeTypeEnum"
                     },
                     "driver": {
                         "$ref": "#/components/schemas/DriverEnum"
@@ -21035,7 +23151,15 @@
                 "type": "string",
                 "description": "* `ENABLED` - Enabled\n* `DISABLED` - Disabled"
             },
-            "RuntimeType467Enum": {
+            "RuntimeNetworkModeEnum": {
+                "enum": [
+                    "DENY_ALL",
+                    "ALLOWLIST"
+                ],
+                "type": "string",
+                "description": "* `DENY_ALL` - Deny All\n* `ALLOWLIST` - Allowlist"
+            },
+            "RuntimeTypeEnum": {
                 "enum": [
                     "CONTAINER",
                     "VM"
@@ -21043,21 +23167,55 @@
                 "type": "string",
                 "description": "* `CONTAINER` - Container\n* `VM` - Vm"
             },
-            "ScanStatusEnum": {
-                "enum": [
-                    "PENDING",
-                    "CLEAN",
-                    "INFECTED",
-                    "FAILED"
-                ],
-                "type": "string",
-                "description": "* `PENDING` - Pending\n* `CLEAN` - Clean\n* `INFECTED` - Infected\n* `FAILED` - Failed"
+            "SessionStepUpData": {
+                "type": "object",
+                "properties": {
+                    "recent": {
+                        "type": "boolean"
+                    },
+                    "authenticated_at": {
+                        "type": "string",
+                        "format": "date-time"
+                    }
+                },
+                "required": [
+                    "authenticated_at",
+                    "recent"
+                ]
+            },
+            "SessionStepUpInput": {
+                "type": "object",
+                "properties": {
+                    "password": {
+                        "type": "string",
+                        "writeOnly": true,
+                        "maxLength": 256
+                    }
+                },
+                "required": [
+                    "password"
+                ]
+            },
+            "SessionStepUpResponse": {
+                "type": "object",
+                "properties": {
+                    "data": {
+                        "$ref": "#/components/schemas/SessionStepUpData"
+                    },
+                    "meta": {
+                        "$ref": "#/components/schemas/AccountTraceMeta"
+                    }
+                },
+                "required": [
+                    "data",
+                    "meta"
+                ]
             },
             "SessionWrite": {
                 "type": "object",
                 "properties": {
                     "mode": {
-                        "$ref": "#/components/schemas/Mode1c3Enum"
+                        "$ref": "#/components/schemas/AgentModeEnum"
                     }
                 },
                 "required": [
@@ -21258,16 +23416,6 @@
                     "size_bytes"
                 ]
             },
-            "SourceTypeEnum": {
-                "enum": [
-                    "COURSE_MATERIAL",
-                    "LAB_MANUAL",
-                    "TEACHER_FAQ",
-                    "STATIC"
-                ],
-                "type": "string",
-                "description": "* `COURSE_MATERIAL` - COURSE_MATERIAL\n* `LAB_MANUAL` - LAB_MANUAL\n* `TEACHER_FAQ` - TEACHER_FAQ\n* `STATIC` - STATIC"
-            },
             "SourceVersionWrite": {
                 "type": "object",
                 "properties": {
@@ -21280,7 +23428,7 @@
                 "type": "object",
                 "properties": {
                     "source_type": {
-                        "$ref": "#/components/schemas/SourceTypeEnum"
+                        "$ref": "#/components/schemas/SourceWriteSourceTypeEnum"
                     },
                     "title": {
                         "type": "string",
@@ -21295,6 +23443,16 @@
                     "source_type",
                     "title"
                 ]
+            },
+            "SourceWriteSourceTypeEnum": {
+                "enum": [
+                    "COURSE_MATERIAL",
+                    "LAB_MANUAL",
+                    "TEACHER_FAQ",
+                    "STATIC"
+                ],
+                "type": "string",
+                "description": "* `COURSE_MATERIAL` - COURSE_MATERIAL\n* `LAB_MANUAL` - LAB_MANUAL\n* `TEACHER_FAQ` - TEACHER_FAQ\n* `STATIC` - STATIC"
             },
             "StaffCreate": {
                 "type": "object",
@@ -21395,48 +23553,6 @@
                 "type": "string",
                 "description": "* `QUOTA_CHECK` - Quota Check\n* `IMAGE_PREPARE` - Image Prepare\n* `CREATE` - Create\n* `NETWORK_ATTACH` - Network Attach\n* `BOOT_PROBE` - Boot Probe\n* `WORKSPACE_READY` - Workspace Ready"
             },
-            "Status4f0Enum": {
-                "enum": [
-                    "QUEUED",
-                    "RUNNING",
-                    "RETRY",
-                    "PASSED",
-                    "FAILED",
-                    "CANCELLED"
-                ],
-                "type": "string",
-                "description": "* `QUEUED` - Queued\n* `RUNNING` - Running\n* `RETRY` - Retry\n* `PASSED` - Passed\n* `FAILED` - Failed\n* `CANCELLED` - Cancelled"
-            },
-            "Status7feEnum": {
-                "enum": [
-                    "PENDING",
-                    "IN_REVIEW",
-                    "DECIDED"
-                ],
-                "type": "string",
-                "description": "* `PENDING` - Pending\n* `IN_REVIEW` - In Review\n* `DECIDED` - Decided"
-            },
-            "Status9b1Enum": {
-                "enum": [
-                    "DRAFT",
-                    "PUBLISHED"
-                ],
-                "type": "string",
-                "description": "* `DRAFT` - Draft\n* `PUBLISHED` - Published"
-            },
-            "StatusA0dEnum": {
-                "enum": [
-                    "QUEUED",
-                    "RUNNING",
-                    "PASSED",
-                    "FAILED",
-                    "TIMEOUT",
-                    "RESOURCE_EXCEEDED",
-                    "REJECTED"
-                ],
-                "type": "string",
-                "description": "* `QUEUED` - Queued\n* `RUNNING` - Running\n* `PASSED` - Passed\n* `FAILED` - Failed\n* `TIMEOUT` - Timeout\n* `RESOURCE_EXCEEDED` - Resource Exceeded\n* `REJECTED` - Rejected"
-            },
             "StatusAction": {
                 "type": "object",
                 "properties": {
@@ -21453,44 +23569,11 @@
                     "status"
                 ]
             },
-            "StatusB00Enum": {
-                "enum": [
-                    "ACTIVE",
-                    "RETIRED"
-                ],
-                "type": "string",
-                "description": "* `ACTIVE` - ACTIVE\n* `RETIRED` - RETIRED"
-            },
-            "StatusE1dEnum": {
-                "enum": [
-                    "ACTIVE",
-                    "REVOKED"
-                ],
-                "type": "string",
-                "description": "* `ACTIVE` - ACTIVE\n* `REVOKED` - REVOKED"
-            },
-            "StatusFdcEnum": {
-                "enum": [
-                    "ACTIVE",
-                    "PURGE_PENDING",
-                    "PURGED"
-                ],
-                "type": "string",
-                "description": "* `ACTIVE` - Active\n* `PURGE_PENDING` - Purge Pending\n* `PURGED` - Purged"
-            },
-            "StrategyEnum": {
-                "enum": [
-                    "REPORT",
-                    "COMPLETE"
-                ],
-                "type": "string",
-                "description": "* `REPORT` - REPORT\n* `COMPLETE` - COMPLETE"
-            },
             "SubmissionData": {
                 "type": "object",
                 "properties": {
                     "kind": {
-                        "$ref": "#/components/schemas/KindAd6Enum"
+                        "$ref": "#/components/schemas/ArtifactKindEnum"
                     },
                     "version": {
                         "$ref": "#/components/schemas/ReportVersionData"
@@ -21541,16 +23624,6 @@
                 ],
                 "type": "string",
                 "description": "* `WORKSPACE_SNAPSHOT` - Workspace Snapshot"
-            },
-            "TargetTypeBeeEnum": {
-                "enum": [
-                    "REPORT_TEXT",
-                    "ATTACHMENT",
-                    "WORKSPACE_SNAPSHOT",
-                    "SYSTEM_ARTIFACT"
-                ],
-                "type": "string",
-                "description": "* `REPORT_TEXT` - Report Text\n* `ATTACHMENT` - Attachment\n* `WORKSPACE_SNAPSHOT` - Workspace Snapshot\n* `SYSTEM_ARTIFACT` - System Artifact"
             },
             "TaskData": {
                 "type": "object",
@@ -21726,7 +23799,7 @@
                 "type": "object",
                 "properties": {
                     "decision": {
-                        "$ref": "#/components/schemas/DecisionFb4Enum"
+                        "$ref": "#/components/schemas/ReviewDecisionEnum"
                     },
                     "reason": {
                         "type": "string",
@@ -21830,10 +23903,10 @@
                         "type": "string"
                     },
                     "scan_status": {
-                        "$ref": "#/components/schemas/ScanStatusEnum"
+                        "$ref": "#/components/schemas/ImageScanStatusEnum"
                     },
                     "status": {
-                        "$ref": "#/components/schemas/StatusFdcEnum"
+                        "$ref": "#/components/schemas/PurgeLifecycleStatusEnum"
                     },
                     "failure_code": {
                         "type": "string"
@@ -21907,6 +23980,123 @@
                     "data",
                     "meta"
                 ]
+            },
+            "TemplateChapterData": {
+                "type": "object",
+                "properties": {
+                    "public_id": {
+                        "type": "string"
+                    },
+                    "title": {
+                        "type": "string"
+                    },
+                    "description": {
+                        "type": "string"
+                    },
+                    "learning_objectives": {
+                        "type": "array",
+                        "items": {}
+                    },
+                    "sort_order": {
+                        "type": "integer"
+                    },
+                    "status": {
+                        "type": "string"
+                    },
+                    "resource_profile_id": {
+                        "type": "string",
+                        "nullable": true
+                    },
+                    "effective_resource_profile_id": {
+                        "type": "string"
+                    },
+                    "row_version": {
+                        "type": "integer"
+                    },
+                    "tasks": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/TemplateTaskData"
+                        }
+                    }
+                },
+                "required": [
+                    "description",
+                    "effective_resource_profile_id",
+                    "learning_objectives",
+                    "public_id",
+                    "resource_profile_id",
+                    "row_version",
+                    "sort_order",
+                    "status",
+                    "tasks",
+                    "title"
+                ]
+            },
+            "TemplateChapterListResponse": {
+                "type": "object",
+                "properties": {
+                    "data": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/TemplateChapterData"
+                        }
+                    },
+                    "meta": {
+                        "type": "object",
+                        "additionalProperties": {}
+                    }
+                },
+                "required": [
+                    "data",
+                    "meta"
+                ]
+            },
+            "TemplateChapterResponse": {
+                "type": "object",
+                "properties": {
+                    "data": {
+                        "$ref": "#/components/schemas/TemplateChapterData"
+                    },
+                    "meta": {
+                        "type": "object",
+                        "additionalProperties": {}
+                    }
+                },
+                "required": [
+                    "data",
+                    "meta"
+                ]
+            },
+            "TemplateChapterWrite": {
+                "type": "object",
+                "properties": {
+                    "title": {
+                        "type": "string",
+                        "maxLength": 160
+                    },
+                    "description": {
+                        "type": "string"
+                    },
+                    "learning_objectives": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "sort_order": {
+                        "type": "integer",
+                        "minimum": 1
+                    },
+                    "status": {
+                        "$ref": "#/components/schemas/RubricStatusEnum"
+                    },
+                    "resource_profile_id": {
+                        "type": "string",
+                        "nullable": true,
+                        "maxLength": 26
+                    }
+                }
             },
             "TemplateData": {
                 "type": "object",
@@ -22051,6 +24241,147 @@
                     "meta"
                 ]
             },
+            "TemplateTaskData": {
+                "type": "object",
+                "properties": {
+                    "public_id": {
+                        "type": "string"
+                    },
+                    "title": {
+                        "type": "string"
+                    },
+                    "description": {
+                        "type": "string"
+                    },
+                    "instructions": {
+                        "type": "string"
+                    },
+                    "task_type": {
+                        "type": "string"
+                    },
+                    "sort_order": {
+                        "type": "integer"
+                    },
+                    "status": {
+                        "type": "string"
+                    },
+                    "execution_spec": {
+                        "type": "object",
+                        "additionalProperties": {}
+                    },
+                    "resource_profile_id": {
+                        "type": "string",
+                        "nullable": true
+                    },
+                    "effective_resource_profile_id": {
+                        "type": "string"
+                    },
+                    "submission_policy": {
+                        "type": "object",
+                        "additionalProperties": {}
+                    },
+                    "grading_policy": {
+                        "type": "object",
+                        "additionalProperties": {}
+                    },
+                    "row_version": {
+                        "type": "integer"
+                    }
+                },
+                "required": [
+                    "description",
+                    "effective_resource_profile_id",
+                    "execution_spec",
+                    "grading_policy",
+                    "instructions",
+                    "public_id",
+                    "resource_profile_id",
+                    "row_version",
+                    "sort_order",
+                    "status",
+                    "submission_policy",
+                    "task_type",
+                    "title"
+                ]
+            },
+            "TemplateTaskListResponse": {
+                "type": "object",
+                "properties": {
+                    "data": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/TemplateTaskData"
+                        }
+                    },
+                    "meta": {
+                        "type": "object",
+                        "additionalProperties": {}
+                    }
+                },
+                "required": [
+                    "data",
+                    "meta"
+                ]
+            },
+            "TemplateTaskResponse": {
+                "type": "object",
+                "properties": {
+                    "data": {
+                        "$ref": "#/components/schemas/TemplateTaskData"
+                    },
+                    "meta": {
+                        "type": "object",
+                        "additionalProperties": {}
+                    }
+                },
+                "required": [
+                    "data",
+                    "meta"
+                ]
+            },
+            "TemplateTaskWrite": {
+                "type": "object",
+                "properties": {
+                    "title": {
+                        "type": "string",
+                        "maxLength": 160
+                    },
+                    "description": {
+                        "type": "string"
+                    },
+                    "instructions": {
+                        "type": "string"
+                    },
+                    "task_type": {
+                        "type": "string",
+                        "maxLength": 64
+                    },
+                    "sort_order": {
+                        "type": "integer",
+                        "minimum": 1
+                    },
+                    "status": {
+                        "$ref": "#/components/schemas/RubricStatusEnum"
+                    },
+                    "execution_spec": {
+                        "type": "object",
+                        "additionalProperties": {}
+                    },
+                    "resource_profile_id": {
+                        "type": "string",
+                        "nullable": true,
+                        "maxLength": 26
+                    },
+                    "submission_policy": {
+                        "type": "object",
+                        "additionalProperties": {}
+                    },
+                    "grading_policy": {
+                        "type": "object",
+                        "additionalProperties": {}
+                    }
+                }
+            },
             "TemplateVersionData": {
                 "type": "object",
                 "properties": {
@@ -22142,9 +24473,16 @@
                         "items": {
                             "$ref": "#/components/schemas/AutoCheckRuleData"
                         }
+                    },
+                    "chapters": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/TemplateChapterData"
+                        }
                     }
                 },
                 "required": [
+                    "chapters",
                     "dependencies",
                     "execution_spec",
                     "image_digest",
@@ -22619,6 +24957,15 @@
                     "meta"
                 ]
             },
+            "UserRoleEnum": {
+                "enum": [
+                    "TEACHER",
+                    "STUDENT",
+                    "PLATFORM_ADMIN"
+                ],
+                "type": "string",
+                "description": "* `TEACHER` - TEACHER\n* `STUDENT` - STUDENT\n* `PLATFORM_ADMIN` - PLATFORM_ADMIN"
+            },
             "VerificationData": {
                 "type": "object",
                 "properties": {
@@ -22745,6 +25092,33 @@
                 "required": [
                     "endpoint_url",
                     "name"
+                ]
+            },
+            "WeeklyStudyData": {
+                "type": "object",
+                "properties": {
+                    "minutes_by_day": {
+                        "type": "array",
+                        "items": {
+                            "type": "integer",
+                            "minimum": 0
+                        }
+                    },
+                    "total_minutes": {
+                        "type": "integer"
+                    },
+                    "last_week_minutes": {
+                        "type": "integer"
+                    },
+                    "has_records": {
+                        "type": "boolean"
+                    }
+                },
+                "required": [
+                    "has_records",
+                    "last_week_minutes",
+                    "minutes_by_day",
+                    "total_minutes"
                 ]
             },
             "Workbench": {
@@ -22945,10 +25319,10 @@
                         "type": "boolean"
                     },
                     "kind": {
-                        "$ref": "#/components/schemas/KindAd6Enum"
+                        "$ref": "#/components/schemas/ArtifactKindEnum"
                     },
                     "strategy": {
-                        "$ref": "#/components/schemas/StrategyEnum"
+                        "$ref": "#/components/schemas/AgentReportStrategyEnum"
                     },
                     "can_submit": {
                         "type": "boolean"
@@ -23007,7 +25381,7 @@
                         "type": "boolean"
                     },
                     "report_strategy": {
-                        "$ref": "#/components/schemas/ReportStrategyEnum"
+                        "$ref": "#/components/schemas/AgentReportStrategyEnum"
                     },
                     "allowed_actions": {
                         "type": "array",
@@ -23180,6 +25554,18 @@
                 "type": "string",
                 "description": "* `LEGACY_DRAFT` - LEGACY_DRAFT\n* `RUNTIME_IDE` - RUNTIME_IDE\n* `READ_ONLY` - READ_ONLY"
             },
+            "WorkflowJobStatusEnum": {
+                "enum": [
+                    "QUEUED",
+                    "RUNNING",
+                    "RETRY",
+                    "PASSED",
+                    "FAILED",
+                    "CANCELLED"
+                ],
+                "type": "string",
+                "description": "* `QUEUED` - Queued\n* `RUNNING` - Running\n* `RETRY` - Retry\n* `PASSED` - Passed\n* `FAILED` - Failed\n* `CANCELLED` - Cancelled"
+            },
             "WorkspaceCheckpoint": {
                 "type": "object",
                 "properties": {
@@ -23285,7 +25671,7 @@
                         "nullable": true
                     },
                     "status": {
-                        "$ref": "#/components/schemas/StatusA0dEnum"
+                        "$ref": "#/components/schemas/AutoCheckStatusEnum"
                     },
                     "error_code": {
                         "type": "string"

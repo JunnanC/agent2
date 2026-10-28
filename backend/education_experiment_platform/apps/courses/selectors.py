@@ -6,7 +6,45 @@ from apps.core.errors import ResourceNotFound
 from apps.core.pagination import PageSpec
 
 from .errors import CourseGrantRequired
-from .models import Course, CourseStaff, CourseStaffGrant, Enrollment
+from .models import AcademicTerm, Course, CourseStaff, CourseStaffGrant, Enrollment
+
+
+def term_for_ref(term_ref: str) -> AcademicTerm:
+    queryset = (
+        AcademicTerm.objects.filter(is_current=True)
+        if term_ref == "current"
+        else AcademicTerm.objects.filter(public_id=term_ref)
+    )
+    try:
+        return queryset.get()
+    except AcademicTerm.DoesNotExist as exc:
+        raise ResourceNotFound() from exc
+
+
+def teacher_courses_for_term(actor: User, term_ref: str) -> QuerySet[Course]:
+    term = term_for_ref(term_ref)
+    return (
+        Course.objects.select_related("term", "owner")
+        .filter(term=term, staff__user=actor, staff__status=CourseStaff.Status.ACTIVE)
+        .exclude(status__in=(Course.Status.CLOSED, Course.Status.ARCHIVED))
+        .distinct()
+        .order_by("code", "id")
+    )
+
+
+def student_courses_for_term(actor: User, term_ref: str) -> QuerySet[Course]:
+    term = term_for_ref(term_ref)
+    return (
+        Course.objects.select_related("term", "owner")
+        .filter(
+            term=term,
+            enrollments__student=actor,
+            enrollments__status=Enrollment.Status.ACTIVE,
+        )
+        .exclude(status__in=(Course.Status.CLOSED, Course.Status.ARCHIVED))
+        .distinct()
+        .order_by("code", "id")
+    )
 
 
 def owned_active_course_refs(user: User) -> list[str]:

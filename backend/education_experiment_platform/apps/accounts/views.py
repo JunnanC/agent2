@@ -4,6 +4,7 @@ from typing import Any
 from django.conf import settings
 from django.http import HttpRequest
 from django.middleware.csrf import get_token
+from django.utils import timezone
 from drf_spectacular.utils import OpenApiResponse, extend_schema
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -52,6 +53,8 @@ from .serializers import (
     QualificationGrantSerializer,
     QualificationListResponseSerializer,
     QualificationResponseSerializer,
+    SessionStepUpInputSerializer,
+    SessionStepUpResponseSerializer,
     TeacherQualificationUpdateSerializer,
     UserCreateSerializer,
     UserListResponseSerializer,
@@ -79,6 +82,7 @@ from .services import (
     set_account_status,
     update_identity_verification,
     update_own_profile,
+    verify_session_password,
 )
 
 
@@ -261,6 +265,68 @@ class LogoutView(APIView):
         enforce_csrf(request)
         request.session.flush()
         return Response(status=204)
+
+
+class SessionStepUpView(APIView):
+    permission_classes = [IsAuthenticatedAccount]
+
+    @extend_schema(
+        request=SessionStepUpInputSerializer,
+        responses={200: SessionStepUpResponseSerializer},
+        tags=["auth"],
+        extensions={"x-portals": ["USER", "TEACHING", "PLATFORM"]},
+    )
+    def post(self, request: HttpRequest) -> Response:
+        enforce_csrf(request)
+        serializer = SessionStepUpInputSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user: User = request.user  # type: ignore[assignment]
+        portal = str(request.portal)
+        ip_address = client_ip(request)
+        rate_key = check_login_rate_limit(
+            identifier=user.username,
+            ip_address=ip_address,
+            portal=portal,
+        )
+        if not verify_session_password(user, serializer.validated_data["password"]):
+            append_audit(
+                actor_ref=user.public_id,
+                actor_portal=portal,
+                actor_context={},
+                action="auth.session.step_up",
+                target_type="account",
+                target_ref=user.public_id,
+                result="DENIED",
+                error_code="INVALID_CREDENTIALS",
+                client_ip_hash=hash_client_ip(ip_address, salt=settings.AUDIT_IP_HASH_SALT),
+                user_agent_summary=request.headers.get("User-Agent", ""),
+                trace_id=str(request.trace_id),
+            )
+            PORTAL_LOGIN_TOTAL.labels(portal=portal, result="denied").inc()
+            raise InvalidCredentials()
+        refresh_current_session_security(request, user=user)
+        clear_login_rate_limit(rate_key)
+        append_audit(
+            actor_ref=user.public_id,
+            actor_portal=portal,
+            actor_context={},
+            action="auth.session.step_up",
+            target_type="account",
+            target_ref=user.public_id,
+            result="SUCCEEDED",
+            client_ip_hash=hash_client_ip(ip_address, salt=settings.AUDIT_IP_HASH_SALT),
+            user_agent_summary=request.headers.get("User-Agent", ""),
+            trace_id=str(request.trace_id),
+        )
+        PORTAL_LOGIN_TOTAL.labels(portal=portal, result="succeeded").inc()
+        return _response(
+            request,
+            {
+                "recent": True,
+                "authenticated_at": timezone.now(),
+            },
+            etag=etag_for_version(user.row_version),
+        )
 
 
 class LogoutAllView(APIView):

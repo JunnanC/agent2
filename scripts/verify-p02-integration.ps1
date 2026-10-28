@@ -16,7 +16,7 @@ $previousEntryPort = $env:ENTRY_PORT
 $previousFluentdHostPort = $env:FLUENTD_HOST_PORT
 $previousMinioConsolePort = $env:MINIO_CONSOLE_PORT
 $previousPrometheusPort = $env:PROMETHEUS_PORT
-$previousUserWebUrl = $env:USER_WEB_URL
+$previousUserWebUrl = $env:STUDENT_WEB_URL
 $previousTeacherWebUrl = $env:TEACHER_WEB_URL
 $previousAdminWebUrl = $env:ADMIN_WEB_URL
 $env:APP_NETWORK_SUBNET = '172.30.202.0/24'
@@ -24,7 +24,7 @@ $env:ENTRY_PORT = '18082'
 $env:FLUENTD_HOST_PORT = '24225'
 $env:MINIO_CONSOLE_PORT = '19001'
 $env:PROMETHEUS_PORT = '19090'
-$env:USER_WEB_URL = "http://user.localhost:$($env:ENTRY_PORT)"
+$env:STUDENT_WEB_URL = "http://student.localhost:$($env:ENTRY_PORT)"
 $env:TEACHER_WEB_URL = "http://teacher.localhost:$($env:ENTRY_PORT)"
 $env:ADMIN_WEB_URL = "http://admin.localhost:$($env:ENTRY_PORT)"
 
@@ -77,7 +77,7 @@ mysql --host=127.0.0.1 --user="$MYSQL_APP_USER" "$MYSQL_DATABASE" --execute="UPD
         $env:PLAYWRIGHT_CHANNEL = 'chrome'
         $env:P02_E2E_PASSWORD = $bootstrapPassword
         $npm = (Get-Command npm.cmd -ErrorAction Stop).Source
-        & $npm run test:e2e:user
+        & $npm run test:e2e:student
         if ($LASTEXITCODE -ne 0) { throw 'User portal E2E failed.' }
         & $npm run test:e2e:teacher
         if ($LASTEXITCODE -ne 0) { throw 'Teacher portal E2E failed.' }
@@ -97,7 +97,7 @@ mysql --host=127.0.0.1 --user="$MYSQL_APP_USER" "$MYSQL_DATABASE" --execute="UPD
         @{ Name = 'FLUENTD_HOST_PORT'; Value = $previousFluentdHostPort },
         @{ Name = 'MINIO_CONSOLE_PORT'; Value = $previousMinioConsolePort },
         @{ Name = 'PROMETHEUS_PORT'; Value = $previousPrometheusPort },
-        @{ Name = 'USER_WEB_URL'; Value = $previousUserWebUrl },
+        @{ Name = 'STUDENT_WEB_URL'; Value = $previousUserWebUrl },
         @{ Name = 'TEACHER_WEB_URL'; Value = $previousTeacherWebUrl },
         @{ Name = 'ADMIN_WEB_URL'; Value = $previousAdminWebUrl }
     )) {

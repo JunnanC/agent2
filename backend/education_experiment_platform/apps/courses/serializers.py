@@ -83,6 +83,28 @@ class CourseTraceMetaSerializer(serializers.Serializer):
     trace_id = serializers.CharField()
 
 
+class ContextCourseDataSerializer(serializers.Serializer):
+    id = serializers.CharField()
+    code = serializers.CharField()
+    title = serializers.CharField()
+    status = serializers.CharField()
+    staff_role = serializers.CharField(required=False)
+    enrollment_role = serializers.CharField(required=False)
+
+
+class ContextTermDataSerializer(serializers.Serializer):
+    id = serializers.CharField()
+    code = serializers.CharField()
+    name = serializers.CharField()
+    status = serializers.CharField()
+
+
+class ContextDataSerializer(serializers.Serializer):
+    user_role = serializers.ChoiceField(choices=("TEACHER", "STUDENT", "PLATFORM_ADMIN"))
+    current_term = ContextTermDataSerializer()
+    courses = ContextCourseDataSerializer(many=True)
+
+
 class CoursePageMetaSerializer(CourseTraceMetaSerializer):
     page = serializers.IntegerField()
     page_size = serializers.IntegerField()
@@ -169,6 +191,11 @@ class CheckDataSerializer(serializers.Serializer):
 
 class CourseResponseSerializer(serializers.Serializer):
     data = CourseDataSerializer()
+    meta = CourseTraceMetaSerializer()
+
+
+class ContextResponseSerializer(serializers.Serializer):
+    data = ContextDataSerializer()
     meta = CourseTraceMetaSerializer()
 
 

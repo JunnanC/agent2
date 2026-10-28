@@ -1,12 +1,20 @@
 from datetime import timedelta
+from types import SimpleNamespace
+from unittest.mock import patch
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.utils import timezone
 
 from apps.core.errors import RowVersionConflict
+from apps.provisioning.adapters import fake_runtime, reset_fake_runtime
 
-from ..errors import GovernanceStateConflict, ImageNotApproved, QuotaExceeded
-from ..models import ImageAsset, QuotaReservation, ResourceProfile
+from ..errors import (
+    GovernanceStateConflict,
+    GovernanceValidationError,
+    ImageNotApproved,
+    QuotaExceeded,
+)
+from ..models import ImageAsset, QuotaReservation, ResourceProfile, RuntimeAdapter
 from ..selectors import resource_summary
 from ..services import (
     ActorContext,
@@ -14,11 +22,16 @@ from ..services import (
     create_quota,
     create_resource_profile,
     decide_image,
+    effective_resource_profile,
     release_reservation,
+    reresolve_image_digest,
     reserve_quota,
+    resolve_image_digest,
     transition_resource_profile,
     update_image_scan,
+    validate_resource_profile,
 )
+from ..tasks import probe_runtime_adapters
 from .helpers import create_governance_admin, create_governance_course, create_governance_teacher
 
 
@@ -115,6 +128,111 @@ class GovernanceServiceTests(TestCase):
             },
             expires_at=timezone.now() + timedelta(hours=1),
             context=ActorContext(self.student.public_id, "USER", "r" * 32),
+        )
+
+    def test_resource_profile_validation_normalizes_legacy_values(self) -> None:
+        values = validate_resource_profile(
+            {"cpu_millicores": 500, "memory_mb": 1024, "disk_gb": 5}
+        )
+
+        self.assertEqual(values["cpu_request_millicores"], 500)
+        self.assertEqual(values["cpu_limit_millicores"], 500)
+        self.assertEqual(values["memory_request_mb"], 1024)
+        self.assertEqual(values["memory_limit_mb"], 1024)
+
+    def test_resource_profile_validation_rejects_non_positive_and_inverted_limits(self) -> None:
+        with self.assertRaises(GovernanceValidationError):
+            validate_resource_profile(
+                {
+                    "cpu_millicores": 500,
+                    "memory_mb": 1024,
+                    "cpu_request_millicores": 0,
+                    "cpu_limit_millicores": 500,
+                    "disk_gb": 5,
+                }
+            )
+        with self.assertRaises(GovernanceValidationError):
+            validate_resource_profile(
+                {
+                    "cpu_millicores": 500,
+                    "memory_mb": 1024,
+                    "cpu_request_millicores": 600,
+                    "cpu_limit_millicores": 500,
+                    "disk_gb": 5,
+                }
+            )
+
+    def test_effective_resource_profile_falls_back_for_legacy_task_snapshot(self) -> None:
+        task = SimpleNamespace(
+            resource_profile=self.profile,
+            resource_profile_snapshot={
+                "public_id": self.profile.public_id,
+                "cpu_millicores": 2000,
+                "memory_mb": 4096,
+            },
+        )
+
+        effective = effective_resource_profile(task)
+
+        self.assertEqual(effective["cpu_request_millicores"], 2000)
+        self.assertEqual(effective["cpu_limit_millicores"], 2000)
+        self.assertEqual(effective["memory_request_mb"], 4096)
+        self.assertEqual(effective["memory_limit_mb"], 4096)
+
+    def test_effective_legacy_snapshot_is_unchanged_when_profile_changes(self) -> None:
+        task = SimpleNamespace(
+            resource_profile=self.profile,
+            resource_profile_snapshot={
+                "public_id": self.profile.public_id,
+                "cpu_millicores": 2000,
+                "memory_mb": 4096,
+                "disk_gb": 20,
+                "network_mode": "DENY_ALL",
+            },
+        )
+        ResourceProfile.objects.filter(pk=self.profile.pk).update(
+            cpu_millicores=8000,
+            memory_mb=16384,
+            cpu_request_millicores=4000,
+            cpu_limit_millicores=8000,
+            memory_request_mb=8192,
+            memory_limit_mb=16384,
+            disk_gb=80,
+            network_mode="ALLOWLIST",
+        )
+
+        effective = effective_resource_profile(task)
+
+        self.assertEqual(effective["cpu_request_millicores"], 2000)
+        self.assertEqual(effective["cpu_limit_millicores"], 2000)
+        self.assertEqual(effective["memory_request_mb"], 4096)
+        self.assertEqual(effective["memory_limit_mb"], 4096)
+        self.assertEqual(effective["disk_gb"], 20)
+        self.assertEqual(effective["network_mode"], "DENY_ALL")
+
+    @override_settings(RUNTIME_MODE="fake", RUNTIME_ADAPTER_CODE="runtime/governance")
+    def test_runtime_health_probe_uses_configured_runtime_resolver(self) -> None:
+        RuntimeAdapter.objects.create(
+            code="runtime/governance",
+            name="Governance runtime",
+            runtime_type=RuntimeAdapter.RuntimeType.CONTAINER,
+            driver=RuntimeAdapter.Driver.FAKE,
+            status=RuntimeAdapter.Status.ENABLED,
+            config_ref="",
+            change_reason="test",
+        )
+        reset_fake_runtime()
+
+        with patch(
+            "apps.governance.tasks._runtime_adapter_for_row", return_value=fake_runtime()
+        ) as resolver:
+            result = probe_runtime_adapters.run(trace_id="governance-runtime-test")
+
+        self.assertEqual(result, {"runtime/governance": "HEALTHY"})
+        resolver.assert_called_once_with(
+            driver=RuntimeAdapter.Driver.FAKE,
+            config_ref="",
+            code="runtime/governance",
         )
 
     def test_reservation_uses_platform_course_user_intersection(self) -> None:
@@ -244,3 +362,284 @@ class GovernanceServiceTests(TestCase):
                 reason="retire",
                 context=self.context,
             )
+
+
+class ImageDigestResolutionTests(TestCase):
+    def setUp(self) -> None:
+        reset_fake_runtime()
+        self.addCleanup(reset_fake_runtime)
+        self.admin = create_governance_admin(suffix="resolve-admin")
+        self.context = ActorContext(self.admin.public_id, "PLATFORM", "r" * 32)
+
+    def _create_pending_image(self, *, with_digest: bool) -> ImageAsset:
+        return create_image(
+            actor=self.admin,
+            registry="docker.io",
+            repository="library/ubuntu",
+            display_tag="22.04",
+            digest="sha256:" + "e" * 64 if with_digest else "",
+            risk_level="LOW",
+            reason="catalog import",
+            context=self.context,
+        )
+
+    def _enabled_fake_runtime(self) -> RuntimeAdapter:
+        return RuntimeAdapter.objects.create(
+            code="RESOLVE-FAKE",
+            name="Resolve fake runtime",
+            runtime_type=RuntimeAdapter.RuntimeType.CONTAINER,
+            driver=RuntimeAdapter.Driver.FAKE,
+            status=RuntimeAdapter.Status.ENABLED,
+        )
+
+    def test_create_image_without_digest_stays_pending_resolution(self) -> None:
+        image = self._create_pending_image(with_digest=False)
+        self.assertIsNone(image.digest)
+        self.assertFalse(image.is_ready)
+        self.assertEqual(image.approval_status, ImageAsset.ApprovalStatus.PENDING)
+
+    def test_resolve_image_digest_uses_enabled_runtime_and_locks_afterwards(self) -> None:
+        self._enabled_fake_runtime()
+        image = self._create_pending_image(with_digest=False)
+        resolved = resolve_image_digest(
+            image_id=image.public_id,
+            expected_version=image.row_version,
+            reason="platform resolve",
+            context=self.context,
+        )
+        self.assertTrue(resolved.digest.startswith("sha256:"))
+        self.assertEqual(len(resolved.digest), 71)
+        with self.assertRaises(GovernanceStateConflict):
+            resolve_image_digest(
+                image_id=image.public_id,
+                expected_version=resolved.row_version,
+                reason="repeat resolve",
+                context=self.context,
+            )
+        unlocked = resolve_image_digest(
+            image_id=image.public_id,
+            reason="worker retry replay",
+            allow_resolved=True,
+            context=self.context,
+        )
+        self.assertEqual(unlocked.public_id, image.public_id)
+        self.assertTrue(unlocked.digest.startswith("sha256:"))
+
+    def test_resolve_image_without_expected_version_uses_current_row(self) -> None:
+        self._enabled_fake_runtime()
+        image = self._create_pending_image(with_digest=False)
+        resolved = resolve_image_digest(
+            image_id=image.public_id,
+            reason="worker resolve",
+            context=self.context,
+        )
+        self.assertTrue(resolved.digest.startswith("sha256:"))
+
+    def test_resolve_duplicate_content_marks_row_rejected_with_reference(self) -> None:
+        self._enabled_fake_runtime()
+        first = self._create_pending_image(with_digest=False)
+        approved = resolve_image_digest(
+            image_id=first.public_id,
+            reason="first import",
+            context=self.context,
+        )
+        duplicate_row = create_image(
+            actor=self.admin,
+            registry="docker.io",
+            repository="library/ubuntu",
+            display_tag="22.04",
+            digest="",
+            risk_level="LOW",
+            reason="duplicate import",
+            context=self.context,
+        )
+        duplicate = resolve_image_digest(
+            image_id=duplicate_row.public_id,
+            reason="duplicate import",
+            context=self.context,
+        )
+        self.assertEqual(duplicate.approval_status, ImageAsset.ApprovalStatus.REJECTED)
+        self.assertIsNone(duplicate.digest)
+        self.assertIn(approved.public_id, duplicate.change_reason)
+        self.assertNotEqual(duplicate.public_id, first.public_id)
+
+    def test_resolve_image_requires_enabled_runtime(self) -> None:
+        image = self._create_pending_image(with_digest=False)
+        with self.assertRaises(GovernanceValidationError):
+            resolve_image_digest(
+                image_id=image.public_id,
+                reason="no runtime",
+                context=self.context,
+            )
+
+    def test_resolve_rejected_for_retired_image(self) -> None:
+        self._enabled_fake_runtime()
+        image = ImageAsset.objects.create(
+            registry="docker.io",
+            repository="library/retired",
+            digest=None,
+            approval_status=ImageAsset.ApprovalStatus.RETIRED,
+            risk_level="LOW",
+        )
+        with self.assertRaises(GovernanceStateConflict):
+            resolve_image_digest(
+                image_id=image.public_id,
+                reason="resolve retired",
+                context=self.context,
+            )
+
+    def test_approval_blocked_until_digest_resolved(self) -> None:
+        self._enabled_fake_runtime()
+        image = self._create_pending_image(with_digest=False)
+        scanned = update_image_scan(
+            image_id=image.public_id,
+            actor=self.admin,
+            expected_version=image.row_version,
+            scan_status=ImageAsset.ScanStatus.CLEAN,
+            scan_report_ref="scan-1",
+            risk_level="LOW",
+            reason="scan complete",
+            context=self.context,
+        )
+        with self.assertRaises(GovernanceValidationError):
+            decide_image(
+                image_id=image.public_id,
+                actor=self.admin,
+                expected_version=scanned.row_version,
+                decision="APPROVED",
+                reason="approve",
+                context=self.context,
+            )
+        resolved = resolve_image_digest(
+            image_id=image.public_id,
+            reason="platform resolve",
+            context=self.context,
+        )
+        approved = decide_image(
+            image_id=image.public_id,
+            actor=self.admin,
+            expected_version=resolved.row_version,
+            decision="APPROVED",
+            reason="approve",
+            context=self.context,
+        )
+        self.assertEqual(approved.approval_status, ImageAsset.ApprovalStatus.APPROVED)
+        self.assertTrue(approved.is_ready)
+
+    def test_reresolve_is_idempotent_when_digest_unchanged(self) -> None:
+        self._enabled_fake_runtime()
+        image = self._create_pending_image(with_digest=False)
+        resolved = resolve_image_digest(
+            image_id=image.public_id,
+            reason="first resolve",
+            context=self.context,
+        )
+        scanned = update_image_scan(
+            image_id=image.public_id,
+            actor=self.admin,
+            expected_version=resolved.row_version,
+            scan_status=ImageAsset.ScanStatus.CLEAN,
+            scan_report_ref="scan-reresolve-idle",
+            risk_level="LOW",
+            reason="scan before approve",
+            context=self.context,
+        )
+        approved = decide_image(
+            image_id=image.public_id,
+            actor=self.admin,
+            expected_version=scanned.row_version,
+            decision="APPROVED",
+            reason="approve",
+            context=self.context,
+        )
+        before_version = approved.row_version
+        revisited = reresolve_image_digest(
+            image_id=image.public_id,
+            reason="no drift",
+            context=self.context,
+        )
+        self.assertEqual(revisited.digest, approved.digest)
+        self.assertEqual(revisited.approval_status, ImageAsset.ApprovalStatus.APPROVED)
+        self.assertEqual(revisited.scan_status, ImageAsset.ScanStatus.CLEAN)
+        self.assertEqual(revisited.row_version, before_version)
+
+    def test_reresolve_updates_digest_and_resets_scan_approval(self) -> None:
+        self._enabled_fake_runtime()
+        image = self._create_pending_image(with_digest=True)
+        scanned = update_image_scan(
+            image_id=image.public_id,
+            actor=self.admin,
+            expected_version=image.row_version,
+            scan_status=ImageAsset.ScanStatus.CLEAN,
+            scan_report_ref="scan-reresolve-drift",
+            risk_level="LOW",
+            reason="scan before approve",
+            context=self.context,
+        )
+        decide_image(
+            image_id=image.public_id,
+            actor=self.admin,
+            expected_version=scanned.row_version,
+            decision="APPROVED",
+            reason="approve baseline",
+            context=self.context,
+        )
+        drifted = "sha256:" + "a" * 64
+        with patch("apps.governance.services.runtime_for_driver") as factory:
+            factory.return_value.resolve_image.return_value = {"digest": drifted}
+            result = reresolve_image_digest(
+                image_id=image.public_id,
+                reason="runtime image rebuilt",
+                context=self.context,
+            )
+        self.assertEqual(result.digest, drifted)
+        self.assertEqual(result.approval_status, ImageAsset.ApprovalStatus.PENDING)
+        self.assertEqual(result.scan_status, ImageAsset.ScanStatus.PENDING)
+        self.assertIsNone(result.approved_at)
+
+    def test_reresolve_delegates_to_first_resolution_when_digest_missing(self) -> None:
+        self._enabled_fake_runtime()
+        image = self._create_pending_image(with_digest=False)
+        result = reresolve_image_digest(
+            image_id=image.public_id,
+            reason="no digest yet",
+            context=self.context,
+        )
+        self.assertTrue((result.digest or "").startswith("sha256:"))
+        self.assertEqual(result.approval_status, ImageAsset.ApprovalStatus.PENDING)
+
+    def test_reresolve_conflicts_for_retired_image(self) -> None:
+        self._enabled_fake_runtime()
+        image = ImageAsset.objects.create(
+            registry="docker.io",
+            repository="library/retired",
+            digest="sha256:" + "c" * 64,
+            approval_status=ImageAsset.ApprovalStatus.RETIRED,
+            risk_level="LOW",
+        )
+        with self.assertRaises(GovernanceStateConflict):
+            reresolve_image_digest(
+                image_id=image.public_id,
+                reason="reresolve retired",
+                context=self.context,
+            )
+
+    def test_reresolve_conflicts_when_new_digest_collides_with_catalog(self) -> None:
+        self._enabled_fake_runtime()
+        holder = ImageAsset.objects.create(
+            registry="docker.io",
+            repository="library/holder",
+            digest="sha256:" + "a" * 64,
+            approval_status=ImageAsset.ApprovalStatus.APPROVED,
+            risk_level="LOW",
+        )
+        image = self._create_pending_image(with_digest=True)
+        with patch("apps.governance.services.runtime_for_driver") as factory:
+            factory.return_value.resolve_image.return_value = {"digest": holder.digest}
+            with self.assertRaises(GovernanceStateConflict) as ctx:
+                reresolve_image_digest(
+                    image_id=image.public_id,
+                    reason="drift into existing asset",
+                    context=self.context,
+                )
+        self.assertEqual(ctx.exception.detail.get("duplicate_of"), holder.public_id)

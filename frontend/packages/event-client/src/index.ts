@@ -1,157 +1,167 @@
-export type PortalEvent = {
-  id: string
-  type: string
-  data: Record<string, unknown>
+/**
+ * 门户 SSE 客户端：GET /api/v2/events/stream（EventSource 同源携带 session cookie）。
+ * - 保存最后事件 id；浏览器原生 EventSource 自动以 Last-Event-ID 重连。
+ * - 处理注释行（heartbeat / stream-ready）与业务事件；resync.required 或 cursor 错误时触发 REST 复核。
+ * - SSE 只是提示：最终事实一律通过 onResync → React Query invalidate 前 REST 查询为准。
+ * - 断线连续失败时降级轮询（仍通过 onResync 提示刷新）。
+ */
+
+import { API_PREFIX } from "@edu/auth-client";
+
+export const STREAM_URL = `${API_PREFIX}/events/stream`;
+
+export interface PortalEvent {
+  id: string | null;
+  type: string;
+  data: Record<string, unknown>;
+  traceId?: string;
 }
 
-export type EventConnectionState = 'connecting' | 'live' | 'backoff' | 'polling' | 'closed'
-
-export type PortalEventClientOptions = {
-  url?: string
-  onEvent?: (event: PortalEvent) => void
-  onError?: (error: unknown) => void
-  onStateChange?: (state: EventConnectionState) => void
-  poll?: () => Promise<PortalEvent[]>
-  maxBackoffMs?: number
+export interface PortalEventStreamOptions {
+  /** 任意事件（含 resync）回调 */
+  onEvent: (event: PortalEvent) => void;
+  /** 建议刷新 REST 数据：resync.required / cursor 失效 / 连续断线降级 */
+  onResync: (reason: "resync-required" | "cursor-expired" | "reconnect-degraded") => void;
+  /** 连接状态变化回调 */
+  onStatus?: (status: EventStreamStatus) => void;
+  /** 降级轮询间隔（默认 15s） */
+  pollIntervalMs?: number;
 }
 
-type Listener = (event: PortalEvent) => void
+const RESYNC_EVENTS = new Set(["resync.required"]);
+const CURSOR_ERRORS = new Set(["SSE_CURSOR_EXPIRED", "SSE_RESYNC_REQUIRED"]);
 
-/** One resumable SSE connection per portal. Tokens are deliberately not accepted here. */
-export class PortalEventClient {
-  private readonly url: string
-  private readonly poll?: () => Promise<PortalEvent[]>
-  private readonly maxBackoffMs: number
-  private readonly listeners = new Set<Listener>()
-  private readonly seen = new Set<string>()
-  private controller: AbortController | undefined
-  private running = false
-  private retry = 0
-  private state: EventConnectionState = 'closed'
-  private cursor = ''
+const CHECKPOINT_UNSET = Symbol("unset-last-event-id");
 
-  constructor(options: PortalEventClientOptions = {}) {
-    this.url = options.url ?? '/api/v2/events/stream'
-    this.poll = options.poll
-    this.maxBackoffMs = options.maxBackoffMs ?? 30_000
-    if (options.onEvent) this.listeners.add(options.onEvent)
-    this.onError = options.onError
-    this.onStateChange = options.onStateChange
+export type EventStreamStatus = "connecting" | "connected" | "reconnecting" | "polling" | "closed";
+
+export class PortalEventStream {
+  private source: EventSource | null = null;
+  private lastEventId: string | null = CHECKPOINT_UNSET as unknown as string;
+  private pollTimer: ReturnType<typeof setInterval> | null = null;
+  private failureCount = 0;
+  private status: EventStreamStatus = "closed";
+  private closed = false;
+
+  constructor(
+    private readonly sourceFactory: (url: string) => EventSource = (url) => new EventSource(url),
+    private readonly maxFailuresBeforePolling = 3,
+  ) {}
+
+  get lastId(): string | null {
+    if (this.lastEventId === (CHECKPOINT_UNSET as unknown as string)) return null;
+    return this.lastEventId;
   }
 
-  private readonly onError?: (error: unknown) => void
-  private readonly onStateChange?: (state: EventConnectionState) => void
-
-  get connectionState(): EventConnectionState { return this.state }
-  get lastEventId(): string { return this.cursor }
-
-  subscribe(listener: Listener): () => void {
-    this.listeners.add(listener)
-    return () => this.listeners.delete(listener)
+  get currentStatus(): EventStreamStatus {
+    return this.status;
   }
 
-  start(): void {
-    if (this.running) return
-    this.running = true
-    void this.connect()
+  start(options: PortalEventStreamOptions): void {
+    this.closed = false;
+    this.connect(options);
   }
 
   stop(): void {
-    this.running = false
-    this.controller?.abort()
-    this.controller = undefined
-    this.setState('closed')
+    this.closed = true;
+    this.source?.close();
+    this.source = null;
+    if (this.pollTimer) clearInterval(this.pollTimer);
+    this.pollTimer = null;
+    this.setStatus("closed");
   }
 
-  private setState(state: EventConnectionState): void {
-    if (this.state === state) return
-    this.state = state
-    this.onStateChange?.(state)
+  private setStatus(next: EventStreamStatus): void {
+    if (this.status === next) return;
+    this.status = next;
   }
 
-  private emit(event: PortalEvent): void {
-    if (event.id && this.seen.has(event.id)) return
-    if (event.id) {
-      this.seen.add(event.id)
-      if (this.seen.size > 512) this.seen.delete(this.seen.values().next().value ?? '')
-      this.cursor = event.id
-    }
-    for (const listener of this.listeners) listener(event)
-  }
+  private connect(options: PortalEventStreamOptions): void {
+    if (this.closed) return;
+    this.setStatus("connecting");
+    const source = this.sourceFactory(STREAM_URL);
+    this.source = source;
 
-  private async connect(): Promise<void> {
-    while (this.running) {
-      this.setState(this.retry ? 'backoff' : 'connecting')
-      this.controller = new AbortController()
-      try {
-        const headers = new Headers({ Accept: 'text/event-stream' })
-        if (this.cursor) headers.set('Last-Event-ID', this.cursor)
-        const response = await fetch(this.url, { credentials: 'include', headers, signal: this.controller.signal })
-        if (!response.ok || !response.body) throw new Error(`SSE_${response.status}`)
-        this.retry = 0
-        this.setState('live')
-        await this.consume(response.body)
-        if (this.running && this.poll) throw new Error('SSE_CLOSED')
-      } catch (error) {
-        if (!this.running) break
-        this.onError?.(error)
-        this.retry += 1
-        if (this.poll) {
-          this.setState('polling')
-          try {
-            for (const event of await this.poll()) this.emit(event)
-          } catch (pollError) {
-            this.onError?.(pollError)
-          }
-        }
-        const delay = Math.min(this.maxBackoffMs, 500 * 2 ** Math.min(this.retry, 6))
-        await new Promise((resolve) => window.setTimeout(resolve, delay))
-      } finally {
-        this.controller = undefined
+    const handle = (type: string, data: Record<string, unknown>, id: string | null) => {
+      this.failureCount = 0;
+      this.setStatus("connected");
+      if (id) this.lastEventId = id;
+      const event: PortalEvent = { id, type, data, traceId: typeof data.trace_id === "string" ? data.trace_id : undefined };
+      options.onEvent(event);
+      if (RESYNC_EVENTS.has(type)) options.onResync("resync-required");
+      if (CURSOR_ERRORS.has(type)) {
+        this.reconnect(options);
+        options.onResync("cursor-expired");
       }
+    };
+
+    source.onopen = () => {
+      this.failureCount = 0;
+      this.setStatus("connected");
+    };
+
+    source.onmessage = (event) => handle("message", safeJson(event.data), event.lastEventId || null);
+
+    source.onerror = () => {
+      this.source?.close();
+      this.source = null;
+      this.failureCount += 1;
+      if (this.closed) return;
+      if (options.onStatus) options.onStatus("reconnecting");
+      this.setStatus("reconnecting");
+      if (this.failureCount >= this.maxFailuresBeforePolling) {
+        this.startPolling(options);
+      } else {
+        setTimeout(() => this.connect(options), backoffMs(this.failureCount));
+      }
+    };
+
+    // 服务器可能用命名事件（如 publish.succeeded）；统一监听常用域 + 兜底 message
+    for (const type of [
+      "publish.succeeded", "publish.failed", "publish.closed", "publish.withdrawn",
+      "task.assigned", "provisioning.completed", "provisioning.failed",
+      "review.decided", "report.returned", "notification.created",
+      "session.expired", "resync.required", "course.updated",
+    ]) {
+      source.addEventListener(type, (event) => {
+        const messageEvent = event as MessageEvent<string>;
+        handle(type, safeJson(messageEvent.data), messageEvent.lastEventId || null);
+      });
     }
   }
 
-  private async consume(body: ReadableStream<Uint8Array>): Promise<void> {
-    const reader = body.getReader()
-    const decoder = new TextDecoder()
-    let buffer = ''
-    let id = ''
-    let type = 'message'
-    let data: string[] = []
-    const flush = () => {
-      if (!data.length) return
-      let payload: Record<string, unknown> = {}
-      try { payload = JSON.parse(data.join('\n')) as Record<string, unknown> } catch { payload = { raw: data.join('\n') } }
-      this.emit({ id, type, data: payload })
-      id = ''; type = 'message'; data = []
-    }
-    while (this.running) {
-      const result = await reader.read()
-      if (result.done) { flush(); break }
-      buffer += decoder.decode(result.value, { stream: true })
-      const lines = buffer.split(/\r?\n/)
-      buffer = lines.pop() ?? ''
-      for (const line of lines) {
-        if (!line) { flush(); continue }
-        if (line.startsWith(':')) continue
-        const separator = line.indexOf(':')
-        const field = separator < 0 ? line : line.slice(0, separator)
-        const value = separator < 0 ? '' : line.slice(separator + 1).replace(/^ /, '')
-        if (field === 'id') id = value
-        else if (field === 'event') type = value || 'message'
-        else if (field === 'data') data.push(value)
-      }
-    }
-    reader.releaseLock()
+  private reconnect(options: PortalEventStreamOptions): void {
+    this.source?.close();
+    this.source = null;
+    setTimeout(() => this.connect(options), 200);
+  }
+
+  startPolling(options: PortalEventStreamOptions): void {
+    if (this.pollTimer) return;
+    this.setStatus("polling");
+    this.pollTimer = setInterval(() => {
+      if (this.closed) return;
+      // 降级轮询：让上层重新拉节点数据
+      options.onResync("reconnect-degraded");
+      // 尝试恢复真实 SSE
+      this.failureCount = 0;
+      if (this.pollTimer) clearInterval(this.pollTimer);
+      this.pollTimer = null;
+      this.connect(options);
+    }, options.pollIntervalMs ?? 15_000);
+    options.onResync("reconnect-degraded");
   }
 }
 
-export function openPortalEventStream(
-  onEvent?: (event: PortalEvent) => void,
-  onError?: (error: unknown) => void,
-): PortalEventClient {
-  const client = new PortalEventClient({ onEvent, onError })
-  client.start()
-  return client
+function safeJson(raw: string): Record<string, unknown> {
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    return typeof parsed === "object" && parsed !== null ? parsed as Record<string, unknown> : {};
+  } catch {
+    return {};
+  }
+}
+
+function backoffMs(failureCount: number): number {
+  return Math.min(15_000, 1000 * 2 ** Math.min(4, failureCount));
 }

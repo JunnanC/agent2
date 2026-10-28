@@ -1,7 +1,7 @@
 # 08 API 接口详细设计
 
 > 上游：`00`～`07`  
-> 状态：绿地（greenfield）v2 API 契约，尚未生成 OpenAPI/代码
+> 状态：v2 API 目标契约基线；当前已存在后端路由与在线 schema 入口，实际接口以 `api_urls.py`、各 app 的 `urls.py`、视图和 serializer 复核，导出文件缺失与验收边界见 [项目现状快照](../项目现状快照_2026-10-15.md)。
 
 ## 一、统一约定
 
@@ -626,7 +626,7 @@ GET  /files/{one_time_token}
 /workspace/{session_public_id}/...
 ```
 
-只允许 user-web Session/工作区票据，网关每次检查票据、task、student、instance 和撤销状态。teacher/admin 站点不得代理到学生工作区。
+只允许 student-web Session/工作区票据，网关每次检查票据、task、student、instance 和撤销状态。teacher/admin 站点不得代理到学生工作区。
 
 ## 十八、幂等与 If-Match 清单
 

@@ -64,7 +64,7 @@ try {
         & npx.cmd vitest run --pool=threads --maxWorkers=1
         if ($LASTEXITCODE -ne 0) { throw 'P15 frontend tests failed.' }
         & npm.cmd run build:user
-        if ($LASTEXITCODE -ne 0) { throw 'P15 user-web build failed.' }
+        if ($LASTEXITCODE -ne 0) { throw 'P15 student-web build failed.' }
     } finally { Pop-Location }
 
     & docker compose -f "$root\docker-compose.dev.yml" config --quiet

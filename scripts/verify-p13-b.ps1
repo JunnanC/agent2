@@ -21,7 +21,7 @@ try { & $python @pythonArgs -m ruff check education_experiment_platform/apps/int
 Push-Location "$root\frontend"
 try {
     & npm.cmd run generate:api
-    & npx.cmd tsc -p apps/user-web/tsconfig.json --noEmit
+    & npx.cmd tsc -p apps/student-web/tsconfig.json --noEmit
     & npx.cmd tsc -p apps/teacher-web/tsconfig.json --noEmit
     & npx.cmd tsc -p apps/admin-web/tsconfig.json --noEmit
     if ($LASTEXITCODE -ne 0) { throw 'P13-B frontend typecheck failed.' }

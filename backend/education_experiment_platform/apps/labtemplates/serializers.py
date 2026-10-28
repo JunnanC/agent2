@@ -3,14 +3,22 @@ from rest_framework import serializers
 
 from apps.core.models import ObjectAsset
 
-from .models import AutoCheckRule, Template, TemplatePrecheckRun, TemplateVersion
+from .errors import TemplateValidationError
+from .image_services import normalize_image_reference
+from .models import (
+    AutoCheckRule,
+    ExperimentImage,
+    Template,
+    TemplateChapter,
+    TemplatePrecheckRun,
+    TemplateTask,
+    TemplateVersion,
+)
 
 
 class ExecutionSpecSerializer(serializers.Serializer):
     language = serializers.ChoiceField(choices=("python",))
-    entrypoint = serializers.RegexField(
-        r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,126}\.py$", max_length=128
-    )
+    entrypoint = serializers.RegexField(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,126}\.py$", max_length=128)
     timeout_seconds = serializers.IntegerField(
         min_value=1, max_value=settings.TEMPLATE_CHECK_TIMEOUT_MAX_SECONDS
     )
@@ -19,22 +27,6 @@ class ExecutionSpecSerializer(serializers.Serializer):
     comparator = serializers.ChoiceField(choices=("token",))
     tests_asset = serializers.CharField(max_length=26)
     network_mode = serializers.ChoiceField(choices=("DENY_ALL",))
-
-    def validate(self, attrs: dict[str, object]) -> dict[str, object]:
-        expected = {
-            "language",
-            "entrypoint",
-            "timeout_seconds",
-            "memory_mb",
-            "cpu_millicores",
-            "comparator",
-            "tests_asset",
-            "network_mode",
-        }
-        unknown = set(self.initial_data) - expected
-        if unknown:
-            raise serializers.ValidationError({"unknown": sorted(unknown)})
-        return attrs
 
 
 class TemplateWriteSerializer(serializers.Serializer):
@@ -65,6 +57,22 @@ class TemplateVersionWriteSerializer(serializers.Serializer):
     review_policy = serializers.DictField(required=False)
     retention_days = serializers.IntegerField(min_value=1, max_value=3650, required=False)
 
+    def validate(self, attrs: dict[str, object]) -> dict[str, object]:
+        unknown = set(self.initial_data) - set(self.fields)
+        if unknown:
+            raise serializers.ValidationError({"unknown": sorted(unknown)})
+        execution_spec = self.initial_data.get("execution_spec")
+        if isinstance(execution_spec, dict):
+            spec_unknown = set(execution_spec) - {
+                "language", "entrypoint", "timeout_seconds", "memory_mb",
+                "cpu_millicores", "comparator", "tests_asset", "network_mode",
+            }
+            if spec_unknown:
+                raise serializers.ValidationError(
+                    {"execution_spec": {"unknown": sorted(spec_unknown)}}
+                )
+        return attrs
+
 
 class AutoCheckRuleWriteSerializer(serializers.Serializer):
     position = serializers.IntegerField(min_value=1)
@@ -82,13 +90,125 @@ class AutoCheckRulesWriteSerializer(serializers.Serializer):
     rules = AutoCheckRuleWriteSerializer(many=True)
 
 
+class TemplateChapterWriteSerializer(serializers.Serializer):
+    title = serializers.CharField(max_length=160, required=False)
+    description = serializers.CharField(required=False, allow_blank=True)
+    learning_objectives = serializers.ListField(child=serializers.CharField(), required=False)
+    sort_order = serializers.IntegerField(min_value=1, required=False)
+    status = serializers.ChoiceField(choices=TemplateChapter.Status.choices, required=False)
+    resource_profile_id = serializers.CharField(max_length=26, required=False, allow_null=True)
+
+
+class TemplateTaskWriteSerializer(serializers.Serializer):
+    title = serializers.CharField(max_length=160, required=False)
+    description = serializers.CharField(required=False, allow_blank=True)
+    instructions = serializers.CharField(required=False, allow_blank=True)
+    task_type = serializers.CharField(max_length=64, required=False)
+    sort_order = serializers.IntegerField(min_value=1, required=False)
+    status = serializers.ChoiceField(choices=TemplateTask.Status.choices, required=False)
+    execution_spec = serializers.DictField(required=False)
+    resource_profile_id = serializers.CharField(max_length=26, required=False, allow_null=True)
+    submission_policy = serializers.DictField(required=False)
+    grading_policy = serializers.DictField(required=False)
+
+
+class ReorderWriteSerializer(serializers.Serializer):
+    ids = serializers.ListField(child=serializers.CharField(max_length=26), allow_empty=False)
+
+
+class ExecutionSpecSaveSerializer(serializers.Serializer):
+    tests_json = serializers.CharField()
+    language = serializers.ChoiceField(choices=("python",))
+    entrypoint = serializers.RegexField(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,126}\.py$", max_length=128)
+    timeout_seconds = serializers.IntegerField(
+        min_value=1, max_value=settings.TEMPLATE_CHECK_TIMEOUT_MAX_SECONDS
+    )
+    memory_mb = serializers.IntegerField(min_value=1)
+    cpu_millicores = serializers.IntegerField(min_value=1)
+    comparator = serializers.ChoiceField(choices=("token",))
+    network_mode = serializers.ChoiceField(choices=("DENY_ALL",))
+
+
 class TemplateAssetCreateSerializer(serializers.Serializer):
     version_id = serializers.CharField(max_length=26)
-    purpose = serializers.ChoiceField(choices=("MANUAL", "STARTER", "REPORT_TEMPLATE", "TESTS"))
+    purpose = serializers.ChoiceField(
+        choices=("MANUAL", "STARTER", "REPORT_TEMPLATE", "TESTS", "BUILD_CONTEXT")
+    )
     file_name = serializers.CharField(max_length=255)
     media_type = serializers.CharField(max_length=255)
     size_bytes = serializers.IntegerField(min_value=1)
     digest_sha256 = serializers.RegexField(r"^[0-9a-fA-F]{64}$")
+
+
+class ExperimentImageCreateSerializer(serializers.Serializer):
+    template_version_id = serializers.CharField(max_length=26)
+    source_type = serializers.ChoiceField(choices=ExperimentImage.SourceType.choices)
+    registry = serializers.CharField(max_length=255, required=False, allow_blank=True)
+    repository = serializers.CharField(max_length=255)
+    requested_tag = serializers.CharField(max_length=128)
+    build_context_asset_id = serializers.CharField(max_length=26, required=False)
+    build_args = serializers.DictField(required=False)
+
+    def validate(self, attrs: dict[str, object]) -> dict[str, object]:
+        try:
+            registry, repository, requested_tag = normalize_image_reference(
+                registry=attrs.get("registry", ""),
+                repository=attrs.get("repository"),
+                requested_tag=attrs.get("requested_tag"),
+            )
+        except TemplateValidationError as exc:
+            raise serializers.ValidationError(exc.detail) from exc
+        attrs.update(
+            registry=registry,
+            repository=repository,
+            requested_tag=requested_tag,
+        )
+        return attrs
+
+
+class ExperimentImageDataSerializer(serializers.Serializer):
+    public_id = serializers.CharField()
+    template_version_id = serializers.CharField()
+    source_type = serializers.ChoiceField(choices=ExperimentImage.SourceType.choices)
+    registry = serializers.CharField()
+    repository = serializers.CharField()
+    requested_tag = serializers.CharField()
+    resolved_digest = serializers.CharField(allow_blank=True)
+    status = serializers.ChoiceField(choices=ExperimentImage.Status.choices)
+    scan_status = serializers.ChoiceField(choices=ExperimentImage.ScanStatus.choices)
+    image_asset_id = serializers.CharField(allow_null=True)
+    build_context_asset_id = serializers.CharField(allow_null=True)
+    validation_detail = serializers.DictField()
+    build_args = serializers.DictField()
+    logs = serializers.CharField()
+    error_code = serializers.CharField()
+    row_version = serializers.IntegerField()
+
+
+class ExperimentImageResponseSerializer(serializers.Serializer):
+    data = ExperimentImageDataSerializer()
+    meta = serializers.DictField()
+
+
+class ExperimentImagePrepareSerializer(serializers.Serializer):
+    build_args = serializers.DictField(required=False)
+
+
+class ExperimentImageListResponseSerializer(serializers.Serializer):
+    data = ExperimentImageDataSerializer(many=True)
+    meta = serializers.DictField()
+
+
+class ExperimentImageEventSerializer(serializers.Serializer):
+    event_type = serializers.CharField()
+    payload = serializers.DictField()
+    trace_id = serializers.CharField()
+    created_at = serializers.DateTimeField()
+
+
+class ExperimentImageEventsResponseSerializer(serializers.Serializer):
+    data = ExperimentImageEventSerializer(many=True)
+    meta = serializers.DictField()
 
 
 class TemplateAssetDataSerializer(serializers.Serializer):
@@ -147,6 +267,55 @@ class AutoCheckRuleDataSerializer(serializers.Serializer):
     rule_digest = serializers.CharField()
 
 
+class TemplateTaskDataSerializer(serializers.Serializer):
+    public_id = serializers.CharField()
+    title = serializers.CharField()
+    description = serializers.CharField()
+    instructions = serializers.CharField()
+    task_type = serializers.CharField()
+    sort_order = serializers.IntegerField()
+    status = serializers.CharField()
+    execution_spec = serializers.DictField()
+    resource_profile_id = serializers.CharField(allow_null=True)
+    effective_resource_profile_id = serializers.CharField()
+    submission_policy = serializers.DictField()
+    grading_policy = serializers.DictField()
+    row_version = serializers.IntegerField()
+
+
+class TemplateChapterDataSerializer(serializers.Serializer):
+    public_id = serializers.CharField()
+    title = serializers.CharField()
+    description = serializers.CharField()
+    learning_objectives = serializers.ListField()
+    sort_order = serializers.IntegerField()
+    status = serializers.CharField()
+    resource_profile_id = serializers.CharField(allow_null=True)
+    effective_resource_profile_id = serializers.CharField()
+    row_version = serializers.IntegerField()
+    tasks = TemplateTaskDataSerializer(many=True)
+
+
+class TemplateChapterResponseSerializer(serializers.Serializer):
+    data = TemplateChapterDataSerializer()
+    meta = serializers.DictField()
+
+
+class TemplateChapterListResponseSerializer(serializers.Serializer):
+    data = TemplateChapterDataSerializer(many=True)
+    meta = serializers.DictField()
+
+
+class TemplateTaskResponseSerializer(serializers.Serializer):
+    data = TemplateTaskDataSerializer()
+    meta = serializers.DictField()
+
+
+class TemplateTaskListResponseSerializer(serializers.Serializer):
+    data = TemplateTaskDataSerializer(many=True)
+    meta = serializers.DictField()
+
+
 class AutoCheckRulesDataSerializer(serializers.Serializer):
     rules = AutoCheckRuleDataSerializer(many=True)
 
@@ -180,6 +349,7 @@ class TemplateVersionDataSerializer(serializers.Serializer):
     spec_digest = serializers.CharField(allow_null=True)
     row_version = serializers.IntegerField()
     rules = AutoCheckRuleDataSerializer(many=True)
+    chapters = TemplateChapterDataSerializer(many=True)
 
 
 class PrecheckRunDataSerializer(serializers.Serializer):
@@ -275,7 +445,79 @@ def rule_data(item: AutoCheckRule) -> dict[str, object]:
     }
 
 
+def task_data(item: TemplateTask, version: TemplateVersion) -> dict[str, object]:
+    profile = item.resource_profile or item.chapter.resource_profile or version.resource_profile
+    return {
+        "public_id": item.public_id,
+        "title": item.title,
+        "description": item.description,
+        "instructions": item.instructions,
+        "task_type": item.task_type,
+        "sort_order": item.sort_order,
+        "status": item.status,
+        "execution_spec": item.execution_spec,
+        "resource_profile_id": item.resource_profile.public_id if item.resource_profile else None,
+        "effective_resource_profile_id": profile.public_id,
+        "submission_policy": item.submission_policy,
+        "grading_policy": item.grading_policy,
+        "row_version": item.row_version,
+    }
+
+
+def chapter_data(item: TemplateChapter, version: TemplateVersion) -> dict[str, object]:
+    profile = item.resource_profile or version.resource_profile
+    return {
+        "public_id": item.public_id,
+        "title": item.title,
+        "description": item.description,
+        "learning_objectives": item.learning_objectives,
+        "sort_order": item.sort_order,
+        "status": item.status,
+        "resource_profile_id": item.resource_profile.public_id if item.resource_profile else None,
+        "effective_resource_profile_id": profile.public_id,
+        "row_version": item.row_version,
+        "tasks": [task_data(task, version) for task in item.tasks.all().order_by("sort_order")],
+    }
+
+
 def version_data(item: TemplateVersion) -> dict[str, object]:
+    def task_value(task: TemplateTask) -> dict[str, object]:
+        profile = task.resource_profile or task.chapter.resource_profile or item.resource_profile
+        return {
+            "public_id": task.public_id,
+            "title": task.title,
+            "description": task.description,
+            "instructions": task.instructions,
+            "task_type": task.task_type,
+            "sort_order": task.sort_order,
+            "status": task.status,
+            "execution_spec": task.execution_spec,
+            "resource_profile_id": task.resource_profile.public_id
+            if task.resource_profile
+            else None,
+            "effective_resource_profile_id": profile.public_id,
+            "submission_policy": task.submission_policy,
+            "grading_policy": task.grading_policy,
+            "row_version": task.row_version,
+        }
+
+    def chapter_value(chapter: TemplateChapter) -> dict[str, object]:
+        profile = chapter.resource_profile or item.resource_profile
+        return {
+            "public_id": chapter.public_id,
+            "title": chapter.title,
+            "description": chapter.description,
+            "learning_objectives": chapter.learning_objectives,
+            "sort_order": chapter.sort_order,
+            "status": chapter.status,
+            "resource_profile_id": chapter.resource_profile.public_id
+            if chapter.resource_profile
+            else None,
+            "effective_resource_profile_id": profile.public_id,
+            "row_version": chapter.row_version,
+            "tasks": [task_value(task) for task in chapter.tasks.all().order_by("sort_order")],
+        }
+
     return {
         "public_id": item.public_id,
         "template_id": item.template.public_id,
@@ -304,6 +546,10 @@ def version_data(item: TemplateVersion) -> dict[str, object]:
         "rules": [
             rule_data(rule)
             for rule in item.auto_check_rules.filter(is_active=True).order_by("position")
+        ],
+        "chapters": [
+            chapter_data(chapter, item)
+            for chapter in item.chapters.all().prefetch_related("tasks").order_by("sort_order")
         ],
     }
 
@@ -354,5 +600,28 @@ def asset_data(item: object, version: TemplateVersion) -> dict[str, object]:
         "status": item.status,
         "failure_code": item.failure_code,
         "attached": attached,
+        "row_version": item.row_version,
+    }
+
+
+def experiment_image_data(item: ExperimentImage) -> dict[str, object]:
+    return {
+        "public_id": item.public_id,
+        "template_version_id": item.template_version.public_id,
+        "source_type": item.source_type,
+        "registry": item.registry,
+        "repository": item.repository,
+        "requested_tag": item.requested_tag,
+        "resolved_digest": item.resolved_digest,
+        "status": item.status,
+        "scan_status": item.scan_status,
+        "image_asset_id": item.image_asset.public_id if item.image_asset else None,
+        "build_context_asset_id": item.build_context_asset.public_id
+        if item.build_context_asset
+        else None,
+        "validation_detail": item.validation_detail,
+        "build_args": item.build_args_masked,
+        "logs": item.logs_masked,
+        "error_code": item.error_code,
         "row_version": item.row_version,
     }

@@ -15,6 +15,7 @@ from apps.reports.models import ReportDraft
 from .models import WorkspaceExecutionRun, WorkspaceSession, WorkspaceSnapshot
 from .selectors import active_storage_job_for_user, workbench_task_for_user
 from .serializers import storage_job_data
+from .services import task_has_active_test_rules
 
 PUBLIC_STAGES = tuple(ProvisioningJob.Stage.values)
 _ACTIVE_TASK_STATUSES = {
@@ -295,7 +296,12 @@ def _submission_data(
             ):
                 blocked_reason = {"code": "REPORT_ATTACHMENTS_NOT_READY"}
 
-    if required and blocked_reason is None and snapshot is not None:
+    if (
+        required
+        and blocked_reason is None
+        and snapshot is not None
+        and task_has_active_test_rules(task)
+    ):
         driver = task.runtime_adapter_driver or (
             task.runtime_adapter.driver if task.runtime_adapter_id else "FAKE"
         )

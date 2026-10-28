@@ -13,7 +13,7 @@ $compose = @('compose', '--profile', 'p14', '-p', $ProjectName, '-f', $composeFi
 $runtimeWorkerStopped = $false
 $runId = [DateTimeOffset]::UtcNow.ToString('yyyyMMddHHmmss')
 $taskTitle = "P15 集成验收实验 $runId"
-$names = @('APP_VERSION', 'OPENAPI_REVISION', 'ENTRY_PORT', 'P02_E2E_PASSWORD', 'P15_E2E_TASK_TITLE', 'P15_COMPOSE_PROJECT', 'P15_COMPOSE_FILE', 'USER_WEB_URL', 'TEACHER_WEB_URL', 'ADMIN_WEB_URL')
+$names = @('APP_VERSION', 'OPENAPI_REVISION', 'ENTRY_PORT', 'P02_E2E_PASSWORD', 'P15_E2E_TASK_TITLE', 'P15_COMPOSE_PROJECT', 'P15_COMPOSE_FILE', 'STUDENT_WEB_URL', 'TEACHER_WEB_URL', 'ADMIN_WEB_URL')
 $previous = @{}
 foreach ($name in $names) { $previous[$name] = [Environment]::GetEnvironmentVariable($name) }
 
@@ -34,7 +34,7 @@ try {
     $env:P15_E2E_TASK_TITLE = $taskTitle
     $env:P15_COMPOSE_PROJECT = $ProjectName
     $env:P15_COMPOSE_FILE = $composeFile
-    $env:USER_WEB_URL = "http://user.localhost:$EntryPort"
+    $env:STUDENT_WEB_URL = "http://student.localhost:$EntryPort"
     $env:TEACHER_WEB_URL = "http://teacher.localhost:$EntryPort"
     $env:ADMIN_WEB_URL = "http://admin.localhost:$EntryPort"
 
@@ -56,7 +56,7 @@ try {
     $lastProbe = 'no response'
     for ($attempt = 0; $attempt -lt 60; $attempt++) {
         try {
-            $health = Invoke-WebRequest -Uri "$($env:USER_WEB_URL)/api/v2/health" -TimeoutSec 5 -NoProxy
+            $health = Invoke-WebRequest -Uri "$($env:STUDENT_WEB_URL)/api/v2/health" -TimeoutSec 5 -NoProxy
             $lastProbe = "status=$($health.StatusCode) body=$($health.Content)"
             if ($health.StatusCode -eq 200 -and $health.Content -match '"openapi_revision"\s*:\s*"v2-p15"') { $ready = $true; break }
         } catch { $lastProbe = $_.Exception.Message }
@@ -68,7 +68,7 @@ try {
     $runtimeWorkerStopped = $true
     Push-Location "$root\frontend"
     try {
-        & npx.cmd playwright test e2e/p15f.spec.ts --project=user-web --workers=1
+        & npx.cmd playwright test e2e/p15f.spec.ts --project=student-web --workers=1
         $journeyExit = $LASTEXITCODE
     } finally { Pop-Location }
     Invoke-P15Compose -StepArguments @('up', '--detach', '--no-deps', 'runtime-worker') -FailureMessage 'P15 runtime worker could not be restored after the loading-page check.'
@@ -80,7 +80,7 @@ try {
 
     Push-Location "$root\frontend"
     try {
-        & npx.cmd playwright test e2e/p08.spec.ts e2e/p15e.spec.ts --project=user-web --project=teacher-web --project=admin-web --workers=1
+        & npx.cmd playwright test e2e/p08.spec.ts e2e/p15e.spec.ts --project=student-web --project=teacher-web --project=admin-web --workers=1
         $regressionExit = $LASTEXITCODE
     } finally { Pop-Location }
     if ($regressionExit -ne 0) {

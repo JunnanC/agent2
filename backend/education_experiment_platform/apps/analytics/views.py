@@ -38,7 +38,7 @@ from .serializers import (
     recommendation_data,
     risk_data,
 )
-from .services import resolve_risk_signal
+from .services import PROJECTION_VERSION, resolve_risk_signal
 
 IF_MATCH = OpenApiParameter("If-Match", str, OpenApiParameter.HEADER, required=True)
 IDEMPOTENCY_KEY = OpenApiParameter("Idempotency-Key", str, OpenApiParameter.HEADER, required=True)
@@ -100,6 +100,34 @@ class TeachingAnalyticsOverviewView(P13APIView):
         return _response(
             request, daily_data(daily) if daily else {"course_id": course.public_id, "metrics": {}}
         )
+
+
+class TeachingAnalyticsSeriesView(P13APIView):
+    permission_classes = [IsTeachingPortal]
+
+    @extend_schema(
+        tags=["teaching-analytics"],
+        parameters=[
+            OpenApiParameter(
+                "days",
+                location=OpenApiParameter.QUERY,
+                type=int,
+                description="返回最近 N 天的每日投影(默认 28,上限 90)",
+            )
+        ],
+        extensions={"x-portals": ["TEACHING"]},
+    )
+    def get(self, request: HttpRequest, course_id: str) -> Response:
+        course = teaching_course(actor=request.user, course_id=course_id)
+        try:
+            days = max(1, min(90, int(request.query_params.get("days", "28"))))
+        except ValueError:
+            days = 28
+        rows = CourseDaily.objects.filter(
+            course=course, projection_version=PROJECTION_VERSION
+        ).order_by("-period_start")[:days]
+        series = [daily_data(item) for item in reversed(list(rows))]
+        return _response(request, {"course_id": course.public_id, "series": series})
 
 
 class TeachingAnalyticsRiskSignalView(P13APIView):

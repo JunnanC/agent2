@@ -18,6 +18,20 @@ class LoginInputSerializer(serializers.Serializer):
     password = serializers.CharField(max_length=256, trim_whitespace=False, write_only=True)
 
 
+class SessionStepUpInputSerializer(serializers.Serializer):
+    password = serializers.CharField(max_length=256, trim_whitespace=False, write_only=True)
+
+
+class SessionStepUpDataSerializer(serializers.Serializer):
+    recent = serializers.BooleanField()
+    authenticated_at = serializers.DateTimeField()
+
+
+class SessionStepUpResponseSerializer(serializers.Serializer):
+    data = SessionStepUpDataSerializer()
+    meta = AccountTraceMetaSerializer()
+
+
 class CsrfDataSerializer(serializers.Serializer):
     csrf = serializers.CharField()
 

@@ -1,6 +1,17 @@
+import os
+import subprocess
+import sys
+from pathlib import Path
+
 from django.apps import apps
 from django.conf import settings
 from django.test import SimpleTestCase
+
+ROOT = (
+    Path(os.environ["PROJECT_ROOT"])
+    if os.environ.get("PROJECT_ROOT")
+    else Path(__file__).resolve().parents[4]
+)
 
 EXPECTED_DOMAIN_APPS = {
     "core",
@@ -22,6 +33,36 @@ EXPECTED_DOMAIN_APPS = {
 
 
 class SettingsTests(SimpleTestCase):
+    def test_unit_test_settings_use_the_local_protocol_stub(self) -> None:
+        assert settings.LOCAL_RUNTIME_MODE == "STUB"
+
+    def test_production_rejects_fake_runtime_without_adapter_configuration(self) -> None:
+        environment = os.environ.copy()
+        environment.update(
+            {
+                "DJANGO_SETTINGS_MODULE": "education_experiment_platform.settings.prod",
+                "DJANGO_SECRET_KEY": "test-secret",
+                "IDENTITY_HMAC_KEY": "test-identity",
+                "WORKSPACE_UPSTREAM_HMAC_KEY": "test-upstream",
+                "DJANGO_ALLOWED_HOSTS": "localhost",
+                "DJANGO_TRUSTED_ORIGINS": "http://localhost",
+                "TRUSTED_PROXY_CIDRS": "127.0.0.1/32",
+                "RUNTIME_MODE": "fake",
+                "RUNTIME_ADAPTER_CODE": "runtime/fake",
+                "RUNTIME_ADAPTER_CONFIGS": "{}",
+            }
+        )
+        result = subprocess.run(
+            [sys.executable, "-c", "import education_experiment_platform.settings.prod"],
+            cwd=ROOT / "backend" / "education_experiment_platform",
+            env=environment,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert result.returncode != 0
+        assert "Production requires RUNTIME_MODE=swarm" in result.stderr
+
     def test_all_target_apps_exist_without_teams(self) -> None:
         installed = {config.label for config in apps.get_app_configs()}
         assert installed >= EXPECTED_DOMAIN_APPS
@@ -54,6 +95,7 @@ class SettingsTests(SimpleTestCase):
             "accounts_platform_admin_assignment_event",
         }
         assert {model._meta.db_table for model in apps.get_app_config("courses").get_models()} == {
+            "courses_academic_term",
             "courses_course",
             "courses_course_staff",
             "courses_course_staff_event",
@@ -94,7 +136,12 @@ class SettingsTests(SimpleTestCase):
             "labtemplates_template",
             "labtemplates_template_version",
             "labtemplates_auto_check_rule",
+            "labtemplates_template_chapter",
+            "labtemplates_template_task",
             "labtemplates_template_precheck_run",
+            "labtemplates_experiment_image",
+            "labtemplates_image_build_job",
+            "labtemplates_legacy_template_migration",
         }
         assert {model._meta.db_table for model in apps.get_app_config("reviews").get_models()} == {
             "reviews_rubric",
@@ -114,6 +161,8 @@ class SettingsTests(SimpleTestCase):
             model._meta.db_table for model in apps.get_app_config("experiments").get_models()
         } == {
             "experiments_task_publication",
+            "experiments_publication_chapter",
+            "experiments_publication_task",
             "experiments_publication_audience",
             "experiments_publication_prerequisite",
             "experiments_experiment_task",
@@ -126,6 +175,7 @@ class SettingsTests(SimpleTestCase):
         } == {
             "provisioning_instance",
             "provisioning_job",
+            "provisioning_runtime_capacity_reservation",
             "provisioning_stage_event",
         }
         assert {

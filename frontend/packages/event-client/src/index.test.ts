@@ -1,88 +1,74 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, vi } from "vitest";
+import { PortalEventStream } from "./index";
 
-import { PortalEventClient, type EventConnectionState, type PortalEvent } from './index'
+class FakeEventSource {
+  static instances: FakeEventSource[] = [];
+  onopen: (() => void) | null = null;
+  onmessage: ((event: { data: string; lastEventId: string }) => void) | null = null;
+  onerror: (() => void) | null = null;
+  listeners = new Map<string, Array<(event: { data: string; lastEventId: string }) => void>>();
+  closed = false;
 
-afterEach(() => {
-  vi.unstubAllGlobals()
-  vi.restoreAllMocks()
-})
+  constructor(public url: string) {
+    FakeEventSource.instances.push(this);
+  }
 
-describe('PortalEventClient', () => {
-  it('parses SSE frames and drops duplicate event ids', async () => {
-    const events: PortalEvent[] = []
-    const body = [
-      'id: cursor-1',
-      'event: workspace.snapshot.saved',
-      'data: {"version":1}',
-      '',
-      'id: cursor-1',
-      'event: workspace.snapshot.saved',
-      'data: {"version":1}',
-      '',
-      '',
-    ].join('\n')
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(body, { status: 200 })))
-    const client = new PortalEventClient({
-      onEvent: (event) => {
-        events.push(event)
-        client.stop()
-      },
-    })
+  close(): void { this.closed = true; }
 
-    client.start()
-    await vi.waitFor(() => expect(events).toHaveLength(1))
+  addEventListener(type: string, handler: (event: { data: string; lastEventId: string }) => void): void {
+    const list = this.listeners.get(type) ?? [];
+    list.push(handler);
+    this.listeners.set(type, list);
+  }
 
-    expect(events[0]).toEqual({
-      id: 'cursor-1',
-      type: 'workspace.snapshot.saved',
-      data: { version: 1 },
-    })
-    expect(client.lastEventId).toBe('cursor-1')
-  })
+  emit(type: string, data: string, lastEventId = "evt-1"): void {
+    for (const handler of this.listeners.get(type) ?? []) handler({ data, lastEventId });
+  }
 
-  it('sends Last-Event-ID when reconnecting', async () => {
-    let secondHeaders: Headers | undefined
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(
-        new Response('id: cursor-2\nevent: workspace.session.renewed\ndata: {}\n\n'),
-      )
-      .mockImplementationOnce((_url: string, init?: RequestInit) => {
-        secondHeaders = init?.headers as Headers
-        return new Promise<Response>((_resolve, reject) => {
-          init?.signal?.addEventListener('abort', () => reject(new DOMException('aborted')))
-        })
-      })
-    vi.stubGlobal('fetch', fetchMock)
-    const client = new PortalEventClient()
+  fail(): void { this.onerror?.(); }
+}
 
-    client.start()
-    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2))
+describe("PortalEventStream", () => {
+  it("分发业务事件并记录 last id", () => {
+    const stream = new PortalEventSourceStream();
+    const onEvent = vi.fn();
+    const onResync = vi.fn();
+    stream.start({ onEvent, onResync });
+    const source = FakeEventSource.instances[0];
+    if (!source) throw new Error("未创建 EventSource");
+    source.onmessage?.({ data: JSON.stringify({ hello: 1 }), lastEventId: "001" });
+    expect(onEvent).toHaveBeenCalledWith(expect.objectContaining({ type: "message", id: "001" }));
+    expect(onEvent).not.toHaveBeenCalledWith(expect.objectContaining({ type: "resync.required" }));
+    expect(stream.lastId).toBe("001");
+  });
 
-    expect(secondHeaders?.get('Last-Event-ID')).toBe('cursor-2')
-    client.stop()
-  })
+  it("resync.required 触发 REST 复核回调", () => {
+    const stream = new PortalEventSourceStream();
+    const onResync = vi.fn();
+    stream.start({ onEvent: () => undefined, onResync });
+    const source = FakeEventSource.instances[0];
+    if (!source) throw new Error("未创建 EventSource");
+    source.onmessage?.({ data: JSON.stringify({}), lastEventId: "002" });
+    source.onmessage?.({ data: "{}", lastEventId: "003" });
+    expect(onResync).not.toHaveBeenCalled();
+    source.emit("resync.required", "{}", "004");
+    expect(onResync).toHaveBeenCalledWith("resync-required");
+    expect(stream.lastId).toBe("004");
+  });
 
-  it('falls back to polling after a connection failure', async () => {
-    const states: EventConnectionState[] = []
-    const events: PortalEvent[] = []
-    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('offline')))
-    const client = new PortalEventClient({
-      maxBackoffMs: 1,
-      poll: async () => [
-        { id: 'poll-1', type: 'workspace.snapshot.saved', data: { version: 3 } },
-      ],
-      onStateChange: (state) => states.push(state),
-      onEvent: (event) => {
-        events.push(event)
-        client.stop()
-      },
-    })
+  it("stop 后不再重连", () => {
+    FakeEventSource.instances = [];
+    const stream = new PortalEventStream((url) => new FakeEventSource(url) as unknown as EventSource);
+    stream.start({ onEvent: () => undefined, onResync: () => undefined });
+    stream.stop();
+    expect(FakeEventSource.instances[0]?.closed).toBe(true);
+    expect(stream.currentStatus).toBe("closed");
+  });
+});
 
-    client.start()
-    await vi.waitFor(() => expect(events).toHaveLength(1))
-
-    expect(states).toContain('polling')
-    expect(events[0]?.id).toBe('poll-1')
-  })
-})
+class PortalEventSourceStream extends PortalEventStream {
+  constructor() {
+    FakeEventSource.instances = [];
+    super((url) => new FakeEventSource(url) as unknown as EventSource);
+  }
+}

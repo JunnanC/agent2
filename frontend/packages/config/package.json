@@ -1,7 +1,8 @@
 {
   "name": "@edu/config",
-  "version": "0.1.0",
   "private": true,
-  "files": ["tsconfig.json"]
+  "main": "./index.json",
+  "exports": {
+    "./tsconfig.base.json": "./tsconfig.base.json"
+  }
 }
-

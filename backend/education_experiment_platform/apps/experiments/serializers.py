@@ -1,11 +1,16 @@
 from datetime import datetime
-from typing import cast
+from typing import Any, cast
 
 from rest_framework import serializers
+
+from apps.labtemplates.legacy import LegacyTemplateAdapter
 
 from .models import (
     ExperimentTask,
     PublicationAudience,
+    PublicationChapter,
+    PublicationPrerequisite,
+    PublicationTask,
     TaskExtensionDecision,
     TaskExtensionRequest,
     TaskPublication,
@@ -83,6 +88,32 @@ class PublicationPublishSerializer(serializers.Serializer):
     )
 
 
+class PublicationTaskSnapshotSerializer(serializers.Serializer):
+    public_id = serializers.CharField()
+    source_task_id = serializers.CharField()
+    title = serializers.CharField()
+    description = serializers.CharField()
+    instructions = serializers.CharField()
+    task_type = serializers.CharField()
+    sort_order = serializers.IntegerField()
+    image_digest = serializers.CharField()
+    resource_profile_snapshot = serializers.DictField()
+    execution_snapshot = serializers.DictField()
+    submission_policy = serializers.DictField()
+    grading_policy = serializers.DictField()
+
+
+class PublicationChapterSnapshotSerializer(serializers.Serializer):
+    public_id = serializers.CharField()
+    source_chapter_id = serializers.CharField()
+    title = serializers.CharField()
+    description = serializers.CharField()
+    learning_objectives = serializers.ListField()
+    sort_order = serializers.IntegerField()
+    snapshot = serializers.DictField()
+    tasks = PublicationTaskSnapshotSerializer(many=True)
+
+
 class TaskExtensionWriteSerializer(serializers.Serializer):
     requested_deadline = serializers.DateTimeField()
     reason = serializers.CharField(max_length=2000)
@@ -99,6 +130,8 @@ class PublicationDataSerializer(serializers.Serializer):
     template_version_id = serializers.CharField()
     rubric_version_id = serializers.CharField()
     template_spec_digest = serializers.CharField(allow_null=True)
+    template_digest = serializers.CharField(allow_null=True)
+    publication_digest = serializers.CharField(allow_null=True)
     execution_spec = serializers.DictField()
     runtime_adapter_id = serializers.CharField(allow_null=True)
     runtime_adapter_driver = serializers.CharField()
@@ -123,6 +156,7 @@ class PublicationDataSerializer(serializers.Serializer):
     prerequisites = serializers.ListField(child=serializers.DictField())
     publication_error = serializers.DictField()
     row_version = serializers.IntegerField()
+    chapters = PublicationChapterSnapshotSerializer(many=True)
 
 
 class TaskDataSerializer(serializers.Serializer):
@@ -183,8 +217,16 @@ class ExtensionDataSerializer(serializers.Serializer):
     decisions = serializers.ListField(child=serializers.DictField())
 
 
+class WeeklyStudyDataSerializer(serializers.Serializer):
+    minutes_by_day = serializers.ListField(child=serializers.IntegerField(min_value=0))
+    total_minutes = serializers.IntegerField()
+    last_week_minutes = serializers.IntegerField()
+    has_records = serializers.BooleanField()
+
+
 class DashboardDataSerializer(serializers.Serializer):
     counts = serializers.DictField()
+    weekly_study = WeeklyStudyDataSerializer()
     next_tasks = TaskDataSerializer(many=True)
 
 
@@ -193,7 +235,7 @@ class GenericResponseSerializer(serializers.Serializer):
     meta = serializers.DictField()
 
 
-def publication_data(item: TaskPublication) -> dict[str, object]:
+def publication_data(item: TaskPublication) -> dict[str, Any]:
     template = item.template_version
     template_spec_digest = item.template_spec_digest
     execution_spec = dict(item.execution_spec or {})
@@ -217,12 +259,23 @@ def publication_data(item: TaskPublication) -> dict[str, object]:
             "disk_gb": profile.disk_gb,
             "network_mode": profile.network_mode,
         }
+    allowed_actions: list[str] = []
+    if item.status == TaskPublication.Status.DRAFT:
+        allowed_actions = ["publish"]
+    elif item.status == TaskPublication.Status.PUBLISHING:
+        allowed_actions = ["withdraw"]
+    elif item.status == TaskPublication.Status.PUBLISHED:
+        allowed_actions = ["withdraw", "close"]
+    elif item.status == TaskPublication.Status.PUBLISH_FAILED:
+        allowed_actions = ["withdraw"]
     return {
         "public_id": item.public_id,
         "course_id": item.course.public_id,
         "template_version_id": item.template_version.public_id,
         "rubric_version_id": item.rubric_version.public_id,
         "template_spec_digest": template_spec_digest,
+        "template_digest": item.template_digest,
+        "publication_digest": item.publication_digest,
         "execution_spec": execution_spec,
         "runtime_adapter_id": adapter.public_id if adapter else None,
         "runtime_adapter_driver": item.runtime_adapter_driver
@@ -246,6 +299,7 @@ def publication_data(item: TaskPublication) -> dict[str, object]:
         "audience_count": _audience_count(item),
         "publication_error": item.publication_error,
         "row_version": item.row_version,
+        "allowed_actions": allowed_actions,
         "prerequisites": [
             {
                 "kind": pre.kind,
@@ -254,16 +308,117 @@ def publication_data(item: TaskPublication) -> dict[str, object]:
                 if pre.prerequisite_publication_id
                 else None,
             }
-            for pre in item.prerequisites.all()
+            for pre in _publication_prerequisites(item)
         ],
+        "chapters": publication_chapter_data(item),
     }
 
 
+def publication_chapter_data(item: TaskPublication) -> list[dict[str, object]]:
+    chapters = _publication_chapters(item)
+    if not chapters:
+        legacy = LegacyTemplateAdapter.from_version(item.template_version)
+        if legacy.migration_required:
+            return []
+        return [
+            {
+                "public_id": chapter["public_id"],
+                "source_chapter_id": None,
+                "title": chapter["title"],
+                "description": chapter["description"],
+                "learning_objectives": chapter.get("learning_objectives", []),
+                "sort_order": chapter["sort_order"],
+                "snapshot": True,
+                "tasks": [
+                    {
+                        "public_id": task["public_id"],
+                        "source_task_id": None,
+                        "title": task["title"],
+                        "description": task["description"],
+                        "instructions": task["instructions"],
+                        "task_type": task["task_type"],
+                        "sort_order": task["sort_order"],
+                        "image_digest": "",
+                        "resource_profile_snapshot": {},
+                        "execution_snapshot": task["execution_spec"],
+                        "submission_policy": {"required": True},
+                        "grading_policy": {"mode": "MANUAL"},
+                    }
+                    for task in chapter["tasks"]
+                ],
+            }
+            for chapter in legacy.chapters
+        ]
+    return [
+        {
+            "public_id": chapter.public_id,
+            "source_chapter_id": chapter.source_chapter_id,
+            "title": chapter.title,
+            "description": chapter.description,
+            "learning_objectives": chapter.learning_objectives,
+            "sort_order": chapter.sort_order,
+            "snapshot": chapter.snapshot,
+            "tasks": [
+                {
+                    "public_id": task.public_id,
+                    "source_task_id": task.source_task_id,
+                    "title": task.title,
+                    "description": task.description,
+                    "instructions": task.instructions,
+                    "task_type": task.task_type,
+                    "sort_order": task.sort_order,
+                    "image_digest": task.image_digest,
+                    "resource_profile_snapshot": task.resource_profile_snapshot,
+                    "execution_snapshot": task.execution_snapshot,
+                    "submission_policy": task.submission_policy,
+                    "grading_policy": task.grading_policy,
+                }
+                for task in _publication_tasks(chapter)
+            ],
+        }
+        for chapter in chapters
+    ]
+
+
 def _audience_count(item: TaskPublication) -> int:
-    row = item.audience.filter(audience_kind=PublicationAudience.Kind.ALL_ACTIVE).first()
-    if row is not None:
-        return len(row.snapshot_enrollment_ids)
-    return item.audience.count()
+    audience = _publication_audience(item)
+    all_active = next(
+        (row for row in audience if row.audience_kind == PublicationAudience.Kind.ALL_ACTIVE),
+        None,
+    )
+    if all_active is not None:
+        return len(all_active.snapshot_enrollment_ids)
+    return len(audience)
+
+
+def _publication_prerequisites(item: TaskPublication) -> list[PublicationPrerequisite]:
+    values: list[PublicationPrerequisite] | None = getattr(item, "_response_prerequisites", None)
+    if values is None:
+        values = list(
+            item.prerequisites.select_related("chapter", "prerequisite_publication").all()
+        )
+    return list(values)
+
+
+def _publication_audience(item: TaskPublication) -> list[PublicationAudience]:
+    values = getattr(item, "_response_audience", None)
+    if values is None:
+        values = list(item.audience.all())
+    return list(values)
+
+
+def _publication_chapters(item: TaskPublication) -> list[PublicationChapter]:
+    values: list[PublicationChapter] | None = getattr(item, "_response_chapters", None)
+    if values is None:
+        values = list(item.chapter_snapshots.all())
+    return sorted(values, key=lambda chapter: (chapter.sort_order, chapter.id))
+
+
+def _publication_tasks(chapter: PublicationChapter) -> list[PublicationTask]:
+    values: list[PublicationTask] | None = getattr(chapter, "_response_tasks", None)
+    if values is None:
+        values = list(chapter.task_snapshots.all())
+    return sorted(values, key=lambda task: (task.sort_order, task.id))
 
 
 def task_data(
@@ -289,7 +444,7 @@ def task_data(
         }
     provisioning = None
     try:
-        from apps.provisioning.models import ProvisioningJob
+        from apps.provisioning.models import ProvisioningInstance, ProvisioningJob
 
         job = (
             item.provisioning_jobs.select_related("failure_record", "compensation_task")
@@ -309,7 +464,17 @@ def task_data(
                 ),
                 "events_channel": f"task:{item.public_id}",
             }
-    except (AttributeError, ProvisioningJob.DoesNotExist):
+        instance = getattr(item, "provisioning_instance", None)
+        if instance is not None:
+            provisioning = dict(provisioning or {})
+            provisioning.update(
+                {
+                    "runtime_id": instance.public_id,
+                    "runtime_row_version": instance.row_version,
+                    "instance_status": instance.status,
+                }
+            )
+    except (AttributeError, ProvisioningInstance.DoesNotExist, ProvisioningJob.DoesNotExist):
         provisioning = None
     return {
         "public_id": item.public_id,

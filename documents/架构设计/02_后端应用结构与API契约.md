@@ -1,7 +1,7 @@
 # 02 后端应用结构与 API 契约
 
 > 上游：`00_架构总纲.md`、`01_领域模型与数据设计.md`  
-> 状态：目标后端设计，尚未实施
+> 状态：目标后端设计基线；当前已存在 15 个 Django 应用和 API 路由，具体实现与验收边界见 [项目现状快照](../项目现状快照_2026-10-15.md)。
 
 ## 一、工程结构
 
@@ -56,7 +56,7 @@ tests/              模型、service、API、权限和并发测试
 三个站点将本站 `/api/v2/*` 反向代理到共享 Django。网关根据已匹配的 Host 覆盖写入可信头：
 
 ```text
-user.example.edu    → X-Portal: USER
+student.example.edu    → X-Portal: USER
 teacher.example.edu → X-Portal: TEACHING
 admin.example.edu   → X-Portal: PLATFORM
 ```

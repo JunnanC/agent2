@@ -25,6 +25,7 @@ from .selectors import (
     paged_teaching_tasks,
     paged_user_tasks,
     publication_for_course,
+    publication_response_prefetches,
     publications_for_course,
     task_for_user,
     visible_extension_requests_for_user,
@@ -54,7 +55,8 @@ from .services import (
     prerequisite_blockers_for_publication,
     publish_publication,
     request_extension,
-    start_task,
+    start_task_runtime,
+    stop_task_runtime,
     teaching_progress,
     update_publication,
     withdraw_publication,
@@ -133,9 +135,14 @@ def _idempotent(
 def _refresh_publication(publication_id: str) -> TaskPublication:
     return (
         TaskPublication.objects.select_related(
-            "course", "template_version__template", "rubric_version__rubric"
+            "course",
+            "template_version__template",
+            "rubric_version__rubric",
+            "runtime_adapter",
+            "image",
+            "resource_profile",
         )
-        .prefetch_related("prerequisites", "audience")
+        .prefetch_related(*publication_response_prefetches())
         .get(public_id=publication_id)
     )
 
@@ -434,6 +441,8 @@ class UserDashboardView(APIView):
         extensions={"x-portals": ["USER"]},
     )
     def get(self, request: HttpRequest) -> Response:
+        from apps.workspaces.selectors import weekly_study_minutes_for_student
+
         spec = PageSpec(page=1, page_size=5)
         tasks, _ = paged_user_tasks(actor=request.user, spec=spec)
         counts: dict[str, int] = {}
@@ -445,6 +454,7 @@ class UserDashboardView(APIView):
             request,
             {
                 "counts": counts,
+                "weekly_study": weekly_study_minutes_for_student(student=request.user),
                 "next_tasks": [
                     task_data(
                         item,
@@ -547,17 +557,54 @@ class UserTaskStartView(APIView):
         expected = parse_if_match(request.headers.get("If-Match"))
 
         def operation() -> StoredResponse:
-            item = start_task(
+            item, _job = start_task_runtime(
                 task_id=task_id,
                 actor=request.user,
                 expected_version=expected,
                 context=_context(request),
+                payload=request.data if isinstance(request.data, dict) else {},
             )
             item = task_for_user(actor=request.user, task_id=item.public_id)
             return StoredResponse(
                 202,
                 _body(request, task_data(item, actions=allowed_actions(item, actor=request.user))),
                 {"ETag": etag_for_version(item.row_version)},
+            )
+
+        return _idempotent(request, payload={}, operation=operation)
+
+
+class UserTaskStopView(APIView):
+    permission_classes = [IsUserPortal]
+
+    @extend_schema(
+        operation_id="student_task_runtime_stop",
+        request=None,
+        responses=GenericResponseSerializer,
+        parameters=[IF_MATCH, IDEMPOTENCY_KEY],
+        extensions={"x-portals": ["USER"]},
+    )
+    def post(self, request: HttpRequest, runtime_id: str) -> Response:
+        expected = parse_if_match(request.headers.get("If-Match"))
+
+        def operation() -> StoredResponse:
+            instance = stop_task_runtime(
+                runtime_id=runtime_id,
+                actor=request.user,
+                context=_context(request),
+                expected_version=expected,
+            )
+            return StoredResponse(
+                200,
+                _body(
+                    request,
+                    {
+                        "runtime_id": instance.public_id,
+                        "task_id": instance.task.public_id,
+                        "status": instance.status,
+                    },
+                ),
+                {"ETag": etag_for_version(instance.task.row_version)},
             )
 
         return _idempotent(request, payload={}, operation=operation)

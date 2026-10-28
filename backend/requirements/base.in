@@ -13,3 +13,4 @@ boto3==1.40.40
 jsonschema==4.25.1
 docker==7.1.0
 httpx==0.28.1
+cryptography==46.0.3

@@ -290,7 +290,9 @@ class Command(BaseCommand):
     def _image(teacher: User) -> ImageAsset:
         digest = str(os.getenv("P16_IMAGE_DIGEST", "")).strip()
         if not (digest.startswith("sha256:") and len(digest) == 71):
-            digest = "sha256:" + "0" * 64
+            raise CommandError(
+                "P16_IMAGE_DIGEST must be a sha256 digest from the local Docker image."
+            )
         image, _ = ImageAsset.objects.get_or_create(
             digest=digest,
             defaults={

@@ -3,6 +3,7 @@ import urllib.error
 import urllib.request
 from contextlib import suppress
 from datetime import timedelta
+from typing import Any
 
 from celery import shared_task
 from django.conf import settings
@@ -11,12 +12,21 @@ from redis import Redis
 
 from apps.core.audit import append_failure
 from apps.core.models import FailureRecord
-from apps.provisioning.adapters import RuntimeAdapterFailure, runtime_for_driver
+from apps.provisioning.adapters import RuntimeAdapterFailure
 from apps.provisioning.ports import RuntimeSpec
+from apps.provisioning.services import _runtime_adapter_for_row
 
+from .errors import GovernanceStateConflict, GovernanceValidationError
 from .metrics import RUNTIME_ADAPTER_CAPACITY, RUNTIME_ADAPTER_HEALTH
 from .models import QuotaReservation, RuntimeAdapter
-from .services import expire_reservations, rebuild_quota_cache, record_runtime_health
+from .services import (
+    ActorContext,
+    expire_reservations,
+    rebuild_quota_cache,
+    record_runtime_health,
+    reresolve_image_digest,
+    resolve_image_digest,
+)
 
 
 def _nonnegative_int(value: object) -> int:
@@ -63,8 +73,10 @@ def probe_runtime_adapters(*, trace_id: str = "") -> dict[str, str]:
     for adapter_config in adapters:
         try:
             health = dict(
-                runtime_for_driver(
-                    adapter_config.driver, config_ref=adapter_config.config_ref
+                _runtime_adapter_for_row(
+                    driver=adapter_config.driver,
+                    config_ref=adapter_config.config_ref,
+                    code=adapter_config.code,
                 ).health()
             )
         except RuntimeAdapterFailure:
@@ -176,8 +188,10 @@ def reconcile_runtime_capacity(*, trace_id: str = "") -> dict[str, int]:
                     "RUNTIME_CAPACITY_TEMPLATE_UNAVAILABLE", retryable=False
                 )
             adapter_config, spec = resolved
-            runtime_for_driver(
-                adapter_config.driver, config_ref=adapter_config.config_ref
+            _runtime_adapter_for_row(
+                driver=adapter_config.driver,
+                config_ref=adapter_config.config_ref,
+                code=adapter_config.code,
             ).coordinate_capacity(
                 spec,
                 idempotency_key=f"capacity:{reservation.reservation_key}",
@@ -214,8 +228,10 @@ def reconcile_runtime_capacity(*, trace_id: str = "") -> dict[str, int]:
     for reservation in recent.iterator():
         for adapter_config in adapters:
             try:
-                runtime_for_driver(
-                    adapter_config.driver, config_ref=adapter_config.config_ref
+                _runtime_adapter_for_row(
+                    driver=adapter_config.driver,
+                    config_ref=adapter_config.config_ref,
+                    code=adapter_config.code,
                 ).release_capacity(
                     idempotency_key=f"capacity:{reservation.reservation_key}"
                 )
@@ -245,3 +261,99 @@ def run_maintenance(*, trace_id: str) -> dict[str, int | str]:
         "capacity_released": capacity["released"],
         "capacity_failed": capacity["failed"],
     }
+
+
+def _describe_resolve_failure(exc: Exception) -> str:
+    detail = getattr(exc, "detail", None)
+    if isinstance(detail, dict) and detail:
+        parts = [f"{key}={value}" for key, value in detail.items()]
+        return "; ".join(parts) or str(exc)
+    return str(exc)
+
+
+@shared_task(
+    name="apps.governance.resolve_image_digest",
+    bind=True,
+    max_retries=2,
+    queue="q_provision",
+    acks_late=True,
+)
+def resolve_image_digest_task(self: Any, image_id: str, trace_id: str = "") -> str:
+    try:
+        resolved = resolve_image_digest(
+            image_id=image_id,
+            reason="",
+            allow_resolved=True,
+            context=ActorContext("PLATFORM_WORKER", "PLATFORM", trace_id),
+        )
+    except (GovernanceValidationError, GovernanceStateConflict) as exc:
+        # 确定性失败（无可用运行时 / 内容重复 / 源站不可达等）重试不会成功，直接记录并抛出
+        append_failure(
+            failure_type="IMAGE_RESOLVE",
+            subject_type="IMAGE_ASSET",
+            subject_ref=image_id,
+            error_code="IMAGE_RESOLVE_FAILED",
+            message=_describe_resolve_failure(exc),
+            detail={"image_id": image_id},
+            retryable=False,
+            trace_id=trace_id,
+        )
+        raise
+    except Exception as exc:
+        if self.request.retries < self.max_retries:
+            raise self.retry(exc=exc, countdown=2 ** self.request.retries) from exc
+        append_failure(
+            failure_type="IMAGE_RESOLVE",
+            subject_type="IMAGE_ASSET",
+            subject_ref=image_id,
+            error_code="IMAGE_RESOLVE_FAILED",
+            message=str(exc),
+            detail={"image_id": image_id},
+            retryable=False,
+            trace_id=trace_id,
+        )
+        raise
+    return resolved.public_id
+
+
+@shared_task(
+    name="apps.governance.reresolve_image_digest",
+    bind=True,
+    max_retries=2,
+    queue="q_provision",
+    acks_late=True,
+)
+def reresolve_image_digest_task(self: Any, image_id: str, trace_id: str = "") -> str:
+    try:
+        resolved = reresolve_image_digest(
+            image_id=image_id,
+            context=ActorContext("PLATFORM_WORKER", "PLATFORM", trace_id),
+        )
+    except (GovernanceValidationError, GovernanceStateConflict) as exc:
+        # 确定性失败(运行时不可达 / 重解析出的摘要与目录内其它资产重复)重试无意义
+        append_failure(
+            failure_type="IMAGE_RERESOLVE",
+            subject_type="IMAGE_ASSET",
+            subject_ref=image_id,
+            error_code="IMAGE_RERESOLVE_FAILED",
+            message=_describe_resolve_failure(exc),
+            detail={"image_id": image_id},
+            retryable=False,
+            trace_id=trace_id,
+        )
+        raise
+    except Exception as exc:
+        if self.request.retries < self.max_retries:
+            raise self.retry(exc=exc, countdown=2 ** self.request.retries) from exc
+        append_failure(
+            failure_type="IMAGE_RERESOLVE",
+            subject_type="IMAGE_ASSET",
+            subject_ref=image_id,
+            error_code="IMAGE_RERESOLVE_FAILED",
+            message=str(exc),
+            detail={"image_id": image_id},
+            retryable=False,
+            trace_id=trace_id,
+        )
+        raise
+    return resolved.public_id

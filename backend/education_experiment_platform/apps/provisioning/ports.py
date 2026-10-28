@@ -16,6 +16,8 @@ class RuntimeSpec:
     cpu_millicores: int
     memory_mb: int
     disk_gb: int
+    cpu_limit_millicores: int = 0
+    memory_limit_mb: int = 0
     network_policy: Mapping[str, object] = field(default_factory=dict)
     workspace_capabilities: Mapping[str, object] = field(default_factory=dict)
     ttl_seconds: int = 0
@@ -29,6 +31,14 @@ class RuntimeSpec:
         registry = self.image_registry.rstrip("/")
         repository = self.image_repository.lstrip("/")
         return f"{registry}/{repository}@{self.image_digest}"
+
+    @property
+    def cpu_request_millicores(self) -> int:
+        return self.cpu_millicores
+
+    @property
+    def memory_request_mb(self) -> int:
+        return self.memory_mb
 
 
 @dataclass(frozen=True)
@@ -68,9 +78,27 @@ class RuntimeWorkspaceArtifact:
 
 
 class RuntimeAdapter(Protocol):
+    def capabilities(self) -> Mapping[str, bool]: ...
+
     def preflight(self, spec: RuntimeSpec) -> RuntimeResult: ...
 
     def prepare_image(self, spec: RuntimeSpec) -> None: ...
+
+    def build_image(
+        self,
+        *,
+        registry: str,
+        repository: str,
+        tag: str,
+        context: Mapping[str, object],
+        build_args: Mapping[str, object],
+    ) -> Mapping[str, object]: ...
+
+    def resolve_image(
+        self, *, registry: str, repository: str, tag: str
+    ) -> Mapping[str, object]: ...
+
+    def validate_image(self, *, digest: str) -> Mapping[str, object]: ...
 
     def attach_network(self, spec: RuntimeSpec) -> None: ...
 
@@ -127,4 +155,5 @@ class RuntimeAdapter(Protocol):
         memory_mb: int,
         cpu_millicores: int,
         network_mode: str,
+        tests: bytes = b"",
     ) -> RuntimeExecutionResult: ...

@@ -7,15 +7,18 @@ fi
 
 umask 077
 
+TTYD_PID=''
 CODE_SERVER_PID=''
 ROUTER_PID=''
 
 terminate() {
     trap - INT TERM EXIT
-    if [ -n "$ROUTER_PID" ]; then kill -TERM "$ROUTER_PID" 2>/dev/null || true; fi
-    if [ -n "$CODE_SERVER_PID" ]; then kill -TERM "$CODE_SERVER_PID" 2>/dev/null || true; fi
-    if [ -n "$ROUTER_PID" ]; then wait "$ROUTER_PID" 2>/dev/null || true; fi
-    if [ -n "$CODE_SERVER_PID" ]; then wait "$CODE_SERVER_PID" 2>/dev/null || true; fi
+    for pid in "$TTYD_PID" "$ROUTER_PID" "$CODE_SERVER_PID"; do
+        if [ -n "$pid" ]; then kill -TERM "$pid" 2>/dev/null || true; fi
+    done
+    for pid in "$TTYD_PID" "$ROUTER_PID" "$CODE_SERVER_PID"; do
+        if [ -n "$pid" ]; then wait "$pid" 2>/dev/null || true; fi
+    done
 }
 
 trap terminate INT TERM EXIT
@@ -28,6 +31,19 @@ mkdir -p \
     "$XDG_RUNTIME_DIR" \
     /tmp/code-server/user-data/User
 cp /opt/workspace-config/User/settings.json /tmp/code-server/user-data/User/settings.json
+
+# 真实终端:ttyd 以 -W 连接到真实 shell,router 以 /terminal/ 前缀分发到此端口。
+# 通过线路上游(X-Workspace-Upstream-Token)在 router 鉴权;详细的终端参数保持:
+# interface=127.0.0.1(仅环路)、base-path=/terminal(网关保留能力前缀)、port=7681。
+if [ -x /usr/local/bin/ttyd ]; then
+    /usr/local/bin/ttyd \
+        --interface 127.0.0.1 \
+        --port 7681 \
+        --base-path /terminal \
+        --writable \
+        /bin/bash &
+    TTYD_PID=$!
+fi
 
 /opt/code-server/bin/code-server \
     --bind-addr 127.0.0.1:3000 \

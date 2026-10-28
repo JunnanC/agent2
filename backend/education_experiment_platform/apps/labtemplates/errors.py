@@ -7,6 +7,18 @@ class TemplateStateConflict(CoreError):
     status_code = 409
 
 
+class TemplateNameExists(CoreError):
+    code = "TEMPLATE_NAME_EXISTS"
+    message = "已存在同名实验模板，请更换模板名称"
+    status_code = 422
+
+
+class TemplateDeleteForbidden(CoreError):
+    code = "TEMPLATE_DELETE_FORBIDDEN"
+    message = "只有模板创建者可以删除该模板"
+    status_code = 403
+
+
 class TemplateValidationError(CoreError):
     code = "TEMPLATE_VALIDATION_ERROR"
     message = "模板规格无效"

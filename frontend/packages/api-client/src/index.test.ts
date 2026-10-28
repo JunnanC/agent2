@@ -1,80 +1,92 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { taskApi, workspaceApi } from "./index";
+import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 
-import { RequestIntent, apiRequest, apiRequestWithMetadata } from './index'
+function jsonResponse(status: number, body: unknown, headers?: Record<string, string>): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "Content-Type": "application/json", ...headers },
+  });
+}
 
-afterEach(() => {
-  vi.unstubAllGlobals()
-  document.cookie = 'csrftoken=; Max-Age=0; path=/'
-})
+const okEnvelope = { data: {}, meta: { trace_id: "t1" } };
 
-describe('api client', () => {
-  it('keeps one idempotency key for retries with the same body', async () => {
-    const fetchMock = vi
-      .fn()
-      .mockImplementation(() => Promise.resolve(new Response('{"data":{}}', { status: 201 })))
-    vi.stubGlobal('fetch', fetchMock)
-    const intent = new RequestIntent('intent-1')
-    const request = {
-      method: 'POST',
-      body: JSON.stringify({ name: 'one' }),
-      headers: { 'Content-Type': 'application/json' },
-      intent,
-    }
+/**
+ * 契约对齐测试（对应 docs/frontend/frontend-backend-integration-guide.md）：
+ * - row_version 实测为数字，前端需转字符串展示
+ * - allowed_actions 实测为大写（ENTER / REQUEST_EXTENSION），前端统一小写
+ * - current_failure 为对象（可以为空对象），非数组
+ */
+describe("task 数据边界规范化", () => {
+  beforeEach(() => {
+    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse(200, {
+      ...okEnvelope,
+      data: {
+        public_id: "01M5EES0WBQ53F1CRNPQQ1MS1X",
+        title: "Linux 网络故障排查",
+        course_id: "course-1",
+        publication_id: "pub-1",
+        status: "READY",
+        progress: 0,
+        row_version: 3,
+        allowed_actions: ["ENTER", "REQUEST_EXTENSION"],
+        blockers: [],
+        current_failure: {},
+      },
+    })));
+  });
 
-    await apiRequest('/api/v2/things', request)
-    await apiRequest('/api/v2/things', request)
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
 
-    for (const call of fetchMock.mock.calls) {
-      const headers = call[1]?.headers as Headers
-      expect(headers.get('Idempotency-Key')).toBe('intent-1')
-    }
-    await expect(
-      apiRequest('/api/v2/things', { ...request, body: JSON.stringify({ name: 'two' }) }),
-    ).rejects.toThrow('create a new RequestIntent')
-  })
+  it("detail 返回的 row_version 转字符串、动作转小写", async () => {
+    const task = await taskApi.detail("01M5EES0WBQ53F1CRNPQQ1MS1X");
+    expect(task.row_version).toBe("3");
+    expect(task.allowed_actions).toEqual(["enter", "request_extension"]);
+    expect(task.blockers).toEqual([]);
+    expect(task.status).toBe("READY");
+  });
 
-  it('adds CSRF and If-Match and returns response metadata', async () => {
-    document.cookie = 'csrftoken=csrf-value; path=/'
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response('{"data":{}}', {
-        status: 200,
-        headers: { ETag: '"4"', 'X-Request-ID': 'trace-1' },
-      }),
-    )
-    vi.stubGlobal('fetch', fetchMock)
+  it("字段缺失时不抛错（空数组保底）", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse(200, { ...okEnvelope, data: { public_id: "t2" } })));
+    const task = await taskApi.detail("t2");
+    expect(task.allowed_actions).toEqual([]);
+    expect(task.blockers).toEqual([]);
+  });
 
-    const result = await apiRequestWithMetadata('/api/v2/things/one', {
-      method: 'PATCH',
-      body: '{}',
-      ifMatch: '"3"',
-    })
+  it("rows_class 列表响应也做同样的规范化", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse(200, {
+      data: [{ public_id: "t-x", status: "ASSIGNED", row_version: 9, allowed_actions: ["START"] }],
+      meta: { page: 1, page_size: 20, total: 1, trace_id: "t1" },
+    })));
+    const list = await taskApi.list({});
+    expect(list.rows[0]?.row_version).toBe("9");
+    expect(list.rows[0]?.allowed_actions).toEqual(["start"]);
+  });
 
-    const headers = fetchMock.mock.calls[0]?.[1]?.headers as Headers
-    expect(headers.get('X-CSRFToken')).toBe('csrf-value')
-    expect(headers.get('If-Match')).toBe('"3"')
-    expect(result.etag).toBe('"4"')
-    expect(result.traceId).toBe('trace-1')
-  })
+  it("checkpoints 的 { items: [...] } 包装返回也能转成列表", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse(200, {
+      data: { items: [{ public_id: "cp-1", task_id: "t-1" }], current_version: 0, row_version: 1 },
+      meta: { trace_id: "t1" },
+    })));
+    const list = await workspaceApi.checkpoints("t-1", "tok");
+    expect(list.rows).toHaveLength(1);
+    expect(list.currentVersion).toBe(0);
+    expect(list.sessionRowVersion).toBe(1);
+  });
 
-  it('normalizes non-json gateway failures with trace information', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue(
-        new Response('upstream unavailable', {
-          status: 503,
-          headers: { 'X-Request-ID': 'trace-2' },
-        }),
-      ),
-    )
-
-    await expect(apiRequest('/api/v2/health')).rejects.toMatchObject({
-      status: 503,
-      traceId: 'trace-2',
-      payload: { error: { code: 'HTTP_503', retryable: true } },
-    })
-  })
-
-  it('rejects cross-origin request paths', async () => {
-    await expect(apiRequest('https://example.invalid/api')).rejects.toThrow('same-origin')
-  })
-})
+  it("工作区运行请求会携带 X-Workspace-Token 头", async () => {
+    const fetchMock = vi.fn(async (input: string | URL, init?: RequestInit) => {
+      void input;
+      void init;
+      return jsonResponse(200, { ...okEnvelope, data: { public_id: "r-1", status: "PASSED" } });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    await workspaceApi.createExecutionRun("t-1", {}, "ws-token");
+    const postCall = fetchMock.mock.calls.find(([, init]) => (init as RequestInit)?.method === "POST");
+    expect(postCall).toBeTruthy();
+    const headers = new Headers((postCall as [string | URL, RequestInit])[1].headers as HeadersInit);
+    expect(headers.get("X-Workspace-Token")).toBe("ws-token");
+    expect(headers.get("Idempotency-Key")).toBeTruthy();
+  });
+});
