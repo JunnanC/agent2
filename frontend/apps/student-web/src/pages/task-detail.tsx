@@ -38,7 +38,8 @@ export function TaskDetail() {
     refetchInterval: (query) => {
       const data = query.state.data as Record<string, unknown> | null;
       const status = String(data?.["status"] ?? "");
-      return ["SUBMITTED", "RUNNING"].includes(status) ? 4000 : false;
+      /* 后端 job 状态只有 QUEUED/RUNNING/RETRY/PASSED/FAILED/CANCELLED,QUEUED 阶段也必须持续轮询 */
+      return ["QUEUED", "SUBMITTED", "RUNNING", "RETRY"].includes(status) ? 4000 : false;
     },
     enabled: task.data?.status === "PROVISIONING",
   });
@@ -47,13 +48,16 @@ export function TaskDetail() {
 
   const actionMutation = useMutation({
     mutationFn: (input: { action: string }): Promise<Task | { task: Task; session: WorkspaceSession }> => {
-      const reuseKey = `task-${input.action}-${taskId}`;
-      if (input.action === "start") return taskApi.start(taskId, task.data?.row_version ?? "", reuseKey);
-      if (input.action === "retry") return taskApi.retry(taskId, task.data?.row_version ?? "", reuseKey);
+      const ifMatch = task.data?.row_version ?? "";
+      /* 幂等键必须随行版本变化:同一任务可能反复 start/retry,固定键会被后端幂等层重放旧响应,
+         提示"成功"但任务状态不变,弹窗会永远停留在"正在提交开通请求…" */
+      const reuseKey = `task-${input.action}-${taskId}-${ifMatch}`;
+      if (input.action === "start") return taskApi.start(taskId, ifMatch, reuseKey);
+      if (input.action === "retry") return taskApi.retry(taskId, ifMatch, reuseKey);
       if (input.action === "enter") {
-        return taskApi.enter(taskId, task.data?.row_version ?? "", reuseKey);
+        return taskApi.enter(taskId, ifMatch, reuseKey);
       }
-      return taskApi.complete(taskId, task.data?.row_version ?? "");
+      return taskApi.complete(taskId, ifMatch);
     },
     onMutate: (input) => {
       if (input.action === "start" || input.action === "retry") {
@@ -141,6 +145,11 @@ export function TaskDetail() {
       autoEnteredRef.current = true;
       setProvisionOpen(false);
       actionMutation.mutate({ action: "enter" });
+      return;
+    }
+    /* 操作已受理但任务没有进入准备状态且无装载进度可展示时收起弹窗,避免永远停留在"正在提交开通请求…" */
+    if (!task.isFetching && !actionMutation.isPending && taskStatus !== "PROVISIONING" && !provisioning.data) {
+      setProvisionOpen(false);
     }
   }, [provisionOpen, task, provisioning.data, actionMutation]);
 
