@@ -6,7 +6,6 @@ import { LoadingState, ToastProvider } from "@edu/ui";
 import { queryClient } from "./providers";
 import { AuthGuard, PortalSSEBridge } from "./guards";
 import { Login } from "@/pages/login";
-import { Home } from "@/pages/home";
 import { Users } from "@/pages/users";
 import { Governance } from "@/pages/governance";
 import { Resources } from "@/pages/resources";
@@ -14,6 +13,7 @@ import { Images } from "@/pages/images";
 import { Incidents } from "@/pages/incidents";
 import { Audit } from "@/pages/audit";
 import { Agents } from "@/pages/agents";
+import ManagementConsole from "../App";
 
 export function App(): JSX.Element {
   return (
@@ -24,8 +24,10 @@ export function App(): JSX.Element {
           <PortalSSEBridge />
           <Routes>
             <Route path="/login" element={<Login />} />
+            <Route element={<AuthGuard shell={false} />}>
+              <Route path="/" element={<ManagementConsole />} />
+            </Route>
             <Route element={<AuthGuard />}>
-              <Route path="/" element={<Home />} />
               <Route path="/users" element={<Users />} />
               <Route path="/governance" element={<Governance />} />
               <Route path="/resources" element={<Resources />} />

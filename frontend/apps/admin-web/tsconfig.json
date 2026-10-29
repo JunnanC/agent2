@@ -4,11 +4,11 @@
     "types": ["vite/client"],
     "baseUrl": ".",
     "paths": {
-      "@edu/ui": ["../../packages/ui/src/index.tsx"],
-      "@edu/api-client": ["../../packages/api-client/src/index.ts"],
+      "@edu/ui": ["./src/legacy/ui.tsx"],
+      "@edu/api-client": ["./src/legacy/api-client.ts"],
       "@edu/auth-client": ["../../packages/auth-client/src/index.ts"],
-      "@edu/event-client": ["../../packages/event-client/src/index.ts"],
-      "@edu/query-keys": ["../../packages/query-keys/src/index.ts"],
+      "@edu/event-client": ["./src/legacy/event-client.ts"],
+      "@edu/query-keys": ["./src/legacy/query-keys.ts"],
       "@/*": ["./src/*"]
     }
   },

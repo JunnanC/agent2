@@ -1,10 +1,11 @@
 {
   "name": "@edu/admin-web",
   "private": true,
+  "type": "module",
   "scripts": {
-    "dev": "vite --port 5175",
-    "build": "vite build",
-    "preview": "vite preview"
+    "dev": "vite --host 127.0.0.1 --port 5175 --strictPort",
+    "build": "tsc -b && vite build",
+    "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
     "@edu/api-client": "*",

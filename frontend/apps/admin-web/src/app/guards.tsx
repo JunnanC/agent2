@@ -23,7 +23,7 @@ export function PortalSSEBridge() {
   return null;
 }
 
-export function AuthGuard() {
+export function AuthGuard({ shell = true }: { shell?: boolean }) {
   const session = useSession();
   const navigate = useNavigate();
   const location = useLocation();
@@ -55,6 +55,8 @@ export function AuthGuard() {
       </div>
     );
   }
+
+  if (!shell) return <Outlet />;
 
   const { me, logout } = session;
   const displayName = me.display_name || me.username;

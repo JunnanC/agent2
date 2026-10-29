@@ -11,11 +11,11 @@ export default defineConfig({
   resolve: {
     alias: [
       { find: "@edu/ui/styles.css", replacement: path.resolve(__dirname, "../../packages/ui/src/styles.css") },
-      { find: /^@edu\/ui$/, replacement: path.resolve(__dirname, "../../packages/ui/src/index.tsx") },
-      { find: "@edu/api-client", replacement: path.resolve(__dirname, "../../packages/api-client/src/index.ts") },
+      { find: /^@edu\/ui$/, replacement: path.resolve(__dirname, "src/legacy/ui.tsx") },
+      { find: "@edu/api-client", replacement: path.resolve(__dirname, "src/legacy/api-client.ts") },
       { find: "@edu/auth-client", replacement: path.resolve(__dirname, "../../packages/auth-client/src/index.ts") },
-      { find: "@edu/event-client", replacement: path.resolve(__dirname, "../../packages/event-client/src/index.ts") },
-      { find: "@edu/query-keys", replacement: path.resolve(__dirname, "../../packages/query-keys/src/index.ts") },
+      { find: "@edu/event-client", replacement: path.resolve(__dirname, "src/legacy/event-client.ts") },
+      { find: "@edu/query-keys", replacement: path.resolve(__dirname, "src/legacy/query-keys.ts") },
       { find: "@", replacement: path.resolve(__dirname, "src") },
     ],
   },
