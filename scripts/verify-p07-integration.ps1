@@ -8,7 +8,7 @@ if ($ProjectName -notmatch '^[a-z0-9][a-z0-9_-]{2,62}$') { throw 'ProjectName mu
 $root = Split-Path -Parent $PSScriptRoot
 $compose = @('compose', '-p', $ProjectName, '-f', "$root\docker-compose.dev.yml")
 $previous = @{}
-foreach ($name in @('ENTRY_PORT', 'OPENAPI_REVISION', 'APP_VERSION', 'APP_NETWORK_SUBNET', 'FLUENTD_HOST_PORT', 'MINIO_API_PORT', 'MINIO_CONSOLE_PORT', 'PROMETHEUS_PORT', 'P02_E2E_PASSWORD', 'USER_WEB_URL', 'TEACHER_WEB_URL', 'ADMIN_WEB_URL')) {
+foreach ($name in @('ENTRY_PORT', 'OPENAPI_REVISION', 'APP_VERSION', 'APP_NETWORK_SUBNET', 'FLUENTD_HOST_PORT', 'MINIO_API_PORT', 'MINIO_CONSOLE_PORT', 'PROMETHEUS_PORT', 'P02_E2E_PASSWORD', 'STUDENT_WEB_URL', 'TEACHER_WEB_URL', 'ADMIN_WEB_URL')) {
     $previous[$name] = [Environment]::GetEnvironmentVariable($name)
 }
 $env:ENTRY_PORT = '18087'
@@ -57,13 +57,13 @@ try {
     & docker @compose up --build --detach
     if ($LASTEXITCODE -ne 0) { throw 'P07 full local edge stack failed to start.' }
     $env:P02_E2E_PASSWORD = $seedPassword
-    $env:USER_WEB_URL = 'http://user.localhost:18087'
+    $env:STUDENT_WEB_URL = 'http://student.localhost:18087'
     $env:TEACHER_WEB_URL = 'http://teacher.localhost:18087'
     $env:ADMIN_WEB_URL = 'http://admin.localhost:18087'
     $ready = $false
     for ($attempt = 0; $attempt -lt 60; $attempt++) {
         try {
-            $health = Invoke-RestMethod -Uri "$($env:USER_WEB_URL)/api/v2/health" -TimeoutSec 5 -NoProxy
+            $health = Invoke-RestMethod -Uri "$($env:STUDENT_WEB_URL)/api/v2/health" -TimeoutSec 5 -NoProxy
             if ($health.data.openapi_revision -eq 'v2-p07') { $ready = $true; break }
         } catch { }
         Start-Sleep -Seconds 2
@@ -71,7 +71,7 @@ try {
     if (-not $ready) { throw 'P07 local edge stack did not become ready.' }
     Push-Location "$root\frontend"
     try {
-        & npx.cmd playwright test e2e/p07.spec.ts --project=user-web --project=teacher-web --project=admin-web --workers=1
+        & npx.cmd playwright test e2e/p07.spec.ts --project=student-web --project=teacher-web --project=admin-web --workers=1
         if ($LASTEXITCODE -ne 0) { throw 'P07 three-portal Playwright verification failed.' }
     } finally { Pop-Location }
     Write-Output 'P07 isolated Compose schema, FakeRuntime seed, edge, Celery, OpenAPI, and three-portal Playwright checks passed; production evidence remains environment-dependent.'

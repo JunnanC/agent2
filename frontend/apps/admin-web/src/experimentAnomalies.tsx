@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
-import { ApiError, apiRequestWithMetadata, type PublicationData, type TaskData } from '@edu/api-client'
-import { experimentKeys } from '@edu/query-keys'
-import { PageHeader, RequestStateView, StatusBadge } from '@edu/ui'
+import { ApiError, apiRequestWithMetadata, type PublicationData, type TaskData } from './legacy/api-client'
+import { experimentKeys } from './legacy/query-keys'
+import { PageHeader, RequestStateView, StatusBadge } from './legacy/ui'
 
 type Compensation = {
   public_id: string

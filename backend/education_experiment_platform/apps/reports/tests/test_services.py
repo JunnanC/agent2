@@ -31,6 +31,7 @@ from apps.experiments.tests.helpers import (
     create_enrollment,
 )
 from apps.governance.models import Quota, RuntimeAdapter
+from apps.labtemplates.models import AutoCheckRule
 from apps.provisioning.adapters import reset_fake_runtime
 from apps.provisioning.services import execute_provisioning_job, start_provisioning
 from apps.workspaces.models import WorkspaceExecutionRun, WorkspaceSnapshot
@@ -390,6 +391,20 @@ class ReportServiceTests(TestCase):
             runtime_adapter_driver=RuntimeAdapter.Driver.DOCKER_LOCAL,
             runtime_adapter_config_ref="runtime/local-algorithm",
         )
+        AutoCheckRule.objects.create(
+            template_version=self.task.template_version,
+            position=1,
+            position_key="p09-rule",
+            checker_type="PYTEST",
+            input_schema={"type": "object"},
+            output_schema={"type": "object"},
+            timeout_seconds=30,
+            resource_limit={},
+            network_policy={"mode": "DENY_ALL"},
+            display_policy={"show_score": True},
+            failure_semantics={"on_failure": "FAIL_CHECK"},
+            rule_digest="d" * 64,
+        )
         self._snapshot()
         draft = ReportDraft.objects.get(task=self.task)
         update_report_draft(
@@ -408,6 +423,40 @@ class ReportServiceTests(TestCase):
                 context=self.context,
             )
         self.assertFalse(ReportVersion.objects.filter(task=self.task).exists())
+
+    def test_submission_without_test_rules_skips_execution_requirement(self) -> None:
+        """模板无测试用例时,提交沿用快照级兼容凭据,不要求执行运行。"""
+        type(self.task).objects.filter(pk=self.task.pk).update(
+            runtime_adapter_driver=RuntimeAdapter.Driver.DOCKER_LOCAL,
+            runtime_adapter_config_ref="runtime/local-algorithm",
+        )
+        snapshot = self._snapshot()
+        draft = ReportDraft.objects.get(task=self.task)
+        update_report_draft(
+            task_id=self.task.public_id,
+            actor=self.task.student,
+            body_markdown="# No rules attached",
+            expected_version=draft.row_version,
+            context=self.context,
+        )
+        self.task.refresh_from_db()
+        version, changed = submit_report(
+            task_id=self.task.public_id,
+            actor=self.task.student,
+            expected_task_version=self.task.row_version,
+            context=self.context,
+        )
+        self.assertEqual(changed.status, ExperimentTask.Status.UNDER_REVIEW)
+        self.assertEqual(version.execution_snapshot_id, snapshot.pk)
+        self.assertEqual(version.execution_run.snapshot_id, snapshot.pk)
+        self.assertEqual(
+            version.execution_run.status, WorkspaceExecutionRun.Status.PASSED
+        )
+        self.assertFalse(
+            WorkspaceExecutionRun.objects.filter(task=self.task).exclude(
+                pk=version.execution_run_id
+            ).exists()
+        )
 
     def test_submit_rejects_execution_asset_owned_by_another_run(self) -> None:
         snapshot = self._snapshot()

@@ -31,7 +31,7 @@ $previous = @{}
 $environmentNames = @(
     'APP_VERSION', 'OPENAPI_REVISION', 'ENTRY_PORT', 'P02_E2E_PASSWORD',
     'P16_E2E_TASK_TITLE', 'P16_COMPOSE_PROJECT', 'P16_COMPOSE_FILE',
-    'USER_WEB_URL', 'TEACHER_WEB_URL', 'ADMIN_WEB_URL', 'APP_NETWORK_SUBNET', 'FLUENTD_HOST_PORT',
+    'STUDENT_WEB_URL', 'TEACHER_WEB_URL', 'ADMIN_WEB_URL', 'APP_NETWORK_SUBNET', 'FLUENTD_HOST_PORT',
     'MINIO_API_PORT', 'MINIO_CONSOLE_PORT', 'PROMETHEUS_PORT', 'LOCAL_RUNTIME_IMAGE',
     'LOCAL_RUNTIME_MODE', 'LOCAL_RUNTIME_NETWORK', 'RUNTIME_ADAPTER_CONFIGS'
 )
@@ -65,7 +65,7 @@ try {
     $env:P16_E2E_TASK_TITLE = $taskTitle
     $env:P16_COMPOSE_PROJECT = $ProjectName
     $env:P16_COMPOSE_FILE = $composeFile
-    $env:USER_WEB_URL = "http://user.localhost:$EntryPort"
+    $env:STUDENT_WEB_URL = "http://student.localhost:$EntryPort"
     $env:TEACHER_WEB_URL = "http://teacher.localhost:$EntryPort"
     $env:ADMIN_WEB_URL = "http://admin.localhost:$EntryPort"
     $env:LOCAL_RUNTIME_IMAGE = $RuntimeImage
@@ -76,13 +76,13 @@ try {
     $composeUpArgs = @('up')
     if ($SkipRuntimeBuild) {
         # Build every application service explicitly, but never rebuild the promoted digest.
-        $buildServices = @('core-check', 'migrate', 'django', 'celery', 'celery-beat', 'runtime-worker', 'workspace-storage-worker', 'workspace-gateway', 'log-ingest', 'nginx')
+        $buildServices = @('core-check', 'migrate', 'django', 'celery', 'celery-beat', 'runtime-worker', 'workspace-gateway', 'log-ingest', 'nginx')
         Invoke-Compose -StepArguments (@('build') + $buildServices) -FailureMessage 'P16 Compose application services failed to build.'
         $composeUpArgs += '--no-build'
     } else {
         $composeUpArgs += '--build'
     }
-    $composeUpArgs += @('--detach', 'migrate', 'django', 'celery', 'celery-beat', 'runtime-worker', 'workspace-storage-worker', 'workspace-gateway', 'nginx')
+    $composeUpArgs += @('--detach', 'migrate', 'django', 'celery', 'celery-beat', 'runtime-worker', 'workspace-gateway', 'nginx')
     Invoke-Compose -StepArguments $composeUpArgs -FailureMessage 'P16 Compose services failed to build or start.'
     # Long-running Kong replicas cache Compose DNS answers across Django recreation.
     Invoke-Compose -StepArguments @('restart', 'kong') -FailureMessage 'P16 Kong replicas failed to refresh upstream DNS.'
@@ -111,7 +111,7 @@ try {
     $lastProbe = 'no response'
     for ($attempt = 0; $attempt -lt 90; $attempt++) {
         try {
-            $health = Invoke-WebRequest -Uri "$($env:USER_WEB_URL)/api/v2/health" -TimeoutSec 5 -NoProxy
+            $health = Invoke-WebRequest -Uri "$($env:STUDENT_WEB_URL)/api/v2/health" -TimeoutSec 5 -NoProxy
             $lastProbe = "status=$($health.StatusCode) body=$($health.Content)"
             if ($health.StatusCode -eq 200 -and $health.Content -match 'v2-p16') {
                 $consecutiveReady++
@@ -134,12 +134,12 @@ try {
     if ($seedText -match '\btask=([A-Za-z0-9_-]+)\b') { $taskId = $Matches[1] }
     if (-not $taskId) { throw 'P16 seed output did not return a task id for scoped cleanup.' }
 
-    $playwrightCommand = 'npm ci --ignore-scripts && npx playwright test e2e/p16.spec.ts --project=user-web --workers=1'
+    $playwrightCommand = 'npm ci --ignore-scripts && npx playwright test e2e/p16.spec.ts --project=student-web --workers=1'
     $playwrightArgs = @(
         'run', '--rm', '--network', 'host', '--volume', "$(Join-Path $root 'frontend'):/work/frontend",
         '--volume', '/work/frontend/node_modules',
         '--workdir', '/work/frontend', '--env', "P02_E2E_PASSWORD=$SeedPassword", '--env', "P16_E2E_TASK_TITLE=$taskTitle",
-        '--env', "USER_WEB_URL=http://user.localhost:$EntryPort", '--env', "TEACHER_WEB_URL=http://teacher.localhost:$EntryPort",
+        '--env', "STUDENT_WEB_URL=http://student.localhost:$EntryPort", '--env', "TEACHER_WEB_URL=http://teacher.localhost:$EntryPort",
         '--env', "P16_COMPOSE_PROJECT=$ProjectName", '--env', "P16_COMPOSE_FILE=/work/compose.dev.yml",
         'mcr.microsoft.com/playwright:v1.55.1-noble', 'bash', '-lc', $playwrightCommand
     )

@@ -25,7 +25,7 @@ if ($existingContainers -or $existingVolumes) {
 }
 
 $previous = @{}
-foreach ($name in @('APP_VERSION', 'OPENAPI_REVISION', 'ENTRY_PORT', 'APP_NETWORK_SUBNET', 'FLUENTD_HOST_PORT', 'MINIO_API_PORT', 'MINIO_CONSOLE_PORT', 'PROMETHEUS_PORT', 'P02_E2E_PASSWORD', 'USER_WEB_URL', 'TEACHER_WEB_URL', 'ADMIN_WEB_URL')) {
+foreach ($name in @('APP_VERSION', 'OPENAPI_REVISION', 'ENTRY_PORT', 'APP_NETWORK_SUBNET', 'FLUENTD_HOST_PORT', 'MINIO_API_PORT', 'MINIO_CONSOLE_PORT', 'PROMETHEUS_PORT', 'P02_E2E_PASSWORD', 'STUDENT_WEB_URL', 'TEACHER_WEB_URL', 'ADMIN_WEB_URL')) {
     $previous[$name] = [Environment]::GetEnvironmentVariable($name)
 }
 $env:APP_VERSION = '0.9.0-p09'
@@ -55,14 +55,14 @@ try {
 
     Invoke-P09Compose -StepArguments @('up', '--build', '--detach') -FailureMessage 'P09 full local edge stack failed to start.'
     $env:P02_E2E_PASSWORD = $seedPassword
-    $env:USER_WEB_URL = 'http://user.localhost:18089'
+    $env:STUDENT_WEB_URL = 'http://student.localhost:18089'
     $env:TEACHER_WEB_URL = 'http://teacher.localhost:18089'
     $env:ADMIN_WEB_URL = 'http://admin.localhost:18089'
     $ready = $false
     $lastProbe = 'no response'
     for ($attempt = 0; $attempt -lt 60; $attempt++) {
         try {
-            $healthText = & curl.exe --noproxy '*' --silent --show-error --max-time 5 --write-out "`nHTTP_STATUS:%{http_code}" "$($env:USER_WEB_URL)/api/v2/health" | Out-String
+            $healthText = & curl.exe --noproxy '*' --silent --show-error --max-time 5 --write-out "`nHTTP_STATUS:%{http_code}" "$($env:STUDENT_WEB_URL)/api/v2/health" | Out-String
             if ($LASTEXITCODE -ne 0) { throw $healthText.Trim() }
             if ($healthText -match '(?s)^(?<body>.*)\r?\nHTTP_STATUS:(?<status>\d{3})\s*$') {
                 $healthBody = $Matches.body.Trim()
@@ -79,7 +79,7 @@ try {
 
     Push-Location "$root\frontend"
     try {
-        & npx.cmd playwright test e2e/p09.spec.ts --project=user-web --project=admin-web --workers=1
+        & npx.cmd playwright test e2e/p09.spec.ts --project=student-web --project=admin-web --workers=1
         if ($LASTEXITCODE -ne 0) { throw 'P09 student, teacher, or admin Playwright verification failed.' }
     } finally { Pop-Location }
     Write-Output 'P09 isolated Compose, MySQL migrations, MinIO, ClamAV, Celery, Nginx-to-Kong edge, OpenAPI, and three-portal Playwright checks passed. Production environment evidence remains outstanding.'

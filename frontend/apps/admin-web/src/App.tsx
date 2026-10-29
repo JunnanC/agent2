@@ -1,15 +1,18 @@
 import { useEffect, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { ApiError } from '@edu/api-client';
-import { useSession } from '@edu/auth-client';
-import { LoginForm, RequestStateView } from '@edu/ui';
+import { useSession } from './app/session';
 import { DetailDrawer, type Detail } from './components';
 import { pages, type Page } from './data';
-import { Audit, Governance, Incidents, ModulePage, Overview, Resources } from './pages';
+import { ModulePage } from './pages';
+import { Home as LiveOverview } from './pages/home';
+import { Governance as LiveGovernance } from './pages/governance';
+import { Resources as LiveResources } from './pages/resources';
+import { Images as LiveImages } from './pages/images';
+import { Incidents as LiveIncidents } from './pages/incidents';
+import { Audit as LiveAudit } from './pages/audit';
 import {
   AdminsPage,
   CoursesPage,
-  ImagesPage,
   QuotasPage,
   ResourceProfilesPage,
   RuntimesPage,
@@ -72,7 +75,7 @@ export default function App() {
     ['质量与智能', [['templatePrechecks', '◇'], ['reportScanAnomalies', '△'], ['reviewMonitor', '≡'], ['agentPolicies', '✦']]],
     ['运维与集成', [['operations', '◌'], ['governance', '⌑'], ['resources', '▤'], ['incidents', '△'], ['audit', '≡']]],
   ];
-  const content = page === 'overview' ? <Overview navigate={navigate} /> : page === 'governance' ? <Governance onDetail={setDetail} /> : page === 'resources' ? <Resources onDetail={setDetail} /> : page === 'incidents' ? <Incidents onDetail={setDetail} /> : page === 'audit' ? <Audit onDetail={setDetail} /> : apiPages.has(page) ? <ApiPage page={page} session={session} /> : <ModulePage page={page} onDetail={setDetail} />;
+  const content = page === 'overview' ? <LiveOverview /> : page === 'governance' ? <LiveGovernance /> : page === 'resources' ? <LiveResources /> : page === 'incidents' ? <LiveIncidents /> : page === 'audit' ? <LiveAudit /> : apiPages.has(page) ? <ApiPage page={page} /> : <ModulePage page={page} onDetail={setDetail} />;
   return <div className="app">
     <a href="#main-content" className="skip-link" onClick={event => { event.preventDefault(); document.getElementById('main-content')?.focus(); }}>跳到主要内容</a>
     {menuOpen && <button className="nav-backdrop" aria-label="关闭管理导航" onClick={() => setMenuOpen(false)} />}
@@ -82,7 +85,7 @@ export default function App() {
       <div className="sidebar-bottom"><div className="environment"><span className="dot" />服务健康为演示状态</div><div className="operator"><span className="avatar">管</span><span><span className="operator-name">平台管理员</span><span className="operator-role">平台运维与治理</span></span></div></div>
     </aside>
     <main className="main" id="main-content" tabIndex={-1}>
-      <header className="topbar"><div className="top-left"><button className="icon-button mobile-nav" aria-label={menuOpen ? '关闭管理导航' : '打开管理导航'} aria-expanded={menuOpen} aria-controls="management-navigation" onClick={() => setMenuOpen(!menuOpen)}>☰</button><span className="top-parent">平台管理</span><span className="crumb-sep">/</span><strong>{pages[page].title}</strong></div><div className="top-actions"><span className="demo-tag">{apiPages.has(page) ? session.status === 'authenticated' ? '实时接口' : session.status === 'denied' ? '权限不足' : session.status === 'error' ? '认证服务异常' : session.status === 'loading' ? '检查会话' : '需管理员登录' : '演示数据'}</span>{session.status === 'authenticated' ? <button className="btn" onClick={() => void session.signOut().finally(() => queryClient.clear())}>退出</button> : null}<button className="icon-button" aria-label="帮助" onClick={() => setToast(apiPages.has(page) ? '此模块读取管理端服务接口' : '此模块使用本地演示数据')}>?</button><span className="top-avatar">{session.me?.display_name?.slice(0, 1) ?? '管'}</span></div></header>
+      <header className="topbar"><div className="top-left"><button className="icon-button mobile-nav" aria-label={menuOpen ? '关闭管理导航' : '打开管理导航'} aria-expanded={menuOpen} aria-controls="management-navigation" onClick={() => setMenuOpen(!menuOpen)}>☰</button><span className="top-parent">平台管理</span><span className="crumb-sep">/</span><strong>{pages[page].title}</strong></div><div className="top-actions"><span className="demo-tag">{apiPages.has(page) || ['overview', 'governance', 'resources', 'incidents', 'audit'].includes(page) ? '实时接口' : '演示数据'}</span>{session.me ? <button className="btn" onClick={() => void session.logout().finally(() => queryClient.clear())}>退出</button> : null}<button className="icon-button" aria-label="帮助" onClick={() => setToast(apiPages.has(page) || ['overview', 'governance', 'resources', 'incidents', 'audit'].includes(page) ? '此模块读取管理端服务接口' : '此模块使用本地演示数据')}>?</button><span className="top-avatar">{session.me?.display_name?.slice(0, 1) ?? '管'}</span></div></header>
       <div className="content"><div className="page-head"><div><div className="eyebrow">{pages[page].eyebrow}<span className="crumb-sep">/</span>平台管理</div><h1>{pages[page].title}</h1><p>{pages[page].description}</p></div><div className="head-actions">{!apiPages.has(page) && <span className="demo-tag">界面演示</span>}{page === 'overview' && <button className="btn" onClick={() => navigate('audit')}>查看审计记录 →</button>}</div></div>
         <div key={page}>{content}</div>
       </div>
@@ -92,21 +95,7 @@ export default function App() {
   </div>;
 }
 
-function ApiPage({ page, session }: { page: Page; session: ReturnType<typeof useSession> }) {
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-  if (session.status === 'loading') return <RequestStateView state="loading" />;
-  if (session.status === 'anonymous') {
-    const signIn = async (identifier: string, password: string) => {
-      setBusy(true); setError('');
-      try { await session.signIn({ identifier, password }); }
-      catch (cause) { setError(cause instanceof ApiError ? cause.payload.error.message : '登录请求未完成。'); }
-      finally { setBusy(false); }
-    };
-    return <LoginForm title="平台管理端" busy={busy} error={error} onSubmit={signIn} />;
-  }
-  if (session.status === 'denied') return <RequestStateView state="forbidden" title="需要平台管理员资格" />;
-  if (session.status === 'error') return <RequestStateView state="error" onRetry={() => void session.refresh()} />;
+function ApiPage({ page }: { page: Page }) {
   switch (page) {
     case 'users': return <UsersPage />;
     case 'teachers': return <TeachersPage />;
@@ -114,7 +103,7 @@ function ApiPage({ page, session }: { page: Page; session: ReturnType<typeof use
     case 'verifications': return <VerificationsPage />;
     case 'courses': return <CoursesPage />;
     case 'runtimes': return <RuntimesPage />;
-    case 'images': return <ImagesPage />;
+    case 'images': return <LiveImages />;
     case 'resourceProfiles': return <ResourceProfilesPage />;
     case 'quotas': return <QuotasPage />;
     case 'security': return <SecurityPage />;

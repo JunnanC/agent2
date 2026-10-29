@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
-import { ApiError, apiRequestWithMetadata } from '@edu/api-client'
-import { reviewKeys } from '@edu/query-keys'
-import { PageHeader, RequestStateView, StatusBadge } from '@edu/ui'
+import { ApiError, apiRequestWithMetadata } from './legacy/api-client'
+import { reviewKeys } from './legacy/query-keys'
+import { PageHeader, RequestStateView, StatusBadge } from './legacy/ui'
 
 type ReviewMonitor = {
   review_counts: Record<string, number>

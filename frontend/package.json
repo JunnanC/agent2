@@ -1,28 +1,25 @@
 {
-  "name": "edu-platform-frontend",
+  "name": "edu-agent-frontend",
   "private": true,
   "type": "module",
-  "version": "0.3.0",
-  "packageManager": "npm@11.6.0",
+  "version": "0.16.0",
   "workspaces": [
-    "apps/*",
-    "packages/*"
+    "packages/*",
+    "apps/*"
   ],
   "scripts": {
-    "dev:user": "npm run dev -w @edu/user-web",
-    "dev:teacher": "npm run dev -w @edu/teacher-web",
-    "dev:admin": "npm run dev -w @edu/admin-web",
-    "build": "npm run build:user && npm run build:teacher && npm run build:admin",
-    "build:user": "npm run build -w @edu/user-web",
-    "build:teacher": "npm run build -w @edu/teacher-web",
-    "build:admin": "npm run build -w @edu/admin-web",
-    "typecheck": "npm run typecheck --workspaces --if-present",
-    "lint": "eslint apps packages e2e --max-warnings=0",
-    "test": "vitest run",
-    "test:e2e:user": "playwright test --project=user-web",
-    "test:e2e:teacher": "playwright test --project=teacher-web",
-    "test:e2e:admin": "playwright test --project=admin-web",
-    "generate:api": "openapi-typescript openapi.json -o packages/api-client/src/generated/schema.d.ts"
+    "dev:student": "npm --workspace @edu/student-web run dev",
+    "dev:teacher": "npm --workspace @edu/teacher-web run dev",
+    "dev:admin": "npm --workspace @edu/admin-web run dev",
+    "build:student": "npm --workspace @edu/student-web run build",
+    "build:teacher": "npm --workspace @edu/teacher-web run build",
+    "build:admin": "npm --workspace @edu/admin-web run build",
+    "build": "npm run build:student && npm run build:teacher && npm run build:admin",
+    "typecheck": "npm run typecheck:packages && npx tsc -p apps/student-web --noEmit && npx tsc -p apps/teacher-web --noEmit && npx tsc -p apps/admin-web --noEmit",
+    "typecheck:packages": "tsc -p packages/ui --noEmit && tsc -p packages/auth-client --noEmit && tsc -p packages/query-keys --noEmit && tsc -p packages/event-client --noEmit && tsc -p packages/api-client --noEmit",
+    "generate:api": "openapi-typescript openapi.json -o packages/api-client/src/generated/schema.d.ts",
+    "lint": "eslint . --max-warnings=0",
+    "test": "vitest run"
   },
   "devDependencies": {
     "@eslint/js": "9.36.0",
@@ -46,5 +43,12 @@
     "typescript-eslint": "8.44.1",
     "vite": "^7.3.6",
     "vitest": "^5.0.2"
+  },
+  "dependencies": {
+    "@tanstack/react-query": "^5.59.0",
+    "dompurify": "^3.4.17",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^7.18.4"
   }
 }

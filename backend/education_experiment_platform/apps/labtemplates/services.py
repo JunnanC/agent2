@@ -1,8 +1,9 @@
 import hashlib
+import io
 import json
 import re
 from collections.abc import Callable, Mapping
-from typing import Any
+from typing import Any, Final
 
 from django.conf import settings
 from django.db import IntegrityError, transaction
@@ -11,10 +12,13 @@ from django.utils import timezone
 from jsonschema import Draft202012Validator, SchemaError
 
 from apps.accounts.models import User
+from apps.core.assets import register_asset, set_scan_result
 from apps.core.audit import append_audit, append_failure, hash_client_ip
 from apps.core.concurrency import compare_and_swap
 from apps.core.errors import ResourceNotFound, RowVersionConflict
+from apps.core.identifiers import new_ulid
 from apps.core.models import ObjectAsset
+from apps.core.object_storage import object_storage
 from apps.core.outbox import append_outbox_event, enqueue_relay_after_commit
 from apps.courses.models import Course, CourseCopyItem, CourseCopyJob, CourseStaffGrant
 from apps.courses.ports import published_material_versions
@@ -26,13 +30,23 @@ from apps.governance.ports import template_governance_snapshot
 from . import events
 from .errors import (
     TemplateAssetNotReady,
+    TemplateDeleteForbidden,
     TemplateDigestMismatch,
+    TemplateNameExists,
     TemplatePrecheckFailed,
     TemplateStateConflict,
     TemplateValidationError,
 )
 from .metrics import PRECHECK_ACTIVE, PRECHECK_DURATION, PRECHECK_RUNS
-from .models import AutoCheckRule, Template, TemplatePrecheckRun, TemplateVersion
+from .models import (
+    AutoCheckRule,
+    ExperimentImage,
+    Template,
+    TemplateChapter,
+    TemplatePrecheckRun,
+    TemplateTask,
+    TemplateVersion,
+)
 
 VERSION_FIELDS = {
     "runtime_type",
@@ -49,18 +63,16 @@ VERSION_FIELDS = {
     "retention_days",
 }
 ASSET_FIELDS = ("manual_asset", "starter_asset", "report_template_asset")
-EXECUTION_SPEC_KEYS = frozenset(
-    {
-        "language",
-        "entrypoint",
-        "timeout_seconds",
-        "memory_mb",
-        "cpu_millicores",
-        "comparator",
-        "tests_asset",
-        "network_mode",
-    }
-)
+EXECUTION_SPEC_KEYS = frozenset({
+    "language",
+    "entrypoint",
+    "timeout_seconds",
+    "memory_mb",
+    "cpu_millicores",
+    "comparator",
+    "tests_asset",
+    "network_mode",
+})
 _PYTHON_ENTRYPOINT = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,126}\.py$")
 
 
@@ -105,9 +117,7 @@ def _normalize_execution_spec(value: Any) -> dict[str, Any]:
             detail={"execution_spec": {"resources": "positive_integers_required"}}
         )
     if value["timeout_seconds"] > settings.TEMPLATE_CHECK_TIMEOUT_MAX_SECONDS:
-        raise TemplateValidationError(
-            detail={"execution_spec": {"timeout_seconds": "too_large"}}
-        )
+        raise TemplateValidationError(detail={"execution_spec": {"timeout_seconds": "too_large"}})
     return {
         "language": language,
         "entrypoint": entrypoint,
@@ -249,6 +259,31 @@ def _version_changes(course: Course, data: dict[str, Any]) -> dict[str, Any]:
     return clean
 
 
+def _archive_template_name(template: Template) -> str:
+    suffix = f"[archived {template.public_id[-8:]}]"
+    return f"{template.name[:160 - len(suffix)]}{suffix}"
+
+
+def _release_withdrawn_names(*, course: Course, name: str) -> None:
+    """Rename withdrawn templates so a soft-deleted name can be reused.
+
+    Templates are soft-deleted into WITHDRAWN and hidden from listings, but the
+    (course, name) unique constraint keeps their name reserved. Releasing the
+    name here prevents the confusing "state conflict" on re-creation.
+    """
+    archived = list(
+        Template.objects.select_for_update()
+        .filter(course=course, status=Template.Status.WITHDRAWN, name=name.strip())
+    )
+    for item in archived:
+        compare_and_swap(
+            Template,
+            pk=item.pk,
+            expected_version=item.row_version,
+            changes={"name": _archive_template_name(item)},
+        )
+
+
 @transaction.atomic
 def create_template(
     *,
@@ -260,16 +295,18 @@ def create_template(
     context: ActorContext,
 ) -> Template:
     course = _course(course_id, actor, CourseStaffGrant.Capability.MANAGE_TEMPLATE)
+    clean_name = name.strip()
+    _release_withdrawn_names(course=course, name=clean_name)
     try:
         item = Template.objects.create(
             course=course,
-            name=name.strip(),
+            name=clean_name,
             category=category.strip(),
             description=description.strip(),
             owner=actor,
         )
     except IntegrityError as exc:
-        raise TemplateStateConflict(detail={"name": "already_exists"}) from exc
+        raise TemplateNameExists(detail={"name": clean_name}) from exc
     _audit(
         context,
         action="labtemplate.create",
@@ -316,7 +353,7 @@ def update_template(
             Template, pk=item.pk, expected_version=expected_version, changes=clean
         )
     except IntegrityError as exc:
-        raise TemplateStateConflict(detail={"name": "already_exists"}) from exc
+        raise TemplateNameExists(detail={"name": clean.get("name", "")}) from exc
     _audit(
         context,
         action="labtemplate.update",
@@ -332,6 +369,189 @@ def update_template(
         aggregate_type="labtemplate",
         aggregate_ref=item.public_id,
         payload={"course_id": course.public_id, "template_id": item.public_id},
+    )
+    return changed  # type: ignore[return-value]
+
+
+@transaction.atomic
+def delete_template(
+    *,
+    course_id: str,
+    template_id: str,
+    actor: User,
+    expected_version: int,
+    context: ActorContext,
+) -> Template:
+    """Soft-delete a template the actor owns (hard deletes are forbidden).
+
+    DRAFT templates can be deleted directly; otherwise the teacher must first
+    withdraw the published version through ``withdraw_version``.
+    """
+
+    course = _course(course_id, actor, CourseStaffGrant.Capability.MANAGE_TEMPLATE)
+    try:
+        template = Template.objects.select_for_update().get(public_id=template_id, course=course)
+    except Template.DoesNotExist as exc:
+        raise ResourceNotFound() from exc
+    _expected(template.row_version, expected_version)
+    if template.owner_id != actor.pk:
+        raise TemplateDeleteForbidden(detail={"reason": "ONLY_OWNER"})
+    if template.status != Template.Status.DRAFT:
+        raise TemplateStateConflict(
+            detail={"status": template.status, "hint": "已发布模板需先撤回版本再删除"}
+        )
+    changed = compare_and_swap(
+        Template,
+        pk=template.pk,
+        expected_version=expected_version,
+        changes={"status": Template.Status.WITHDRAWN},
+    )
+    _release_withdrawn_names(course=course, name=template.name)
+    _audit(
+        context,
+        action="labtemplate.delete",
+        target_type="labtemplate",
+        target_ref=template.public_id,
+        course_ref=course.public_id,
+        before={"status": template.status},
+        after={"status": Template.Status.WITHDRAWN},
+    )
+    _event(
+        context,
+        event_type=events.TEMPLATE_DELETED,
+        aggregate_type="labtemplate",
+        aggregate_ref=template.public_id,
+        payload={"course_id": course.public_id, "template_id": template.public_id},
+    )
+    return changed  # type: ignore[return-value]
+
+
+_ALLOWED_SPEC_LANGUAGES: Final = {"python"}
+_ALLOWED_SPEC_COMPARATORS: Final = {"token"}
+_ALLOWED_SPEC_NETWORK: Final = {"DENY_ALL"}
+_ENTRYPOINT_RE: Final[re.Pattern[str]] = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,126}\.py$")
+
+
+@transaction.atomic
+def save_execution_spec(
+    *,
+    course_id: str,
+    template_id: str,
+    version_id: str,
+    actor: User,
+    expected_version: int,
+    spec: dict[str, Any],
+    tests_json: str,
+    context: ActorContext,
+) -> TemplateVersion:
+    """Server-side shortcut: register a default TESTS asset and freeze execution_spec.
+
+    Most of the editor UI cannot upload binary assets; the demo-less quick path
+    accepts the tests JSON payload inline, writes it via the internal MinIO
+    client (no cross-origin upload), registers the asset CLEAN (validated JSON,
+    small payload), and CAS-updates the draft version's execution_spec.
+    """
+
+    course = _course(course_id, actor, CourseStaffGrant.Capability.MANAGE_TEMPLATE)
+    try:
+        template = Template.objects.select_for_update().get(public_id=template_id, course=course)
+        version = TemplateVersion.objects.select_for_update().get(
+            public_id=version_id, template=template
+        )
+    except (Template.DoesNotExist, TemplateVersion.DoesNotExist) as exc:
+        raise ResourceNotFound() from exc
+    version = _content_guard(version, expected_version, context)
+
+    language = str(spec.get("language", ""))
+    entrypoint = str(spec.get("entrypoint", "")).strip()
+    comparator = str(spec.get("comparator", ""))
+    network_mode = str(spec.get("network_mode", ""))
+    if language not in _ALLOWED_SPEC_LANGUAGES:
+        raise TemplateValidationError(detail={"language": "unsupported"})
+    if not _ENTRYPOINT_RE.fullmatch(entrypoint):
+        raise TemplateValidationError(detail={"entrypoint": "invalid"})
+    if comparator not in _ALLOWED_SPEC_COMPARATORS:
+        raise TemplateValidationError(detail={"comparator": "unsupported"})
+    if network_mode not in _ALLOWED_SPEC_NETWORK:
+        raise TemplateValidationError(detail={"network_mode": "unsupported"})
+    timeout_seconds = int(spec.get("timeout_seconds", 0) or 0)
+    memory_mb = int(spec.get("memory_mb", 0) or 0)
+    cpu_millicores = int(spec.get("cpu_millicores", 0) or 0)
+    if timeout_seconds < 1 or memory_mb < 1 or cpu_millicores < 1:
+        raise TemplateValidationError(
+            detail={"resources": "timeout/memory/cpu must be positive"}
+        )
+    try:
+        probe = json.loads(tests_json)
+    except json.JSONDecodeError as exc:
+        raise TemplateValidationError(detail={"tests_json": "invalid_json"}) from exc
+    cases = probe.get("cases") if isinstance(probe, dict) else None
+    if not isinstance(cases, list):
+        raise TemplateValidationError(detail={"tests_json": "cases_required"})
+    for item in cases:
+        if not isinstance(item, dict) or not isinstance(
+            item.get("input"), str
+        ) or not isinstance(item.get("expected"), str):
+            raise TemplateValidationError(detail={"tests_json": "case_shape"})
+    content = json.dumps(probe, ensure_ascii=False).encode("utf-8")
+    digest = hashlib.sha256(content).hexdigest()
+    if len(content) > settings.TEMPLATE_ASSET_MAX_BYTES:
+        raise TemplateValidationError(detail={"tests_json": "too_large"})
+
+    object_key = f"template-assets/{version.public_id}/{new_ulid()}/tests.json"
+    stored = object_storage().put_stream(
+        bucket=settings.MINIO_BUCKET,
+        object_key=object_key,
+        stream=io.BytesIO(content),
+        media_type="application/json",
+    )
+    asset = register_asset(
+        bucket=settings.MINIO_BUCKET,
+        object_key=object_key,
+        object_version=stored.version_id,
+        digest_sha256=digest,
+        size_bytes=len(content),
+        owner_type="TEMPLATE_VERSION",
+        owner_ref=version.public_id,
+        purpose="TESTS",
+        media_type="application/json",
+        original_name="tests.json",
+    )
+    asset = set_scan_result(
+        asset_id=asset.pk,
+        expected_version=asset.row_version,
+        scan_status=ObjectAsset.ScanStatus.CLEAN,
+    )
+    clean_spec: dict[str, Any] = {
+        "language": language,
+        "entrypoint": entrypoint,
+        "timeout_seconds": timeout_seconds,
+        "memory_mb": memory_mb,
+        "cpu_millicores": cpu_millicores,
+        "comparator": comparator,
+        "tests_asset": asset.public_id,
+        "network_mode": network_mode,
+    }
+    changed = compare_and_swap(
+        TemplateVersion,
+        pk=version.pk,
+        expected_version=version.row_version,
+        changes={"execution_spec": clean_spec},
+    )
+    _audit(
+        context,
+        action="labtemplate.execution_spec.save",
+        target_type="labtemplate_version",
+        target_ref=version.public_id,
+        course_ref=course.public_id,
+        after={"tests_asset": asset.public_id},
+    )
+    _event(
+        context,
+        event_type=events.VERSION_UPDATED,
+        aggregate_type="labtemplate_version",
+        aggregate_ref=version.public_id,
+        payload={"course_id": course.public_id, "tests_asset": asset.public_id},
     )
     return changed  # type: ignore[return-value]
 
@@ -397,12 +617,10 @@ def update_version(
         )
     except TemplateVersion.DoesNotExist as exc:
         raise ResourceNotFound() from exc
-    _expected(version.row_version, expected_version)
-    if version.status not in {TemplateVersion.Status.DRAFT, TemplateVersion.Status.PRECHECK_FAILED}:
-        raise TemplateStateConflict(detail={"status": version.status})
+    version = _content_guard(version, expected_version, context)
     clean = _version_changes(course, changes)
     changed = compare_and_swap(
-        TemplateVersion, pk=version.pk, expected_version=expected_version, changes=clean
+        TemplateVersion, pk=version.pk, expected_version=version.row_version, changes=clean
     )
     _audit(
         context,
@@ -410,7 +628,7 @@ def update_version(
         target_type="labtemplate_version",
         target_ref=version.public_id,
         course_ref=course.public_id,
-        before={"row_version": version.row_version},
+        before={"row_version": expected_version},
         after={"fields": sorted(clean)},
     )
     _event(
@@ -421,6 +639,450 @@ def update_version(
         payload={"course_id": course.public_id, "version_id": version.public_id},
     )
     return changed  # type: ignore[return-value]
+
+
+def _content_version(course: Course, version_id: str, actor: User) -> TemplateVersion:
+    try:
+        return TemplateVersion.objects.select_for_update().get(
+            public_id=version_id, template__course=course
+        )
+    except TemplateVersion.DoesNotExist as exc:
+        raise ResourceNotFound() from exc
+
+
+def _content_guard(
+    version: TemplateVersion, expected_version: int, context: ActorContext
+) -> TemplateVersion:
+    """Validate content editing and unfreeze PRECHECK_PASSED after edits.
+
+    Editing chapters, tasks, runtime fields, or rules invalidates the frozen
+    precheck digest. A PRECHECK_PASSED version rolls back to DRAFT with
+    spec_digest cleared, so the teacher re-runs the precheck before publishing.
+    PRECHECK_FAILED versions keep editing without status changes (their digest
+    is already invalid), and PUBLISHED versions stay immutable.
+    """
+    _expected(version.row_version, expected_version)
+    if version.status in {TemplateVersion.Status.DRAFT, TemplateVersion.Status.PRECHECK_FAILED}:
+        return version
+    if version.status != TemplateVersion.Status.PRECHECK_PASSED:
+        raise TemplateStateConflict(detail={"status": version.status})
+    changed = compare_and_swap(
+        TemplateVersion,
+        pk=version.pk,
+        expected_version=version.row_version,
+        changes={"status": TemplateVersion.Status.DRAFT, "spec_digest": None},
+    )  # type: ignore[assignment]
+    _audit(
+        context,
+        action="labtemplate.version.reopen",
+        target_type="labtemplate_version",
+        target_ref=version.public_id,
+        course_ref=version.template.course_id,
+        before={"status": version.status},
+        after={"status": TemplateVersion.Status.DRAFT, "reason": "content_edit"},
+    )
+    _event(
+        context,
+        event_type=events.VERSION_UPDATED,
+        aggregate_type="labtemplate_version",
+        aggregate_ref=version.public_id,
+        payload={"course_id": version.template.course.public_id, "reason": "content_edit"},
+    )
+    return changed
+
+
+def _profile(course: Course, value: str | None) -> ResourceProfile | None:
+    if value is None:
+        return None
+    profile = ResourceProfile.objects.filter(
+        public_id=value, status=ResourceProfile.Status.ACTIVE
+    ).first()
+    if profile is None:
+        raise TemplateValidationError(detail={"resource_profile_id": "not_available"})
+    return profile
+
+
+def _chapter_payload(data: dict[str, Any]) -> dict[str, Any]:
+    allowed = {
+        "title",
+        "description",
+        "learning_objectives",
+        "sort_order",
+        "status",
+        "resource_profile_id",
+    }
+    clean = {key: data[key] for key in allowed if key in data}
+    if "title" in clean:
+        clean["title"] = str(clean["title"]).strip()
+        if not clean["title"]:
+            raise TemplateValidationError(detail={"title": "required"})
+    if "sort_order" in clean:
+        try:
+            clean["sort_order"] = int(clean["sort_order"])
+        except (TypeError, ValueError) as exc:
+            raise TemplateValidationError(
+                detail={"sort_order": "positive_integer_required"}
+            ) from exc
+        if clean["sort_order"] < 1:
+            raise TemplateValidationError(detail={"sort_order": "positive_integer_required"})
+    return clean
+
+
+def _task_payload(data: dict[str, Any]) -> dict[str, Any]:
+    allowed = {
+        "title",
+        "description",
+        "instructions",
+        "task_type",
+        "sort_order",
+        "status",
+        "execution_spec",
+        "resource_profile_id",
+        "submission_policy",
+        "grading_policy",
+    }
+    clean = {key: data[key] for key in allowed if key in data}
+    for field in ("title", "task_type"):
+        if field in clean:
+            clean[field] = str(clean[field]).strip()
+            if not clean[field]:
+                raise TemplateValidationError(detail={field: "required"})
+    if "sort_order" in clean:
+        try:
+            clean["sort_order"] = int(clean["sort_order"])
+        except (TypeError, ValueError) as exc:
+            raise TemplateValidationError(
+                detail={"sort_order": "positive_integer_required"}
+            ) from exc
+        if clean["sort_order"] < 1:
+            raise TemplateValidationError(detail={"sort_order": "positive_integer_required"})
+    return clean
+
+
+@transaction.atomic
+def create_chapter(
+    *,
+    course_id: str,
+    version_id: str,
+    actor: User,
+    expected_version: int,
+    data: dict[str, Any],
+    context: ActorContext,
+) -> TemplateChapter:
+    course = _course(course_id, actor, CourseStaffGrant.Capability.MANAGE_TEMPLATE)
+    version = _content_guard(
+        _content_version(course, version_id, actor), expected_version, context
+    )
+    clean = _chapter_payload(data)
+    if "sort_order" not in clean:
+        clean["sort_order"] = (
+            version.chapters.order_by("-sort_order").values_list("sort_order", flat=True).first()
+            or 0
+        ) + 1
+    if "resource_profile_id" in clean:
+        clean["resource_profile"] = _profile(course, clean.pop("resource_profile_id"))
+    try:
+        item = TemplateChapter.objects.create(template_version=version, **clean)
+    except IntegrityError as exc:
+        raise TemplateValidationError(detail={"sort_order": "unique_positive_required"}) from exc
+    compare_and_swap(
+        TemplateVersion, pk=version.pk, expected_version=version.row_version, changes={}
+    )
+    _audit(
+        context,
+        action="labtemplate.chapter.create",
+        target_type="labtemplate_chapter",
+        target_ref=item.public_id,
+        course_ref=course.public_id,
+        after={"version_id": version.public_id},
+    )
+    _event(
+        context,
+        event_type=events.CHAPTER_CREATED,
+        aggregate_type="labtemplate_chapter",
+        aggregate_ref=item.public_id,
+        payload={"version_id": version.public_id},
+    )
+    return item
+
+
+@transaction.atomic
+def update_chapter(
+    *,
+    course_id: str,
+    chapter_id: str,
+    actor: User,
+    expected_version: int,
+    changes: dict[str, Any],
+    context: ActorContext,
+) -> TemplateChapter:
+    course = _course(course_id, actor, CourseStaffGrant.Capability.MANAGE_TEMPLATE)
+    try:
+        item = (
+            TemplateChapter.objects.select_for_update()
+            .select_related("template_version")
+            .get(public_id=chapter_id, template_version__template__course=course)
+        )
+    except TemplateChapter.DoesNotExist as exc:
+        raise ResourceNotFound() from exc
+    template_version = _content_guard(item.template_version, expected_version, context)
+    clean = _chapter_payload(changes)
+    if "resource_profile_id" in clean:
+        resource_profile_id = clean.pop("resource_profile_id")
+        profile = _profile(course, resource_profile_id) if resource_profile_id else None
+        clean["resource_profile_id"] = profile.pk if profile is not None else None
+    try:
+        changed = compare_and_swap(
+            TemplateChapter, pk=item.pk, expected_version=item.row_version, changes=clean
+        )
+        changed_version = compare_and_swap(
+            TemplateVersion,
+            pk=item.template_version_id,
+            expected_version=template_version.row_version,
+            changes={},
+        )
+        _audit(
+            context,
+            action="labtemplate.chapter.update",
+            target_type="labtemplate_chapter",
+            target_ref=item.public_id,
+            course_ref=course.public_id,
+            after={"fields": sorted(clean)},
+        )
+        _event(
+            context,
+            event_type=events.CHAPTER_UPDATED,
+            aggregate_type="labtemplate_chapter",
+            aggregate_ref=item.public_id,
+            payload={"version_id": changed_version.public_id},
+        )
+        return changed  # type: ignore[return-value]
+    except IntegrityError as exc:
+        raise TemplateValidationError(detail={"sort_order": "unique_positive_required"}) from exc
+
+
+@transaction.atomic
+def create_task(
+    *,
+    course_id: str,
+    chapter_id: str,
+    actor: User,
+    expected_version: int,
+    data: dict[str, Any],
+    context: ActorContext,
+) -> TemplateTask:
+    course = _course(course_id, actor, CourseStaffGrant.Capability.MANAGE_TEMPLATE)
+    try:
+        chapter = (
+            TemplateChapter.objects.select_for_update()
+            .select_related("template_version")
+            .get(public_id=chapter_id, template_version__template__course=course)
+        )
+    except TemplateChapter.DoesNotExist as exc:
+        raise ResourceNotFound() from exc
+    template_version = _content_guard(chapter.template_version, expected_version, context)
+    clean = _task_payload(data)
+    if "sort_order" not in clean:
+        clean["sort_order"] = (
+            chapter.tasks.order_by("-sort_order").values_list("sort_order", flat=True).first() or 0
+        ) + 1
+    if "resource_profile_id" in clean:
+        clean["resource_profile"] = _profile(course, clean.pop("resource_profile_id"))
+    try:
+        item = TemplateTask.objects.create(chapter=chapter, **clean)
+    except IntegrityError as exc:
+        raise TemplateValidationError(detail={"sort_order": "unique_positive_required"}) from exc
+    compare_and_swap(
+        TemplateVersion,
+        pk=chapter.template_version_id,
+        expected_version=template_version.row_version,
+        changes={},
+    )
+    _audit(
+        context,
+        action="labtemplate.task.create",
+        target_type="labtemplate_task",
+        target_ref=item.public_id,
+        course_ref=course.public_id,
+        after={"chapter_id": chapter.public_id},
+    )
+    _event(
+        context,
+        event_type=events.TASK_CREATED,
+        aggregate_type="labtemplate_task",
+        aggregate_ref=item.public_id,
+        payload={"chapter_id": chapter.public_id},
+    )
+    return item
+
+
+@transaction.atomic
+def update_task(
+    *,
+    course_id: str,
+    task_id: str,
+    actor: User,
+    expected_version: int,
+    changes: dict[str, Any],
+    context: ActorContext,
+) -> TemplateTask:
+    course = _course(course_id, actor, CourseStaffGrant.Capability.MANAGE_TEMPLATE)
+    try:
+        item = (
+            TemplateTask.objects.select_for_update()
+            .select_related("chapter__template_version")
+            .get(public_id=task_id, chapter__template_version__template__course=course)
+        )
+    except TemplateTask.DoesNotExist as exc:
+        raise ResourceNotFound() from exc
+    template_version = _content_guard(item.chapter.template_version, expected_version, context)
+    clean = _task_payload(changes)
+    if "resource_profile_id" in clean:
+        resource_profile_id = clean.pop("resource_profile_id")
+        profile = _profile(course, resource_profile_id) if resource_profile_id else None
+        clean["resource_profile_id"] = profile.pk if profile is not None else None
+    try:
+        changed = compare_and_swap(
+            TemplateTask, pk=item.pk, expected_version=item.row_version, changes=clean
+        )
+        changed_version = compare_and_swap(
+            TemplateVersion,
+            pk=item.chapter.template_version_id,
+            expected_version=template_version.row_version,
+            changes={},
+        )
+        _audit(
+            context,
+            action="labtemplate.task.update",
+            target_type="labtemplate_task",
+            target_ref=item.public_id,
+            course_ref=course.public_id,
+            after={"fields": sorted(clean)},
+        )
+        _event(
+            context,
+            event_type=events.TASK_UPDATED,
+            aggregate_type="labtemplate_task",
+            aggregate_ref=item.public_id,
+            payload={"version_id": changed_version.public_id},
+        )
+        return changed  # type: ignore[return-value]
+    except IntegrityError as exc:
+        raise TemplateValidationError(detail={"sort_order": "unique_positive_required"}) from exc
+
+
+def _reorder(
+    *,
+    course: Course,
+    version: TemplateVersion,
+    parent: TemplateChapter | None,
+    ids: list[str],
+    model: type[TemplateChapter] | type[TemplateTask],
+    context: ActorContext,
+) -> TemplateVersion:
+    if len(ids) != len(set(ids)) or not ids:
+        raise TemplateValidationError(detail={"ids": "complete_unique_order_required"})
+    query = model.objects.select_for_update().filter(public_id__in=ids)
+    if parent is None:
+        query = query.filter(template_version=version)  # type: ignore[union-attr]
+    else:
+        query = query.filter(chapter=parent)  # type: ignore[union-attr]
+    rows = list(query)
+    expected_count = version.chapters.count() if parent is None else parent.tasks.count()
+    if len(rows) != len(ids) or len(rows) != expected_count:
+        raise TemplateValidationError(detail={"ids": "complete_unique_order_required"})
+    rows_by_id = {row.public_id: row for row in rows}
+    for public_id in ids:
+        row = rows_by_id[public_id]
+        compare_and_swap(
+            model,
+            pk=row.pk,
+            expected_version=row.row_version,
+            changes={
+                "sort_order": row.sort_order
+                + expected_count
+                + max(row.sort_order, expected_count)
+                + 1
+            },
+        )
+    for index, public_id in enumerate(ids, start=1):
+        row = model.objects.get(pk=rows_by_id[public_id].pk)
+        compare_and_swap(
+            model, pk=row.pk, expected_version=row.row_version, changes={"sort_order": index}
+        )
+    changed = compare_and_swap(
+        TemplateVersion, pk=version.pk, expected_version=version.row_version, changes={}
+    )
+    target = parent.public_id if parent is not None else version.public_id
+    _audit(
+        context,
+        action="labtemplate.content.reorder",
+        target_type="labtemplate_chapter" if parent is None else "labtemplate_task",
+        target_ref=target,
+        course_ref=course.public_id,
+        after={"ids": ids},
+    )
+    _event(
+        context,
+        event_type=events.CONTENT_REORDERED,
+        aggregate_type="labtemplate_version",
+        aggregate_ref=version.public_id,
+        payload={"parent_id": target, "ids": ids},
+    )
+    return changed  # type: ignore[return-value]
+
+
+@transaction.atomic
+def reorder_chapters(
+    *,
+    course_id: str,
+    version_id: str,
+    actor: User,
+    expected_version: int,
+    chapter_ids: list[str],
+    context: ActorContext,
+) -> TemplateVersion:
+    course = _course(course_id, actor, CourseStaffGrant.Capability.MANAGE_TEMPLATE)
+    version = _content_version(course, version_id, actor)
+    version = _content_guard(version, expected_version, context)
+    return _reorder(
+        course=course,
+        version=version,
+        parent=None,
+        ids=chapter_ids,
+        model=TemplateChapter,
+        context=context,
+    )
+
+
+@transaction.atomic
+def reorder_tasks(
+    *,
+    course_id: str,
+    chapter_id: str,
+    actor: User,
+    expected_version: int,
+    task_ids: list[str],
+    context: ActorContext,
+) -> TemplateVersion:
+    course = _course(course_id, actor, CourseStaffGrant.Capability.MANAGE_TEMPLATE)
+    try:
+        chapter = (
+            TemplateChapter.objects.select_for_update()
+            .select_related("template_version")
+            .get(public_id=chapter_id, template_version__template__course=course)
+        )
+    except TemplateChapter.DoesNotExist as exc:
+        raise ResourceNotFound() from exc
+    template_version = _content_guard(chapter.template_version, expected_version, context)
+    return _reorder(
+        course=course,
+        version=template_version,
+        parent=chapter,
+        ids=task_ids,
+        model=TemplateTask,
+        context=context,
+    )
 
 
 def _rule_payload(data: dict[str, Any]) -> dict[str, Any]:
@@ -461,9 +1123,7 @@ def replace_rules(
         )
     except TemplateVersion.DoesNotExist as exc:
         raise ResourceNotFound() from exc
-    _expected(version.row_version, expected_version)
-    if version.status not in {TemplateVersion.Status.DRAFT, TemplateVersion.Status.PRECHECK_FAILED}:
-        raise TemplateStateConflict(detail={"status": version.status})
+    version = _content_guard(version, expected_version, context)
     payloads = [_rule_payload(item) for item in rules]
     positions = [int(item["position"]) for item in payloads]
     if len(positions) != len(set(positions)) or any(position < 1 for position in positions):
@@ -481,7 +1141,7 @@ def replace_rules(
         AutoCheckRule(template_version=version, **item) for item in payloads
     ])
     changed = compare_and_swap(
-        TemplateVersion, pk=version.pk, expected_version=expected_version, changes={}
+        TemplateVersion, pk=version.pk, expected_version=version.row_version, changes={}
     )
     _audit(
         context,
@@ -552,6 +1212,8 @@ def _validated_snapshot(
     adapter = governance["adapter"]
     image = governance["image"]
     profile: ResourceProfile = governance["profile"]
+    cpu_limit = getattr(profile, "cpu_limit_millicores", None) or profile.cpu_millicores
+    memory_limit = getattr(profile, "memory_limit_mb", None) or profile.memory_mb
     if adapter.runtime_type != version.runtime_type or profile.runtime_type != version.runtime_type:
         raise TemplateValidationError(detail={"runtime_type": "resource_mismatch"})
     if version.runtime_type != RuntimeAdapter.RuntimeType.CONTAINER:
@@ -560,9 +1222,9 @@ def _validated_snapshot(
         )
     if execution_spec["timeout_seconds"] > settings.TEMPLATE_CHECK_TIMEOUT_MAX_SECONDS:
         raise TemplateValidationError(detail={"execution_spec": {"timeout_seconds": "too_large"}})
-    if execution_spec["memory_mb"] > profile.memory_mb:
+    if execution_spec["memory_mb"] > memory_limit:
         raise TemplateValidationError(detail={"execution_spec": {"memory_mb": "exceeds_profile"}})
-    if execution_spec["cpu_millicores"] > profile.cpu_millicores:
+    if execution_spec["cpu_millicores"] > cpu_limit:
         raise TemplateValidationError(
             detail={"execution_spec": {"cpu_millicores": "exceeds_profile"}}
         )
@@ -601,8 +1263,8 @@ def _validated_snapshot(
             )
         limits = rule.resource_limit
         if (
-            int(limits.get("cpu_millicores", 0)) > profile.cpu_millicores
-            or int(limits.get("memory_mb", 0)) > profile.memory_mb
+            int(limits.get("cpu_millicores", 0)) > cpu_limit
+            or int(limits.get("memory_mb", 0)) > memory_limit
             or int(limits.get("disk_gb", 0)) > profile.disk_gb
         ):
             raise TemplateValidationError(
@@ -678,6 +1340,11 @@ def _validated_snapshot(
             "code": profile.code,
             "cpu_millicores": profile.cpu_millicores,
             "memory_mb": profile.memory_mb,
+            "cpu_request_millicores": getattr(profile, "cpu_request_millicores", None)
+            or profile.cpu_millicores,
+            "cpu_limit_millicores": cpu_limit,
+            "memory_request_mb": getattr(profile, "memory_request_mb", None) or profile.memory_mb,
+            "memory_limit_mb": memory_limit,
             "disk_gb": profile.disk_gb,
             "network_mode": profile.network_mode,
         },
@@ -730,7 +1397,7 @@ def request_precheck(
         version = (
             TemplateVersion.objects.select_for_update()
             .select_related("template__course")
-            .prefetch_related("auto_check_rules")
+            .prefetch_related("auto_check_rules", "chapters__tasks")
             .get(public_id=version_id, template__course=course)
         )
     except TemplateVersion.DoesNotExist as exc:
@@ -978,6 +1645,54 @@ def publish_version(
     _expected(version.row_version, expected_version)
     if version.status != TemplateVersion.Status.PRECHECK_PASSED or not version.spec_digest:
         raise TemplateStateConflict(detail={"status": version.status})
+    if not version.chapters.exists():
+        raise TemplateValidationError(
+            message="模板规格无效：当前版本没有任何章节，请先在「内容结构」添加章节",
+            detail={"chapters": "at_least_one_required"},
+        )
+    # Publishing the version cascades any DRAFT chapters/tasks to PUBLISHED:
+    # the per-item publish endpoints were never shipped, and the version-level
+    # publish is the single release action teachers use.
+    chapters_to_publish = list(
+        TemplateChapter.objects.select_for_update()
+        .filter(template_version=version)
+        .exclude(status=TemplateChapter.Status.PUBLISHED)
+    )
+    tasks_to_publish = list(
+        TemplateTask.objects.select_for_update()
+        .filter(chapter__template_version=version)
+        .exclude(status=TemplateTask.Status.PUBLISHED)
+    )
+    for chapter in chapters_to_publish:
+        compare_and_swap(
+            TemplateChapter,
+            pk=chapter.pk,
+            expected_version=chapter.row_version,
+            changes={"status": TemplateChapter.Status.PUBLISHED},
+        )
+    for task in tasks_to_publish:
+        compare_and_swap(
+            TemplateTask,
+            pk=task.pk,
+            expected_version=task.row_version,
+            changes={"status": TemplateTask.Status.PUBLISHED},
+        )
+    if not ExperimentImage.objects.filter(
+        template_version=version, status=ExperimentImage.Status.READY
+    ).exists():
+        ExperimentImage.objects.create(
+            template_version=version,
+            source_type=ExperimentImage.SourceType.EXTERNAL_REFERENCE,
+            registry=version.image.registry,
+            repository=version.image.repository,
+            requested_tag=version.image.display_tag or "stable",
+            resolved_digest=version.image.digest,
+            image_asset=version.image,
+            status=ExperimentImage.Status.READY,
+            scan_status=ExperimentImage.ScanStatus.CLEAN,
+            trace_id=context.trace_id,
+            created_by=actor,
+        )
     publish_snapshot = _validated_snapshot(version)
     if _digest(publish_snapshot) != version.spec_digest:
         raise TemplateDigestMismatch()
@@ -1003,7 +1718,12 @@ def publish_version(
         target_type="labtemplate_version",
         target_ref=version.public_id,
         course_ref=course.public_id,
-        after={"status": "PUBLISHED", "spec_digest": version.spec_digest},
+        after={
+            "status": "PUBLISHED",
+            "spec_digest": version.spec_digest,
+            "chapters_published": len(chapters_to_publish),
+            "tasks_published": len(tasks_to_publish),
+        },
     )
     _event(
         context,
@@ -1091,7 +1811,7 @@ def clone_version(
     try:
         source = (
             TemplateVersion.objects.select_related("template")
-            .prefetch_related("auto_check_rules")
+            .prefetch_related("auto_check_rules", "chapters__tasks")
             .get(public_id=version_id, template__course=course)
         )
     except TemplateVersion.DoesNotExist as exc:
@@ -1111,7 +1831,7 @@ def clone_version(
         dependencies=source.dependencies,
         # TESTS assets are owned by the source version and cannot be reused by
         # a new mutable version; the clone must choose a new scanned asset.
-        execution_spec={},
+        execution_spec=source.execution_spec,
         network_policy=source.network_policy,
         workspace_capabilities=source.workspace_capabilities,
         material_refs=source.material_refs,
@@ -1139,6 +1859,41 @@ def clone_version(
             rule_digest=rule.rule_digest,
         )
         for rule in source.auto_check_rules.filter(is_active=True)
+    ])
+    source_chapters = list(source.chapters.all().order_by("sort_order"))
+    TemplateChapter.objects.bulk_create([
+        TemplateChapter(
+            template_version=clone,
+            title=chapter.title,
+            description=chapter.description,
+            learning_objectives=chapter.learning_objectives,
+            sort_order=chapter.sort_order,
+            status=TemplateChapter.Status.DRAFT,
+            resource_profile=chapter.resource_profile,
+        )
+        for chapter in source_chapters
+    ])
+    cloned_chapters = list(clone.chapters.all().order_by("sort_order"))
+    chapter_map = {
+        source_chapter.pk: cloned_chapter
+        for source_chapter, cloned_chapter in zip(source_chapters, cloned_chapters, strict=True)
+    }
+    TemplateTask.objects.bulk_create([
+        TemplateTask(
+            chapter=chapter_map[task.chapter_id],
+            title=task.title,
+            description=task.description,
+            instructions=task.instructions,
+            task_type=task.task_type,
+            sort_order=task.sort_order,
+            status=TemplateTask.Status.DRAFT,
+            execution_spec=task.execution_spec,
+            resource_profile=task.resource_profile,
+            submission_policy=task.submission_policy,
+            grading_policy=task.grading_policy,
+        )
+        for source_chapter in source_chapters
+        for task in source_chapter.tasks.all().order_by("sort_order")
     ])
     _audit(
         context,

@@ -1,6 +1,7 @@
 import hashlib
 from typing import Any
 
+from .identifiers import normalize_trace_id
 from .models import AuditLog, FailureRecord
 from .redaction import redact
 
@@ -42,7 +43,7 @@ def append_audit(
         error_code=error_code,
         client_ip_hash=client_ip_hash,
         user_agent_summary=user_agent_summary[:255],
-        trace_id=trace_id,
+        trace_id=normalize_trace_id(trace_id),
     )
 
 
@@ -65,5 +66,5 @@ def append_failure(
         message_masked=redact(message),
         detail_masked=redact(detail),
         retryable=retryable,
-        trace_id=trace_id,
+        trace_id=normalize_trace_id(trace_id),
     )

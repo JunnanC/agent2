@@ -18,7 +18,7 @@ from apps.experiments.tests.helpers import (
     create_draft_publication,
     create_enrollment,
 )
-from apps.governance.models import Quota, RuntimeAdapter
+from apps.governance.models import Quota, ResourceProfile, RuntimeAdapter
 from apps.provisioning.adapters import reset_fake_runtime
 from apps.provisioning.models import ProvisioningInstance
 from apps.provisioning.services import execute_provisioning_job, start_provisioning
@@ -38,12 +38,14 @@ from ..models import (
 from ..permissions import require_workspace_session
 from ..serializers import execution_run_data
 from ..services import (
+    _runtime_spec_for_execution,
     create_storage_job,
     enter_task,
     execute_execution_run,
     renew_session,
     request_execution_run,
     revoke_session,
+    task_has_active_test_rules,
     transition_storage_job,
 )
 from ..storage import (
@@ -116,6 +118,45 @@ class WorkspaceSessionServiceTests(TestCase):
     def tearDown(self) -> None:
         reset_fake_runtime()
 
+    def test_execution_spec_uses_frozen_legacy_resource_profile(self) -> None:
+        snapshot = dict(self.task.resource_profile_snapshot)
+        snapshot.update(
+            {
+                "cpu_millicores": 1200,
+                "memory_mb": 2048,
+                "disk_gb": 7,
+                "network_mode": "DENY_ALL",
+            }
+        )
+        for field in (
+            "cpu_request_millicores",
+            "cpu_limit_millicores",
+            "memory_request_mb",
+            "memory_limit_mb",
+        ):
+            snapshot.pop(field, None)
+        ExperimentTask.objects.filter(pk=self.task.pk).update(resource_profile_snapshot=snapshot)
+        ResourceProfile.objects.filter(pk=self.task.resource_profile_id).update(
+            public_id="profile-mutated-after",
+            cpu_millicores=8000,
+            memory_mb=16384,
+            cpu_request_millicores=4000,
+            cpu_limit_millicores=8000,
+            memory_request_mb=8192,
+            memory_limit_mb=16384,
+            disk_gb=80,
+            network_mode="ALLOWLIST",
+        )
+        task = ExperimentTask.objects.get(pk=self.task.pk)
+
+        spec = _runtime_spec_for_execution(task, trace_id=self.context.trace_id)
+
+        self.assertEqual(spec.resource_profile_id, snapshot["public_id"])
+        self.assertEqual(spec.cpu_millicores, 1200)
+        self.assertEqual(spec.memory_mb, 2048)
+        self.assertEqual(spec.disk_gb, 7)
+        self.assertEqual(spec.network_policy["mode"], "DENY_ALL")
+
     def test_ready_task_exposes_enter_and_issue_is_scoped(self) -> None:
         self.assertEqual(
             allowed_actions(self.task, actor=self.task.student),
@@ -131,6 +172,32 @@ class WorkspaceSessionServiceTests(TestCase):
         self.assertNotEqual(session.token_hash, token)
         self.assertNotIn(token, session.token_hash)
         require_workspace_session(session=session, token=token, task_id=self.task.public_id)
+
+    def test_runtime_provisioning_creates_a_reusable_workspace_session(self) -> None:
+        session = WorkspaceSession.objects.get(task=self.task)
+
+        self.assertEqual(session.status, WorkspaceSession.Status.ACTIVE)
+        self.assertEqual(session.instance_id, self.task.provisioning_instance.pk)
+        self.assertEqual(session.capabilities["terminal"], True)
+
+    def test_enter_refreshes_stale_session_capabilities(self) -> None:
+        """能力是派投影:发布后声明变化(教师补 terminal)时,重入应刷新旧会话快照。"""
+
+        session = WorkspaceSession.objects.get(task=self.task)
+        self.assertEqual(session.capabilities["terminal"], True)
+        WorkspaceSession.objects.filter(pk=session.pk).update(
+            capabilities={**session.capabilities, "terminal": False}
+        )
+
+        _task, refreshed, _token = enter_task(
+            task_id=self.task.public_id,
+            actor=self.task.student,
+            expected_version=self.task.row_version,
+            context=self.context,
+        )
+
+        self.assertEqual(refreshed.public_id, session.public_id)
+        self.assertTrue(refreshed.capabilities["terminal"])
 
     def test_storage_job_contract_rejects_fake_runtime_without_creating_a_row(self) -> None:
         _task, session, token = enter_task(
@@ -532,6 +599,87 @@ class WorkspaceSessionServiceTests(TestCase):
         ready = workbench_data(actor=self.task.student, task_id=self.task.public_id)
         self.assertTrue(ready["submission"]["can_submit"])
         self.assertIsNone(ready["submission"]["blocked_reason"])
+
+    def test_report_submission_without_test_rules_does_not_require_a_run(self) -> None:
+        """检查点型实验(模板无测试用例)不应被 TEST_NOT_FINISHED 卡住。"""
+        from apps.reports.models import ReportDraft
+        from apps.reports.services import update_report_draft
+
+        RuntimeAdapter.objects.filter(pk=self.task.runtime_adapter_id).update(
+            driver=RuntimeAdapter.Driver.DOCKER_LOCAL,
+            config_ref="runtime/local-docker",
+        )
+        ExperimentTask.objects.filter(pk=self.task.pk).update(
+            runtime_adapter_driver=RuntimeAdapter.Driver.DOCKER_LOCAL
+        )
+        _, session, _token = enter_task(
+            task_id=self.task.public_id,
+            actor=self.task.student,
+            expected_version=self.task.row_version,
+            context=self.context,
+        )
+        digest = hashlib.sha256(b"checkpoint-workspace").hexdigest()
+        asset = ObjectAsset.objects.create(
+            bucket="edu-platform",
+            object_key=f"workspaces/{self.task.public_id}/{digest}",
+            object_version="snapshot-version-1",
+            digest_sha256=digest,
+            size_bytes=8,
+            media_type="text/plain",
+            owner_type="WORKSPACE_TASK",
+            owner_ref=self.task.public_id,
+            purpose="WORKSPACE_SNAPSHOT",
+            scan_status=ObjectAsset.ScanStatus.CLEAN,
+        )
+        WorkspaceSnapshot.objects.create(
+            task=self.task,
+            session=session,
+            asset=asset,
+            version_no=1,
+            client_seq=1,
+            digest_sha256=digest,
+            size_bytes=8,
+            media_type="text/plain",
+            saved_at=timezone.now(),
+            trace_id="snapshot".ljust(32, "0"),
+        )
+        draft = ReportDraft.objects.get(task=self.task)
+        update_report_draft(
+            task_id=self.task.public_id,
+            actor=self.task.student,
+            body_markdown="# checkpoint only",
+            expected_version=draft.row_version,
+            context=self.context,
+        )
+        self.assertFalse(task_has_active_test_rules(self.task))
+
+        ready = workbench_data(actor=self.task.student, task_id=self.task.public_id)
+        self.assertTrue(ready["submission"]["can_submit"])
+        self.assertIsNone(ready["submission"]["blocked_reason"])
+
+        # 声明了测试用例后,无运行结果重新被阻塞
+        from apps.labtemplates.models import AutoCheckRule
+
+        AutoCheckRule.objects.create(
+            template_version=self.task.template_version,
+            position=1,
+            position_key="p08-rule",
+            checker_type="PYTEST",
+            input_schema={"type": "object"},
+            output_schema={"type": "object"},
+            timeout_seconds=30,
+            resource_limit={},
+            network_policy={"mode": "DENY_ALL"},
+            display_policy={"show_score": True},
+            failure_semantics={"on_failure": "FAIL_CHECK"},
+            rule_digest="a" * 64,
+        )
+        blocked = workbench_data(actor=self.task.student, task_id=self.task.public_id)
+        self.assertFalse(blocked["submission"]["can_submit"])
+        self.assertEqual(
+            blocked["submission"]["blocked_reason"]["code"],
+            "TEST_NOT_FINISHED",
+        )
 
     def test_renew_rotates_token_and_old_token_is_invalid(self) -> None:
         _, session, token = enter_task(

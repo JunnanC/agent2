@@ -47,7 +47,7 @@ export function DataTable({ headers, rows, badgeColumns = [], statuses = [], tim
       <span className="toolbar-end" role="status">{visible.length} 条记录 · 演示数据</span>
     </div>
     <div className="table-wrap"><table><thead><tr>{headers.map(header => <th key={header}>{header}</th>)}<th><span className="sr-only">操作</span></th></tr></thead><tbody>
-      {visible.map(row => <tr key={row.id}>{row.cells.map((value, index) => <td key={index} className={index === 0 ? 'object-cell' : ''}>{badgeColumns.includes(index) ? <Badge value={value} /> : value}</td>)}<td><button className="row-action" onClick={() => onDetail({ title: row.cells[0], fields: [['记录 ID', row.id], ...headers.map((header, index): [string, string] => [header, row.cells[index]])] })}>查看详情 →</button></td></tr>)}
+      {visible.map(row => <tr key={row.id}>{row.cells.map((value, index) => <td key={index} className={index === 0 ? 'object-cell' : ''}>{badgeColumns.includes(index) ? <Badge value={value} /> : value}</td>)}<td><button className="row-action" onClick={() => onDetail({ title: row.cells[0] ?? '', fields: [['记录 ID', row.id], ...headers.map((header, index): [string, string] => [header, row.cells[index] ?? ''])] })}>查看详情 →</button></td></tr>)}
       {visible.length === 0 && <tr><td colSpan={headers.length + 1} className="empty-state">没有匹配记录，请调整搜索或筛选条件。</td></tr>}
     </tbody></table></div>
   </section>;

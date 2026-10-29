@@ -1,154 +1,122 @@
-export const systemKeys = {
-  all: ['system'] as const,
-  health: () => [...systemKeys.all, 'health'] as const,
-}
+/**
+ * TanStack Query 键工厂。
+ * 约定：数组第一段为域，第二段为资源/视图，第三段为筛选或 id。
+ * SSE 事件只触发对应域的失效；logout / SESSION_EXPIRED 时清空整个缓存。
+ */
 
-export const accountKeys = {
-  all: ['accounts'] as const,
-  me: () => ['me'] as const,
-  verification: () => [...accountKeys.all, 'verification'] as const,
-  users: (filters: object = {}) => [...accountKeys.all, 'users', filters] as const,
-  teachers: (filters: object = {}) => [...accountKeys.all, 'teachers', filters] as const,
-  admins: (filters: object = {}) => [...accountKeys.all, 'admins', filters] as const,
-  verifications: (filters: object = {}) => [...accountKeys.all, 'verifications', filters] as const,
-}
+export type QueryFilter = Record<string, string | number | boolean | null | undefined>;
 
-export const courseKeys = {
-  all: ['courses'] as const,
-  catalog: (filters: object = {}) => [...courseKeys.all, 'catalog', filters] as const,
-  detail: (courseId: string) => [...courseKeys.all, 'detail', courseId] as const,
-  content: (courseId: string, resource: string) => [...courseKeys.all, 'content', courseId, resource] as const,
-  myEnrollments: (filters: object = {}) => ['me', 'enrollments', filters] as const,
-  teaching: (filters: object = {}) => ['teaching', 'courses', filters] as const,
-  teachingDetail: (courseId: string) => ['teaching', 'courses', courseId] as const,
-  staff: (courseId: string) => ['teaching', 'courses', courseId, 'staff'] as const,
-  roster: (courseId: string, filters: object = {}) => ['teaching', 'courses', courseId, 'enrollments', filters] as const,
-  job: (courseId: string, jobId: string) => ['teaching', 'courses', courseId, 'jobs', jobId] as const,
-}
+const stable = (filter: QueryFilter = {}): Array<string | number | boolean> => {
+  const entries = Object.entries(filter)
+    .filter(([, value]) => value != null && value !== "")
+    .sort(([a], [b]) => a.localeCompare(b));
+  return entries.map(([key, value]) => `_${key}=${String(value)}`);
+};
 
-export const governanceKeys = {
-  all: ['governance'] as const,
-  runtimes: () => [...governanceKeys.all, 'runtimes'] as const,
-  images: () => [...governanceKeys.all, 'images'] as const,
-  profiles: () => [...governanceKeys.all, 'profiles'] as const,
-  quotas: () => [...governanceKeys.all, 'quotas'] as const,
-  policies: (kind = 'RUNTIME_SECURITY') => [...governanceKeys.all, 'policies', kind] as const,
-  allowlists: () => [...governanceKeys.all, 'allowlists'] as const,
-  usage: () => [...governanceKeys.all, 'usage'] as const,
-  alerts: () => [...governanceKeys.all, 'alerts'] as const,
-  courseSummary: (courseId: string) => [...governanceKeys.all, 'course', courseId] as const,
-  resourceSummary: (courseId: string) => [...governanceKeys.all, 'resource', courseId] as const,
-}
+export const keys = {
+  /* 通用 */
+  me: () => ["me"] as const,
+  context: () => ["context"] as const,
+  notifications: (filter?: QueryFilter) => ["notifications", ...stable(filter)] as const,
+  notificationPreferences: () => ["notification-preferences"] as const,
 
-export const templateKeys = {
-  all: ['templates'] as const,
-  list: (courseId: string) => [...templateKeys.all, courseId, 'list'] as const,
-  options: (courseId: string) => [...templateKeys.all, courseId, 'options'] as const,
-  detail: (courseId: string, templateId: string) => [...templateKeys.all, courseId, templateId] as const,
-  versions: (courseId: string, templateId: string) => [...templateKeys.detail(courseId, templateId), 'versions'] as const,
-  version: (courseId: string, versionId: string) => [...templateKeys.all, courseId, 'versions', versionId] as const,
-  prechecks: (courseId: string, versionId: string) => [...templateKeys.version(courseId, versionId), 'prechecks'] as const,
-  asset: (courseId: string, templateId: string, assetId: string) => [...templateKeys.detail(courseId, templateId), 'assets', assetId] as const,
-  platformSummary: () => [...templateKeys.all, 'platform-summary'] as const,
-}
+  /* 学生端 */
+  studentDashboard: () => ["student", "dashboard", stable()] as const,
+  courses: (filter: QueryFilter = {}) => ["courses", ...stable(filter)] as const,
+  enrollments: (filter: QueryFilter = {}) => ["student-enrollments", ...stable(filter)] as const,
+  enrollment: (id: string) => ["student-enrollments", id] as const,
+  course: (courseId: string) => ["courses", courseId] as const,
+  courseResource: (courseId: string, resource: string, filter: QueryFilter = {}) =>
+    ["courses", courseId, resource, ...stable(filter)] as const,
+  tasks: (filter: QueryFilter = {}) => ["tasks", ...stable(filter)] as const,
+  task: (taskId: string) => ["tasks", taskId] as const,
+  taskTransitions: (taskId: string) => ["tasks", taskId, "transitions"] as const,
+  taskExtension: (taskId: string) => ["tasks", taskId, "extensions"] as const,
+  provisioningJob: (taskId: string) => ["tasks", taskId, "provisioning-job"] as const,
+  workbench: (taskId: string) => ["tasks", taskId, "workbench"] as const,
+  workspaceSessions: (taskId: string) => ["tasks", taskId, "workspace-sessions"] as const,
+  checkpoints: (taskId: string) => ["tasks", taskId, "checkpoints"] as const,
+  executionRuns: (taskId: string, filter: QueryFilter = {}) =>
+    ["tasks", taskId, "execution-runs", ...stable(filter)] as const,
+  executionRun: (taskId: string, runId: string) => ["tasks", taskId, "execution-runs", runId] as const,
+  reportDraft: (taskId: string) => ["tasks", taskId, "report-draft"] as const,
+  reportAttachments: (taskId: string) => ["tasks", taskId, "attachments"] as const,
+  reportVersions: (taskId: string) => ["tasks", taskId, "report-versions"] as const,
+  reviewResult: (taskId: string) => ["tasks", taskId, "review-result"] as const,
+  riskSignals: (filter: QueryFilter = {}) => ["analytics", "risk-signals", ...stable(filter)] as const,
+  recommendations: (filter: QueryFilter = {}) => ["analytics", "recommendations", ...stable(filter)] as const,
 
-export const rubricKeys = {
-  all: ['rubrics'] as const,
-  list: (courseId: string) => [...rubricKeys.all, courseId, 'list'] as const,
-  versions: (courseId: string, rubricId: string) => [...rubricKeys.all, courseId, rubricId, 'versions'] as const,
-  version: (courseId: string, versionId: string) => [...rubricKeys.all, courseId, 'versions', versionId] as const,
-}
+  /* 教师端 */
+  teachingCourses: (filter: QueryFilter = {}) => ["teaching-courses", ...stable(filter)] as const,
+  teachingCourse: (courseId: string) => ["teaching-courses", courseId] as const,
+  teachingCourseResource: (courseId: string, resource: string, filter: QueryFilter = {}) =>
+    ["teaching-courses", courseId, resource, ...stable(filter)] as const,
+  teachingEnrollments: (courseId: string, filter: QueryFilter = {}) =>
+    ["teaching-courses", courseId, "enrollments", ...stable(filter)] as const,
+  teachingEnrollment: (courseId: string, enrollmentId: string) =>
+    ["teaching-courses", courseId, "enrollments", enrollmentId] as const,
+  teachingStaff: (courseId: string) => ["teaching-courses", courseId, "staff"] as const,
+  invitations: (courseId: string) => ["teaching-courses", courseId, "invitations"] as const,
+  importJob: (courseId: string, jobId: string) => ["teaching-courses", courseId, "enrollment-imports", jobId] as const,
+  templates: (courseId: string, filter: QueryFilter = {}) =>
+    ["teaching-templates", courseId, ...stable(filter)] as const,
+  template: (courseId: string, templateId: string) => ["teaching-templates", courseId, templateId] as const,
+  templateOptions: (courseId: string) => ["teaching-templates", courseId, "options"] as const,
+  templateVersions: (courseId: string, templateId: string) =>
+    ["teaching-templates", courseId, templateId, "versions"] as const,
+  templateVersion: (_courseId: string, versionId: string) =>
+    ["teaching-template-versions", versionId] as const,
+  templateChapters: (versionId: string) => ["teaching-template-versions", versionId, "chapters"] as const,
+  templateChapterTasks: (chapterId: string) =>
+    ["teaching-template-chapters", chapterId, "tasks"] as const,
+  autoCheckRules: (versionId: string) => ["teaching-template-versions", versionId, "auto-check-rules"] as const,
+  precheckRuns: (versionId: string, filter: QueryFilter = {}) =>
+    ["teaching-template-versions", versionId, "precheck-runs", ...stable(filter)] as const,
+  experimentImages: (courseId: string, filter: QueryFilter = {}) =>
+    ["teaching-experiment-images", courseId, ...stable(filter)] as const,
+  publications: (courseId: string, filter: QueryFilter = {}) =>
+    ["teaching-publications", courseId, ...stable(filter)] as const,
+  publication: (courseId: string, publicationId: string) =>
+    ["teaching-publications", courseId, publicationId] as const,
+  publicationTasks: (courseId: string, publicationId: string, filter: QueryFilter = {}) =>
+    ["teaching-publications", courseId, publicationId, "tasks", ...stable(filter)] as const,
+  rubrics: (courseId: string) => ["teaching-rubrics", courseId] as const,
+  reviews: (courseId: string, filter: QueryFilter = {}) =>
+    ["teaching-reviews", courseId, ...stable(filter)] as const,
+  review: (courseId: string, reviewId: string) => ["teaching-reviews", courseId, reviewId] as const,
+  reviewScores: (courseId: string, reviewId: string) =>
+    ["teaching-reviews", courseId, reviewId, "criterion-scores"] as const,
+  reviewAnnotations: (courseId: string, reviewId: string) =>
+    ["teaching-reviews", courseId, reviewId, "annotations"] as const,
+  similarityRun: (_courseId: string, runId: string) => ["teaching-similarity-runs", runId] as const,
+  teachingAnalytics: (courseId: string, section: string, filter: QueryFilter = {}) =>
+    ["teaching-analytics", courseId, section, ...stable(filter)] as const,
+  teachingProgress: (courseId: string, filter: QueryFilter = {}) =>
+    ["teaching-analytics", courseId, "progress", ...stable(filter)] as const,
 
-export const experimentKeys = {
-  all: ['experiments'] as const,
-  publications: (courseId: string) => [...experimentKeys.all, 'publications', courseId] as const,
-  publication: (courseId: string, publicationId: string) => [...experimentKeys.publications(courseId), publicationId] as const,
-  tasks: (courseId: string, publicationId: string, filters: object = {}) => [...experimentKeys.publication(courseId, publicationId), 'tasks', filters] as const,
-  progress: (courseId: string) => [...experimentKeys.all, 'progress', courseId] as const,
-  extensionRequests: (courseId: string, filters: object = {}) => [...experimentKeys.all, 'extensions', courseId, filters] as const,
-  dashboard: () => ['me', 'experiment-dashboard'] as const,
-  myTasks: (filters: object = {}) => ['me', 'experiment-tasks', filters] as const,
-  task: (taskId: string) => ['me', 'experiment-task', taskId] as const,
-  provisioningJob: (taskId: string) => [...experimentKeys.task(taskId), 'provisioning-job'] as const,
-  transitions: (taskId: string) => [...experimentKeys.task(taskId), 'transitions'] as const,
-  extensions: (taskId: string) => [...experimentKeys.task(taskId), 'extensions'] as const,
-  anomalies: () => [...experimentKeys.all, 'anomalies'] as const,
-}
+  /* 平台端 */
+  platformUsers: (filter: QueryFilter = {}) => ["platform", "users", ...stable(filter)] as const,
+  verifications: (filter: QueryFilter = {}) => ["platform", "verifications", ...stable(filter)] as const,
+  governanceAlerts: (filter: QueryFilter = {}) => ["platform", "governance", "alerts", ...stable(filter)] as const,
+  governanceUsage: (filter: QueryFilter = {}) => ["platform", "governance", "usage", ...stable(filter)] as const,
+  precheckSummary: (filter: QueryFilter = {}) =>
+    ["platform", "template-prechecks", "summary", ...stable(filter)] as const,
+  images: (filter: QueryFilter = {}) => ["platform", "images", ...stable(filter)] as const,
+  image: (imageId: string) => ["platform", "images", imageId] as const,
+  resourceProfiles: (filter: QueryFilter = {}) => ["platform", "resource-profiles", ...stable(filter)] as const,
+  runtimeAdapters: (filter: QueryFilter = {}) => ["platform", "runtime-adapters", ...stable(filter)] as const,
+  quotas: (filter: QueryFilter = {}) => ["platform", "quotas", ...stable(filter)] as const,
+  instances: (filter: QueryFilter = {}) => ["platform", "instances", ...stable(filter)] as const,
+  platformWorkspaceSessions: (filter: QueryFilter = {}) =>
+    ["platform", "workspaces", "sessions", ...stable(filter)] as const,
+  anomalies: (filter: QueryFilter = {}) => ["platform", "anomalies", "tasks", ...stable(filter)] as const,
+  scanAnomalies: (filter: QueryFilter = {}) => ["platform", "anomalies", "reports", ...stable(filter)] as const,
+  operationsOverview: () => ["platform", "operations", "overview"] as const,
+  operationLogs: (filter: QueryFilter = {}) => ["platform", "operations", "logs", ...stable(filter)] as const,
+  agentModelRoutes: () => ["platform", "agent", "model-routes"] as const,
+  agentToolPolicies: () => ["platform", "agent", "tool-policies"] as const,
+  agentUsageCosts: (filter: QueryFilter = {}) => ["platform", "agent", "usage-costs", ...stable(filter)] as const,
+  agentEvalSuites: () => ["platform", "agent", "eval-suites"] as const,
+};
 
-export const workspaceKeys = {
-  all: ['workspaces'] as const,
-  workbench: (taskId: string) => [...workspaceKeys.all, 'workbench', taskId] as const,
-  session: (taskId: string) => [...workspaceKeys.all, 'session', taskId] as const,
-  snapshot: (taskId: string) => [...workspaceKeys.all, 'snapshot', taskId] as const,
-  storageJob: (jobId: string) => [...workspaceKeys.all, 'storage-job', jobId] as const,
-  checkpoints: (taskId: string) => [...workspaceKeys.all, 'checkpoints', taskId] as const,
-  replay: (taskId: string, scope = 'user') => [...workspaceKeys.all, 'replay', scope, taskId] as const,
-  executions: (taskId: string) => [...workspaceKeys.all, 'executions', taskId] as const,
-  execution: (taskId: string, executionId: string) => [...workspaceKeys.executions(taskId), executionId] as const,
-  teacher: (courseId: string, taskId: string) => [...workspaceKeys.all, 'teacher', courseId, taskId] as const,
-  adminSessions: () => [...workspaceKeys.all, 'admin', 'sessions'] as const,
-}
-
-export const reportKeys = {
-  all: ['reports'] as const,
-  draft: (taskId: string) => [...reportKeys.all, 'draft', taskId] as const,
-  versions: (taskId: string) => [...reportKeys.all, 'versions', taskId] as const,
-  preview: (courseId: string, taskId: string) => [...reportKeys.all, 'preview', courseId, taskId] as const,
-  scanAnomalies: () => [...reportKeys.all, 'scan-anomalies'] as const,
-}
-
-export const reviewKeys = {
-  all: ['reviews'] as const,
-  queue: (courseId: string, filters: object = {}) => [...reviewKeys.all, 'queue', courseId, filters] as const,
-  detail: (courseId: string, reviewId: string) => [...reviewKeys.all, 'detail', courseId, reviewId] as const,
-  scores: (courseId: string, reviewId: string) => [...reviewKeys.detail(courseId, reviewId), 'scores'] as const,
-  annotations: (courseId: string, reviewId: string) => [...reviewKeys.detail(courseId, reviewId), 'annotations'] as const,
-  similarity: (courseId: string, runId: string) => [...reviewKeys.all, 'similarity', courseId, runId] as const,
-  similarityMatches: (courseId: string, runId: string) => [...reviewKeys.similarity(courseId, runId), 'matches'] as const,
-  result: (taskId: string) => [...reviewKeys.all, 'result', taskId] as const,
-  monitor: () => [...reviewKeys.all, 'monitor'] as const,
-}
-
-export const archiveKeys = {
-  all: ['archives'] as const,
-  user: (taskId: string) => [...archiveKeys.all, 'user', taskId] as const,
-  course: (courseId: string) => [...archiveKeys.all, 'course', courseId] as const,
-  detail: (courseId: string, archiveId: string) => [...archiveKeys.course(courseId), archiveId] as const,
-  instances: () => [...archiveKeys.all, 'platform', 'instances'] as const,
-  compensations: (status = '') => [...archiveKeys.all, 'platform', 'compensations', status] as const,
-}
-
-export const agentKeys = {
-  all: ['agents'] as const,
-  profile: (courseId: string) => [...agentKeys.all, 'profile', courseId] as const,
-  sessions: (courseId: string) => [...agentKeys.all, 'sessions', courseId] as const,
-  session: (sessionId: string) => [...agentKeys.all, 'session', sessionId] as const,
-  messages: (sessionId: string) => [...agentKeys.session(sessionId), 'messages'] as const,
-  teachingProfiles: (courseId: string) => [...agentKeys.all, 'teaching', 'profiles', courseId] as const,
-  teachingKnowledge: (courseId: string) => [...agentKeys.all, 'teaching', 'knowledge', courseId] as const,
-  teachingFeedback: (courseId: string) => [...agentKeys.all, 'teaching', 'feedback', courseId] as const,
-  platformPolicies: () => [...agentKeys.all, 'platform', 'policies'] as const,
-}
-
-export const notificationKeys = {
-  all: ['notifications'] as const,
-  list: (portal = '') => [...notificationKeys.all, 'list', portal] as const,
-  preference: (portal = '') => [...notificationKeys.all, 'preference', portal] as const,
-}
-
-export const analyticsKeys = {
-  all: ['analytics'] as const,
-  recommendations: () => [...analyticsKeys.all, 'recommendations'] as const,
-  risks: (courseId = '') => [...analyticsKeys.all, 'risks', courseId] as const,
-  overview: (courseId: string) => [...analyticsKeys.all, 'overview', courseId] as const,
-  quality: (courseId: string) => [...analyticsKeys.all, 'quality', courseId] as const,
-  resourceCosts: (courseId: string) => [...analyticsKeys.all, 'resource-costs', courseId] as const,
-  projections: () => [...analyticsKeys.all, 'projections'] as const,
-}
-
-export const integrationKeys = {
-  all: ['integrations'] as const,
-  providers: () => [...integrationKeys.all, 'providers'] as const,
-  clients: () => [...integrationKeys.all, 'clients'] as const,
-  deliveries: () => [...integrationKeys.all, 'deliveries'] as const,
-}
+export type QueryKeyTree = typeof keys;

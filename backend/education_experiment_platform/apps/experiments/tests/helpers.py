@@ -4,7 +4,13 @@ from apps.accounts.models import User
 from apps.accounts.tests.helpers import create_user
 from apps.courses.models import Course, Enrollment
 from apps.courses.services import ActorContext
-from apps.labtemplates.models import Template, TemplateVersion
+from apps.labtemplates.models import (
+    ExperimentImage,
+    Template,
+    TemplateChapter,
+    TemplateTask,
+    TemplateVersion,
+)
 from apps.labtemplates.tests.helpers import create_template_version
 from apps.reviews.models import Rubric, RubricVersion
 
@@ -33,6 +39,42 @@ def create_domain(*, suffix: str = "p06") -> tuple[User, Course, TemplateVersion
         status=Template.Status.PUBLISHED,
         current_version=template_version,
     )
+    template_version.refresh_from_db()
+    ExperimentImage.objects.create(
+        template_version=template_version,
+        source_type=ExperimentImage.SourceType.EXTERNAL_REFERENCE,
+        registry=template_version.image.registry,
+        repository=template_version.image.repository,
+        requested_tag=template_version.image.display_tag or "stable",
+        resolved_digest=template_version.image.digest,
+        image_asset=template_version.image,
+        status=ExperimentImage.Status.READY,
+        scan_status=ExperimentImage.ScanStatus.CLEAN,
+        trace_id=f"{suffix}-domain-image".ljust(32, "0")[:32],
+        created_by=owner,
+    )
+    chapter = TemplateChapter.objects.create(
+        template_version=template_version,
+        title="Introduction",
+        description="First chapter",
+        learning_objectives=["Understand the environment"],
+        sort_order=1,
+        status=TemplateChapter.Status.PUBLISHED,
+        resource_profile=template_version.resource_profile,
+    )
+    TemplateTask.objects.create(
+        chapter=chapter,
+        title="First task",
+        description="Run the first task",
+        instructions="Follow the instructions",
+        task_type="PRACTICE",
+        sort_order=1,
+        status=TemplateTask.Status.PUBLISHED,
+        execution_spec=dict(template_version.execution_spec or {}),
+        resource_profile=template_version.resource_profile,
+        submission_policy={"required": True},
+        grading_policy={"mode": "MANUAL"},
+    )
     rubric = Rubric.objects.create(
         course=course,
         name=f"Rubric {suffix}",
@@ -51,7 +93,6 @@ def create_domain(*, suffix: str = "p06") -> tuple[User, Course, TemplateVersion
     )
     Rubric.objects.filter(pk=rubric.pk).update(current_version=rubric_version)
     course.refresh_from_db()
-    template_version.refresh_from_db()
     return owner, course, template_version, rubric_version
 
 

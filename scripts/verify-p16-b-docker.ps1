@@ -100,6 +100,11 @@ try {
         throw "Unexpected code-server version: $codeServerVersion"
     }
 
+    $ttydVersion = (& docker exec $container /usr/local/bin/ttyd --version | Select-Object -First 1).Trim()
+    if ($LASTEXITCODE -ne 0 -or -not $ttydVersion -like 'ttyd version 1.7.7*') {
+        throw "Unexpected ttyd version: $ttydVersion"
+    }
+
     $publishedPorts = (& docker inspect --format '{{json .NetworkSettings.Ports}}' $container).Trim()
     if ($publishedPorts -match 'HostPort') {
         throw 'P16-B workspace container unexpectedly publishes a host port.'
@@ -147,9 +152,11 @@ try {
         exposed_ports = @($imageInspect.Config.ExposedPorts.PSObject.Properties.Name)
         published_ports = $publishedPorts
         code_server = $codeServerVersion
+        ttyd = $ttydVersion
         python = '3.14.0'
         base_image = 'm.daocloud.io/docker.io/library/python:3.14.0-slim-bookworm@sha256:9bbb8720ae0a24a6ca8dd678bfdf57818fe70caf54c52a53ec01d8db43405056'
         code_server_archive_sha256 = 'bc650b57fd8d0bcee952c97308dd43ae37ad8dc11b83a713d8eca8ce823fefd9'
+        ttyd_binary_sha256 = '8a217c968aba172e0dbf3f34447218dc015bc4d5e59bf51db2f2cd12b7be4f55'
         health = $health
         judge_command_override = 'passed'
         security = [ordered]@{

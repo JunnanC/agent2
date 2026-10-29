@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
-import { ApiError, apiRequestWithMetadata, type WorkspaceEnvelope, type WorkspaceSessionData } from '@edu/api-client'
-import { workspaceKeys } from '@edu/query-keys'
-import { PageHeader, RequestStateView, StatusBadge } from '@edu/ui'
+import { ApiError, apiRequestWithMetadata, type WorkspaceEnvelope, type WorkspaceSessionData } from './legacy/api-client'
+import { workspaceKeys } from './legacy/query-keys'
+import { PageHeader, RequestStateView, StatusBadge } from './legacy/ui'
 
 export function WorkspaceSessionsPage() {
   const query = useQuery({ queryKey: workspaceKeys.adminSessions(), queryFn: () => apiRequestWithMetadata<WorkspaceEnvelope<Array<WorkspaceSessionData & { public_id: string; student_id: string }>>>('/api/v2/platform/workspaces/sessions') })

@@ -10,6 +10,7 @@ from apps.accounts.models import TeacherQualification, User
 from apps.core.audit import append_audit, hash_client_ip
 from apps.core.concurrency import compare_and_swap
 from apps.core.errors import ResourceNotFound, RowVersionConflict
+from apps.core.identifiers import normalize_trace_id
 from apps.core.outbox import append_outbox_event, enqueue_relay_after_commit
 
 from . import events
@@ -22,6 +23,7 @@ from .errors import (
 )
 from .metrics import COURSE_ENROLLMENT_DECISIONS_TOTAL
 from .models import (
+    AcademicTerm,
     Course,
     CourseStaff,
     CourseStaffEvent,
@@ -40,6 +42,10 @@ from .ports import (
 from .selectors import require_course_capability, require_owner
 
 
+def current_academic_term() -> AcademicTerm:
+    return AcademicTerm.objects.get(is_current=True)
+
+
 @dataclass(frozen=True)
 class ActorContext:
     actor_ref: str
@@ -47,6 +53,9 @@ class ActorContext:
     trace_id: str
     client_ip: str = ""
     user_agent: str = ""
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "trace_id", normalize_trace_id(self.trace_id))
 
 
 def _audit(
@@ -196,12 +205,25 @@ def create_course(
     actor = User.objects.select_for_update().get(pk=actor.pk)
     _active_teacher(actor)
     try:
+        term = current_academic_term()
+    except AcademicTerm.DoesNotExist:
+        now = timezone.now()
+        term = AcademicTerm.objects.create(
+            code="LEGACY-CURRENT",
+            name="Legacy Current Term",
+            starts_at=now,
+            ends_at=now.replace(year=now.year + 1),
+            status=AcademicTerm.Status.CURRENT,
+            is_current=True,
+        )
+    try:
         course = Course.objects.create(
             code=code.strip().upper(),
             title=title.strip(),
             summary=summary.strip(),
             description=description.strip(),
             owner=actor,
+            term=term,
             visibility=visibility,
             enrollment_mode=enrollment_mode,
             capacity=capacity,

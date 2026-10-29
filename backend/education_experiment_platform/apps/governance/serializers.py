@@ -36,9 +36,17 @@ class ImageCreateSerializer(serializers.Serializer):
     registry = serializers.CharField(max_length=255)
     repository = serializers.CharField(max_length=255)
     display_tag = serializers.CharField(max_length=128, required=False, allow_blank=True)
-    digest = serializers.CharField(max_length=71)
+    digest = serializers.CharField(max_length=71, required=False, allow_blank=True)
     risk_level = serializers.ChoiceField(choices=ImageAsset.RiskLevel.choices)
     reason = serializers.CharField(max_length=500)
+
+
+class ImageResolveSerializer(serializers.Serializer):
+    reason = serializers.CharField(max_length=500, required=False, allow_blank=True)
+
+
+class ImageReResolveSerializer(serializers.Serializer):
+    reason = serializers.CharField(max_length=500, required=False, allow_blank=True)
 
 
 class ImageScanSerializer(serializers.Serializer):
@@ -50,7 +58,7 @@ class ImageScanSerializer(serializers.Serializer):
 
 class ImageDecisionSerializer(serializers.Serializer):
     decision = serializers.CharField(max_length=16)
-    reason = serializers.CharField(max_length=500)
+    reason = serializers.CharField(max_length=500, required=False, allow_blank=True)
 
 
 class ResourceProfileCreateSerializer(serializers.Serializer):
@@ -59,6 +67,10 @@ class ResourceProfileCreateSerializer(serializers.Serializer):
     runtime_type = serializers.ChoiceField(choices=RuntimeAdapter.RuntimeType.choices)
     cpu_millicores = serializers.IntegerField(min_value=1)
     memory_mb = serializers.IntegerField(min_value=1)
+    cpu_request_millicores = serializers.IntegerField(min_value=1, required=False)
+    cpu_limit_millicores = serializers.IntegerField(min_value=1, required=False)
+    memory_request_mb = serializers.IntegerField(min_value=1, required=False)
+    memory_limit_mb = serializers.IntegerField(min_value=1, required=False)
     disk_gb = serializers.IntegerField(min_value=1)
     network_mode = serializers.ChoiceField(choices=ResourceProfile.NetworkMode.choices)
     cost_minor_per_hour = serializers.IntegerField(min_value=0, default=0)
@@ -73,6 +85,10 @@ class ResourceProfileUpdateSerializer(serializers.Serializer):
     )
     cpu_millicores = serializers.IntegerField(min_value=1, required=False)
     memory_mb = serializers.IntegerField(min_value=1, required=False)
+    cpu_request_millicores = serializers.IntegerField(min_value=1, required=False)
+    cpu_limit_millicores = serializers.IntegerField(min_value=1, required=False)
+    memory_request_mb = serializers.IntegerField(min_value=1, required=False)
+    memory_limit_mb = serializers.IntegerField(min_value=1, required=False)
     disk_gb = serializers.IntegerField(min_value=1, required=False)
     network_mode = serializers.ChoiceField(
         choices=ResourceProfile.NetworkMode.choices, required=False
@@ -176,6 +192,10 @@ class ResourceProfileDataSerializer(serializers.Serializer):
     status = serializers.CharField()
     cpu_millicores = serializers.IntegerField()
     memory_mb = serializers.IntegerField()
+    cpu_request_millicores = serializers.IntegerField()
+    cpu_limit_millicores = serializers.IntegerField()
+    memory_request_mb = serializers.IntegerField()
+    memory_limit_mb = serializers.IntegerField()
     disk_gb = serializers.IntegerField()
     network_mode = serializers.CharField()
     cost_minor_per_hour = serializers.IntegerField()
@@ -372,6 +392,10 @@ def resource_profile_data(item: ResourceProfile) -> dict[str, Any]:
         "status": item.status,
         "cpu_millicores": item.cpu_millicores,
         "memory_mb": item.memory_mb,
+        "cpu_request_millicores": item.cpu_request_millicores,
+        "cpu_limit_millicores": item.cpu_limit_millicores,
+        "memory_request_mb": item.memory_request_mb,
+        "memory_limit_mb": item.memory_limit_mb,
         "disk_gb": item.disk_gb,
         "network_mode": item.network_mode,
         "cost_minor_per_hour": item.cost_minor_per_hour,

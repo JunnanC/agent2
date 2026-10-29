@@ -69,6 +69,12 @@ class TaskPublication(VersionedModel):
     template_spec_digest = models.CharField(
         max_length=64, null=True, blank=True, db_collation="ascii_bin"
     )
+    template_digest = models.CharField(
+        max_length=64, null=True, blank=True, db_collation="ascii_bin"
+    )
+    publication_digest = models.CharField(
+        max_length=64, null=True, blank=True, db_collation="ascii_bin"
+    )
     execution_spec = models.JSONField(default=dict, blank=True)
     runtime_adapter = models.ForeignKey(
         RuntimeAdapter,
@@ -165,6 +171,87 @@ class TaskPublication(VersionedModel):
             models.Index(
                 fields=("template_version", "status"), name="experiments_pub_template_idx"
             ),
+        ]
+
+
+class PublicationChapter(AppendOnlyModel):
+    """Immutable ordered chapter content captured when a publication is made."""
+
+    public_id = public_id_field()
+    publication = models.ForeignKey(
+        TaskPublication, on_delete=models.PROTECT, related_name="chapter_snapshots"
+    )
+    source_chapter_id = models.CharField(max_length=26, db_collation="ascii_bin")
+    title = models.CharField(max_length=160)
+    description = models.TextField(blank=True, default="")
+    learning_objectives = models.JSONField(default=list, blank=True)
+    sort_order = models.PositiveIntegerField()
+    snapshot = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        db_table = "experiments_publication_chapter"
+        constraints = [
+            models.UniqueConstraint(
+                fields=("publication", "source_chapter_id"),
+                name="experiments_pub_chapter_source_uniq",
+            ),
+            models.UniqueConstraint(
+                fields=("publication", "sort_order"),
+                name="experiments_pub_chapter_order_uniq",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(sort_order__gte=1),
+                name="experiments_pub_chapter_order_ck",
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=("publication", "sort_order"),
+                name="exp_pub_chapter_order_idx",
+            )
+        ]
+
+
+class PublicationTask(AppendOnlyModel):
+    """Immutable ordered task content and runtime inputs captured at publish time."""
+
+    public_id = public_id_field()
+    publication_chapter = models.ForeignKey(
+        PublicationChapter, on_delete=models.PROTECT, related_name="task_snapshots"
+    )
+    source_task_id = models.CharField(max_length=26, db_collation="ascii_bin")
+    title = models.CharField(max_length=160)
+    description = models.TextField(blank=True, default="")
+    instructions = models.TextField(blank=True, default="")
+    task_type = models.CharField(max_length=64)
+    sort_order = models.PositiveIntegerField()
+    image_digest = models.CharField(max_length=71, db_collation="ascii_bin")
+    resource_profile_snapshot = models.JSONField(default=dict, blank=True)
+    execution_snapshot = models.JSONField(default=dict, blank=True)
+    submission_policy = models.JSONField(default=dict, blank=True)
+    grading_policy = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        db_table = "experiments_publication_task"
+        constraints = [
+            models.UniqueConstraint(
+                fields=("publication_chapter", "source_task_id"),
+                name="experiments_pub_task_source_uniq",
+            ),
+            models.UniqueConstraint(
+                fields=("publication_chapter", "sort_order"),
+                name="experiments_pub_task_order_uniq",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(sort_order__gte=1),
+                name="experiments_pub_task_order_ck",
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=("publication_chapter", "sort_order"),
+                name="experiments_pub_task_order_idx",
+            )
         ]
 
 

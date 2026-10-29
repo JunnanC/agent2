@@ -24,9 +24,9 @@ import {
   type UsageResponse,
   type UserData,
   type VerificationData,
-} from '@edu/api-client'
-import { accountKeys, courseKeys, governanceKeys } from '@edu/query-keys'
-import { PageHeader, RequestStateView, StatusBadge, TextField } from '@edu/ui'
+} from './legacy/api-client'
+import { accountKeys, courseKeys, governanceKeys } from './legacy/query-keys'
+import { PageHeader, RequestStateView, StatusBadge, TextField } from './legacy/ui'
 
 function messageFor(error: unknown): string {
   if (!(error instanceof ApiError)) return '请求未完成，请稍后重试。'

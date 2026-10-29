@@ -26,6 +26,7 @@ from apps.courses.models import Enrollment
 from apps.courses.services import ActorContext
 from apps.experiments.models import ExperimentTask
 from apps.experiments.services import transition_task
+from apps.governance.services import effective_resource_profile
 from apps.labtemplates.services import build_execution_command
 from apps.provisioning.adapters import RuntimeAdapterFailure, runtime_for_driver
 from apps.provisioning.metrics import (
@@ -170,7 +171,24 @@ def _new_token() -> tuple[str, str, str]:
 
 
 def _session_capabilities(task: ExperimentTask) -> dict[str, bool]:
-    declared = task.template_version.workspace_capabilities or {}
+    declared: dict[str, object] = {}
+    execution_spec = task.execution_spec if isinstance(task.execution_spec, dict) else {}
+    runtime_snapshot = execution_spec.get("_runtime")
+    if isinstance(runtime_snapshot, dict):
+        declared = runtime_snapshot.get("workspace_capabilities") or {}
+    if not declared and isinstance(execution_spec.get("workspace_capabilities"), dict):
+        declared = execution_spec["workspace_capabilities"]
+    if not declared:
+        publication_execution = task.publication.execution_spec
+        runtime_snapshot = (
+            publication_execution.get("_runtime")
+            if isinstance(publication_execution, dict)
+            else None
+        )
+        if isinstance(runtime_snapshot, dict):
+            declared = runtime_snapshot.get("workspace_capabilities") or {}
+    if not declared:
+        declared = task.template_version.workspace_capabilities or {}
     return {name: bool(declared.get(name, False)) for name in WORKSPACE_CAPABILITIES}
 
 
@@ -185,6 +203,14 @@ def _task_for_actor(*, task_id: str, actor: User) -> ExperimentTask:
         )
     except ExperimentTask.DoesNotExist as exc:
         raise ResourceNotFound() from exc
+
+
+def task_has_active_test_rules(task: ExperimentTask) -> bool:
+    """Whether the frozen template declares any active auto-check (test) rules.
+
+    任务模板没有声明测试用例时,提交报告不应要求存在执行运行结果。
+    """
+    return task.template_version.auto_check_rules.filter(is_active=True).exists()
 
 
 def _assert_enterable(task: ExperimentTask) -> None:
@@ -263,19 +289,27 @@ def issue_session(
     now = timezone.now()
     expiry = now + timedelta(seconds=_ttl_seconds())
     if active is not None:
+        rotated: dict[str, object] = {
+            "jti": jti,
+            "token_hash": digest,
+            "expires_at": expiry,
+            "last_seen_at": now,
+            "status": WorkspaceSession.Status.ACTIVE,
+            "revoked_at": None,
+            "revoke_reason": "",
+            "instance": instance,
+        }
+        # 能力是派投影:enter 已允许 IN_PROGRESS 等"仅轮换会话"路径重入,
+        # 若模板/快照能力在此期间变化(如教师补充 terminal 声明),重算会话能力,
+        # 否则旧会话会永远带着过期能力快照。
+        fresh_capabilities = _session_capabilities(task)
+        if dict(active.capabilities or {}) != fresh_capabilities:
+            rotated["capabilities"] = fresh_capabilities
         changed = compare_and_swap(
             WorkspaceSession,
             pk=active.pk,
             expected_version=active.row_version,
-            changes={
-                "jti": jti,
-                "token_hash": digest,
-                "expires_at": expiry,
-                "last_seen_at": now,
-                "status": WorkspaceSession.Status.ACTIVE,
-                "revoked_at": None,
-                "revoke_reason": "",
-            },
+            changes=rotated,
         )
         session = changed  # type: ignore[assignment]
     else:
@@ -298,16 +332,20 @@ def issue_session(
             active = WorkspaceSession.objects.select_for_update().get(
                 task=task, active_marker=f"{task.public_id}:ACTIVE"
             )
+            raced_rotation: dict[str, object] = {
+                "jti": jti,
+                "token_hash": digest,
+                "expires_at": expiry,
+                "last_seen_at": now,
+            }
+            raced_capabilities = _session_capabilities(task)
+            if dict(active.capabilities or {}) != raced_capabilities:
+                raced_rotation["capabilities"] = raced_capabilities
             session = compare_and_swap(
                 WorkspaceSession,
                 pk=active.pk,
                 expected_version=active.row_version,
-                changes={
-                    "jti": jti,
-                    "token_hash": digest,
-                    "expires_at": expiry,
-                    "last_seen_at": now,
-                },
+                changes=raced_rotation,
             )
     _audit(
         context=context,
@@ -1106,12 +1144,16 @@ EXECUTION_TERMINAL_STATUSES = frozenset(
 
 def _execution_rules(task: ExperimentTask) -> tuple[dict[str, Any], list[str], str]:
     execution_spec = dict(task.execution_spec or {})
-    if not execution_spec:
-        execution_spec = dict(task.template_version.execution_spec or {})
+    command: list[str] = []
     try:
         command = list(build_execution_command(execution_spec))
-    except Exception:  # noqa: BLE001 - legacy FakeRuntime rows have no execution spec
-        command = []
+    except Exception:  # noqa: BLE001 - publication frozen specs may carry legacy overlays
+        try:
+            command = list(
+                build_execution_command(dict(task.template_version.execution_spec or {}))
+            )
+        except Exception:  # noqa: BLE001 - legacy FakeRuntime rows have no execution spec
+            command = []
     summary: dict[str, Any] = {
         "language": execution_spec.get("language", ""),
         "entrypoint": execution_spec.get("entrypoint", ""),
@@ -1130,7 +1172,7 @@ def _execution_rules(task: ExperimentTask) -> tuple[dict[str, Any], list[str], s
 
 
 def _runtime_spec_for_execution(task: ExperimentTask, *, trace_id: str) -> RuntimeSpec:
-    profile = dict(task.resource_profile_snapshot or {})
+    profile = effective_resource_profile(task)
     image = task.image
     return RuntimeSpec(
         task_id=task.public_id,
@@ -1140,15 +1182,11 @@ def _runtime_spec_for_execution(task: ExperimentTask, *, trace_id: str) -> Runti
         image_registry=task.image_registry or (image.registry if image else ""),
         image_repository=task.image_repository or (image.repository if image else ""),
         image_digest=task.image_digest or (image.digest if image else "sha256:"),
-        resource_profile_id=(
-            task.resource_profile.public_id
-            if task.resource_profile_id
-            else str(profile.get("public_id", ""))
-        ),
-        cpu_millicores=int(profile.get("cpu_millicores", 0) or 0),
-        memory_mb=int(profile.get("memory_mb", 0) or 0),
-        disk_gb=int(profile.get("disk_gb", 0) or 0),
-        network_policy={"mode": str(profile.get("network_mode", "DENY_ALL"))},
+        resource_profile_id=str(profile["public_id"]),
+        cpu_millicores=int(profile["cpu_request_millicores"]),
+        memory_mb=int(profile["memory_request_mb"]),
+        disk_gb=int(profile["disk_gb"]),
+        network_policy={"mode": str(profile["network_mode"])},
         workspace_capabilities=dict(task.template_version.workspace_capabilities or {}),
         workspace_port=int(getattr(settings, "RUNTIME_WORKSPACE_PORT", 8080)),
         healthcheck_path=str(getattr(settings, "RUNTIME_HEALTHCHECK_PATH", "/healthz")),
@@ -1379,6 +1417,7 @@ def execute_execution_run(*, execution_run_id: str, trace_id: str = "") -> Works
         summary = dict(run.execution_rule_summary or {})
         command = [str(value) for value in summary.get("command", [])]
         source = b""
+        tests = b""
         adapter = runtime_for_driver(
             driver,
             config_ref=task.runtime_adapter_config_ref
@@ -1391,10 +1430,27 @@ def execute_execution_run(*, execution_run_id: str, trace_id: str = "") -> Works
                 version_id=run.snapshot.asset.object_version,
             )
             source = stored.body.read() if hasattr(stored.body, "read") else b""
+            tests_asset_id = str(summary.get("tests_asset", ""))
+            if tests_asset_id:
+                from apps.core.models import ObjectAsset
+
+                tests_asset = ObjectAsset.objects.filter(public_id=tests_asset_id).first()
+                if tests_asset is not None:
+                    tests_stored = object_storage().open_object(
+                        bucket=tests_asset.bucket,
+                        object_key=tests_asset.object_key,
+                        version_id=tests_asset.object_version,
+                    )
+                    tests = (
+                        tests_stored.body.read()
+                        if hasattr(tests_stored.body, "read")
+                        else b""
+                    )
         result: RuntimeExecutionResult = adapter.execute(
             spec=_runtime_spec_for_execution(task, trace_id=run.trace_id),
             command=command,
             source=source,
+            tests=tests,
             timeout_seconds=int(summary.get("timeout_seconds", 0) or 0),
             memory_mb=int(summary.get("memory_mb", 0) or 0),
             cpu_millicores=int(summary.get("cpu_millicores", 0) or 0),

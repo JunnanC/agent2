@@ -21,6 +21,7 @@ from .content_views import (
     UserQuestionCreateView,
 )
 from .views import (
+    ContextView,
     CourseEnrollmentApplyView,
     MyEnrollmentDetailView,
     MyEnrollmentDropCheckView,
@@ -52,6 +53,7 @@ from .views import (
 )
 
 urlpatterns = [
+    path("context", ContextView.as_view(), name="context"),
     path("courses", PublicCourseListView.as_view(), name="course-list"),
     path("courses/<str:course_id>", PublicCourseDetailView.as_view(), name="course-detail"),
     path(
@@ -188,11 +190,6 @@ urlpatterns = [
         name="question-answer-create",
     ),
     path(
-        "teaching/courses/<str:course_id>/<str:resource>",
-        TeachingContentCollectionView.as_view(),
-        name="teaching-content-collection",
-    ),
-    path(
         "teaching/courses/<str:course_id>/chapters/<str:chapter_id>/<str:status>",
         TeachingChapterStatusView.as_view(),
         name="teaching-chapter-status",
@@ -261,5 +258,12 @@ urlpatterns = [
         "teaching/courses/<str:course_id>/chapters/<str:chapter_id>/prerequisites",
         TeachingChapterPrerequisiteView.as_view(),
         name="teaching-chapter-prerequisites",
+    ),
+    # KEPT LAST: this dynamic two-segment catch-all must not shadow the
+    # specific resources above (invitations, copy-jobs, prerequisites...).
+    path(
+        "teaching/courses/<str:course_id>/<str:resource>",
+        TeachingContentCollectionView.as_view(),
+        name="teaching-content-collection",
     ),
 ]

@@ -1,19 +1,21 @@
-import { defineConfig, devices } from '@playwright/test'
+import { defineConfig, devices } from "@playwright/test";
 
-const browserChannel = process.env.PLAYWRIGHT_CHANNEL as 'chrome' | 'msedge' | undefined
-
+// 学生/教师/平台三端冒烟：构建产物由 dist/<app> 提供（登录页与核心导航），
+// 与 scripts/verify-p1x-*.ps1 的真机联调模式兼容（浏览器持有 session cookie）。
 export default defineConfig({
-  testDir: './e2e',
-  fullyParallel: true,
-  use: {
-    trace: 'retain-on-failure',
-    ...devices['Desktop Chrome'],
-    channel: browserChannel,
-    launchOptions: { args: ['--no-proxy-server'] },
-  },
+  testDir: "./e2e",
+  timeout: 60_000,
+  retries: 0,
+  workers: 1,
+  reporter: [["list"]],
   projects: [
-    { name: 'user-web', use: { baseURL: process.env.USER_WEB_URL ?? 'http://user.localhost:8080' }, grep: /@user/ },
-    { name: 'teacher-web', use: { baseURL: process.env.TEACHER_WEB_URL ?? 'http://teacher.localhost:8080' }, grep: /@teacher/ },
-    { name: 'admin-web', use: { baseURL: process.env.ADMIN_WEB_URL ?? 'http://admin.localhost:8080' }, grep: /@admin/ },
+    { name: "student-web", use: { ...devices["Desktop Chrome"], viewport: { width: 1440, height: 920 } } },
+    { name: "teacher-web", use: { ...devices["Desktop Chrome"], viewport: { width: 1440, height: 920 } } },
+    { name: "admin-web", use: { ...devices["Desktop Chrome"], viewport: { width: 1440, height: 920 } } },
   ],
-})
+  use: {
+    baseURL: process.env.E2E_BASE_URL ?? "http://student.localhost:8080",
+    trace: "retain-on-failure",
+    ignoreHTTPSErrors: true,
+  },
+});

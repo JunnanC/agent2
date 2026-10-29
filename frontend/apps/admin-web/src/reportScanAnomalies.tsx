@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
-import { ApiError, apiRequestWithMetadata } from '@edu/api-client'
-import { reportKeys } from '@edu/query-keys'
-import { PageHeader, RequestStateView, StatusBadge } from '@edu/ui'
+import { ApiError, apiRequestWithMetadata } from './legacy/api-client'
+import { reportKeys } from './legacy/query-keys'
+import { PageHeader, RequestStateView, StatusBadge } from './legacy/ui'
 
 type ScanSummary = {
   counts: Record<string, number>

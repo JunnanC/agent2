@@ -1,4 +1,6 @@
 import logging
+import re
+from collections.abc import Mapping
 from contextlib import suppress
 from typing import Any
 
@@ -14,29 +16,37 @@ from apps.core.models import CompensationTask, FailureRecord
 from apps.core.outbox import append_outbox_event, enqueue_relay_after_commit
 from apps.courses.models import Enrollment
 from apps.courses.services import ActorContext
-from apps.experiments.models import ExperimentTask
+from apps.experiments.models import ExperimentTask, TaskPublication
 from apps.experiments.services import (
     prerequisite_blockers_for_publication,
     transition_task,
 )
+from apps.governance.errors import QuotaExceeded
 from apps.governance.models import QuotaReservation
 from apps.governance.models import RuntimeAdapter as RuntimeAdapterConfig
-from apps.governance.services import release_reservation, reserve_quota
+from apps.governance.services import effective_resource_profile, release_reservation, reserve_quota
 
 from . import events
-from .adapters import RuntimeAdapterFailure, runtime_for_driver
+from .adapters import RuntimeAdapterFailure, runtime_adapter_for, runtime_for_driver
 from .errors import ProvisioningConfigurationError, ProvisioningStateConflict
 from .metrics import (
     PROVISIONING_DURATION,
     PROVISIONING_JOBS_TOTAL,
     PROVISIONING_STAGE_TOTAL,
+    PROVISIONING_WARMUP_TOTAL,
     RUNTIME_CONTAINER_CREATE_DURATION,
     RUNTIME_ENGINE_UNAVAILABLE_TOTAL,
     RUNTIME_WORKSPACE_START_DURATION,
     is_engine_unavailable,
 )
-from .models import ProvisioningInstance, ProvisioningJob, ProvisioningStageEvent, public_id_field
-from .ports import RuntimeInventoryItem, RuntimeSpec
+from .models import (
+    ProvisioningInstance,
+    ProvisioningJob,
+    ProvisioningStageEvent,
+    RuntimeCapacityReservation,
+    public_id_field,
+)
+from .ports import RuntimeAdapter, RuntimeInventoryItem, RuntimeSpec
 from .selectors import active_job_for_task, jobs_for_task
 
 STAGES: tuple[str, ...] = tuple(ProvisioningJob.Stage.values)
@@ -45,6 +55,176 @@ ACTIVE_JOB_STATUSES = (
     ProvisioningJob.Status.RUNNING,
     ProvisioningJob.Status.RETRY,
 )
+IMAGE_DIGEST_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
+RUNTIME_OVERRIDE_KEYS = frozenset(
+    {
+        "image",
+        "image_ref",
+        "image_registry",
+        "registry",
+        "image_repository",
+        "repository",
+        "image_digest",
+        "digest",
+        "tag",
+        "cpu",
+        "cpu_millicores",
+        "cpu_request_millicores",
+        "cpu_limit_millicores",
+        "memory",
+        "memory_mb",
+        "memory_request_mb",
+        "memory_limit_mb",
+        "disk_gb",
+        "network",
+        "network_policy",
+        "workspace",
+        "workspace_capabilities",
+        "adapter",
+        "runtime_adapter",
+        "runtime_adapter_driver",
+        "runtime_adapter_config_ref",
+        "runtime_type",
+    }
+)
+
+
+@transaction.atomic
+def reserve_runtime_capacity(
+    *,
+    reservation_id: str | QuotaReservation,
+    runtime_adapter_id: str,
+    cpu_millicores: int,
+    memory_mb: int,
+) -> RuntimeCapacityReservation | None:
+    """Atomically admit a quota reservation against adapter capacity."""
+    if cpu_millicores <= 0 or memory_mb <= 0:
+        raise ProvisioningConfigurationError(
+            detail={"capacity": "cpu_and_memory_must_be_positive"}
+        )
+    reservation: QuotaReservation
+    if isinstance(reservation_id, str):
+        reservation = QuotaReservation.objects.select_for_update().get(public_id=reservation_id)
+    else:
+        reservation = QuotaReservation.objects.select_for_update().get(pk=reservation_id.pk)
+    runtime = RuntimeAdapterConfig.objects.select_for_update().get(public_id=runtime_adapter_id)
+    if reservation.status != QuotaReservation.Status.ACTIVE:
+        raise ProvisioningStateConflict(detail={"reservation": reservation.status})
+    existing = RuntimeCapacityReservation.objects.select_for_update().filter(
+        reservation=reservation
+    ).first()
+    if existing is not None:
+        if existing.status != RuntimeCapacityReservation.Status.ACTIVE:
+            raise ProvisioningStateConflict(detail={"reservation": "capacity_already_released"})
+        if (existing.cpu_millicores, existing.memory_mb) != (cpu_millicores, memory_mb):
+            raise ProvisioningStateConflict(detail={"reservation": "capacity_binding_mismatch"})
+        if existing.runtime_adapter_id != runtime.pk:
+            raise ProvisioningStateConflict(detail={"reservation": "runtime_binding_mismatch"})
+        return existing
+    # Zero-valued capacity is the historical "not reported" marker.
+    if (
+        runtime.capacity_cpu_millicores
+        and runtime.available_cpu_millicores < cpu_millicores
+    ) or (
+        runtime.capacity_memory_mb
+        and runtime.available_memory_mb < memory_mb
+    ):
+        raise QuotaExceeded(
+            detail={
+                "dimension": "runtime_capacity",
+                "available_cpu_millicores": runtime.available_cpu_millicores,
+                "available_memory_mb": runtime.available_memory_mb,
+                "requested_cpu_millicores": cpu_millicores,
+                "requested_memory_mb": memory_mb,
+            }
+        )
+    if runtime.capacity_cpu_millicores or runtime.capacity_memory_mb:
+        changed = compare_and_swap(
+            RuntimeAdapterConfig,
+            pk=runtime.pk,
+            expected_version=runtime.row_version,
+            changes={
+                "available_cpu_millicores": (
+                    runtime.available_cpu_millicores - cpu_millicores
+                    if runtime.capacity_cpu_millicores
+                    else runtime.available_cpu_millicores
+                ),
+                "available_memory_mb": (
+                    runtime.available_memory_mb - memory_mb
+                    if runtime.capacity_memory_mb
+                    else runtime.available_memory_mb
+                ),
+            },
+        )
+        del changed
+    return RuntimeCapacityReservation.objects.create(
+        reservation=reservation,
+        runtime_adapter=runtime,
+        cpu_millicores=cpu_millicores,
+        memory_mb=memory_mb,
+    )
+
+
+@transaction.atomic
+def release_runtime_capacity(
+    *, reservation_id: str | QuotaReservation
+) -> RuntimeCapacityReservation | None:
+    """Release a runtime binding once; repeated calls are no-ops."""
+    reservation: QuotaReservation
+    if isinstance(reservation_id, str):
+        reservation = QuotaReservation.objects.select_for_update().get(public_id=reservation_id)
+    else:
+        reservation = QuotaReservation.objects.select_for_update().get(pk=reservation_id.pk)
+    binding = RuntimeCapacityReservation.objects.select_for_update().filter(
+        reservation=reservation
+    ).first()
+    if binding is None or binding.status != RuntimeCapacityReservation.Status.ACTIVE:
+        return binding
+    runtime = RuntimeAdapterConfig.objects.select_for_update().get(pk=binding.runtime_adapter_id)
+    changes: dict[str, int] = {}
+    if runtime.capacity_cpu_millicores:
+        changes["available_cpu_millicores"] = min(
+            runtime.capacity_cpu_millicores,
+            runtime.available_cpu_millicores + binding.cpu_millicores,
+        )
+    if runtime.capacity_memory_mb:
+        changes["available_memory_mb"] = min(
+            runtime.capacity_memory_mb,
+            runtime.available_memory_mb + binding.memory_mb,
+        )
+    if changes:
+        compare_and_swap(
+            RuntimeAdapterConfig,
+            pk=runtime.pk,
+            expected_version=runtime.row_version,
+            changes=changes,
+        )
+    return compare_and_swap(
+        RuntimeCapacityReservation,
+        pk=binding.pk,
+        expected_version=binding.row_version,
+        changes={
+            "status": RuntimeCapacityReservation.Status.RELEASED,
+            "released_at": timezone.now(),
+        },
+    )
+
+
+def _release_reservation(*, reservation_id: str, reason: str, context: Any) -> None:
+    try:
+        release_runtime_capacity(reservation_id=reservation_id)
+    except Exception as exc:  # noqa: BLE001 - quota release must proceed independently
+        logger.error(
+            "runtime capacity release failed",
+            extra={
+                "trace_id": _trace(context),
+                "resource_ref": reservation_id,
+                "error_code": str(getattr(exc, "code", "RUNTIME_CAPACITY_RELEASE_FAILED")),
+                "result": "FAILED",
+            },
+        )
+    release_reservation(reservation_id=reservation_id, reason=reason, context=context)
+
 
 logger = logging.getLogger("runtime.provisioning")
 
@@ -108,32 +288,92 @@ def _emit(
     enqueue_relay_after_commit(trace_id=_trace(context))
 
 
-def _task_runtime_snapshot(task: ExperimentTask) -> tuple[Any, Any, Any, dict[str, Any]]:
-    """Return task-frozen runtime rows, with a legacy-template fallback."""
+def _task_runtime_snapshot(
+    task: ExperimentTask, *, require_published_snapshot: bool = False
+) -> tuple[Any, Any, Any, dict[str, Any]]:
+    """Return the runtime facts frozen on the assigned task.
+
+    Historical tasks can still use the template fallback for administrative
+    replay.  Student runtime provisioning opts into the strict path so a
+    mutable template can never change an already published task.
+    """
 
     template = task.template_version
+    if require_published_snapshot:
+        missing = []
+        if task.runtime_adapter_id is None or not task.runtime_adapter_driver:
+            missing.append("runtime_adapter")
+        if task.image_id is None or not task.image_registry or not task.image_repository:
+            missing.append("image")
+        if not task.image_digest:
+            missing.append("image_digest")
+        if task.resource_profile_id is None or not task.resource_profile_snapshot:
+            missing.append("resource_profile_snapshot")
+        if missing:
+            raise ProvisioningConfigurationError(
+                detail={"published_snapshot": {"missing": missing}}
+            )
+        return (
+            task.runtime_adapter,
+            task.image,
+            task.resource_profile,
+            dict(task.resource_profile_snapshot),
+        )
     adapter = task.runtime_adapter or template.runtime_adapter
     image = task.image or template.image
     profile = task.resource_profile or template.resource_profile
-    profile_snapshot = dict(task.resource_profile_snapshot or {})
-    if not profile_snapshot:
-        profile_snapshot = {
-            "public_id": profile.public_id,
-            "code": profile.code,
-            "runtime_type": profile.runtime_type,
-            "cpu_millicores": profile.cpu_millicores,
-            "memory_mb": profile.memory_mb,
-            "disk_gb": profile.disk_gb,
-            "network_mode": profile.network_mode,
-        }
+    profile_snapshot = effective_resource_profile(task)
     return adapter, image, profile, profile_snapshot
+
+
+def _published_execution_snapshot(task: ExperimentTask) -> dict[str, Any]:
+    """Read only the publication/task-frozen runtime execution facts."""
+
+    frozen_execution = task.execution_spec if isinstance(task.execution_spec, Mapping) else {}
+    embedded = frozen_execution.get("_runtime")
+    if isinstance(embedded, Mapping):
+        return dict(embedded)
+    publication_execution = task.publication.execution_spec
+    embedded = (
+        publication_execution.get("_runtime")
+        if isinstance(publication_execution, Mapping)
+        else None
+    )
+    if isinstance(embedded, Mapping):
+        return dict(embedded)
+    raise ProvisioningConfigurationError(
+        detail={"published_snapshot": {"missing": ["execution_spec"]}}
+    )
+
+
+def _assert_digest_only_spec(task: ExperimentTask, spec: RuntimeSpec) -> None:
+    if not task.publication_id or task.publication.status != task.publication.Status.PUBLISHED:
+        raise ProvisioningConfigurationError(
+            detail={"publication": "published_snapshot_required"}
+        )
+    if (
+        not spec.image_registry.strip()
+        or not spec.image_repository.strip()
+        or not IMAGE_DIGEST_RE.fullmatch(spec.image_digest)
+    ):
+        raise ProvisioningConfigurationError(
+            detail={
+                "image": "registry_repository_sha256_digest_required",
+                "image_ref": spec.image_ref,
+            }
+        )
 
 
 def _runtime_spec(
     task: ExperimentTask, *, trace_id: str = "", instance_public_id: str = ""
 ) -> RuntimeSpec:
-    template = task.template_version
-    _, image, profile, profile_snapshot = _task_runtime_snapshot(task)
+    _, image, _, profile_snapshot = _task_runtime_snapshot(
+        task, require_published_snapshot=True
+    )
+    execution_snapshot = _published_execution_snapshot(task)
+    task_profile_snapshot = execution_snapshot.get("resource_profile_snapshot")
+    if isinstance(task_profile_snapshot, Mapping) and task_profile_snapshot:
+        profile_snapshot = dict(task_profile_snapshot)
     deadline = task.effective_deadline or task.publication.window_end
     ttl_seconds = max(
         60,
@@ -142,46 +382,175 @@ def _runtime_spec(
             int(getattr(settings, "RUNTIME_DEFAULT_TTL_SECONDS", 14400)),
         ),
     )
-    network_policy = dict(template.network_policy or {})
-    execution_spec = dict(task.execution_spec or {})
-    network_policy["mode"] = str(
-        execution_spec.get("network_mode")
-        or profile_snapshot.get("network_mode")
-        or profile.network_mode
-    )
-    return RuntimeSpec(
+
+    network_policy = dict(execution_snapshot.get("network_policy") or {})
+    network_policy.setdefault("mode", str(profile_snapshot["network_mode"]))
+    workspace_capabilities = dict(execution_snapshot.get("workspace_capabilities") or {})
+    spec = RuntimeSpec(
         task_id=task.public_id,
         course_id=task.course.public_id,
         student_id=task.student.public_id,
         runtime_type=task.runtime_type,
-        image_registry=task.image_registry or image.registry,
-        image_repository=task.image_repository or image.repository,
-        image_digest=task.image_digest or image.digest,
-        resource_profile_id=str(profile_snapshot.get("public_id") or profile.public_id),
-        cpu_millicores=int(profile_snapshot.get("cpu_millicores") or profile.cpu_millicores),
-        memory_mb=int(profile_snapshot.get("memory_mb") or profile.memory_mb),
-        disk_gb=int(profile_snapshot.get("disk_gb") or profile.disk_gb),
+        image_registry=task.image_registry,
+        image_repository=task.image_repository,
+        image_digest=task.image_digest,
+        resource_profile_id=str(profile_snapshot["public_id"]),
+        cpu_millicores=int(profile_snapshot["cpu_request_millicores"]),
+        memory_mb=int(profile_snapshot["memory_request_mb"]),
+        disk_gb=int(profile_snapshot["disk_gb"]),
+        cpu_limit_millicores=int(profile_snapshot["cpu_limit_millicores"]),
+        memory_limit_mb=int(profile_snapshot["memory_limit_mb"]),
         network_policy={
-            "mode": profile_snapshot.get("network_mode") or profile.network_mode,
             **network_policy,
         },
-        workspace_capabilities=template.workspace_capabilities,
+        workspace_capabilities=workspace_capabilities,
         ttl_seconds=ttl_seconds,
         workspace_port=int(getattr(settings, "RUNTIME_WORKSPACE_PORT", 8080)),
         healthcheck_path=str(getattr(settings, "RUNTIME_HEALTHCHECK_PATH", "/healthz")),
         trace_id=trace_id,
         instance_public_id=instance_public_id,
     )
+    _assert_digest_only_spec(task, spec)
+    return spec
+
+
+def _publication_warmup_spec(publication: TaskPublication, *, trace_id: str) -> RuntimeSpec:
+    profile_snapshot = dict(publication.resource_profile_snapshot or {})
+    execution = (
+        dict(publication.execution_spec)
+        if isinstance(publication.execution_spec, Mapping)
+        else {}
+    )
+    raw_embedded = execution.get("_runtime")
+    embedded = dict(raw_embedded) if isinstance(raw_embedded, Mapping) else {}
+    network_policy = dict(embedded.get("network_policy") or {})
+    network_policy.setdefault("mode", str(profile_snapshot.get("network_mode") or "DENY_ALL"))
+    ttl_seconds = int(getattr(settings, "RUNTIME_DEFAULT_TTL_SECONDS", 14400))
+    if publication.window_end is not None:
+        ttl_seconds = max(
+            60,
+            min(
+                int((publication.window_end - timezone.now()).total_seconds()),
+                ttl_seconds,
+            ),
+        )
+    return RuntimeSpec(
+        task_id=publication.public_id,
+        course_id=str(publication.course.public_id),
+        student_id="",
+        runtime_type=str(profile_snapshot.get("runtime_type") or "CONTAINER"),
+        image_registry=publication.image_registry or "",
+        image_repository=publication.image_repository or "",
+        image_digest=publication.image_digest or "",
+        resource_profile_id=str(profile_snapshot.get("public_id") or ""),
+        cpu_millicores=int(
+            profile_snapshot.get("cpu_request_millicores")
+            or profile_snapshot.get("cpu_millicores")
+            or 500
+        ),
+        memory_mb=int(
+            profile_snapshot.get("memory_request_mb")
+            or profile_snapshot.get("memory_mb")
+            or 1024
+        ),
+        disk_gb=int(profile_snapshot.get("disk_gb") or 0),
+        cpu_limit_millicores=int(
+            profile_snapshot.get("cpu_limit_millicores")
+            or profile_snapshot.get("cpu_millicores")
+            or 1000
+        ),
+        memory_limit_mb=int(
+            profile_snapshot.get("memory_limit_mb")
+            or profile_snapshot.get("memory_mb")
+            or 2048
+        ),
+        network_policy=network_policy,
+        workspace_capabilities=dict(embedded.get("workspace_capabilities") or {}),
+        ttl_seconds=ttl_seconds,
+        workspace_port=int(getattr(settings, "RUNTIME_WORKSPACE_PORT", 8080)),
+        healthcheck_path=str(getattr(settings, "RUNTIME_HEALTHCHECK_PATH", "/healthz")),
+        trace_id=trace_id,
+    )
+
+
+def warmup_publication_image(*, publication_id: str, trace_id: str = "") -> str:
+    """Digest-pinned image warm-up after a publication; never raises.
+
+    Runs after the publish transaction commits. Any failure is silent: tasks
+    keep the ASSIGNED status and surface their regular provisioning errors
+    when a student starts them.
+    """
+    if not getattr(settings, "AUTO_PROVISION_ON_ASSIGNMENT", True):
+        PROVISIONING_WARMUP_TOTAL.labels(result="disabled").inc()
+        return "disabled"
+    publication = (
+        TaskPublication.objects.select_related("course", "runtime_adapter")
+        .filter(public_id=publication_id)
+        .first()
+    )
+    if publication is None or publication.status != TaskPublication.Status.PUBLISHED:
+        PROVISIONING_WARMUP_TOTAL.labels(result="skipped_publication_status").inc()
+        return "skipped_publication_status"
+    if not IMAGE_DIGEST_RE.fullmatch(publication.image_digest or ""):
+        PROVISIONING_WARMUP_TOTAL.labels(result="skipped_image_snapshot").inc()
+        return "skipped_image_snapshot"
+    adapter_row = publication.runtime_adapter
+    try:
+        adapter = _runtime_adapter_for_row(
+            driver=publication.runtime_adapter_driver or getattr(adapter_row, "driver", ""),
+            config_ref=publication.runtime_adapter_config_ref
+            or getattr(adapter_row, "config_ref", ""),
+            code=getattr(adapter_row, "code", ""),
+        )
+        spec = _publication_warmup_spec(publication, trace_id=trace_id)
+        if spec.image_registry.strip().casefold() == "local":
+            adapter.prepare_image(spec)
+        else:
+            adapter.resolve_image(
+                registry=spec.image_registry,
+                repository=spec.image_repository,
+                tag=spec.image_digest,
+            )
+            adapter.validate_image(digest=spec.image_digest)
+    except Exception as exc:
+        logger.warning(
+            "provisioning.warmup skipped",
+            extra={
+                "publication_id": publication_id,
+                "error_code": _error_code(exc)[0],
+            },
+        )
+        PROVISIONING_WARMUP_TOTAL.labels(result="error").inc()
+        return "error"
+    PROVISIONING_WARMUP_TOTAL.labels(result="warmed").inc()
+    return "warmed"
+
+
+def _runtime_adapter_for_row(
+    *, driver: str, config_ref: str = "", code: str = ""
+) -> RuntimeAdapter:
+    """Use the explicit deployment mode for its selected governance row.
+
+    Historical rows may still name a different driver/configuration, so those
+    continue through the compatibility resolver until they are migrated.
+    """
+
+    configured_code = str(getattr(settings, "RUNTIME_ADAPTER_CODE", "")).strip()
+    if configured_code and code.strip().casefold() == configured_code.casefold():
+        return runtime_adapter_for(configured_code)
+    return runtime_for_driver(driver, config_ref=config_ref)
 
 
 def _reservation_values(task: ExperimentTask) -> dict[str, int]:
-    _, _, profile, profile_snapshot = _task_runtime_snapshot(task)
+    _, _, _, profile_snapshot = _task_runtime_snapshot(
+        task, require_published_snapshot=True
+    )
     return {
         "instance_count": 1,
         "start_count": 1,
-        "cpu_millicores": int(profile_snapshot.get("cpu_millicores") or profile.cpu_millicores),
-        "memory_mb": int(profile_snapshot.get("memory_mb") or profile.memory_mb),
-        "disk_gb": int(profile_snapshot.get("disk_gb") or profile.disk_gb),
+        "cpu_millicores": int(profile_snapshot["cpu_request_millicores"]),
+        "memory_mb": int(profile_snapshot["memory_request_mb"]),
+        "disk_gb": int(profile_snapshot["disk_gb"]),
         "object_storage_bytes": 0,
         "agent_tokens": 0,
         "agent_requests": 0,
@@ -219,6 +588,9 @@ def _next_attempt_no(task: ExperimentTask) -> int:
 def _create_job_and_reservation(
     *, task: ExperimentTask, context: Any, attempt_no: int
 ) -> ProvisioningJob:
+    adapter, image, profile, profile_snapshot = _task_runtime_snapshot(
+        task, require_published_snapshot=True
+    )
     job_id = public_id_field().get_default()  # type: ignore[assignment]
     reservation = reserve_quota(
         reservation_key=f"provisioning:{job_id}",
@@ -227,13 +599,17 @@ def _create_job_and_reservation(
         subject_ref=task.public_id,
         course_id=task.course.public_id,
         user_id=task.student.public_id,
-        resource_profile_id=str(
-            (task.resource_profile_snapshot or {}).get("public_id")
-            or (task.resource_profile or task.template_version.resource_profile).public_id
-        ),
+        resource_profile_id=str(profile_snapshot["public_id"]),
         values=_reservation_values(task),
         expires_at=None,
         context=context,
+    )
+    adapter = _task_runtime_snapshot(task)[0]
+    reserve_runtime_capacity(
+        reservation_id=reservation,
+        runtime_adapter_id=adapter.public_id,
+        cpu_millicores=_reservation_values(task)["cpu_millicores"],
+        memory_mb=_reservation_values(task)["memory_mb"],
     )
     job = ProvisioningJob.objects.create(
         public_id=job_id,
@@ -250,9 +626,9 @@ def _create_job_and_reservation(
         task=task,
         defaults={
             "course": task.course,
-            "runtime_adapter": _task_runtime_snapshot(task)[0],
-            "image": _task_runtime_snapshot(task)[1],
-            "resource_profile": _task_runtime_snapshot(task)[2],
+            "runtime_adapter": adapter,
+            "image": image,
+            "resource_profile": profile,
             "runtime_type": task.runtime_type,
             "status": ProvisioningInstance.Status.CREATING,
             "created_trace_id": _trace(context),
@@ -307,13 +683,58 @@ def _enqueue(job: ProvisioningJob) -> None:
     )
 
 
+def _reject_runtime_overrides(overrides: Mapping[str, object] | None) -> None:
+    if not overrides:
+        return
+    nested = overrides.get("runtime_spec")
+    keys = set(overrides)
+    if isinstance(nested, Mapping):
+        keys.update(nested)
+    forbidden = sorted(key for key in keys if key in RUNTIME_OVERRIDE_KEYS)
+    if forbidden:
+        raise ProvisioningConfigurationError(
+            detail={"runtime_overrides_forbidden": forbidden}
+        )
+
+
 @transaction.atomic
 def start_provisioning(
-    *, task_id: str, actor: User, expected_version: int, context: ActorContext
+    *,
+    task_id: str,
+    actor: User,
+    expected_version: int,
+    context: ActorContext,
+    overrides: Mapping[str, object] | None = None,
 ) -> tuple[ExperimentTask, ProvisioningJob]:
+    _reject_runtime_overrides(overrides)
     task = _load_task(task_id, actor=actor)
+    instance = ProvisioningInstance.objects.select_for_update().filter(task=task).first()
+    if task.status in {
+        ExperimentTask.Status.PROVISIONING,
+        ExperimentTask.Status.READY,
+        ExperimentTask.Status.IN_PROGRESS,
+    }:
+        active = active_job_for_task(task)
+        if active is not None:
+            return task, active
+        if (
+            task.status in {ExperimentTask.Status.READY, ExperimentTask.Status.IN_PROGRESS}
+            and instance is not None
+            and instance.status == ProvisioningInstance.Status.READY
+        ):
+            completed = (
+                jobs_for_task(task)
+                .filter(status=ProvisioningJob.Status.PASSED)
+                .order_by("-attempt_no", "-created_at")
+                .first()
+            )
+            if completed is not None:
+                return task, completed
+        raise ProvisioningStateConflict(detail={"status": task.status})
     if task.status != ExperimentTask.Status.ASSIGNED:
         raise ProvisioningStateConflict(detail={"status": task.status})
+    if task.publication.status != task.publication.Status.PUBLISHED:
+        raise ProvisioningStateConflict(detail={"publication_status": task.publication.status})
     if task.enrollment.status != Enrollment.Status.ACTIVE:
         raise ProvisioningStateConflict(detail={"enrollment_status": task.enrollment.status})
     now = timezone.now()
@@ -333,7 +754,9 @@ def start_provisioning(
         raise PublicationPrerequisiteBlocked(detail={"blockers": blockers})
     if active_job_for_task(task) is not None:
         raise ProvisioningStateConflict(detail={"active_job": True})
-    adapter_row, image, profile, _ = _task_runtime_snapshot(task)
+    adapter_row, image, profile, _ = _task_runtime_snapshot(
+        task, require_published_snapshot=True
+    )
     if adapter_row.status != "ENABLED" or adapter_row.health_status in ("DEGRADED", "UNAVAILABLE"):
         raise ProvisioningStateConflict(detail={"runtime_adapter": adapter_row.public_id})
     if (
@@ -450,7 +873,7 @@ def cancel_queued_provisioning(
                 "destroyed_at": timezone.now(),
             },
         )
-    release_reservation(
+    _release_reservation(
         reservation_id=job.reservation.public_id,
         reason="queued provisioning cancelled",
         context=context,
@@ -622,7 +1045,7 @@ def _mark_failed(job: ProvisioningJob, exc: Exception, context: ActorContext) ->
             changes={"status": ProvisioningInstance.Status.FAILED, "failure_record": failure},
         )
     with suppress(Exception):
-        release_reservation(
+        _release_reservation(
             reservation_id=job.reservation.public_id, reason=error_code, context=context
         )
     task = ExperimentTask.objects.select_for_update().get(pk=job.task_id)
@@ -701,14 +1124,20 @@ def execute_provisioning_job(*, job_id: str, trace_id: str = "") -> Provisioning
         instance = ProvisioningInstance.objects.select_for_update().get(task=job.task)
 
     context = _job_context(job)
-    spec = _runtime_spec(
-        job.task, trace_id=job.trace_id, instance_public_id=instance.public_id
-    )
     try:
-        adapter_row, image, _, _ = _task_runtime_snapshot(job.task)
+        spec = _runtime_spec(
+            job.task, trace_id=job.trace_id, instance_public_id=instance.public_id
+        )
+        adapter_row, image, _, _ = _task_runtime_snapshot(
+            job.task, require_published_snapshot=True
+        )
         adapter_driver = job.task.runtime_adapter_driver or adapter_row.driver
         adapter_config_ref = job.task.runtime_adapter_config_ref or adapter_row.config_ref
-        adapter = runtime_for_driver(adapter_driver, config_ref=adapter_config_ref)
+        adapter = _runtime_adapter_for_row(
+            driver=adapter_driver,
+            config_ref=adapter_config_ref,
+            code=adapter_row.code,
+        )
         result = None
         for stage in STAGES:
             event = _stage_started(job, stage, context)
@@ -795,7 +1224,7 @@ def execute_provisioning_job(*, job_id: str, trace_id: str = "") -> Provisioning
             )
             task = ExperimentTask.objects.select_for_update().get(pk=job.task_id)
             if task.status == ExperimentTask.Status.PROVISIONING:
-                transition_task(
+                task = transition_task(
                     task_id=task.public_id,
                     to_status=ExperimentTask.Status.READY,
                     actor=None,
@@ -805,6 +1234,9 @@ def execute_provisioning_job(*, job_id: str, trace_id: str = "") -> Provisioning
                     context=context,
                     detail={"job_id": job.public_id},
                 )
+            from apps.workspaces.services import issue_session
+
+            issue_session(task=task, actor=task.student, context=context)
             changed = compare_and_swap(
                 ProvisioningJob,
                 pk=job.pk,
@@ -873,7 +1305,11 @@ def compensate_provisioning(task: CompensationTask) -> None:
         config_ref = instance.runtime_adapter.config_ref if instance is not None else ""
 
     if instance is not None and external_id:
-        adapter = runtime_for_driver(driver, config_ref=config_ref)
+        adapter = _runtime_adapter_for_row(
+            driver=driver,
+            config_ref=config_ref,
+            code=instance.runtime_adapter.code if instance is not None else "",
+        )
         adapter.destroy(external_id, f"destroy:{job.public_id}")
 
     with transaction.atomic():
@@ -897,15 +1333,19 @@ def compensate_provisioning(task: CompensationTask) -> None:
                     "destroyed_at": timezone.now(),
                 },
             )
-        release_reservation(
+        _release_reservation(
             reservation_id=job.reservation.public_id,
             reason="provisioning compensation",
             context=context,
         )
 
 
-def runtime_inventory(*, driver: str = "FAKE", config_ref: str = "") -> list[RuntimeInventoryItem]:
-    return runtime_for_driver(driver, config_ref=config_ref).inventory()
+def runtime_inventory(
+    *, driver: str = "FAKE", config_ref: str = "", code: str = ""
+) -> list[RuntimeInventoryItem]:
+    return _runtime_adapter_for_row(
+        driver=driver, config_ref=config_ref, code=code
+    ).inventory()
 
 
 def enabled_runtime_inventory(
@@ -923,7 +1363,9 @@ def enabled_runtime_inventory(
     for adapter_config in adapters.order_by("driver", "code"):
         try:
             items = runtime_inventory(
-                driver=adapter_config.driver, config_ref=adapter_config.config_ref
+                driver=adapter_config.driver,
+                config_ref=adapter_config.config_ref,
+                code=adapter_config.code,
             )
         except Exception as exc:  # noqa: BLE001 - inventory must not break the platform list
             error_code = str(getattr(exc, "code", "RUNTIME_UNAVAILABLE"))[:64]
@@ -976,8 +1418,10 @@ def enabled_runtime_resources() -> list[RuntimeInventoryItem]:
     adapters = RuntimeAdapterConfig.objects.filter(status=RuntimeAdapterConfig.Status.ENABLED)
     for adapter_config in adapters.order_by("driver", "code"):
         try:
-            adapter = runtime_for_driver(
-                adapter_config.driver, config_ref=adapter_config.config_ref
+            adapter = _runtime_adapter_for_row(
+                driver=adapter_config.driver,
+                config_ref=adapter_config.config_ref,
+                code=adapter_config.code,
             )
             inventory_resources = getattr(adapter, "inventory_resources", None)
             if not callable(inventory_resources):
@@ -1018,7 +1462,11 @@ def runtime_inventory_snapshot(*, trace_id: str = "") -> dict[str, Any]:
     for config in configs:
         driver = str(config.driver)
         try:
-            adapter = runtime_for_driver(driver, config_ref=config.config_ref)
+            adapter = _runtime_adapter_for_row(
+                driver=driver,
+                config_ref=config.config_ref,
+                code=config.code,
+            )
             health = dict(adapter.health())
             health_status = str(health.get("status", "UNKNOWN"))
             drivers.append({"driver": driver, "code": config.code, "status": health_status})
@@ -1195,7 +1643,7 @@ def destroy_task_instance(
             .first()
         )
         if job is not None:
-            release_reservation(
+            _release_reservation(
                 reservation_id=job.reservation.public_id,
                 reason="runtime destroyed",
                 context=ActorContext(
@@ -1237,7 +1685,11 @@ def destroy_task_instance(
         external_id = instance.external_id or ""
         driver = instance.runtime_adapter.driver
 
-    adapter = runtime_for_driver(driver, config_ref=instance.runtime_adapter.config_ref)
+    adapter = _runtime_adapter_for_row(
+        driver=driver,
+        config_ref=instance.runtime_adapter.config_ref,
+        code=instance.runtime_adapter.code,
+    )
     if external_id:
         # Capture the task-owned Volume before the adapter removes the
         # container and its managed Volume.  FakeRuntime has no storage job.

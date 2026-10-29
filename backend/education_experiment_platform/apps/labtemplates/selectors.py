@@ -10,6 +10,7 @@ from apps.courses.selectors import require_course_capability, visible_course
 from apps.governance.models import ImageAsset
 from apps.governance.ports import template_resource_options
 
+from .legacy import LegacyTemplateAdapter
 from .models import Template, TemplatePrecheckRun, TemplateVersion
 
 
@@ -23,7 +24,12 @@ def templates_for_course(*, actor: User, course_id: str) -> QuerySet[Template]:
     course = teaching_course(
         actor=actor, course_id=course_id, capability=CourseStaffGrant.Capability.MANAGE_TEMPLATE
     )
-    return Template.objects.filter(course=course).select_related("current_version").order_by("name")
+    return (
+        Template.objects.filter(course=course)
+        .exclude(status=Template.Status.WITHDRAWN)
+        .select_related("current_version")
+        .order_by("name")
+    )
 
 
 def template_for_course(*, actor: User, course_id: str, template_id: str) -> Template:
@@ -31,8 +37,10 @@ def template_for_course(*, actor: User, course_id: str, template_id: str) -> Tem
         actor=actor, course_id=course_id, capability=CourseStaffGrant.Capability.MANAGE_TEMPLATE
     )
     try:
-        return Template.objects.select_related("course", "current_version").get(
-            public_id=template_id, course=course
+        return (
+            Template.objects.exclude(status=Template.Status.WITHDRAWN)
+            .select_related("course", "current_version")
+            .get(public_id=template_id, course=course)
         )
     except Template.DoesNotExist as exc:
         raise ResourceNotFound() from exc
@@ -58,6 +66,14 @@ def version_for_course(*, actor: User, course_id: str, version_id: str) -> Templ
         )
     except TemplateVersion.DoesNotExist as exc:
         raise ResourceNotFound() from exc
+
+
+def template_content_for_course(
+    *, actor: User, course_id: str, version_id: str
+) -> LegacyTemplateAdapter:
+    return LegacyTemplateAdapter.from_version(
+        version_for_course(actor=actor, course_id=course_id, version_id=version_id)
+    )
 
 
 def options_for_course(*, actor: User, course_id: str) -> dict[str, Any]:

@@ -15,6 +15,54 @@ def public_id_field() -> models.CharField:
     )
 
 
+class AcademicTerm(VersionedModel):
+    class Status(models.TextChoices):
+        UPCOMING = "UPCOMING"
+        CURRENT = "CURRENT"
+        CLOSED = "CLOSED"
+
+    public_id = public_id_field()
+    code = models.CharField(max_length=64, unique=True)
+    name = models.CharField(max_length=160)
+    starts_at = models.DateTimeField()
+    ends_at = models.DateTimeField()
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.UPCOMING)
+    is_current = models.BooleanField(default=False)
+    current_slot = models.GeneratedField(
+        expression=models.Case(
+            models.When(is_current=True, then=models.Value(1)),
+            default=models.Value(None),
+        ),
+        output_field=models.PositiveSmallIntegerField(null=True),
+        db_persist=True,
+    )
+
+    class Meta:
+        db_table = "courses_academic_term"
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(ends_at__gt=models.F("starts_at")),
+                name="courses_term_date_window_ck",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(status__in=("UPCOMING", "CURRENT", "CLOSED")),
+                name="courses_term_status_ck",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(is_current=False) | models.Q(status="CURRENT"),
+                name="courses_term_current_status_ck",
+            ),
+            models.UniqueConstraint(
+                fields=("current_slot",),
+                name="courses_term_one_current_uniq",
+            ),
+        ]
+
+
+def current_term_default() -> int:
+    return AcademicTerm.objects.get(is_current=True).pk
+
+
 class Course(VersionedModel):
     class Status(models.TextChoices):
         DRAFT = "DRAFT"
@@ -36,6 +84,12 @@ class Course(VersionedModel):
     summary = models.CharField(max_length=500, blank=True, default="")
     description = models.TextField(blank=True, default="")
     owner = models.ForeignKey(User, on_delete=models.PROTECT, related_name="owned_courses")
+    term = models.ForeignKey(
+        AcademicTerm,
+        on_delete=models.PROTECT,
+        related_name="courses",
+        default=current_term_default,
+    )
     status = models.CharField(max_length=16, choices=Status.choices, default=Status.DRAFT)
     visibility = models.CharField(
         max_length=16,

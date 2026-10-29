@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
-import { apiRequestWithMetadata, type PlatformPrecheckSummaryResponse } from '@edu/api-client'
-import { templateKeys } from '@edu/query-keys'
-import { PageHeader, RequestStateView, StatusBadge } from '@edu/ui'
+import { apiRequestWithMetadata, type PlatformPrecheckSummaryResponse } from './legacy/api-client'
+import { templateKeys } from './legacy/query-keys'
+import { PageHeader, RequestStateView, StatusBadge } from './legacy/ui'
 
 export function PrecheckSummaryPage() {
   const query = useQuery({ queryKey: templateKeys.platformSummary(), queryFn: () => apiRequestWithMetadata<PlatformPrecheckSummaryResponse>('/api/v2/platform/template-prechecks/summary') })

@@ -3,6 +3,12 @@ from django.urls import path
 from .views import (
     AutoCheckRuleView,
     CloneVersionView,
+    ExecutionSpecSaveView,
+    ExperimentImageCollectionView,
+    ExperimentImageDetailView,
+    ExperimentImageEventsView,
+    ExperimentImagePrepareView,
+    ExperimentImageRetireView,
     PlatformPrecheckSummaryView,
     PrecheckRunListView,
     PrecheckView,
@@ -10,15 +16,41 @@ from .views import (
     TemplateAssetCollectionView,
     TemplateAssetCompleteView,
     TemplateAssetDetailView,
+    TemplateChapterCollectionView,
+    TemplateChapterDetailView,
+    TemplateChapterReorderView,
     TemplateDetailView,
     TemplateListView,
     TemplateOptionsView,
+    TemplateTaskCollectionView,
+    TemplateTaskDetailView,
+    TemplateTaskReorderView,
     TemplateVersionDetailView,
     TemplateVersionListView,
     WithdrawVersionView,
 )
 
 urlpatterns = [
+    path(
+        "teaching/courses/<str:course_id>/experiment-images",
+        ExperimentImageCollectionView.as_view(),
+    ),
+    path(
+        "teaching/courses/<str:course_id>/experiment-images/<str:image_id>",
+        ExperimentImageDetailView.as_view(),
+    ),
+    path(
+        "teaching/courses/<str:course_id>/experiment-images/<str:image_id>/prepare",
+        ExperimentImagePrepareView.as_view(),
+    ),
+    path(
+        "teaching/courses/<str:course_id>/experiment-images/<str:image_id>/events",
+        ExperimentImageEventsView.as_view(),
+    ),
+    path(
+        "teaching/courses/<str:course_id>/experiment-images/<str:image_id>/retire",
+        ExperimentImageRetireView.as_view(),
+    ),
     path("teaching/courses/<str:course_id>/template-options", TemplateOptionsView.as_view()),
     path("teaching/courses/<str:course_id>/templates", TemplateListView.as_view()),
     path(
@@ -49,8 +81,36 @@ urlpatterns = [
         AutoCheckRuleView.as_view(),
     ),
     path(
+        "teaching/courses/<str:course_id>/template-versions/<str:version_id>/chapters",
+        TemplateChapterCollectionView.as_view(),
+    ),
+    path(
+        "teaching/courses/<str:course_id>/template-versions/<str:version_id>/chapters/reorder",
+        TemplateChapterReorderView.as_view(),
+    ),
+    path(
+        "teaching/courses/<str:course_id>/template-chapters/<str:chapter_id>",
+        TemplateChapterDetailView.as_view(),
+    ),
+    path(
+        "teaching/courses/<str:course_id>/template-chapters/<str:chapter_id>/tasks",
+        TemplateTaskCollectionView.as_view(),
+    ),
+    path(
+        "teaching/courses/<str:course_id>/template-chapters/<str:chapter_id>/tasks/reorder",
+        TemplateTaskReorderView.as_view(),
+    ),
+    path(
+        "teaching/courses/<str:course_id>/template-tasks/<str:task_id>",
+        TemplateTaskDetailView.as_view(),
+    ),
+    path(
         "teaching/courses/<str:course_id>/template-versions/<str:version_id>/precheck",
         PrecheckView.as_view(),
+    ),
+    path(
+        "teaching/courses/<str:course_id>/template-versions/<str:version_id>/execution-spec",
+        ExecutionSpecSaveView.as_view(),
     ),
     path(
         "teaching/courses/<str:course_id>/template-versions/<str:version_id>/precheck-runs",

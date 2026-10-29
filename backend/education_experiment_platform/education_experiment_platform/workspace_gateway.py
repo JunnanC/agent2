@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 import os
 from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
 from http.cookies import SimpleCookie
@@ -11,6 +12,8 @@ import httpx
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "education_experiment_platform.settings.local")
 
 from django.conf import settings  # noqa: E402
+
+logger = logging.getLogger("edu.workspace.gateway")
 
 WORKSPACE_CAPABILITIES = frozenset({"webide", "notebook", "terminal", "preview"})
 HOP_HEADERS = frozenset({
@@ -144,6 +147,23 @@ async def _body(receive: Callable[[], Awaitable[dict[str, Any]]]) -> AsyncIterat
             return
 
 
+def request_has_body(headers: Mapping[bytes, bytes]) -> bool:
+    """Whether the incoming request frames an actual body.
+
+    Empty GETs must NOT stream an empty httpx content iterator: httpx encodes
+    iterator contents as Transfer-Encoding: chunked and libwebsockets (ttyd)
+    drops empty chunked requests without responding.
+    """
+    transfer_encoding = (headers.get(b"transfer-encoding") or b"").strip()
+    if transfer_encoding:
+        return True
+    content_length = (headers.get(b"content-length") or b"0").strip()
+    try:
+        return int(content_length) > 0
+    except ValueError:
+        return True
+
+
 async def _proxy_http(
     scope: dict[str, Any],
     receive: Callable[[], Awaitable[dict[str, Any]]],
@@ -158,10 +178,15 @@ async def _proxy_http(
     url = f"{upstream}/{capability}/{tail}"
     if query:
         url = f"{url}?{query}"
+    # 仅在请求确有实体时透传流式 body:空 GET 若传 content 迭代器会被 httpx
+    # 编码为 Transfer-Encoding: chunked,libwebsockets(ttyd)不接受空 chunked
+    # 请求帧,会静默断开连接。
+    raw_headers = dict((key.lower(), value) for key, value in scope.get("headers", []))
+    request_body = request_has_body(raw_headers)
     request_headers = [
         (key.decode("latin-1"), value.decode("latin-1"))
-        for key, value in scope.get("headers", [])
-        if key.lower() in FORWARD_HEADERS
+        for key, value in raw_headers.items()
+        if key in FORWARD_HEADERS
     ]
     request_headers.append(
         (
@@ -178,7 +203,7 @@ async def _proxy_http(
             str(scope.get("method", "GET")),
             url,
             headers=request_headers,
-            content=_body(receive),
+            content=_body(receive) if request_body else None,
         ) as response,
     ):
         response_headers = [
@@ -254,6 +279,12 @@ async def _proxy_websocket(
             for task in done:
                 task.result()
     except Exception:
+        logger.exception(
+            "workspace websocket proxy failed session=%s capability=%s tail=%s",
+            scope.get("workspace_session", ""),
+            capability,
+            tail,
+        )
         await send({"type": "websocket.close", "code": 1011})
 
 
@@ -367,7 +398,14 @@ async def application(
             await send({"type": "websocket.close", "code": 4403})
         else:
             await _send_error(send, exc.code, exc.status)
-    except (httpx.HTTPError, OSError):
+    except (httpx.HTTPError, OSError) as exc:
+        logger.exception(
+            "workspace upstream request failed session=%s capability=%s tail=%s error=%s",
+            scope.get("workspace_session", ""),
+            capability if scope["type"] != "websocket" else capability,
+            tail,
+            exc,
+        )
         if scope["type"] == "websocket":
             await send({"type": "websocket.close", "code": 1013})
         else:

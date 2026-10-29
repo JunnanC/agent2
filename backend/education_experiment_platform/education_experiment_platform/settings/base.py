@@ -120,6 +120,68 @@ SPECTACULAR_SETTINGS: dict[str, object] = {
     "VERSION": OPENAPI_REVISION,
     "SERVE_INCLUDE_SCHEMA": False,
     "OAS_VERSION": "3.0.3",
+    "ENUM_NAME_OVERRIDES": {
+        "CourseEnrollmentDecisionEnum": (("APPROVE", "APPROVE"), ("REJECT", "REJECT")),
+        "ReviewDecisionEnum": (("APPROVE", "Approve"), ("REJECT", "Reject")),
+        "ArtifactKindEnum": (("REPORT", "REPORT"), ("SYSTEM_ARTIFACT", "SYSTEM_ARTIFACT")),
+        "AgentModeEnum": (
+            ("KNOWLEDGE_QA", "KNOWLEDGE_QA"),
+            ("SOCRATIC_HINT", "SOCRATIC_HINT"),
+            ("DEBUG_ASSIST", "DEBUG_ASSIST"),
+            ("REPORT_COACH", "REPORT_COACH"),
+            ("WORKSPACE_ASSIST", "WORKSPACE_ASSIST"),
+        ),
+        "RuntimeNetworkModeEnum": (("DENY_ALL", "Deny All"), ("ALLOWLIST", "Allowlist")),
+        "RuntimeTypeEnum": (("CONTAINER", "Container"), ("VM", "Vm")),
+        "ExperimentImageSourceTypeEnum": (
+            ("BUILD_CONTEXT", "Build Context"),
+            ("EXTERNAL_REFERENCE", "External Reference"),
+        ),
+        "ImageScanStatusEnum": (
+            ("PENDING", "Pending"),
+            ("CLEAN", "Clean"),
+            ("INFECTED", "Infected"),
+            ("FAILED", "Failed"),
+        ),
+        "ReviewTargetTypeEnum": (
+            ("REPORT_TEXT", "Report Text"),
+            ("ATTACHMENT", "Attachment"),
+            ("WORKSPACE_SNAPSHOT", "Workspace Snapshot"),
+            ("SYSTEM_ARTIFACT", "System Artifact"),
+        ),
+        "ActiveRevokedStatusEnum": (("ACTIVE", "Active"), ("REVOKED", "Revoked")),
+        "ActiveRevokedCodeStatusEnum": (("ACTIVE", "ACTIVE"), ("REVOKED", "REVOKED")),
+        "ActiveRetiredStatusEnum": (("ACTIVE", "ACTIVE"), ("RETIRED", "RETIRED")),
+        "PurgeLifecycleStatusEnum": (
+            ("ACTIVE", "Active"),
+            ("PURGE_PENDING", "Purge Pending"),
+            ("PURGED", "Purged"),
+        ),
+        "RubricStatusEnum": (("DRAFT", "Draft"), ("PUBLISHED", "Published")),
+        "ReviewWorkflowStatusEnum": (
+            ("PENDING", "Pending"),
+            ("IN_REVIEW", "In Review"),
+            ("DECIDED", "Decided"),
+        ),
+        "AutoCheckStatusEnum": (
+            ("QUEUED", "Queued"),
+            ("RUNNING", "Running"),
+            ("PASSED", "Passed"),
+            ("FAILED", "Failed"),
+            ("TIMEOUT", "Timeout"),
+            ("RESOURCE_EXCEEDED", "Resource Exceeded"),
+            ("REJECTED", "Rejected"),
+        ),
+        "WorkflowJobStatusEnum": (
+            ("QUEUED", "Queued"),
+            ("RUNNING", "Running"),
+            ("RETRY", "Retry"),
+            ("PASSED", "Passed"),
+            ("FAILED", "Failed"),
+            ("CANCELLED", "Cancelled"),
+        ),
+        "AgentReportStrategyEnum": (("REPORT", "REPORT"), ("COMPLETE", "COMPLETE")),
+    },
 }
 
 REDIS_URL = env("REDIS_URL", "redis://redis:6379/0")
@@ -147,9 +209,11 @@ CELERY_TASK_DEFAULT_QUEUE = "q_default"
 CELERY_WORKER_PREFETCH_MULTIPLIER = 1
 CELERY_WORKER_HIJACK_ROOT_LOGGER = False
 CELERY_TASK_ROUTES = {
-    "apps.core.relay_outbox": {"queue": "q_relay"},
-    "apps.core.run_compensations": {"queue": "q_compensate"},
     "apps.provisioning.*": {"queue": "q_provision"},
+    "apps.core.relay_outbox": {"queue": "q_relay"},
+    "apps.governance.probe_runtime_adapters": {"queue": "q_provision"},
+    "apps.governance.resolve_image_digest": {"queue": "q_provision"},
+    "apps.core.run_compensations": {"queue": "q_compensate"},
     "apps.archives.*": {"queue": "q_archive"},
     "apps.agents.*": {"queue": "q_agent"},
     "apps.courses.*": {"queue": "q_content"},
@@ -268,10 +332,14 @@ ARCHIVE_MAX_ATTEMPTS = int(env("ARCHIVE_MAX_ATTEMPTS", "5"))
 RUNTIME_EXECUTION_RETENTION_DAYS = int(env("RUNTIME_EXECUTION_RETENTION_DAYS", "30"))
 RUNTIME_CLEANUP_MAX_ATTEMPTS = int(env("RUNTIME_CLEANUP_MAX_ATTEMPTS", "10"))
 RUNTIME_ADAPTER_CONFIGS = json_env("RUNTIME_ADAPTER_CONFIGS")
+RUNTIME_MODE = env("RUNTIME_MODE", "local").strip().lower()
+if RUNTIME_MODE not in {"fake", "local", "swarm"}:
+    raise RuntimeError("RUNTIME_MODE must be fake, local, or swarm")
+RUNTIME_ADAPTER_CODE = env("RUNTIME_ADAPTER_CODE", "runtime/local-docker")
 LOCAL_RUNTIME_IMAGE = env("LOCAL_RUNTIME_IMAGE", "edu-platform-algorithm-workspace:local")
 LOCAL_RUNTIME_NETWORK = env("LOCAL_RUNTIME_NETWORK", "edu-platform-p14_runtime")
 LOCAL_DOCKER_HOST = env("LOCAL_DOCKER_HOST", "unix:///var/run/docker.sock")
-LOCAL_RUNTIME_MODE = env("LOCAL_RUNTIME_MODE", "STUB").upper()
+LOCAL_RUNTIME_MODE = env("LOCAL_RUNTIME_MODE", "REAL").upper()
 if LOCAL_RUNTIME_MODE not in {"STUB", "REAL"}:
     raise RuntimeError("LOCAL_RUNTIME_MODE must be STUB or REAL")
 if not LOCAL_RUNTIME_IMAGE.strip() or any(char.isspace() for char in LOCAL_RUNTIME_IMAGE):
@@ -290,9 +358,15 @@ SWARM_REQUEST_TIMEOUT_SECONDS = int(env("SWARM_REQUEST_TIMEOUT_SECONDS", "30"))
 SWARM_BOOT_TIMEOUT_SECONDS = int(env("SWARM_BOOT_TIMEOUT_SECONDS", "120"))
 SWARM_POLL_INTERVAL_SECONDS = float(env("SWARM_POLL_INTERVAL_SECONDS", "2"))
 SWARM_RUNTIME_NETWORK = env("SWARM_RUNTIME_NETWORK", "edu-runtime")
+if os.getenv("DJANGO_SETTINGS_MODULE", "").endswith(".prod"):
+    if RUNTIME_MODE != "swarm" or not RUNTIME_ADAPTER_CODE.strip():
+        raise RuntimeError("Production requires RUNTIME_MODE=swarm and RUNTIME_ADAPTER_CODE")
+    if RUNTIME_ADAPTER_CODE not in RUNTIME_ADAPTER_CONFIGS:
+        raise RuntimeError("Production runtime adapter configuration is missing")
 RUNTIME_DEFAULT_TTL_SECONDS = int(env("RUNTIME_DEFAULT_TTL_SECONDS", "14400"))
 RUNTIME_WORKSPACE_PORT = int(env("RUNTIME_WORKSPACE_PORT", "8080"))
 RUNTIME_HEALTHCHECK_PATH = env("RUNTIME_HEALTHCHECK_PATH", "/healthz")
+AUTO_PROVISION_ON_ASSIGNMENT = bool_env("AUTO_PROVISION_ON_ASSIGNMENT", default=True)
 AGENT_DEFAULT_MAX_TOKENS = int(env("AGENT_DEFAULT_MAX_TOKENS", "2048"))
 AGENT_DEFAULT_DAILY_TOKENS = int(env("AGENT_DEFAULT_DAILY_TOKENS", "100000"))
 AGENT_DEFAULT_REQUESTS_PER_MINUTE = int(env("AGENT_DEFAULT_REQUESTS_PER_MINUTE", "30"))

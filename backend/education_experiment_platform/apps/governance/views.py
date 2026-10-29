@@ -3,6 +3,7 @@ from collections.abc import Callable, Iterable
 from typing import Any
 
 from django.conf import settings
+from django.db import transaction
 from django.http import HttpRequest
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework.response import Response
@@ -13,11 +14,11 @@ from apps.accounts.models import User
 from apps.accounts.permissions import IsPlatformPortal, IsTeachingPortal, IsUserPortal
 from apps.accounts.security import client_ip
 from apps.core.concurrency import etag_for_version, parse_if_match
-from apps.core.errors import ResourceNotFound
+from apps.core.errors import ResourceNotFound, RowVersionConflict
 from apps.core.idempotency import PrincipalScope, StoredResponse, execute_idempotent
 from apps.core.pagination import PageSpec
 
-from .errors import RecentAuthenticationRequired
+from .errors import GovernanceStateConflict, RecentAuthenticationRequired
 from .models import (
     ImageAsset,
     NetworkAllowlist,
@@ -47,6 +48,8 @@ from .serializers import (
     ImageCreateSerializer,
     ImageDecisionSerializer,
     ImageListResponseSerializer,
+    ImageReResolveSerializer,
+    ImageResolveSerializer,
     ImageResponseSerializer,
     ImageScanSerializer,
     PolicyListResponseSerializer,
@@ -74,6 +77,7 @@ from .serializers import (
 )
 from .services import (
     ActorContext,
+    active_container_adapter,
     create_allowlist_entry,
     create_image,
     create_quota,
@@ -88,6 +92,7 @@ from .services import (
     update_resource_profile,
     update_runtime_adapter,
 )
+from .tasks import reresolve_image_digest_task, resolve_image_digest_task
 
 IF_MATCH = OpenApiParameter(
     name="If-Match",
@@ -360,12 +365,14 @@ class ImageDetailView(APIView):
         _require_recent_auth(request)
         serializer = ImageScanSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
         item = update_image_scan(
             image_id=image_id,
             actor=request.user,
             expected_version=parse_if_match(request.headers.get("If-Match")),
             context=_context(request),
-            **serializer.validated_data,
+            scan_report_ref=data.get("scan_report_ref", ""),
+            **{key: value for key, value in data.items() if key != "scan_report_ref"},
         )
         return _response(request, image_data(item), etag=etag_for_version(item.row_version))
 
@@ -393,12 +400,116 @@ class ImageDecisionView(APIView):
                 actor=request.user,
                 expected_version=expected,
                 context=_context(request),
-                **serializer.validated_data,
+                decision=serializer.validated_data["decision"],
+                reason=serializer.validated_data.get("reason", ""),
             )
             return StoredResponse(
                 200,
                 _body(request, image_data(item)),
                 {"ETag": etag_for_version(item.row_version)},
+            )
+
+        return _idempotent_response(request, payload=serializer.validated_data, operation=operation)
+
+
+class ImageResolveView(APIView):
+    permission_classes = [IsPlatformPortal]
+
+    @extend_schema(
+        operation_id="platform_images_resolve",
+        request=ImageResolveSerializer,
+        responses={202: ImageResponseSerializer},
+        parameters=[IDEMPOTENCY_KEY, IF_MATCH],
+        tags=["platform-governance"],
+        extensions={"x-portals": ["PLATFORM"]},
+    )
+    def post(self, request: HttpRequest, image_id: str) -> Response:
+        _require_recent_auth(request)
+        serializer = ImageResolveSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        expected = parse_if_match(request.headers.get("If-Match"))
+        try:
+            image = ImageAsset.objects.get(public_id=image_id)
+        except ImageAsset.DoesNotExist as exc:
+            raise ResourceNotFound() from exc
+        trace_id = str(getattr(request, "trace_id", ""))
+
+        def operation() -> StoredResponse:
+            current = ImageAsset.objects.get(pk=image.pk)
+            if current.row_version != expected:
+                raise RowVersionConflict(
+                    detail={
+                        "expected_row_version": expected,
+                        "actual_row_version": current.row_version,
+                    }
+                )
+            if current.approval_status == ImageAsset.ApprovalStatus.RETIRED:
+                raise GovernanceStateConflict(
+                    detail={"approval_status": current.approval_status}
+                )
+            if current.digest:
+                raise GovernanceStateConflict(detail={"digest": "already_resolved"})
+            active_container_adapter()
+            transaction.on_commit(
+                lambda: resolve_image_digest_task.delay(current.public_id, trace_id),
+                robust=True,
+            )
+            return StoredResponse(
+                202,
+                _body(request, image_data(current)),
+                {"ETag": etag_for_version(current.row_version)},
+            )
+
+        return _idempotent_response(request, payload=serializer.validated_data, operation=operation)
+
+
+class ImageReResolveView(APIView):
+    permission_classes = [IsPlatformPortal]
+
+    @extend_schema(
+        operation_id="platform_images_reresolve",
+        request=ImageReResolveSerializer,
+        responses={202: ImageResponseSerializer},
+        parameters=[IDEMPOTENCY_KEY, IF_MATCH],
+        tags=["platform-governance"],
+        extensions={"x-portals": ["PLATFORM"]},
+    )
+    def post(self, request: HttpRequest, image_id: str) -> Response:
+        """对已解析摘要的镜像重新向运行时查询当前摘要(如镜像被重建)。"""
+        _require_recent_auth(request)
+        serializer = ImageReResolveSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        expected = parse_if_match(request.headers.get("If-Match"))
+        try:
+            image = ImageAsset.objects.get(public_id=image_id)
+        except ImageAsset.DoesNotExist as exc:
+            raise ResourceNotFound() from exc
+        trace_id = str(getattr(request, "trace_id", ""))
+
+        def operation() -> StoredResponse:
+            current = ImageAsset.objects.get(pk=image.pk)
+            if current.row_version != expected:
+                raise RowVersionConflict(
+                    detail={
+                        "expected_row_version": expected,
+                        "actual_row_version": current.row_version,
+                    }
+                )
+            if current.approval_status == ImageAsset.ApprovalStatus.RETIRED:
+                raise GovernanceStateConflict(
+                    detail={"approval_status": current.approval_status}
+                )
+            if not current.digest:
+                raise GovernanceStateConflict(detail={"digest": "first_resolution_required"})
+            active_container_adapter()
+            transaction.on_commit(
+                lambda: reresolve_image_digest_task.delay(current.public_id, trace_id),
+                robust=True,
+            )
+            return StoredResponse(
+                202,
+                _body(request, image_data(current)),
+                {"ETag": etag_for_version(current.row_version)},
             )
 
         return _idempotent_response(request, payload=serializer.validated_data, operation=operation)

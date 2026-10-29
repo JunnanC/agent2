@@ -9,10 +9,10 @@ import {
   type CompensationListResponse,
   type InstanceData,
   type InstanceListResponse,
-} from '@edu/api-client'
+} from './legacy/api-client'
 import { PortalEventClient } from '@edu/event-client'
-import { archiveKeys } from '@edu/query-keys'
-import { PageHeader, RequestStateView, StatusBadge } from '@edu/ui'
+import { archiveKeys } from './legacy/query-keys'
+import { PageHeader, RequestStateView, StatusBadge } from './legacy/ui'
 
 function stateFor(error: unknown): 'forbidden' | 'conflict' | 'precondition' | 'error' {
   if (error instanceof ApiError && error.status === 403) return 'forbidden'

@@ -54,17 +54,19 @@ export function Resources({ onDetail }: { onDetail: (detail: Detail) => void }) 
       { label: '配额预警', value: '04', foot: '2 项高风险' },
       { label: '活跃工作区会话', value: '84', foot: '最近 24 小时' },
     ]} />
-    <section className="section"><div className="tabs" role="tablist" aria-label="资源分类">{tabs.map(([key, title], index) => <button key={key} id={`tab-${key}`} role="tab" aria-selected={tab === key} aria-controls="resource-panel" tabIndex={tab === key ? 0 : -1} className={tab === key ? 'active' : ''} onClick={() => setTab(key)} onKeyDown={event => {
+    <section className="section"><div className="tabs" role="tablist" aria-label="资源分类">{tabs.map(([key, title], index) => <button key={key ?? index} id={`tab-${key}`} role="tab" aria-selected={tab === key} aria-controls="resource-panel" tabIndex={tab === key ? 0 : -1} className={tab === key ? 'active' : ''} onClick={() => setTab(key ?? '')} onKeyDown={event => {
       if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
       event.preventDefault();
       const next = event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1 : (index + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length;
-      setTab(tabs[next][0]);
-      document.getElementById(`tab-${tabs[next][0]}`)?.focus();
+      const nextTab = tabs[next];
+      if (!nextTab) return;
+      setTab(nextTab[0] ?? '');
+      document.getElementById(`tab-${nextTab[0]}`)?.focus();
     }}>{title}</button>)}</div>
       <div id="resource-panel" role="tabpanel" aria-labelledby={`tab-${tab}`}>
         {tab === 'runtime' ? <>
           <div className="columns">
-            <Panel title="运行时健康" extra={<span className="pill green">2 正常 · 1 需关注</span>}><div className="panel-body">{[['Docker Sandbox · v3', '健康率 99.8%', '健康'], ['Notebook Runtime · v2', '健康率 99.4%', '健康'], ['Judge Worker · v1', '队列占用 72%', '需关注']].map(([title, meta, status]) => <div className="resource-row" key={title}><div><div className="queue-title">{title}</div><div className="queue-meta">{meta}</div></div><Badge value={status} /></div>)}</div></Panel>
+            <Panel title="运行时健康" extra={<span className="pill green">2 正常 · 1 需关注</span>}><div className="panel-body">{[['Docker Sandbox · v3', '健康率 99.8%', '健康'], ['Notebook Runtime · v2', '健康率 99.4%', '健康'], ['Judge Worker · v1', '队列占用 72%', '需关注']].map(([title, meta, status]) => <div className="resource-row" key={title ?? ''}><div><div className="queue-title">{title}</div><div className="queue-meta">{meta}</div></div><Badge value={status ?? ''} /></div>)}</div></Panel>
             <Panel title="配额使用" extra={<span className="muted">本学期</span>}><div className="panel-body">{[['CPU', 71], ['内存', 58], ['对象存储', 43]].map(([label, value]) => <div className="progress-row" key={label}><span>{label}</span><div className={`track ${Number(value) > 70 ? 'amber' : ''}`}><span style={{ width: `${value}%` }} /></div><strong>{value}%</strong></div>)}</div></Panel>
           </div>
           <section className="section"><div className="section-title"><h2>资源规格</h2><small>状态及操作由服务端权限决定</small></div><DataTable headers={['规格', 'CPU', '内存', '当前使用', '状态']} rows={profileRows} badgeColumns={[4]} onDetail={onDetail} /></section>
@@ -121,7 +123,7 @@ export function ModulePage({ page, onDetail }: { page: Page; onDetail: (detail: 
   const rows = moduleRows[page] ?? [];
   const attention = rows.filter((row) => !['正常', '已通过', '已发布', '有效', '运行中', '启用', '已批准', 'PASSED', '健康', '允许'].includes(row.status)).length;
   return <>
-    <Metrics items={[{ label: '记录总数', value: String(rows.length).padStart(2, '0'), foot: '演示数据快照' }, { label: '需关注', value: String(attention).padStart(2, '0'), foot: '按当前状态统计' }, { label: '今日更新', value: String(rows.filter((row) => row.date === '2026-10-15').length).padStart(2, '0'), foot: '最近活动记录' }, { label: '治理域', value: pages[page].eyebrow.split(' ')[0], foot: '平台管理范围' }]} />
+    <Metrics items={[{ label: '记录总数', value: String(rows.length).padStart(2, '0'), foot: '演示数据快照' }, { label: '需关注', value: String(attention).padStart(2, '0'), foot: '按当前状态统计' }, { label: '今日更新', value: String(rows.filter((row) => row.date === '2026-10-15').length).padStart(2, '0'), foot: '最近活动记录' }, { label: '治理域', value: pages[page]?.eyebrow.split(' ')[0] ?? '平台', foot: '平台管理范围' }]} />
     <div className="section"><DataTable headers={config.headers} rows={rows} statuses={config.statuses} badgeColumns={config.badgeColumns} timeFilter exportable onDetail={onDetail} /></div>
   </>;
 }

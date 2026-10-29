@@ -1,0 +1,16 @@
+{
+  "extends": "../../packages/config/tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["vite/client"],
+    "baseUrl": ".",
+    "paths": {
+      "@edu/ui": ["../../packages/ui/src/index.tsx"],
+      "@edu/api-client": ["../../packages/api-client/src/index.ts"],
+      "@edu/auth-client": ["../../packages/auth-client/src/index.ts"],
+      "@edu/event-client": ["../../packages/event-client/src/index.ts"],
+      "@edu/query-keys": ["../../packages/query-keys/src/index.ts"],
+      "@/*": ["./src/*"]
+    }
+  },
+  "include": ["src", "vite.config.ts", "../../packages/*/src/**/*.ts", "../../packages/*/src/**/*.tsx"]
+}

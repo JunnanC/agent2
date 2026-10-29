@@ -10,6 +10,11 @@ PROVISIONING_STAGE_TOTAL = Counter(
     "Provisioning stage outcomes",
     ("stage", "status"),
 )
+PROVISIONING_WARMUP_TOTAL = Counter(
+    "provisioning_warmup_total",
+    "Publication image warm-up outcomes",
+    ("result",),
+)
 PROVISIONING_DURATION = Histogram(
     "provisioning_duration_seconds",
     "Provisioning duration by runtime type",

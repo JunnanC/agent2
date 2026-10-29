@@ -14,6 +14,7 @@ from ..adapters import (
     fake_runtime,
     reset_docker_local_protocol_stub,
     reset_fake_runtime,
+    runtime_adapter_for,
     runtime_for_driver,
 )
 from ..ports import RuntimeSpec
@@ -138,6 +139,92 @@ class RuntimeAdapterContractTests(SimpleTestCase):
         self.assertEqual(fake_runtime().calls, [])
         self.assertTrue(callable(getattr(local, "execute_judge", None)))
 
+    @override_settings(RUNTIME_MODE="fake", RUNTIME_ADAPTER_CODE="runtime/fake")
+    def test_fake_mode_resolves_with_capabilities(self) -> None:
+        adapter = runtime_adapter_for("runtime/fake")
+
+        self.assertIs(adapter, fake_runtime())
+        self.assertEqual(
+            adapter.capabilities(),
+            {
+                "image_build": True,
+                "real_container": False,
+                "resource_limits": True,
+                "workspace_access": False,
+            },
+        )
+
+    @override_settings(RUNTIME_MODE="fake", RUNTIME_ADAPTER_CODE="runtime/fake")
+    def test_fake_mode_reports_workspace_access_as_unsupported(self) -> None:
+        adapter = runtime_adapter_for("runtime/fake")
+
+        self.assertFalse(adapter.capabilities()["workspace_access"])
+        with self.assertRaises(RuntimeAdapterFailure) as raised:
+            adapter.capture_workspace(
+                external_id="fake-runtime:1",
+                relative_path="main.py",
+                max_bytes=1024,
+            )
+
+        self.assertEqual(raised.exception.code, "WORKSPACE_CAPTURE_UNSUPPORTED")
+
+    @override_settings(
+        RUNTIME_MODE="local",
+        LOCAL_RUNTIME_MODE="REAL",
+        RUNTIME_ADAPTER_CODE="runtime/local-docker",
+        RUNTIME_ADAPTER_CONFIGS={"runtime/local-docker": {"runtime_network": "edu-runtime"}},
+    )
+    def test_local_mode_resolves_the_real_local_adapter(self) -> None:
+        with patch(
+            "apps.provisioning.adapters.DockerLocalAdapter._build_client",
+            return_value=object(),
+        ):
+            adapter = runtime_adapter_for("runtime/local-docker")
+
+        self.assertIsInstance(adapter, DockerLocalAdapter)
+        self.assertEqual(adapter.capabilities()["real_container"], True)
+
+    @override_settings(
+        RUNTIME_MODE="swarm",
+        RUNTIME_ADAPTER_CODE="runtime/swarm",
+        RUNTIME_ADAPTER_CONFIGS={"runtime/swarm": {"runtime_network": "edu-runtime"}},
+    )
+    def test_swarm_mode_resolves_the_swarm_adapter(self) -> None:
+        with patch(
+            "apps.provisioning.adapters.DockerSwarmAdapter._build_client",
+            return_value=object(),
+        ):
+            adapter = runtime_adapter_for("runtime/swarm")
+
+        self.assertEqual(type(adapter).__name__, "DockerSwarmAdapter")
+        self.assertEqual(
+            adapter.capabilities(),
+            {
+                "image_build": True,
+                "real_container": True,
+                "resource_limits": True,
+                "workspace_access": True,
+            },
+        )
+
+    @override_settings(RUNTIME_MODE="unknown", RUNTIME_ADAPTER_CODE="runtime/unknown")
+    def test_unknown_mode_is_rejected(self) -> None:
+        with self.assertRaises(RuntimeAdapterFailure) as raised:
+            runtime_adapter_for("runtime/unknown")
+
+        self.assertEqual(raised.exception.code, "RUNTIME_MODE_INVALID")
+        self.assertFalse(raised.exception.retryable)
+
+    @override_settings(
+        RUNTIME_MODE="swarm", RUNTIME_ADAPTER_CODE="runtime/swarm", RUNTIME_ADAPTER_CONFIGS={}
+    )
+    def test_production_mode_requires_adapter_configuration(self) -> None:
+        with self.assertRaises(RuntimeAdapterFailure) as raised:
+            runtime_adapter_for("runtime/swarm")
+
+        self.assertEqual(raised.exception.code, "RUNTIME_CONFIG_INVALID")
+        self.assertFalse(raised.exception.retryable)
+
     def test_local_driver_requires_a_configuration_reference(self) -> None:
         with self.assertRaises(RuntimeAdapterFailure) as raised:
             runtime_for_driver("DOCKER_LOCAL")
@@ -172,9 +259,7 @@ class RuntimeAdapterContractTests(SimpleTestCase):
         self.assertFalse(
             any(item.external_id == "judge-cleanup-1" for item in adapter.inventory_resources())
         )
-        adapter.destroy_resource(
-            f"volume:{created.external_id}", "resource-destroy:volume-cleanup"
-        )
+        adapter.destroy_resource(f"volume:{created.external_id}", "resource-destroy:volume-cleanup")
         self.assertFalse(
             any(item.metadata.get("kind") == "volume" for item in adapter.inventory_resources())
         )
@@ -276,9 +361,7 @@ class FakeDockerEngine:
         return {"Id": container_id}
 
     def start(self, container_id: str) -> None:
-        self.containers_state[container_id]["State"].update(
-            {"Running": True, "Status": "running"}
-        )
+        self.containers_state[container_id]["State"].update({"Running": True, "Status": "running"})
 
     def inspect_container(self, container_id: str) -> dict[str, Any]:
         if container_id not in self.containers_state:
@@ -305,12 +388,10 @@ class FakeDockerEngine:
 
     def put_archive(self, container_id: str, path: str, data: bytes) -> bool:
         self.archives.append(data)
-        self.calls.append(
-            (
-                "put_archive",
-                {"container_id": container_id, "path": path, "size": len(data)},
-            )
-        )
+        self.calls.append((
+            "put_archive",
+            {"container_id": container_id, "path": path, "size": len(data)},
+        ))
         return True
 
     def wait(self, container_id: str, timeout: int | None = None) -> dict[str, int]:
@@ -363,6 +444,7 @@ class DockerLocalAdapterTests(SimpleTestCase):
         self.assertEqual(labels["edu.platform.managed"], "true")
         self.assertEqual(client.networks_state[0]["driver"], "bridge")
         container_config = client.containers_state[created.external_id]["_kwargs"]
+        self.assertEqual(container_config["image"], "edu-platform-algorithm-workspace:local")
         self.assertEqual(
             container_config["healthcheck"]["Test"],
             ["CMD", "/usr/local/bin/workspace-router", "healthcheck"],
@@ -382,6 +464,27 @@ class DockerLocalAdapterTests(SimpleTestCase):
         )
         adapter.destroy_resource(workspace_volume["Name"], "resource-destroy:local-1")
         self.assertEqual(client.volumes_state, {})
+
+    def test_workspace_uses_resource_limits_while_admission_values_are_requests(self) -> None:
+        client = FakeDockerEngine()
+        adapter = DockerLocalAdapter(
+            client=client,
+            config={
+                "image": "edu-platform-algorithm-workspace:local",
+                "runtime_network": "edu-runtime",
+            },
+        )
+        spec = runtime_spec(
+            cpu_millicores=500,
+            memory_mb=256,
+            cpu_limit_millicores=1500,
+            memory_limit_mb=2048,
+        )
+
+        adapter.create(spec, "provisioning:local-limits")
+        host_config = next(kwargs for name, kwargs in client.calls if name == "create_host_config")
+        self.assertEqual(host_config["nano_cpus"], 1_500_000_000)
+        self.assertEqual(host_config["mem_limit"], "2048m")
 
     def test_destroy_retains_creation_expiry_when_volume_updates_are_unavailable(self) -> None:
         client = FakeDockerEngine()
@@ -474,6 +577,7 @@ class DockerLocalAdapterTests(SimpleTestCase):
         common = {
             "edu.platform.managed": "true",
             "edu.platform.judge": "judge-stale",
+            "edu.platform.config_ref": "runtime/local-docker",
         }
         client.create_container(
             image="workspace",

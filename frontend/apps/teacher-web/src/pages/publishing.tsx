@@ -1,0 +1,373 @@
+import { useMemo, useState } from "react";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { Link, useParams } from "react-router-dom";
+import { teachingApi } from "@edu/api-client";
+import type { Publication, Template } from "@edu/api-client";
+import { keys } from "@edu/query-keys";
+import {
+  ConfirmDialog, EmptyState, Breadcrumbs, Modal, Panel, RequestStateView, StatusBadge, useToast,
+} from "@edu/ui";
+import { PUBLICATION_STATUS_LABEL, apiErrorMessage, formatDateTime } from "@/lib/format";
+
+interface PrecheckStage {
+  status: string;
+  message?: string;
+}
+
+function toIso(value: string): string {
+  // datetime-local 值转 UTC ISO;浏览器时区解释,后端保存为 aware datetime
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "" : date.toISOString();
+}
+
+const initialCreateForm = {
+  templateId: "",
+  rubricId: "",
+  title: "",
+  description: "",
+  window_start: "",
+  window_end: "",
+  assignment_deadline: "",
+  report_required: true,
+  review_mode: "MANUAL",
+};
+
+export function Publishing() {
+  const { courseId = "" } = useParams();
+  const toast = useToast();
+  const [withdrawTarget, setWithdrawTarget] = useState<Publication | null>(null);
+  const [closeTarget, setCloseTarget] = useState<Publication | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [createForm, setCreateForm] = useState({ ...initialCreateForm });
+
+  const publications = useQuery({
+    queryKey: keys.publications(courseId, {}),
+    queryFn: () => teachingApi.publications(courseId, {}),
+  });
+
+  const templates = useQuery({
+    queryKey: keys.templates(courseId),
+    queryFn: () => teachingApi.templates(courseId),
+    enabled: createOpen,
+  });
+  const rubrics = useQuery({
+    queryKey: keys.rubrics(courseId),
+    queryFn: () => teachingApi.rubrics(courseId),
+    enabled: createOpen,
+  });
+
+  const selectedTemplate: Template | undefined = (templates.data?.rows ?? [])
+    .find((row) => row.public_id === createForm.templateId);
+  const selectedRubric = (rubrics.data?.rows ?? []).find((row) => row.public_id === createForm.rubricId);
+
+  const rows = useMemo(() => publications.data?.rows ?? [], [publications.data]);
+
+  /** 预检面板：取第一门待处理发布（DRAFT/PRECHECK/READY）的最新预检运行 */
+  const pendingPublication = rows.find((row) => ["DRAFT", "PRECHECK", "READY"].includes(row.status));
+  const pendingVersionId = pendingPublication?.template_version_id ?? "";
+  const precheckRuns = useQuery({
+    queryKey: keys.precheckRuns(pendingVersionId),
+    queryFn: () => teachingApi.precheckRuns(courseId, pendingVersionId),
+    enabled: Boolean(pendingVersionId),
+    refetchInterval: (query) => {
+      const data = query.state.data as { rows?: Array<{ status?: string }> };
+      const status = data?.rows?.[0]?.status;
+      return ["SUBMITTED", "RUNNING"].includes(String(status ?? "")) ? 4000 : false;
+    },
+  });
+  const latestPrecheck = precheckRuns.data?.rows?.[0];
+  const precheckStages = (latestPrecheck?.stages ?? []) as PrecheckStage[];
+  const precheckPassed = precheckStages.filter((stage) => stage.status === "SUCCEEDED").length;
+  const precheckTotal = precheckStages.length;
+
+  const taskTotal = rows
+    .filter((row) => row.status === "PUBLISHED")
+    .reduce((sum, row) => sum + (row.audience_count ?? 0), 0);
+
+  const invalidate = () => void publications.refetch();
+
+  const publish = useMutation({
+    mutationFn: (target: Publication) =>
+      teachingApi.publishPublication(courseId, target.public_id, target.row_version),
+    onSuccess: () => { toast.notify("发布作业已提交，可查看进度"); invalidate(); },
+    onError: (error) => toast.notify(apiErrorMessage(error), "error"),
+  });
+
+  const withdraw = useMutation({
+    mutationFn: (target: Publication) =>
+      teachingApi.withdrawPublication(courseId, target.public_id, target.row_version),
+    onSuccess: () => { toast.notify("实验已撤回"); setWithdrawTarget(null); invalidate(); },
+    onError: (error) => toast.notify(apiErrorMessage(error), "error"),
+  });
+
+  const close = useMutation({
+    mutationFn: (target: Publication) =>
+      teachingApi.closePublication(courseId, target.public_id, target.row_version),
+    onSuccess: () => { toast.notify("实验已关闭"); setCloseTarget(null); invalidate(); },
+    onError: (error) => toast.notify(apiErrorMessage(error), "error"),
+  });
+
+  const runPrecheck = useMutation({
+    mutationFn: async (versionId: string) => {
+      // The precheck endpoint requires If-Match; refresh the version row first.
+      const version = await teachingApi.templateVersion(courseId, versionId);
+      return teachingApi.precheck(courseId, versionId, version.row_version);
+    },
+    onSuccess: () => { toast.notify("预检作业已提交，进度见预检状态"); void precheckRuns.refetch(); },
+    onError: (error) => toast.notify(apiErrorMessage(error), "error"),
+  });
+
+  const createPublication = useMutation({
+    mutationFn: () => {
+      const versionId = selectedTemplate?.current_version_id ?? "";
+      const rubricVersionId = selectedRubric?.current_version_id ?? "";
+      if (!versionId || !rubricVersionId) {
+        return Promise.reject(new Error("请先选择模板当前版本与评分表"));
+      }
+      return teachingApi.createPublication(courseId, {
+        template_version_id: versionId,
+        rubric_version_id: rubricVersionId,
+        title: createForm.title.trim(),
+        description: createForm.description.trim(),
+        audience_mode: "ALL_ACTIVE",
+        late_enrollment_policy: "DO_NOT_ASSIGN",
+        window_start: toIso(createForm.window_start),
+        window_end: toIso(createForm.window_end),
+        assignment_deadline: createForm.assignment_deadline ? toIso(createForm.assignment_deadline) : undefined,
+        report_required: createForm.report_required,
+        review_mode: createForm.review_mode,
+        prerequisites: [],
+      });
+    },
+    onSuccess: () => {
+      toast.notify("发布草稿已创建，运行预检通过后发布");
+      setCreateOpen(false);
+      setCreateForm({ ...initialCreateForm });
+      invalidate();
+    },
+    onError: (error) => toast.notify(error instanceof Error ? error.message : apiErrorMessage(error), "error"),
+  });
+
+  const createReady = Boolean(
+    createForm.templateId && createForm.rubricId && createForm.title.trim()
+    && createForm.window_start && createForm.window_end,
+  );
+
+  return (
+    <>
+      <Breadcrumbs items={[{ label: "教师门户" }, { label: "课程" }]} current="实验发布" />
+      <div className="page-actions align-end">
+        <button type="button" className="btn primary" onClick={() => { setCreateForm({ ...initialCreateForm }); setCreateOpen(true); }}>配置新发布</button>
+      </div>
+
+      <Panel>
+        <RequestStateView
+          loading={publications.isLoading}
+          error={publications.error}
+          onRetry={() => invalidate()}
+          empty={!rows.length}
+          emptyState={(
+            <EmptyState
+              title="暂无实验发布"
+              hint="先在实验设计里完成模板版本与预检，再创建发布。"
+              action={<Link className="btn primary" to={`/courses/${courseId}/templates`}>去实验设计</Link>}
+            />
+          )}
+        >
+          <div className="table-wrap">
+            <table className="table">
+              <thead>
+                <tr><th>实验发布</th><th>版本</th><th>对象</th><th>时间窗口</th><th>任务数</th><th>状态</th><th className="table-actions">操作</th></tr>
+              </thead>
+              <tbody>
+                {rows.map((row) => {
+                  const allowed = row.allowed_actions ?? [];
+                  return (
+                    <tr key={row.public_id}>
+                      <td><strong>{row.title}</strong><small style={{ display: "block" }}>{row.template_name ?? row.template_version_id}</small></td>
+                      <td>{row.version_no ? `v${row.version_no}` : "—"}</td>
+                      <td>
+                        {row.audience_count
+                          ? <span>{row.audience_count} 名学生</span>
+                          : <span className="subtle">—</span>}
+                      </td>
+                      <td data-wrap>
+                        {row.status === "PUBLISHED"
+                          ? `${formatDateTime(row.window_start)} — ${formatDateTime(row.window_end)}`
+                          : row.window_start ? `${formatDateTime(row.window_start)} — ${formatDateTime(row.window_end)}`
+                            : "待设置"}
+                      </td>
+                      <td>{row.audience_count ?? "—"}</td>
+                      <td>
+                        <StatusBadge tone={row.status === "PUBLISHED" ? "good"
+                          : row.status === "FAILED" ? "bad"
+                            : row.status === "DRAFT" || row.status === "PRECHECK" || row.status === "READY" ? "warn"
+                              : "neutral"}>
+                          {PUBLICATION_STATUS_LABEL[row.status] ?? row.status}
+                        </StatusBadge>
+                        {row.status === "FAILED" && row.publication_error ? (
+                          <small style={{ display: "block", color: "var(--red)" }}>
+                            {row.publication_error.message ?? row.publication_error.code}
+                          </small>
+                        ) : null}
+                      </td>
+                      <td className="table-actions">
+                        {row.status === "DRAFT" ? (
+                          <button type="button" className="btn sm" disabled={runPrecheck.isPending}
+                            onClick={() => row.template_version_id && runPrecheck.mutate(row.template_version_id)}>
+                            {runPrecheck.isPending ? "提交中…" : "运行预检"}
+                          </button>
+                        ) : null}
+                        {allowed.includes("publish") ? (
+                          <button type="button" className="btn sm primary" disabled={publish.isPending}
+                            onClick={() => publish.mutate(row)}>
+                            {publish.isPending && publish.variables === row ? "提交中…" : "发布"}
+                          </button>
+                        ) : null}
+                        {allowed.includes("withdraw") ? (
+                          <button type="button" className="btn sm" onClick={() => setWithdrawTarget(row)}>撤回</button>
+                        ) : null}
+                        {allowed.includes("close") ? (
+                          <button type="button" className="btn sm" onClick={() => setCloseTarget(row)}>关闭</button>
+                        ) : null}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </RequestStateView>
+      </Panel>
+
+      <div className="grid three section">
+        <Panel title={<><h2>预检状态</h2>
+          {latestPrecheck ? (
+            <StatusBadge tone={latestPrecheck.status === "SUCCEEDED" ? "good"
+              : latestPrecheck.status === "FAILED" ? "bad" : "blue"}>
+              {precheckTotal > 0 ? `${precheckPassed} / ${precheckTotal} 通过` : "预检进行中"}
+            </StatusBadge>
+          ) : pendingPublication ? <span className="status warn">尚未预检</span> : <span className="status neutral">无待发布</span>}
+        </>}>
+          {latestPrecheck && precheckStages.length ? (
+            precheckStages.map((stage, index) => {
+              const ok = stage.status === "SUCCEEDED";
+              const failed = stage.status === "FAILED";
+              return (
+                <div key={index} className="status-line" style={{
+                  background: ok ? "var(--green-soft)" : failed ? "var(--red-soft)" : "var(--amber-soft)",
+                  color: ok ? "var(--green)" : failed ? "var(--red)" : "var(--amber)",
+                  marginBottom: 4,
+                }}>
+                  {ok ? "✓" : failed ? "×" : "!"}　{stage.message ?? "阶段执行中"}
+                </div>
+              );
+            })
+          ) : (
+            <div className="state-block">
+              <strong>{pendingPublication ? "尚未运行预检" : "暂无待预检发布"}</strong>
+              <p>预检运行后这里将展示镜像治理、运行时健康与章节任务校验结果。</p>
+            </div>
+          )}
+        </Panel>
+        <Panel title={<><h2>任务对账</h2>{taskTotal > 0 ? <span className="status blue">{`${taskTotal} 个任务`}</span> : null}</>}>
+          <div className="section">
+            <p className="subtle" style={{ margin: 0 }}>发布后系统会按学生和章节生成任务；对账数字来自当前已发布实验的受众任务数。</p>
+          </div>
+        </Panel>
+        <Panel title={<><h2>发布窗口</h2><span className="status blue">{`${rows.filter((row) => row.status === "PUBLISHED").length} 个进行中`}</span></>}>
+          {rows.filter((row) => row.status === "PUBLISHED").length ? (
+            rows.filter((row) => row.status === "PUBLISHED").map((row) => (
+              <div className="status-line" key={row.public_id} style={{ marginBottom: 4 }}>
+                <strong style={{ marginRight: 6 }}>{row.title}</strong>
+                {formatDateTime(row.window_start)} — {formatDateTime(row.window_end)}
+                {row.assignment_deadline ? ` · 分配截止 ${formatDateTime(row.assignment_deadline)}` : ""}
+              </div>
+            ))
+          ) : (
+            <p className="subtle" style={{ margin: 0 }}>暂无进行中的发布窗口。支持按开放与截止时间设置;受众支持全体或按学生分组,创建发布时选择。</p>
+          )}
+        </Panel>
+      </div>
+
+      <Modal open={createOpen} onClose={() => setCreateOpen(false)} eyebrow="实验发布"
+        title="创建发布草稿"
+        wide
+        actions={(
+          <>
+            <button type="button" className="btn" onClick={() => setCreateOpen(false)}>取消</button>
+            <button type="button" className="btn primary" disabled={!createReady || createPublication.isPending}
+              onClick={() => createPublication.mutate()}>
+              {createPublication.isPending ? "创建中…" : "创建草稿"}
+            </button>
+          </>
+        )}>
+        <div style={{ display: "grid", gap: 10 }}>
+          <label className="form-label" htmlFor="pub-template">实验模板 <span>必选</span></label>
+          <select id="pub-template" className="field" value={createForm.templateId}
+            onChange={(event) => setCreateForm((prev) => ({ ...prev, templateId: event.target.value }))}>
+            <option value="">选择模板</option>
+            {(templates.data?.rows ?? []).map((template) => (
+              <option key={template.public_id} value={template.public_id}>
+                {template.name}{template.current_version_id ? "" : "（暂无版本）"}
+              </option>
+            ))}
+          </select>
+          <label className="form-label" htmlFor="pub-rubric">评分表 <span>必选</span></label>
+          <select id="pub-rubric" className="field" value={createForm.rubricId}
+            onChange={(event) => setCreateForm((prev) => ({ ...prev, rubricId: event.target.value }))}>
+            <option value="">选择评分表</option>
+            {(rubrics.data?.rows ?? []).map((rubric) => (
+              <option key={rubric.public_id} value={rubric.public_id}>
+                {rubric.name}{rubric.current_version_id ? "" : "（暂无可用版本）"}
+              </option>
+            ))}
+          </select>
+          <label className="form-label" htmlFor="pub-title">发布标题 <span>必填</span></label>
+          <input id="pub-title" className="field" value={createForm.title}
+            onChange={(event) => setCreateForm((prev) => ({ ...prev, title: event.target.value }))}
+            placeholder="例如 P05 容器实验" />
+          <label className="form-label" htmlFor="pub-desc">说明</label>
+          <textarea id="pub-desc" className="field" rows={2} value={createForm.description}
+            onChange={(event) => setCreateForm((prev) => ({ ...prev, description: event.target.value }))} />
+          <div style={{ display: "grid", gap: 10, gridTemplateColumns: "1fr 1fr" }}>
+            <div>
+              <label className="form-label" htmlFor="pub-start">开放时间 <span>必填</span></label>
+              <input id="pub-start" className="field" type="datetime-local" value={createForm.window_start}
+                onChange={(event) => setCreateForm((prev) => ({ ...prev, window_start: event.target.value }))} />
+            </div>
+            <div>
+              <label className="form-label" htmlFor="pub-end">截止时间 <span>必填</span></label>
+              <input id="pub-end" className="field" type="datetime-local" value={createForm.window_end}
+                onChange={(event) => setCreateForm((prev) => ({ ...prev, window_end: event.target.value }))} />
+            </div>
+          </div>
+          <div>
+            <label className="form-label" htmlFor="pub-assign">分配截止</label>
+            <input id="pub-assign" className="field" type="datetime-local" value={createForm.assignment_deadline}
+              onChange={(event) => setCreateForm((prev) => ({ ...prev, assignment_deadline: event.target.value }))} />
+          </div>
+          <label className="form-label" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <input type="checkbox" checked={createForm.report_required}
+              onChange={(event) => setCreateForm((prev) => ({ ...prev, report_required: event.target.checked }))} />
+            需要提交实验报告(评审后完成)
+          </label>
+          <p className="subtle" style={{ margin: 0 }}>受众暂为全体选课学生;按学生分组的发布在企业评审(评分表)发布后可再调整。创建后运行预检,通过即可点「发布」。</p>
+        </div>
+      </Modal>
+
+      <ConfirmDialog open={withdrawTarget != null} onClose={() => setWithdrawTarget(null)}
+        onConfirm={() => { if (withdrawTarget) withdraw.mutate(withdrawTarget); }}
+        title="撤回实验？" eyebrow="实验发布" tone="danger" busy={withdraw.isPending}
+        confirmLabel="确认撤回"
+        description={<p>撤回后已分配任务的处理方式将按课程策略决定；撤回操作需要版本号匹配，若期间实验被他人修改会要求刷新。</p>}
+      />
+      <ConfirmDialog open={closeTarget != null} onClose={() => setCloseTarget(null)}
+        onConfirm={() => { if (closeTarget) close.mutate(closeTarget); }}
+        title="关闭实验？" eyebrow="实验发布" tone="danger" busy={close.isPending}
+        confirmLabel="确认关闭"
+        description={<p>关闭后不再接受新的提交；进行中的任务会按后端策略结束。</p>}
+      />
+    </>
+  );
+}

@@ -1,8 +1,8 @@
 import { useState, type FormEvent } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { ApiError, RequestIntent, apiRequestWithMetadata } from '@edu/api-client'
-import { agentKeys } from '@edu/query-keys'
-import { PageHeader, RequestStateView, StatusBadge, TextField } from '@edu/ui'
+import { ApiError, RequestIntent, apiRequestWithMetadata } from './legacy/api-client'
+import { agentKeys } from './legacy/query-keys'
+import { PageHeader, RequestStateView, StatusBadge, TextField } from './legacy/ui'
 
 type RecordData = {
   public_id: string

@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
-import { apiRequestWithMetadata, RequestIntent } from '@edu/api-client'
-import { integrationKeys, notificationKeys, analyticsKeys } from '@edu/query-keys'
-import { PageHeader, RequestStateView, StatusBadge } from '@edu/ui'
+import { apiRequestWithMetadata, RequestIntent } from './legacy/api-client'
+import { integrationKeys, notificationKeys, analyticsKeys } from './legacy/query-keys'
+import { PageHeader, RequestStateView, StatusBadge } from './legacy/ui'
 
 type Data = Record<string, unknown>
 type ResponseData = { data: Data | Data[] }

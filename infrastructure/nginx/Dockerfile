@@ -18,7 +18,7 @@ RUN npm ci --ignore-scripts && npm run build
 
 FROM ${NGINX_BASE_IMAGE}
 COPY infrastructure/nginx/nginx.conf /etc/nginx/nginx.conf
-COPY --from=frontend /workspace/dist/user-web /srv/user-web
+COPY --from=frontend /workspace/dist/student-web /srv/student-web
 COPY --from=frontend /workspace/dist/teacher-web /srv/teacher-web
 COPY --from=frontend /workspace/dist/admin-web /srv/admin-web
 EXPOSE 8080

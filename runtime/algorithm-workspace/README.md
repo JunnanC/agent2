@@ -8,13 +8,18 @@ its build.
 
 The public container contract is deliberately narrow:
 
-- `GET /healthz` reports readiness without returning runtime details.
+- `GET /healthz` reports readiness without returning runtime details (it probes
+  code-server only; ttyd has no health endpoint).
 - `/webide/` proxies HTTP, static assets, and WebSocket upgrades to code-server.
-- `/notebook/`, `/terminal/`, and `/preview/` are not platform capabilities.
+- `/terminal/` proxies HTTP and WebSocket upgrades to the pinned ttyd binary
+  (`--base-path /terminal`, listening only on `127.0.0.1:7681`); the router keeps
+  the `/terminal/` prefix upstream, so gateway paths map directly onto ttyd. ttyd
+  runs `/bin/bash` writable inside the workspace as UID 10001.
+- `/notebook/` and `/preview/` are not platform capabilities.
 - code-server listens only on `127.0.0.1:3000`; the router listens on `8080`.
-- every `/webide/` request requires `X-Workspace-Upstream-Token`. The router
-  reads the expected value from `/run/secrets/workspace_upstream_token`, uses a
-  constant-time digest comparison, and removes the header before proxying.
+- every `/webide/` and `/terminal/` request requires `X-Workspace-Upstream-Token`.
+  The router reads the expected value from `/run/secrets/workspace_upstream_token`,
+  uses a constant-time digest comparison, and removes the header before proxying.
 
 The image runs as UID/GID `10001`, expects `/workspace` to be a task-scoped
 volume, keeps HOME/XDG/user-data under `/tmp`, and keeps the extension directory

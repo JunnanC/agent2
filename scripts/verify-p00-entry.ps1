@@ -15,7 +15,7 @@ function Invoke-EdgeRequest {
 }
 
 $portalHosts = @{
-    'user.localhost' = 'USER'
+    'student.localhost' = 'USER'
     'teacher.localhost' = 'TEACHING'
     'admin.localhost' = 'PLATFORM'
 }
@@ -38,7 +38,7 @@ if ($machineHome.StatusCode -ne 404) { throw 'Machine host unexpectedly served a
 $machineHealth = Invoke-EdgeRequest -HostName 'api.localhost' -Path '/api/v2/health'
 if ($machineHealth.StatusCode -ne 404) { throw 'Machine host exposed a portal API.' }
 
-$sse = Invoke-EdgeRequest -HostName 'user.localhost' -Path '/api/v2/events/stream'
+$sse = Invoke-EdgeRequest -HostName 'student.localhost' -Path '/api/v2/events/stream'
 if ($sse.StatusCode -ne 200 -or $sse.Headers['X-Accel-Buffering'] -ne 'no') {
     throw 'SSE proxy buffering contract failed.'
 }
@@ -46,11 +46,11 @@ if ($sse.StatusCode -ne 200 -or $sse.Headers['X-Accel-Buffering'] -ne 'no') {
 Push-Location "$root\frontend"
 try {
     $env:PLAYWRIGHT_CHANNEL = $env:PLAYWRIGHT_CHANNEL ?? 'chrome'
-    $env:USER_WEB_URL = "http://user.localhost:$Port"
+    $env:STUDENT_WEB_URL = "http://student.localhost:$Port"
     $env:TEACHER_WEB_URL = "http://teacher.localhost:$Port"
     $env:ADMIN_WEB_URL = "http://admin.localhost:$Port"
-    & $npm run test:e2e:user
-    if ($LASTEXITCODE -ne 0) { throw 'User portal E2E failed.' }
+    & $npm run test:e2e:student
+    if ($LASTEXITCODE -ne 0) { throw 'Student portal E2E failed.' }
     & $npm run test:e2e:teacher
     if ($LASTEXITCODE -ne 0) { throw 'Teacher portal E2E failed.' }
     & $npm run test:e2e:admin
