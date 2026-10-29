@@ -25,7 +25,7 @@ type RecordData = {
 function message(error: unknown) { return error instanceof ApiError ? `${error.payload.error.message}（trace: ${error.traceId || 'n/a'}）` : '平台 Agent 请求未完成。' }
 function useList<T>(path: string, key: readonly unknown[]) { return useQuery({ queryKey: key, queryFn: () => apiRequestWithMetadata<{ data: T[] }>(path) }) }
 
-export function PlatformAgentPage() {
+export function AgentPoliciesPage() {
   const [error, setError] = useState(''); const [notice, setNotice] = useState('')
   const [policyForm, setPolicyForm] = useState(false); const [routeForm, setRouteForm] = useState(false)
   const policies = useList<RecordData>('/api/v2/platform/agent/tool-policies', agentKeys.platformPolicies())

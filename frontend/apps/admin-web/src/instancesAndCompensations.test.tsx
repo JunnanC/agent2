@@ -3,7 +3,7 @@ import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { PlatformInstancesPage } from './p11'
+import { PlatformInstancesPage } from './instancesAndCompensations'
 
 vi.mock('@edu/event-client', () => ({
   PortalEventClient: class {

@@ -6,7 +6,7 @@ import { PageHeader, RequestStateView, StatusBadge } from '@edu/ui'
 type Data = Record<string, unknown>
 type ResponseData = { data: Data | Data[] }
 
-export function PlatformP13Page() {
+export function OperationsIntegrationsPage() {
   const notifications = useQuery({ queryKey: notificationKeys.list('PLATFORM'), queryFn: () => apiRequestWithMetadata<ResponseData>('/api/v2/notifications') })
   const preference = useQuery({ queryKey: notificationKeys.preference('PLATFORM'), queryFn: () => apiRequestWithMetadata<ResponseData>('/api/v2/notification-preferences') })
   const operations = useQuery({ queryKey: [...analyticsKeys.all, 'operations'], queryFn: () => apiRequestWithMetadata<ResponseData>('/api/v2/platform/operations/overview') })

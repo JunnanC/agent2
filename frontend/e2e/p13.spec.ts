@@ -48,9 +48,11 @@ test('@teacher P13 course analytics and risk handling stays within viewport', as
   await responsive(page)
 })
 
-test('@admin P13 operations and integrations overview stays within viewport', async ({ page }) => {
-  await login(page, 'admin.integration@example.edu', adminBaseUrl)
-  await page.goto(new URL('/p13', adminBaseUrl).toString())
-  await expect(page.getByRole('heading', { name: '分析、集成与运维' })).toBeVisible()
+test('@admin management navigation stays within viewport', async ({ page }) => {
+  await page.goto(new URL('/#overview', adminBaseUrl).toString())
+  await expect(page.getByRole('heading', { name: '平台概览' })).toBeVisible()
+  await page.getByRole('button', { name: /用户账号/ }).click()
+  await expect(page).toHaveURL(/#users$/)
+  await expect(page.getByRole('heading', { name: '用户账号' })).toBeVisible()
   await responsive(page)
 })

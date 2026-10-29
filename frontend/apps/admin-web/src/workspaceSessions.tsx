@@ -3,7 +3,7 @@ import { ApiError, apiRequestWithMetadata, type WorkspaceEnvelope, type Workspac
 import { workspaceKeys } from '@edu/query-keys'
 import { PageHeader, RequestStateView, StatusBadge } from '@edu/ui'
 
-export function AdminWorkspaceSessionsPage() {
+export function WorkspaceSessionsPage() {
   const query = useQuery({ queryKey: workspaceKeys.adminSessions(), queryFn: () => apiRequestWithMetadata<WorkspaceEnvelope<Array<WorkspaceSessionData & { public_id: string; student_id: string }>>>('/api/v2/platform/workspaces/sessions') })
   if (query.isPending) return <RequestStateView state="loading" />
   if (query.isError) return <RequestStateView state={query.error instanceof ApiError && query.error.status === 403 ? 'forbidden' : 'error'} message="工作区会话摘要暂时不可用。" onRetry={() => void query.refetch()} />

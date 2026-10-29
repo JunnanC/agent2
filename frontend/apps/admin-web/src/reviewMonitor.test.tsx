@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { ReviewMonitorPage } from './p10'
+import { ReviewMonitorPage } from './reviewMonitor'
 
 afterEach(() => vi.restoreAllMocks())
 
