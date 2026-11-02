@@ -33,7 +33,7 @@ class ExperimentApiTests(TestCase):
 
     def setUp(self) -> None:
         self.owner, self.course, self.template_version, self.rubric_version = create_domain(
-            suffix="p06-api"
+            suffix="publications-api"
         )
         ExperimentImage.objects.create(
             template_version=self.template_version,
@@ -45,10 +45,10 @@ class ExperimentApiTests(TestCase):
             image_asset=self.template_version.image,
             status=ExperimentImage.Status.READY,
             scan_status=ExperimentImage.ScanStatus.CLEAN,
-            trace_id="p06-api-image".ljust(32, "0"),
+            trace_id="publications-api-image".ljust(32, "0"),
             created_by=self.owner,
         )
-        self.enrollment = create_enrollment(self.course, suffix="p06-api-student")
+        self.enrollment = create_enrollment(self.course, suffix="publications-api-student")
         self.publication = create_draft_publication(
             owner=self.owner,
             course=self.course,
@@ -101,12 +101,26 @@ class ExperimentApiTests(TestCase):
             content_type="application/json",
             HTTP_X_CSRFTOKEN=csrf,
             HTTP_X_PORTAL="TEACHING",
-            HTTP_IDEMPOTENCY_KEY="p06-create-selected-draft",
+            HTTP_IDEMPOTENCY_KEY="publications-create-selected-draft",
             **PROXY_HEADERS,
         )
         self.assertEqual(response.status_code, 201, response.content)
         self.assertEqual(response.json()["data"]["audience_mode"], "SELECTED")
         self.assertEqual(response.json()["data"]["status"], "DRAFT")
+
+    def test_course_tasks_are_a_list_without_changing_progress_aggregate(self) -> None:
+        client, _csrf = self._client(portal="TEACHING", identifier=self.owner.email)
+        response = client.get(
+            f"/api/v2/teaching/courses/{self.course.public_id}/tasks",
+            HTTP_X_PORTAL="TEACHING", **PROXY_HEADERS,
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertIsInstance(response.json()["data"], list)
+        aggregate = client.get(
+            f"/api/v2/teaching/courses/{self.course.public_id}/progress",
+            HTTP_X_PORTAL="TEACHING", **PROXY_HEADERS,
+        )
+        self.assertIn("task_counts", aggregate.json()["data"])
 
     def test_selected_publish_validates_then_freezes_chosen_students(self) -> None:
         publication = create_draft_publication(
@@ -132,7 +146,7 @@ class ExperimentApiTests(TestCase):
             url,
             {"selected_enrollment_ids": []},
             content_type="application/json",
-            HTTP_IDEMPOTENCY_KEY="p06-publish-selected-empty",
+            HTTP_IDEMPOTENCY_KEY="publications-publish-selected-empty",
             **headers,
         )
         self.assertEqual(rejected.status_code, 422, rejected.content)
@@ -145,14 +159,14 @@ class ExperimentApiTests(TestCase):
         self.assertFalse(PublicationAudience.objects.filter(publication=publication).exists())
         self.assertFalse(ExperimentTask.objects.filter(publication=publication).exists())
         self.assertFalse(
-            IdempotencyRecord.objects.filter(idempotency_key="p06-publish-selected-empty").exists()
+            IdempotencyRecord.objects.filter(idempotency_key="publications-publish-selected-empty").exists()
         )
 
         published = client.post(
             url,
             {"selected_enrollment_ids": [self.enrollment.public_id]},
             content_type="application/json",
-            HTTP_IDEMPOTENCY_KEY="p06-publish-selected-valid",
+            HTTP_IDEMPOTENCY_KEY="publications-publish-selected-valid",
             **headers,
         )
         self.assertEqual(published.status_code, 201, published.content)
@@ -171,7 +185,7 @@ class ExperimentApiTests(TestCase):
         headers = {
             "HTTP_X_CSRFTOKEN": csrf,
             "HTTP_X_PORTAL": "TEACHING",
-            "HTTP_IDEMPOTENCY_KEY": "p06-publish-once",
+            "HTTP_IDEMPOTENCY_KEY": "publications-publish-once",
             "HTTP_IF_MATCH": f'"{self.publication.row_version}"',
             **PROXY_HEADERS,
         }
@@ -195,7 +209,7 @@ class ExperimentApiTests(TestCase):
             HTTP_X_CSRFTOKEN=csrf,
             HTTP_X_PORTAL="TEACHING",
             HTTP_IF_MATCH=f'"{self.publication.row_version}"',
-            HTTP_IDEMPOTENCY_KEY="p06-nested-publish",
+            HTTP_IDEMPOTENCY_KEY="publications-nested-publish",
             **PROXY_HEADERS,
         )
         self.assertEqual(response.status_code, 201, response.content)
@@ -242,8 +256,8 @@ class ExperimentApiTests(TestCase):
         )
         task = ExperimentTask.objects.get(publication=published)
         stranger = create_user(
-            email="p06-api-stranger@example.edu",
-            username="p06-api-stranger",
+            email="publications-api-stranger@example.edu",
+            username="publications-api-stranger",
             password=self.password,
         )
         client, _ = self._client(portal="USER", identifier=stranger.email)
@@ -264,14 +278,14 @@ class DashboardWeeklyStudyTests(TestCase):
     def setUp(self) -> None:
         reset_fake_runtime()
         self.teacher, self.course, template_version, rubric_version = create_domain(
-            suffix="p15-dashboard"
+            suffix="workbench-dashboard"
         )
         RuntimeAdapter.objects.filter(pk=template_version.runtime_adapter_id).update(
             driver=RuntimeAdapter.Driver.FAKE,
             status=RuntimeAdapter.Status.ENABLED,
             health_status=RuntimeAdapter.HealthStatus.HEALTHY,
         )
-        enrollment = create_enrollment(self.course, suffix="p15-dashboard-student")
+        enrollment = create_enrollment(self.course, suffix="workbench-dashboard-student")
         self.student = enrollment.student
         quota_values = {
             "max_concurrent_instances": 10,
@@ -300,7 +314,7 @@ class DashboardWeeklyStudyTests(TestCase):
             course=self.course,
             template_version=template_version,
             rubric_version=rubric_version,
-            suffix="p15-dashboard",
+            suffix="workbench-dashboard",
         )
         published, _ = publish_publication(
             course_id=self.course.public_id,

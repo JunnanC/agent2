@@ -200,7 +200,9 @@ def paged_teaching_tasks(
         "runtime_adapter",
         "image",
         "resource_profile",
-    ).filter(course=course, publication__public_id=publication_id)
+    ).filter(course=course)
+    if publication_id:
+        tasks = tasks.filter(publication__public_id=publication_id)
     if status:
         tasks = tasks.filter(status=status)
     if query:

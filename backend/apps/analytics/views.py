@@ -1,6 +1,6 @@
 from typing import Any
 
-from django.db.models import Count, Sum
+from django.db.models import Count, Q, Sum
 from django.http import HttpRequest
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework.response import Response
@@ -10,6 +10,7 @@ from apps.accounts.models import User
 from apps.accounts.permissions import IsPlatformPortal, IsTeachingPortal, IsUserPortal
 from apps.core.concurrency import etag_for_version, parse_if_match
 from apps.core.idempotency import PrincipalScope, StoredResponse, execute_idempotent
+from apps.core.models import AuditLog
 from apps.courses.services import ActorContext
 
 from .models import (
@@ -293,3 +294,37 @@ class PlatformRuntimeLogsView(AnalyticsAPIView):
                 level=request.query_params.get("level", ""),
             ),
         )
+
+
+class PlatformAuditLogsView(AnalyticsAPIView):
+    permission_classes = [IsPlatformPortal]
+
+    @extend_schema(tags=["platform-analytics"], extensions={"x-portals": ["PLATFORM"]})
+    def get(self, request: HttpRequest) -> Response:
+        from apps.core.pagination import PageSpec
+
+        spec = PageSpec.parse(
+            request.query_params.get("page", 1), request.query_params.get("page_size", 50)
+        )
+        rows = AuditLog.objects.order_by("-created_at", "-id")
+        if trace_id := request.query_params.get("trace_id", ""):
+            rows = rows.filter(trace_id=trace_id)
+        if search := request.query_params.get("search", ""):
+            rows = rows.filter(
+                Q(action__icontains=search)
+                | Q(actor_ref__icontains=search)
+                | Q(target_ref__icontains=search)
+                | Q(trace_id__icontains=search)
+            )
+        total = rows.count()
+        data = [{
+            "id": str(item.pk), "occurred_at": item.created_at,
+            "actor": item.actor_ref, "action": item.action,
+            "target": f"{item.target_type}:{item.target_ref}",
+            "result": item.result, "trace_id": item.trace_id,
+        } for item in rows[spec.offset:spec.offset + spec.page_size]]
+        response = _response(request, data)
+        response.data["meta"].update(
+            {"total": total, "page": spec.page, "page_size": spec.page_size}
+        )
+        return response

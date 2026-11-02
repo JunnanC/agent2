@@ -23,6 +23,11 @@ from .views import (
 )
 
 urlpatterns = [
+    path(
+        "teaching/courses/<str:course_id>/tasks",
+        TeachingTaskListView.as_view(),
+        name="teaching-course-tasks",
+    ),
     path("me/dashboard", UserDashboardView.as_view(), name="me-dashboard"),
     path("tasks", UserTaskListView.as_view(), name="tasks"),
     path("tasks/<str:task_id>", UserTaskDetailView.as_view(), name="task-detail"),

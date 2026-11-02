@@ -330,7 +330,7 @@ class TeachingTaskListView(APIView):
         responses=TaskDataSerializer(many=True),
         extensions={"x-portals": ["TEACHING"]},
     )
-    def get(self, request: HttpRequest, course_id: str, publication_id: str) -> Response:
+    def get(self, request: HttpRequest, course_id: str, publication_id: str = "") -> Response:
         spec = _page_spec(request)
         tasks, total = paged_teaching_tasks(
             actor=request.user,

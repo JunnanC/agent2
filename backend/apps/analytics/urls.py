@@ -4,6 +4,7 @@ from .views import (
     PlatformAnalyticsProjectionView,
     PlatformAnalyticsQualityView,
     PlatformAnalyticsResourceCostView,
+    PlatformAuditLogsView,
     PlatformOperationsView,
     PlatformRuntimeLogsView,
     TeachingAnalyticsOverviewView,
@@ -47,4 +48,5 @@ urlpatterns = [
     path("platform/analytics/projection-jobs", PlatformAnalyticsProjectionView.as_view()),
     path("platform/operations/overview", PlatformOperationsView.as_view()),
     path("platform/operations/logs", PlatformRuntimeLogsView.as_view()),
+    path("platform/operations/audit", PlatformAuditLogsView.as_view()),
 ]
