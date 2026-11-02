@@ -38,6 +38,7 @@ from apps.provisioning.services import (
     enabled_runtime_resources,
 )
 from apps.reports.models import ReportVersion, SystemArtifact
+from apps.reports.serializers import execution_evidence_data
 from apps.reviews.models import AutoCheckRun, Review
 from apps.workspaces.models import (
     OperationEvent,
@@ -293,7 +294,10 @@ def request_task_archive(
 
 def _snapshot(task: ExperimentTask) -> tuple[dict[str, Any], list[ObjectAsset]]:
     report = (
-        ReportVersion.objects.select_related("workspace_snapshot__asset")
+        ReportVersion.objects.select_related(
+            "workspace_snapshot__asset", "execution_run", "execution_snapshot__asset",
+            "execution_stdout_asset", "execution_stderr_asset", "execution_test_report_asset",
+        )
         .prefetch_related("attachments__attachment__asset")
         .filter(task=task)
         .order_by("-version_no")
@@ -323,6 +327,14 @@ def _snapshot(task: ExperimentTask) -> tuple[dict[str, Any], list[ObjectAsset]]:
     assets: dict[int, ObjectAsset] = {}
     if report is not None:
         assets[report.workspace_snapshot.asset_id] = report.workspace_snapshot.asset
+        if report.execution_snapshot_id:
+            assets[report.execution_snapshot.asset_id] = report.execution_snapshot.asset
+        for asset in (
+            report.execution_stdout_asset, report.execution_stderr_asset,
+            report.execution_test_report_asset,
+        ):
+            if asset is not None:
+                assets[asset.pk] = asset
         for link in report.attachments.all():
             assets[link.attachment.asset_id] = link.attachment.asset
     if latest_snapshot is not None:
@@ -349,6 +361,7 @@ def _snapshot(task: ExperimentTask) -> tuple[dict[str, Any], list[ObjectAsset]]:
                 "snapshot_digest": report.snapshot_digest,
                 "submitted_at": report.submitted_at,
                 "body_markdown": report.body_markdown,
+                "execution_evidence": execution_evidence_data(report),
             }
             if report
             else None
@@ -1357,11 +1370,8 @@ def create_archive_export(
 ) -> tuple[FileDownloadGrant, str]:
     try:
         course = Course.objects.select_for_update().get(public_id=course_id)
-        job = (
-            ArchiveJob.objects.select_for_update()
-            .select_related("manifest__package_asset", "task")
-            .get(public_id=archive_id, course=course)
-        )
+        # Immutable manifests must stay outside the app role's locking query.
+        job = ArchiveJob.objects.select_for_update().get(public_id=archive_id, course=course)
     except (Course.DoesNotExist, ArchiveJob.DoesNotExist) as exc:
         raise ResourceNotFound() from exc
     require_course_capability(

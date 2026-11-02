@@ -1,5 +1,7 @@
 import hashlib
 import io
+import json
+import zipfile
 from unittest.mock import patch
 
 from django.test import Client, TestCase
@@ -7,7 +9,7 @@ from django.utils import timezone
 
 from apps.accounts.tests.helpers import create_user, grant_admin
 from apps.core.errors import DownloadScopeDenied, ImmutableRecordError, RowVersionConflict
-from apps.core.models import CompensationTask, FileDownloadGrant
+from apps.core.models import CompensationTask, FileDownloadGrant, ObjectAsset
 from apps.core.object_storage import StoredObject
 from apps.courses.services import ActorContext
 from apps.experiments.models import ExperimentTask
@@ -20,7 +22,8 @@ from apps.experiments.tests.helpers import (
 from apps.governance.models import RuntimeAdapter
 from apps.provisioning.adapters import reset_fake_runtime
 from apps.provisioning.models import ProvisioningInstance
-from apps.workspaces.models import WorkspaceSession
+from apps.reports.models import ReportDraft, ReportVersion
+from apps.workspaces.models import WorkspaceExecutionRun, WorkspaceSession, WorkspaceSnapshot
 
 from ..models import ArchiveExportGrant, ArchiveJob, ArchiveManifest, ArchiveVerification
 from ..services import (
@@ -54,19 +57,19 @@ class MemoryStorage:
         return StoredObject(io.BytesIO(payload), len(payload), "application/zip", version_id)
 
 
-class P11ArchiveServiceTests(TestCase):
+class ArchiveServiceTests(TestCase):
     password = "ValidPassword!234"
 
     def setUp(self) -> None:
         reset_fake_runtime()
         self.owner, self.course, self.template_version, self.rubric_version = create_domain(
-            suffix="p11"
+            suffix="archives"
         )
-        self.enrollment = create_enrollment(self.course, suffix="p11-student")
+        self.enrollment = create_enrollment(self.course, suffix="archives-student")
         self.admin = create_user(
-            email="p11-admin@example.edu",
-            username="p11-admin",
-            display_name="P11 Admin",
+            email="archives-admin@example.edu",
+            username="archives-admin",
+            display_name="archives Admin",
             password=self.password,
         )
         grant_admin(self.admin)
@@ -81,7 +84,7 @@ class P11ArchiveServiceTests(TestCase):
             course=self.course,
             template_version=self.template_version,
             rubric_version=self.rubric_version,
-            suffix="p11",
+            suffix="archives",
         )
         published, _ = publish_publication(
             course_id=self.course.public_id,
@@ -104,7 +107,7 @@ class P11ArchiveServiceTests(TestCase):
             resource_profile=self.template_version.resource_profile,
             runtime_type=self.template_version.runtime_type,
             status=ProvisioningInstance.Status.READY,
-            external_id=f"fake-p11-{self.task.public_id}",
+            external_id=f"fake-archives-{self.task.public_id}",
             created_trace_id="1" * 32,
         )
         self.session = WorkspaceSession.objects.create(
@@ -210,6 +213,61 @@ class P11ArchiveServiceTests(TestCase):
         self.assertEqual(self.session.status, WorkspaceSession.Status.REVOKED)
         self.assertEqual(self.instance.status, ProvisioningInstance.Status.DESTROYED)
 
+    def test_archive_contains_frozen_execution_facts_and_output_objects(self) -> None:
+        storage = MemoryStorage()
+        assets = {}
+        for name, content in {
+            "code": b"print(input().upper())\n", "stdout": b"HELLO\n", "stderr": b"",
+            "test-report": b'{"status":"PASSED"}',
+        }.items():
+            asset = ObjectAsset.objects.create(
+                bucket="edu-platform", object_key=f"workspaces/{self.task.public_id}/{name}",
+                object_version="v1", digest_sha256=hashlib.sha256(content).hexdigest(),
+                size_bytes=len(content), media_type="text/plain", original_name=f"{name}.txt",
+                owner_type="WORKSPACE_TASK", owner_ref=self.task.public_id,
+                purpose="WORKSPACE_SNAPSHOT", scan_status=ObjectAsset.ScanStatus.CLEAN,
+            )
+            storage.objects[(asset.bucket, asset.object_key, asset.object_version)] = content
+            assets[name] = asset
+        snapshot = WorkspaceSnapshot.objects.create(
+            task=self.task, session=self.session, asset=assets["code"], version_no=1,
+            client_seq=1, digest_sha256=assets["code"].digest_sha256,
+            size_bytes=assets["code"].size_bytes, saved_at=timezone.now(), trace_id="e" * 32,
+        )
+        run = WorkspaceExecutionRun.objects.create(
+            task=self.task, session=self.session, snapshot=snapshot, status="PASSED",
+            execution_rule_summary={"entrypoint": "main.py"}, execution_rule_digest="a" * 64,
+            idempotency_key="archive-execution", stdout_asset=assets["stdout"],
+            stderr_asset=assets["stderr"], test_report_asset=assets["test-report"],
+            trace_id="e" * 32,
+        )
+        draft = ReportDraft.objects.create(task=self.task, student=self.task.student)
+        ReportVersion.objects.create(
+            task=self.task, draft=draft, student=self.task.student, version_no=1,
+            body_markdown="report", body_digest=hashlib.sha256(b"report").hexdigest(),
+            workspace_snapshot=snapshot, snapshot_digest=snapshot.digest_sha256,
+            execution_run=run, execution_status="PASSED", execution_snapshot=snapshot,
+            execution_rule_summary=run.execution_rule_summary,
+            execution_rule_digest=run.execution_rule_digest,
+            execution_snapshot_digest=snapshot.digest_sha256,
+            execution_stdout_asset=assets["stdout"], execution_stderr_asset=assets["stderr"],
+            execution_test_report_asset=assets["test-report"],
+            submitted_by=self.task.student, submitted_at=timezone.now(), trace_id="e" * 32,
+        )
+        with patch("apps.archives.services.object_storage", return_value=storage):
+            package, entries, _digest, _size = _build_package(self.task)
+        try:
+            with zipfile.ZipFile(package) as archive:
+                evidence = json.loads(archive.read("report.json"))["execution_evidence"]
+                self.assertEqual(evidence["execution_run_id"], run.public_id)
+                self.assertEqual(evidence["snapshot_id"], snapshot.public_id)
+                self.assertEqual(evidence["status"], "PASSED")
+                entry_assets = {entry.get("asset_id") for entry in entries}
+                for name in ("stdout", "stderr", "test-report"):
+                    self.assertIn(assets[name].public_id, entry_assets)
+        finally:
+            package.close()
+
     def test_export_is_scoped_short_lived_and_append_only(self) -> None:
         storage = MemoryStorage()
         job = self.request()
@@ -234,7 +292,7 @@ class P11ArchiveServiceTests(TestCase):
         self.assertEqual(export.approved_by, self.owner)
         with self.assertRaises(ImmutableRecordError):
             export.save()
-        other = create_enrollment(self.course, suffix="p11-other").student
+        other = create_enrollment(self.course, suffix="archives-other").student
         with self.assertRaises(DownloadScopeDenied):
             authorize_archive_download(
                 ArchiveManifest.objects.get(job=job).package_asset,
@@ -303,9 +361,9 @@ class P11ArchiveServiceTests(TestCase):
         self.assertEqual(response.json()["data"]["status"], ArchiveJob.Status.PASSED)
 
         outsider = create_user(
-            email="p11-outsider@example.edu",
-            username="p11-outsider",
-            display_name="P11 Outsider",
+            email="archives-outsider@example.edu",
+            username="archives-outsider",
+            display_name="archives Outsider",
             password=self.password,
         )
         other, _csrf, other_proxy = self.client_for(identifier=outsider.username, portal="USER")
@@ -329,7 +387,7 @@ class P11ArchiveServiceTests(TestCase):
         headers = {
             "HTTP_X_PORTAL": "TEACHING",
             "HTTP_X_CSRFTOKEN": csrf,
-            "HTTP_IDEMPOTENCY_KEY": "p11-export-api",
+            "HTTP_IDEMPOTENCY_KEY": "archives-export-api",
             "HTTP_IF_MATCH": detail["ETag"],
             **teacher_proxy,
         }
@@ -356,7 +414,7 @@ class P11ArchiveServiceTests(TestCase):
         headers = {
             "HTTP_X_PORTAL": "PLATFORM",
             "HTTP_X_CSRFTOKEN": csrf,
-            "HTTP_IDEMPOTENCY_KEY": "p11-compensation-api",
+            "HTTP_IDEMPOTENCY_KEY": "archives-compensation-api",
             "HTTP_IF_MATCH": f'"{item.row_version}"',
             **proxy,
         }
@@ -382,7 +440,7 @@ class P11ArchiveServiceTests(TestCase):
         headers = {
             "HTTP_X_PORTAL": "PLATFORM",
             "HTTP_X_CSRFTOKEN": csrf,
-            "HTTP_IDEMPOTENCY_KEY": "p11-instance-destroy-api",
+            "HTTP_IDEMPOTENCY_KEY": "archives-instance-destroy-api",
             "HTTP_IF_MATCH": f'"{self.instance.row_version}"',
             **proxy,
         }
