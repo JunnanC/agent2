@@ -1,2 +1,0 @@
-nothing found in stack: edu-platform
-command_exit_code=1

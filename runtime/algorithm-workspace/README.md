@@ -1,6 +1,6 @@
 # Algorithm workspace image
 
-P16-B replaces the contract placeholder with code-server 4.104.2 and Python
+This workspace provides code-server 4.104.2 and Python
 3.14.0 for Linux AMD64. Both the final base image and the Go builder are pinned
 by platform-specific OCI manifest digest; the code-server archive is pinned by
 SHA-256. The final image installs no mutable operating-system packages during
@@ -32,10 +32,11 @@ one-shot Python judge can continue to use this environment image.
 Run the image-only acceptance gate from the repository root:
 
 ```powershell
-./scripts/verify-p16-b-docker.ps1
+./scripts/verify/workspace-image.ps1
 ```
 
 The script builds and tests only through Docker, then writes image metadata,
 smoke results, size, digests, user, entrypoint, and an SPDX JSON SBOM under
-`evidence/p16/`. Registry promotion and Swarm acceptance belong to later P16
-phases.
+`evidence/workspace-image/`. The full image gate requires the `docker sbom`
+plugin. Registry promotion and Swarm deployment need separate acceptance;
+their entry points and prerequisites are in the [script inventory](../../scripts/README.md).

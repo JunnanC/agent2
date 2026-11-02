@@ -8,9 +8,9 @@
 
 ### 1.1 契约来源
 
-- 运行时契约：后端 `GET /api/v2/schema`，由 `backend/education_experiment_platform/education_experiment_platform/api_urls.py` 中的 `SpectacularAPIView` 提供。
-- 导出脚本：`scripts/export-openapi.ps1`；脚本会生成 `frontend/openapi.json` 并调用 `npm run generate:api` 更新前端类型。
-- 基线文件：`frontend/openapi.json`。注意：当前工作树的 `frontend/` 已被删除，该文件目前不存在；恢复或重建前端时必须先重新导出，不能把 Git 基线文件当作当前工作树文件。
+- 运行时契约：后端 `GET /api/v2/schema`，由 `backend/education_experiment_platform/api_urls.py` 中的 `SpectacularAPIView` 提供。
+- 导出脚本：`scripts/dev/export-openapi.ps1`；脚本会生成 `frontend/openapi.json` 并调用 `npm run generate:api` 更新前端类型。
+- 基线文件：`frontend/openapi.json`。当前三端源码及此文件均存在；接口变更后仍须重新导出并同步生成类型，不能假设历史导出自动包含最新接口。
 - 配置默认修订号：`settings/base.py` 中的 `OPENAPI_REVISION` 默认为 `v2-p15`，可由环境变量覆盖；OpenAPI 格式版本配置为 `3.0.3`。这些配置值不能证明后续改造已经完整反映在历史导出中。
 - 历史导出曾包含 315 个 API 操作、342 个 schema；这不是当前工作树重新生成后的统计。源码已增加课程上下文、章节任务、课程镜像和学生运行时停止等接口，见本文及接口目录末尾的源码补充；当前完整数量须在依赖齐备后重新生成并核对。
 - 若本文档与在线 schema 或后端实际响应不一致，以在线 schema 和实际响应为准，并记录差异后更新前端类型。

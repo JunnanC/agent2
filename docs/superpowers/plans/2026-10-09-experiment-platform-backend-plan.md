@@ -38,13 +38,13 @@
 ### Task 1: Freeze the Runtime Port and Add Explicit Runtime Modes
 
 **Files:**
-- Modify: `backend/education_experiment_platform/apps/provisioning/ports.py`
-- Modify: `backend/education_experiment_platform/apps/provisioning/adapters.py`
-- Modify: `backend/education_experiment_platform/apps/provisioning/services.py`
+- Modify: `backend/apps/provisioning/ports.py`
+- Modify: `backend/apps/provisioning/adapters.py`
+- Modify: `backend/apps/provisioning/services.py`
 - Modify: `backend/education_experiment_platform/education_experiment_platform/settings/base.py`
 - Modify: `.env.example`
-- Test: `backend/education_experiment_platform/apps/provisioning/tests/test_adapter_contract.py`
-- Test: `backend/education_experiment_platform/apps/provisioning/tests/test_services.py`
+- Test: `backend/apps/provisioning/tests/test_adapter_contract.py`
+- Test: `backend/apps/provisioning/tests/test_services.py`
 
 **Interfaces:**
 - Consumes: existing `RuntimeSpec`, `RuntimeResult`, `RuntimeAdapter`, governance runtime rows.
@@ -54,20 +54,20 @@
 - [ ] Run: `Set-Location backend; python -m pytest education_experiment_platform/apps/provisioning/tests/test_adapter_contract.py -q`; expected failure for missing resolver/capabilities.
 - [ ] Implement one resolver outside views using `RUNTIME_MODE`, `RUNTIME_ADAPTER_CODE`, and existing `RUNTIME_ADAPTER_CONFIGS`; preserve current adapter call signatures.
 - [ ] Run: `Set-Location backend; python -m pytest education_experiment_platform/apps/provisioning/tests/test_adapter_contract.py education_experiment_platform/apps/provisioning/tests/test_services.py -q`; expected PASS.
-- [ ] Commit: `git add backend/education_experiment_platform/apps/provisioning backend/education_experiment_platform/education_experiment_platform/settings/base.py .env.example; git commit -m "refactor: define configurable runtime modes"`.
+- [ ] Commit: `git add backend/apps/provisioning backend/education_experiment_platform/education_experiment_platform/settings/base.py .env.example; git commit -m "refactor: define configurable runtime modes"`.
 
 ### Task 2: Add Academic Terms and Unified Course Context
 
 **Files:**
-- Modify: `backend/education_experiment_platform/apps/courses/models.py`
-- Modify: `backend/education_experiment_platform/apps/courses/selectors.py`
-- Modify: `backend/education_experiment_platform/apps/courses/services.py`
-- Modify: `backend/education_experiment_platform/apps/courses/views.py`
-- Modify: `backend/education_experiment_platform/apps/courses/urls.py`
-- Create: `backend/education_experiment_platform/apps/courses/migrations/0005_academicterm_course_term.py`
-- Test: `backend/education_experiment_platform/apps/courses/tests/test_models.py`
-- Test: `backend/education_experiment_platform/apps/courses/tests/test_services.py`
-- Test: `backend/education_experiment_platform/apps/courses/tests/test_api.py`
+- Modify: `backend/apps/courses/models.py`
+- Modify: `backend/apps/courses/selectors.py`
+- Modify: `backend/apps/courses/services.py`
+- Modify: `backend/apps/courses/views.py`
+- Modify: `backend/apps/courses/urls.py`
+- Create: `backend/apps/courses/migrations/0005_academicterm_course_term.py`
+- Test: `backend/apps/courses/tests/test_models.py`
+- Test: `backend/apps/courses/tests/test_services.py`
+- Test: `backend/apps/courses/tests/test_api.py`
 
 **Interfaces:**
 - Consumes: `CourseStaff`, `Enrollment`, `Course`, and existing actor permission helpers.
@@ -78,19 +78,19 @@
 - [ ] Add `AcademicTerm` with `UPCOMING/CURRENT/CLOSED`, date constraints, a current marker, and a transitional course term migration derived from legacy teaching windows.
 - [ ] Add term-aware selectors and a compact context endpoint returning user role, current term, course id/code/title/status, and staff/enrollment role.
 - [ ] Run: `Set-Location backend; python -m pytest education_experiment_platform/apps/courses/tests/test_models.py education_experiment_platform/apps/courses/tests/test_services.py education_experiment_platform/apps/courses/tests/test_api.py -q`; expected PASS.
-- [ ] Commit: `git add backend/education_experiment_platform/apps/courses; git commit -m "feat: add academic term and course context"`.
+- [ ] Commit: `git add backend/apps/courses; git commit -m "feat: add academic term and course context"`.
 
 ### Task 3: Add Versioned Chapters and Tasks to Lab Templates
 
 **Files:**
-- Modify: `backend/education_experiment_platform/apps/labtemplates/models.py`
-- Modify: `backend/education_experiment_platform/apps/labtemplates/services.py`
-- Modify: `backend/education_experiment_platform/apps/labtemplates/serializers.py`
-- Modify: `backend/education_experiment_platform/apps/labtemplates/views.py`
-- Modify: `backend/education_experiment_platform/apps/labtemplates/urls.py`
-- Create: `backend/education_experiment_platform/apps/labtemplates/migrations/0004_template_chapter_task.py`
-- Test: `backend/education_experiment_platform/apps/labtemplates/tests/test_services.py`
-- Test: `backend/education_experiment_platform/apps/labtemplates/tests/test_api.py`
+- Modify: `backend/apps/labtemplates/models.py`
+- Modify: `backend/apps/labtemplates/services.py`
+- Modify: `backend/apps/labtemplates/serializers.py`
+- Modify: `backend/apps/labtemplates/views.py`
+- Modify: `backend/apps/labtemplates/urls.py`
+- Create: `backend/apps/labtemplates/migrations/0004_template_chapter_task.py`
+- Test: `backend/apps/labtemplates/tests/test_services.py`
+- Test: `backend/apps/labtemplates/tests/test_api.py`
 
 **Interfaces:**
 - Consumes: `TemplateVersion`, `MANAGE_TEMPLATE`, and existing compare-and-swap row versions.
@@ -102,19 +102,19 @@
 - [ ] Implement transactional CRUD and batch reorder using `compare_and_swap`; reject mixed-parent ids and edits after publication.
 - [ ] Add teacher routes and ordered nested serializers with effective resource values.
 - [ ] Run: `Set-Location backend; python -m pytest education_experiment_platform/apps/labtemplates/tests -q`; expected PASS.
-- [ ] Commit: `git add backend/education_experiment_platform/apps/labtemplates; git commit -m "feat: add versioned experiment chapters and tasks"`.
+- [ ] Commit: `git add backend/apps/labtemplates; git commit -m "feat: add versioned experiment chapters and tasks"`.
 
 ### Task 4: Normalize Resource Profiles and Reservation Semantics
 
 **Files:**
-- Modify: `backend/education_experiment_platform/apps/governance/models.py`
-- Modify: `backend/education_experiment_platform/apps/governance/services.py`
-- Modify: `backend/education_experiment_platform/apps/provisioning/models.py`
-- Modify: `backend/education_experiment_platform/apps/provisioning/services.py`
-- Create: `backend/education_experiment_platform/apps/governance/migrations/0003_resource_request_limits.py`
-- Create: `backend/education_experiment_platform/apps/provisioning/migrations/0002_reservation_binding.py`
-- Test: `backend/education_experiment_platform/apps/governance/tests/test_services.py`
-- Test: `backend/education_experiment_platform/apps/provisioning/tests/test_services.py`
+- Modify: `backend/apps/governance/models.py`
+- Modify: `backend/apps/governance/services.py`
+- Modify: `backend/apps/provisioning/models.py`
+- Modify: `backend/apps/provisioning/services.py`
+- Create: `backend/apps/governance/migrations/0003_resource_request_limits.py`
+- Create: `backend/apps/provisioning/migrations/0002_reservation_binding.py`
+- Test: `backend/apps/governance/tests/test_services.py`
+- Test: `backend/apps/provisioning/tests/test_services.py`
 
 **Interfaces:**
 - Consumes: existing `ResourceProfile`, `RuntimeAdapter` capacities, and `QuotaReservation` logic.
@@ -125,21 +125,21 @@
 - [ ] Extend `ResourceProfile` with CPU request/limit millicores and memory request/limit MB; preserve legacy fields in a data migration and add database checks.
 - [ ] Implement row-locked admission/release: lock runtime and active reservation rows, compare capacity, create/reuse one reservation, decrement once, restore once.
 - [ ] Run: `Set-Location backend; python -m pytest education_experiment_platform/apps/governance/tests education_experiment_platform/apps/provisioning/tests/test_services.py -q`; expected PASS.
-- [ ] Commit: `git add backend/education_experiment_platform/apps/governance backend/education_experiment_platform/apps/provisioning; git commit -m "feat: enforce cpu memory resource reservations"`.
+- [ ] Commit: `git add backend/apps/governance backend/apps/provisioning; git commit -m "feat: enforce cpu memory resource reservations"`.
 
 ### Task 5: Add Experiment Image Lifecycle for Build and External Reference
 
 **Files:**
-- Modify: `backend/education_experiment_platform/apps/governance/models.py`
-- Modify: `backend/education_experiment_platform/apps/labtemplates/models.py`
-- Create: `backend/education_experiment_platform/apps/labtemplates/image_services.py`
-- Modify: `backend/education_experiment_platform/apps/labtemplates/tasks.py`
-- Modify: `backend/education_experiment_platform/apps/labtemplates/serializers.py`
-- Modify: `backend/education_experiment_platform/apps/labtemplates/views.py`
-- Modify: `backend/education_experiment_platform/apps/labtemplates/urls.py`
-- Create: `backend/education_experiment_platform/apps/labtemplates/migrations/0005_experiment_image_build_job.py`
-- Test: `backend/education_experiment_platform/apps/labtemplates/tests/test_assets.py`
-- Test: `backend/education_experiment_platform/apps/labtemplates/tests/test_services.py`
+- Modify: `backend/apps/governance/models.py`
+- Modify: `backend/apps/labtemplates/models.py`
+- Create: `backend/apps/labtemplates/image_services.py`
+- Modify: `backend/apps/labtemplates/tasks.py`
+- Modify: `backend/apps/labtemplates/serializers.py`
+- Modify: `backend/apps/labtemplates/views.py`
+- Modify: `backend/apps/labtemplates/urls.py`
+- Create: `backend/apps/labtemplates/migrations/0005_experiment_image_build_job.py`
+- Test: `backend/apps/labtemplates/tests/test_assets.py`
+- Test: `backend/apps/labtemplates/tests/test_services.py`
 
 **Interfaces:**
 - Consumes: `ImageAsset`, runtime adapter image methods, object assets for build context, and template versions.
@@ -151,18 +151,18 @@
 - [ ] Implement one Celery preparation task: branch by source, build or resolve, persist digest, update scan state, validate, and mask build args/logs.
 - [ ] Add teacher image create/prepare/detail/events/retire routes.
 - [ ] Run: `Set-Location backend; python -m pytest education_experiment_platform/apps/labtemplates/tests -q`; expected PASS.
-- [ ] Commit: `git add backend/education_experiment_platform/apps/governance backend/education_experiment_platform/apps/labtemplates; git commit -m "feat: add experiment image preparation lifecycle"`.
+- [ ] Commit: `git add backend/apps/governance backend/apps/labtemplates; git commit -m "feat: add experiment image preparation lifecycle"`.
 
 ### Task 6: Freeze Publication Chapters, Tasks, Image Digest, and Resources
 
 **Files:**
-- Modify: `backend/education_experiment_platform/apps/experiments/models.py`
-- Modify: `backend/education_experiment_platform/apps/experiments/services.py`
-- Modify: `backend/education_experiment_platform/apps/experiments/serializers.py`
-- Modify: `backend/education_experiment_platform/apps/experiments/views.py`
-- Create: `backend/education_experiment_platform/apps/experiments/migrations/0003_publication_chapter_task_snapshot.py`
-- Test: `backend/education_experiment_platform/apps/experiments/tests/test_services.py`
-- Test: `backend/education_experiment_platform/apps/experiments/tests/test_api.py`
+- Modify: `backend/apps/experiments/models.py`
+- Modify: `backend/apps/experiments/services.py`
+- Modify: `backend/apps/experiments/serializers.py`
+- Modify: `backend/apps/experiments/views.py`
+- Create: `backend/apps/experiments/migrations/0003_publication_chapter_task_snapshot.py`
+- Test: `backend/apps/experiments/tests/test_services.py`
+- Test: `backend/apps/experiments/tests/test_api.py`
 
 **Interfaces:**
 - Consumes: versioned chapter/task models, READY experiment images, resource validation, and existing `TaskPublication` workflow.
@@ -173,21 +173,21 @@
 - [ ] Add publication chapter/task rows with source ids, digest, resource snapshot, execution snapshot, and immutable constraints.
 - [ ] Lock the version, copy ordered content atomically, compute publication/template digest, then preserve audience freeze/idempotency.
 - [ ] Run: `Set-Location backend; python -m pytest education_experiment_platform/apps/experiments/tests -q`; expected PASS.
-- [ ] Commit: `git add backend/education_experiment_platform/apps/experiments; git commit -m "feat: freeze experiment publication snapshots"`.
+- [ ] Commit: `git add backend/apps/experiments; git commit -m "feat: freeze experiment publication snapshots"`.
 
 ### Task 7: Make Student Runtime Provisioning Digest-Only and Resource-Aware
 
 **Files:**
-- Modify: `backend/education_experiment_platform/apps/experiments/services.py`
-- Modify: `backend/education_experiment_platform/apps/experiments/views.py`
-- Modify: `backend/education_experiment_platform/apps/provisioning/ports.py`
-- Modify: `backend/education_experiment_platform/apps/provisioning/services.py`
-- Modify: `backend/education_experiment_platform/apps/provisioning/tasks.py`
-- Modify: `backend/education_experiment_platform/apps/provisioning/models.py`
-- Modify: `backend/education_experiment_platform/apps/workspaces/services.py`
-- Test: `backend/education_experiment_platform/apps/experiments/tests/test_services.py`
-- Test: `backend/education_experiment_platform/apps/provisioning/tests/test_services.py`
-- Test: `backend/education_experiment_platform/apps/workspaces/tests/test_services.py`
+- Modify: `backend/apps/experiments/services.py`
+- Modify: `backend/apps/experiments/views.py`
+- Modify: `backend/apps/provisioning/ports.py`
+- Modify: `backend/apps/provisioning/services.py`
+- Modify: `backend/apps/provisioning/tasks.py`
+- Modify: `backend/apps/provisioning/models.py`
+- Modify: `backend/apps/workspaces/services.py`
+- Test: `backend/apps/experiments/tests/test_services.py`
+- Test: `backend/apps/provisioning/tests/test_services.py`
+- Test: `backend/apps/workspaces/tests/test_services.py`
 
 **Interfaces:**
 - Consumes: publication task snapshot, resource admission, existing `RuntimeSpec`, and workspace session creation.
@@ -198,17 +198,17 @@
 - [ ] Construct `RuntimeSpec` only from publication fields; reject image, registry, digest, CPU, memory, and adapter in student payload; preserve task transition events.
 - [ ] On adapter failure mark job/instance/task failed and release capacity; on success persist external id and create `WorkspaceSession`; reconcile adapter success/database failure via managed labels.
 - [ ] Run: `Set-Location backend; python -m pytest education_experiment_platform/apps/experiments/tests education_experiment_platform/apps/provisioning/tests education_experiment_platform/apps/workspaces/tests -q`; expected PASS.
-- [ ] Commit: `git add backend/education_experiment_platform/apps/experiments backend/education_experiment_platform/apps/provisioning backend/education_experiment_platform/apps/workspaces; git commit -m "feat: provision student runtimes from published digests"`.
+- [ ] Commit: `git add backend/apps/experiments backend/apps/provisioning backend/apps/workspaces; git commit -m "feat: provision student runtimes from published digests"`.
 
 ### Task 8: Implement Real Local Docker Adapter Behind the Existing Contract
 
 **Files:**
-- Modify: `backend/education_experiment_platform/apps/provisioning/adapters.py`
-- Modify: `backend/education_experiment_platform/apps/provisioning/ports.py`
-- Modify: `backend/education_experiment_platform/apps/provisioning/services.py`
+- Modify: `backend/apps/provisioning/adapters.py`
+- Modify: `backend/apps/provisioning/ports.py`
+- Modify: `backend/apps/provisioning/services.py`
 - Modify: `backend/requirements/base.in`
 - Modify: `backend/requirements/base.txt`
-- Create: `backend/education_experiment_platform/apps/provisioning/tests/test_local_adapter.py`
+- Create: `backend/apps/provisioning/tests/test_local_adapter.py`
 
 **Interfaces:**
 - Consumes: existing adapter contract and normalized `RuntimeSpec`.
@@ -218,7 +218,7 @@
 - [ ] Run: `Set-Location backend; python -m pytest education_experiment_platform/apps/provisioning/tests/test_local_adapter.py -q`; expected failure because local implementation is a protocol stub.
 - [ ] Implement a small Docker client boundary using create/start, inspect, stop, remove, and labels; keep SDK imports out of views and use immutable image references.
 - [ ] Run: `Set-Location backend; python -m pytest education_experiment_platform/apps/provisioning/tests -q`; expected PASS without Docker daemon in CI.
-- [ ] Commit: `git add backend/education_experiment_platform/apps/provisioning backend/requirements; git commit -m "feat: add real local docker runtime adapter"`.
+- [ ] Commit: `git add backend/apps/provisioning backend/requirements; git commit -m "feat: add real local docker runtime adapter"`.
 
 ### Task 9: Wire Local Compose and Swarm Deployment Configuration
 
@@ -245,15 +245,15 @@
 ### Task 10: Add Legacy Conversion, Dual Read/Write, and Migration Commands
 
 **Files:**
-- Create: `backend/education_experiment_platform/apps/labtemplates/migrations/0006_legacy_template_content.py`
-- Create: `backend/education_experiment_platform/apps/labtemplates/management/commands/migrate_experiment_templates.py`
-- Create: `backend/education_experiment_platform/apps/labtemplates/management/commands/revalidate_experiment_images.py`
-- Create: `backend/education_experiment_platform/apps/labtemplates/legacy.py`
-- Modify: `backend/education_experiment_platform/apps/labtemplates/selectors.py`
-- Modify: `backend/education_experiment_platform/apps/experiments/selectors.py`
-- Test: `backend/education_experiment_platform/apps/labtemplates/tests/test_migrations.py`
-- Test: `backend/education_experiment_platform/apps/labtemplates/tests/test_services.py`
-- Test: `backend/education_experiment_platform/apps/experiments/tests/test_api.py`
+- Create: `backend/apps/labtemplates/migrations/0006_legacy_template_content.py`
+- Create: `backend/apps/labtemplates/management/commands/migrate_experiment_templates.py`
+- Create: `backend/apps/labtemplates/management/commands/revalidate_experiment_images.py`
+- Create: `backend/apps/labtemplates/legacy.py`
+- Modify: `backend/apps/labtemplates/selectors.py`
+- Modify: `backend/apps/experiments/selectors.py`
+- Test: `backend/apps/labtemplates/tests/test_migrations.py`
+- Test: `backend/apps/labtemplates/tests/test_services.py`
+- Test: `backend/apps/experiments/tests/test_api.py`
 
 **Interfaces:**
 - Consumes: new models/services from Tasks 2–7 and legacy `TemplateVersion` data.
@@ -264,16 +264,16 @@
 - [ ] Implement a source/target migration record keyed by legacy public id, bounded batches, `--dry-run`, migrated/skipped/failed counts, default tree creation only when absent, and `MIGRATION_REQUIRED` for unresolved images.
 - [ ] Implement new-first selectors and legacy fallback assembly; route legacy writes through new services and synchronize old fields only during the compatibility window.
 - [ ] Run the migration and API tests; expected PASS.
-- [ ] Commit: `git add backend/education_experiment_platform/apps/labtemplates backend/education_experiment_platform/apps/experiments; git commit -m "feat: add legacy experiment template migration"`.
+- [ ] Commit: `git add backend/apps/labtemplates backend/apps/experiments; git commit -m "feat: add legacy experiment template migration"`.
 
 ### Task 11: Add End-to-End Runtime Matrix and Reconciliation Checks
 
 **Files:**
-- Create: `backend/education_experiment_platform/apps/provisioning/management/commands/reconcile_runtime_resources.py`
-- Modify: `backend/education_experiment_platform/apps/provisioning/tasks.py`
-- Create: `backend/education_experiment_platform/apps/provisioning/tests/test_runtime_matrix.py`
-- Modify: `backend/education_experiment_platform/apps/experiments/tests/test_api.py`
-- Modify: `backend/education_experiment_platform/apps/courses/tests/test_api.py`
+- Create: `backend/apps/provisioning/management/commands/reconcile_runtime_resources.py`
+- Modify: `backend/apps/provisioning/tasks.py`
+- Create: `backend/apps/provisioning/tests/test_runtime_matrix.py`
+- Modify: `backend/apps/experiments/tests/test_api.py`
+- Modify: `backend/apps/courses/tests/test_api.py`
 - Modify: `backend/education_experiment_platform/education_experiment_platform/tests/test_infrastructure_contract.py`
 
 **Interfaces:**
@@ -285,7 +285,7 @@
 - [ ] Implement reconciliation by managed labels: repair uniquely mapped external ids, mark unknown resources `ORPHANED`, release only reservations attached to terminal instances, report-only by default with `--apply` for cleanup.
 - [ ] Run: `Set-Location backend/education_experiment_platform; $env:DJANGO_SETTINGS_MODULE='education_experiment_platform.settings.test'; python manage.py check; python manage.py makemigrations --check --dry-run; python -m pytest`; expected checks pass and full tests pass.
 - [ ] Run: `Set-Location backend; python -m ruff check education_experiment_platform; python -m mypy education_experiment_platform`; expected no new errors.
-- [ ] Commit: `git add backend/education_experiment_platform/apps/provisioning backend/education_experiment_platform/apps/experiments backend/education_experiment_platform/apps/courses; git commit -m "test: verify experiment runtime migration flow"`.
+- [ ] Commit: `git add backend/apps/provisioning backend/apps/experiments backend/apps/courses; git commit -m "test: verify experiment runtime migration flow"`.
 
 ## Verification and Release Gates
 

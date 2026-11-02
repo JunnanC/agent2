@@ -1,2 +1,0 @@
-ID                            HOSTNAME         STATUS    AVAILABILITY   MANAGER STATUS   ENGINE VERSION
-5gpncbb2yfn79gds7ihj1knab *   docker-desktop   Ready     Active         Leader           28.5.1
