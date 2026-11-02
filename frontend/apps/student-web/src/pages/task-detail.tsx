@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { taskApi } from "@edu/api-client";
+import { reportApi, taskApi } from "@edu/api-client";
 import type { Task, WorkspaceSession } from "@edu/api-client";
 import { keys } from "@edu/query-keys";
 import { AsyncJobProgress, Button, ErrorState, Modal, Panel, RequestStateView, StatusBadge, useToast } from "@edu/ui";
@@ -31,7 +31,15 @@ export function TaskDetail() {
   const [provisionOpen, setProvisionOpen] = useState(false);
   const autoEnteredRef = useRef(false);
 
-  const task = useQuery({ queryKey: keys.task(taskId), queryFn: () => taskApi.detail(taskId) });
+  const task = useQuery({
+    queryKey: keys.task(taskId), queryFn: () => taskApi.detail(taskId),
+    refetchInterval: (query) => query.state.data?.status === "PROVISIONING" ? 2000 : false,
+  });
+  const hasReview = ["UNDER_REVIEW", "APPROVED", "REJECTED", "ARCHIVING", "DESTROYING", "COMPLETED"].includes(task.data?.status ?? "");
+  const reviewResult = useQuery({
+    queryKey: keys.reviewResult(taskId), queryFn: () => reportApi.reviewResult(taskId), enabled: hasReview,
+  });
+  const reviewedRound = reviewResult.data?.rounds.find(round => round.decision);
   const provisioning = useQuery({
     queryKey: keys.provisioningJob(taskId),
     queryFn: () => taskApi.provisioningJob(taskId),
@@ -138,7 +146,7 @@ export function TaskDetail() {
     if (!provisionOpen) return;
     const taskStatus = task.data?.status ?? "";
     const jobStatus = String((provisioning.data as Record<string, unknown> | null)?.["status"] ?? "");
-    if (taskStatus !== "PROVISIONING" && ["SUCCEEDED", "PASSED", "COMPLETED"].includes(jobStatus)) {
+    if (taskStatus === "PROVISIONING" && ["SUCCEEDED", "PASSED", "COMPLETED"].includes(jobStatus) && !task.isFetching) {
       void task.refetch();
     }
     if (taskStatus === "READY" && !autoEnteredRef.current) {
@@ -285,6 +293,31 @@ export function TaskDetail() {
           </div>
         </Panel>
       </div>
+
+      {hasReview ? (
+        <Panel className="section" title={<h2>评审结果</h2>}>
+          <RequestStateView loading={reviewResult.isLoading} error={reviewResult.error}
+            onRetry={() => void reviewResult.refetch()} empty={!reviewedRound}
+            emptyState={<p className="subtle">教师正在评审，评分与批注将在评审完成后显示。</p>}>
+            <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+              <StatusBadge tone={reviewedRound?.decision?.decision === "APPROVE" ? "good" : "warn"}>
+                {reviewedRound?.decision?.decision === "APPROVE" ? "评审通过" : "退回修改"}
+              </StatusBadge>
+              <strong>{reviewedRound?.decision?.score} 分</strong>
+            </div>
+            <dl>
+              {reviewedRound?.scores?.criteria.map(criterion => (
+                <div key={criterion.public_id} style={{ display: "flex", gap: 16, marginTop: 8 }}>
+                  <dt>{criterion.title}</dt><dd style={{ margin: 0 }}>{criterion.score} / {criterion.max_score}</dd>
+                </div>
+              ))}
+            </dl>
+            {reviewedRound?.decision?.feedback ? <p>{reviewedRound.decision.feedback}</p> : null}
+            {reviewedRound?.annotations.length ? <h3>教师批注</h3> : null}
+            {reviewedRound?.annotations.map(annotation => <p key={annotation.public_id}>{annotation.body}</p>)}
+          </RequestStateView>
+        </Panel>
+      ) : null}
 
       <Modal open={extensionOpen} onClose={() => setExtensionOpen(false)} eyebrow="申请延期"
         title="申请任务延期"

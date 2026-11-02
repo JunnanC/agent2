@@ -13,11 +13,13 @@ export function Courses() {
   const [title, setTitle] = useState("");
   const [code, setCode] = useState("");
   const [summary, setSummary] = useState("");
+  const [visibility, setVisibility] = useState<"PUBLIC" | "UNLISTED">("UNLISTED");
+  const [enrollmentMode, setEnrollmentMode] = useState<"OPEN" | "APPROVAL">("APPROVAL");
 
   const courses = useQuery({ queryKey: keys.teachingCourses({}), queryFn: () => teachingApi.courses({ page_size: 50 }) });
 
   const create = useMutation({
-    mutationFn: () => teachingApi.createCourse({ title: title.trim(), code: code.trim(), summary: summary.trim() }),
+    mutationFn: () => teachingApi.createCourse({ title: title.trim(), code: code.trim(), summary: summary.trim(), visibility, enrollment_mode: enrollmentMode }),
     onSuccess: (course) => {
       toast.notify(`课程「${course.title}」已创建`);
       setCreateOpen(false);
@@ -89,6 +91,14 @@ export function Courses() {
         <input id="c-code" className="field" value={code} onChange={(event) => setCode(event.target.value)} placeholder="如 CS-NET-2026" />
         <label className="form-label" htmlFor="c-summary">课程简介 <span>选填</span></label>
         <textarea id="c-summary" className="field" rows={3} value={summary} onChange={(event) => setSummary(event.target.value)} />
+        <label className="form-label" htmlFor="c-visibility">课程可见性</label>
+        <select id="c-visibility" className="field" value={visibility} onChange={(event) => setVisibility(event.target.value as typeof visibility)}>
+          <option value="UNLISTED">不公开展示</option><option value="PUBLIC">公开展示</option>
+        </select>
+        <label className="form-label" htmlFor="c-enrollment">选课方式</label>
+        <select id="c-enrollment" className="field" value={enrollmentMode} onChange={(event) => setEnrollmentMode(event.target.value as typeof enrollmentMode)}>
+          <option value="APPROVAL">需要审核</option><option value="OPEN">直接加入</option>
+        </select>
       </Modal>
     </>
   );

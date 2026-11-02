@@ -72,11 +72,11 @@ export function Publishing() {
     refetchInterval: (query) => {
       const data = query.state.data as { rows?: Array<{ status?: string }> };
       const status = data?.rows?.[0]?.status;
-      return ["SUBMITTED", "RUNNING"].includes(String(status ?? "")) ? 4000 : false;
+      return ["QUEUED", "RUNNING", "RETRY"].includes(String(status ?? "")) ? 4000 : false;
     },
   });
   const latestPrecheck = precheckRuns.data?.rows?.[0];
-  const precheckStages = (latestPrecheck?.stages ?? []) as PrecheckStage[];
+  const precheckStages: PrecheckStage[] = (latestPrecheck?.stage_results ?? []).map((stage) => ({ message: stage.stage, status: stage.result === "PASSED" ? "SUCCEEDED" : stage.result }));
   const precheckPassed = precheckStages.filter((stage) => stage.status === "SUCCEEDED").length;
   const precheckTotal = precheckStages.length;
 
@@ -243,7 +243,7 @@ export function Publishing() {
       <div className="grid three section">
         <Panel title={<><h2>预检状态</h2>
           {latestPrecheck ? (
-            <StatusBadge tone={latestPrecheck.status === "SUCCEEDED" ? "good"
+            <StatusBadge tone={latestPrecheck.status === "PASSED" ? "good"
               : latestPrecheck.status === "FAILED" ? "bad" : "blue"}>
               {precheckTotal > 0 ? `${precheckPassed} / ${precheckTotal} 通过` : "预检进行中"}
             </StatusBadge>
@@ -326,7 +326,7 @@ export function Publishing() {
           <label className="form-label" htmlFor="pub-title">发布标题 <span>必填</span></label>
           <input id="pub-title" className="field" value={createForm.title}
             onChange={(event) => setCreateForm((prev) => ({ ...prev, title: event.target.value }))}
-            placeholder="例如 P05 容器实验" />
+            placeholder="例如 Python 容器实验" />
           <label className="form-label" htmlFor="pub-desc">说明</label>
           <textarea id="pub-desc" className="field" rows={2} value={createForm.description}
             onChange={(event) => setCreateForm((prev) => ({ ...prev, description: event.target.value }))} />

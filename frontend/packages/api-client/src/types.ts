@@ -165,14 +165,23 @@ export interface WorkspaceSession {
   row_version: string;
 }
 
+export interface WorkspaceStorageJob {
+  public_id: string;
+  status: "QUEUED" | "RUNNING" | "PASSED" | "FAILED" | "CANCELLED";
+  result_snapshot_id: string | null;
+  failure?: { code: string; message: string } | null;
+}
+
 export interface Checkpoint {
   public_id: string;
   task_id: string;
   session_id?: string;
   version_no?: number;
   label?: string;
+  name?: string;
   digest_sha256?: string;
   saved_at?: Iso8601;
+  created_at?: Iso8601;
   row_version?: string;
 }
 
@@ -216,6 +225,20 @@ export interface ReportDraft {
   attachments: ReportAttachment[];
   row_version: string;
   updated_at?: Iso8601;
+}
+
+export interface ReviewResult {
+  task_id: string;
+  task_status: string;
+  score: number | null;
+  rounds: Array<{
+    review_id: string;
+    round_no: number;
+    status: string;
+    scores: { criteria: Array<{ public_id: string; title: string; score: number | null; max_score: number }> } | null;
+    annotations: Array<{ public_id: string; body: string }>;
+    decision: { decision: "APPROVE" | "REJECT"; score: number; feedback: string; created_at: Iso8601 } | null;
+  }>;
 }
 
 export interface ReviewSummary {
@@ -310,8 +333,8 @@ export interface TemplateTask {
 export interface PrecheckRun {
   public_id: string;
   template_version_id: string;
-  status: "SUBMITTED" | "RUNNING" | "SUCCEEDED" | "FAILED";
-  stages?: Array<{ key?: string; name: string; status: string; message?: string; error_code?: string }>;
+  status: "QUEUED" | "RUNNING" | "RETRY" | "PASSED" | "FAILED";
+  stage_results?: Array<{ stage: string; result: string; at?: Iso8601 }>;
   created_at?: Iso8601;
   finished_at?: Iso8601 | null;
   trace_id?: string;

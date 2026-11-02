@@ -5,9 +5,9 @@ import type {
   Enrollment, ExecutionRun, ImageCreateInput, ImageScanReportInput, ImportJob, Instance as InstanceData, Invitation, Material, Me,
   ModelRoute, NotificationItem, OperationLog, OperationsOverview, PlatformImage, PlatformUser,
   PortalContext, PrecheckRun, Publication, Quota, ReportDraft, ResourceProfile, ReviewDetail,
-  ReviewSummary, Rubric, RuntimeAdapter, StudentDashboard, Task, TeachingCourseList, Template,
+  ReviewResult, ReviewSummary, Rubric, RuntimeAdapter, StudentDashboard, Task, TeachingCourseList, Template,
   TemplateChapter, TemplateTask, ToolPolicy, TemplateVersion, UsageCost, Verification,
-  WorkspaceSession,
+  WorkspaceSession, WorkspaceStorageJob,
 } from "./types";
 
 export * from "./types";
@@ -109,6 +109,7 @@ function normalizeWorkbenchAggregate(data: WorkbenchAggregate | undefined | null
     task: data.task ? normalizeTask(data.task) : (data.task as never),
     chapters,
     tests: testsList,
+    tests_available: (rawTests as { runnable?: boolean } | null)?.runnable ?? Boolean(testsList?.length),
     template_caps: templateCaps,
   };
 }
@@ -266,9 +267,22 @@ export interface WorkbenchAggregate {
   content?: { description?: string | null; steps?: Array<Record<string, unknown>> } | null;
   current_chapter?: { public_id: string; title: string; instructions?: string[] } | null;
   tests?: Array<{ key?: string; name: string; description?: string }>;
+  tests_available?: boolean;
   capabilities?: string[];
   /** 模板锁定的工作区能力声明(布尔开关,后端 template.workspace_capabilities) */
   template_caps?: Record<string, boolean> | null;
+}
+
+async function waitForStorageJob(job: WorkspaceStorageJob): Promise<WorkspaceStorageJob> {
+  for (let attempt = 0; attempt < 60; attempt++) {
+    if (job.status === "PASSED" && job.result_snapshot_id) return job;
+    if (job.status === "FAILED" || job.status === "CANCELLED") {
+      throw new Error(job.failure?.message || "工作区快照保存失败，请重试");
+    }
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    job = await request<WorkspaceStorageJob>(`/workspace-storage-jobs/${job.public_id}`).then(r => r.data);
+  }
+  throw new Error("工作区快照仍在处理中，请稍后重试");
 }
 
 export const workspaceApi = {
@@ -305,6 +319,19 @@ export const workspaceApi = {
       headers: workspaceToken ? { "X-Workspace-Token": workspaceToken } : undefined,
     }).then((r) => r.data),
 
+  captureSnapshot: async (taskId: string, workspaceToken: string) => {
+    const state = await workspaceApi.checkpoints(taskId, workspaceToken);
+    const job = await request<WorkspaceStorageJob>(`/tasks/${taskId}/workspace-storage-jobs`, {
+      method: "POST",
+      // Failed captures keep their sequence, so a new attempt needs a fresh one.
+      body: { kind: "CAPTURE", client_seq: Date.now(), base_version: state.currentVersion },
+      ifMatch: state.sessionRowVersion,
+      idempotencyKey: newIdempotencyKey(),
+      headers: { "X-Workspace-Token": workspaceToken },
+    }).then(r => r.data);
+    return waitForStorageJob(job);
+  },
+
   checkpoints: (taskId: string, workspaceToken?: string) =>
     request<{ items?: unknown[]; current_version?: number; row_version?: number }>(
       `/tasks/${taskId}/checkpoints`,
@@ -327,13 +354,13 @@ export const workspaceApi = {
     }).then((r) => r.data),
 
   restoreCheckpoint: (taskId: string, checkpointId: string, ifMatch?: string | number | null, workspaceToken?: string, reuseKey?: string) =>
-    request(`/tasks/${taskId}/checkpoints/${checkpointId}/restore`, {
+    request<WorkspaceStorageJob | Record<string, unknown>>(`/tasks/${taskId}/checkpoints/${checkpointId}/restore`, {
       method: "POST",
       body: {},
       idempotencyKey: reuseKey ?? newIdempotencyKey(),
       ifMatch,
       headers: workspaceToken ? { "X-Workspace-Token": workspaceToken } : undefined,
-    }).then((r) => r.data),
+    }).then(async (r) => "status" in r.data ? await waitForStorageJob(r.data as WorkspaceStorageJob) : r.data),
 
   executionRuns: (taskId: string, query?: { page?: number; page_size?: number }, workspaceToken?: string) =>
     request<ExecutionRun[]>(`/tasks/${taskId}/execution-runs`, {
@@ -359,9 +386,9 @@ export const workspaceApi = {
       headers: workspaceToken ? { "X-Workspace-Token": workspaceToken } : undefined,
     }).then((r) => r.data),
 
-  stopRuntime: (runtimeId: string, reuseKey?: string) =>
+  stopRuntime: (runtimeId: string, ifMatch: string | number, reuseKey?: string) =>
     request(`/student/task-runtimes/${runtimeId}/stop`, {
-      method: "POST", body: {}, idempotencyKey: reuseKey ?? newIdempotencyKey(),
+      method: "POST", body: {}, ifMatch, idempotencyKey: reuseKey ?? newIdempotencyKey(),
     }).then((r) => r.data),
 };
 
@@ -397,7 +424,10 @@ export const reportApi = {
     }).then((r) => r.data),
 
   reviewResult: (taskId: string) =>
-    request<Record<string, unknown>>(`/tasks/${taskId}/review-result`).then((r) => r.data),
+    request<Omit<ReviewResult, "score">>(`/tasks/${taskId}/review-result`).then(({ data }) => ({
+      ...data,
+      score: data.rounds.find(round => round.decision)?.decision?.score ?? null,
+    })),
 };
 
 /* ══════════ 教师端 ══════════ */
@@ -593,7 +623,7 @@ export const teachingApi = {
     ifMatch: string | number | null,
     reuseKey?: string,
   ) =>
-    request<unknown>(`/teaching/courses/${courseId}/template-versions/${versionId}/execution-spec`, {
+    request<TemplateVersion>(`/teaching/courses/${courseId}/template-versions/${versionId}/execution-spec`, {
       method: "POST", body: payload, idempotencyKey: reuseKey ?? newIdempotencyKey(), ifMatch,
     }).then((r) => r.data),
 
@@ -657,7 +687,7 @@ export const teachingApi = {
 
   // 学生过程
   progress: (courseId: string, query?: { page?: number; page_size?: number; section?: string }) =>
-    request<Partial<Task>[]>(`/teaching/courses/${courseId}/progress`, { query }).then(taskListEnvelope),
+    request<Partial<Task>[]>(`/teaching/courses/${courseId}/tasks`, { query }).then(taskListEnvelope),
 
   studentTaskWorkspace: (courseId: string, taskId: string) =>
     request<Record<string, unknown>>(`/teaching/courses/${courseId}/tasks/${taskId}/workspace`).then((r) => r.data),
@@ -862,7 +892,7 @@ export const platformApi = {
     request<OperationsOverview>("/platform/operations/overview").then((r) => r.data),
 
   operationLogs: (query?: { page?: number; page_size?: number; search?: string; trace_id?: string }) =>
-    request<OperationLog[]>("/platform/operations/logs", { query }).then(toList),
+    request<OperationLog[]>("/platform/operations/audit", { query }).then(toList),
 
   agentModelRoutes: () =>
     request<ModelRoute[]>("/platform/agent/model-routes").then(toList),
