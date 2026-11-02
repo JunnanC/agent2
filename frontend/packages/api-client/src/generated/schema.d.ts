@@ -631,6 +631,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v2/me/learning-history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["me_learning_history"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v2/me/oidc-identities": {
         parameters: {
             query?: never;
@@ -673,6 +689,86 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["api_v2_me_password_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/me/timetable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["api_v2_me_timetable_retrieve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/me/timetable-imports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["api_v2_me_timetable_imports_retrieve"];
+        put?: never;
+        post: operations["api_v2_me_timetable_imports_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/me/timetable-imports/{job_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["student_timetable_import_retrieve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/me/timetable-imports/{job_id}/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["student_timetable_import_confirm"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/me/timetable-imports/{job_id}/mapping": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["student_timetable_import_mapping_update"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -773,6 +869,54 @@ export interface paths {
         options?: never;
         head?: never;
         patch: operations["api_v2_platform_admin_assignments_partial_update"];
+        trace?: never;
+    };
+    "/api/v2/platform/administrative-classes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["api_v2_platform_administrative_classes_retrieve"];
+        put?: never;
+        post: operations["api_v2_platform_administrative_classes_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/platform/administrative-classes/{class_id}/members": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["api_v2_platform_administrative_classes_members_retrieve"];
+        put?: never;
+        post: operations["api_v2_platform_administrative_classes_members_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/platform/administrative-classes/{class_id}/members/{student_id}/end": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["platform_administrative_class_member_end"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v2/platform/agent/eval-runs": {
@@ -1474,6 +1618,22 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["platform_network_allowlists_revoke"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/platform/operations/audit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["api_v2_platform_operations_audit_retrieve"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -2744,6 +2904,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v2/teaching/courses/{course_id}/ai-score-batches": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["api_v2_teaching_courses_ai_score_batches_retrieve"];
+        put?: never;
+        post: operations["api_v2_teaching_courses_ai_score_batches_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/teaching/courses/{course_id}/ai-score-batches/{batch_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["teaching_ai_score_batch_retrieve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/teaching/courses/{course_id}/ai-score-batches/{batch_id}/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["teaching_ai_score_batch_accept"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v2/teaching/courses/{course_id}/analytics/overview": {
         parameters: {
             query?: never;
@@ -3544,6 +3752,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v2/teaching/courses/{course_id}/reviews/{review_id}/ai-score-suggestions/{suggestion_id}/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["teaching_ai_score_suggestion_accept"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v2/teaching/courses/{course_id}/reviews/{review_id}/annotations": {
         parameters: {
             query?: never;
@@ -3794,6 +4018,22 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["api_v2_teaching_courses_staff_revoke_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/teaching/courses/{course_id}/tasks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["teaching_experiment_tasks_list_2"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -4184,6 +4424,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v2/teaching/courses/{course_id}/timetable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["api_v2_teaching_courses_timetable_retrieve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v2/teaching/courses/{course_id}/transfer-owner": {
         parameters: {
             query?: never;
@@ -4194,6 +4450,70 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["api_v2_teaching_courses_transfer_owner_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/teaching/timetable-imports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["api_v2_teaching_timetable_imports_retrieve"];
+        put?: never;
+        post: operations["api_v2_teaching_timetable_imports_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/teaching/timetable-imports/{job_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["teaching_timetable_import_retrieve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/teaching/timetable-imports/{job_id}/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["teaching_timetable_import_confirm"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/teaching/timetable-imports/{job_id}/mapping": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["teaching_timetable_import_mapping_update"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -4268,6 +4588,93 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        AIScoreBatchData: {
+            public_id: string;
+            course_id: string;
+            publication_id: string;
+            publication_title: string;
+            created_by: string;
+            status: components["schemas"]["AIScoreBatchDataStatusEnum"];
+            entry_count: number;
+            counts: {
+                [key: string]: number;
+            };
+            row_version: number;
+        };
+        AIScoreBatchDataResponse: {
+            data: components["schemas"]["AIScoreBatchData"];
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        /**
+         * @description * `QUEUED` - Queued
+         *     * `RUNNING` - Running
+         *     * `REVIEW_REQUIRED` - Review Required
+         *     * `COMPLETED` - Completed
+         *     * `COMPLETED_WITH_ERRORS` - Completed With Errors
+         *     * `FAILED` - Failed
+         * @enum {string}
+         */
+        AIScoreBatchDataStatusEnum: "QUEUED" | "RUNNING" | "REVIEW_REQUIRED" | "COMPLETED" | "COMPLETED_WITH_ERRORS" | "FAILED";
+        AIScoreBatchDetailData: {
+            batch: components["schemas"]["AIScoreBatchData"];
+            suggestions: components["schemas"]["AIScoreSuggestionData"][];
+            page: number;
+            page_size: number;
+            total: number;
+        };
+        AIScoreBatchDetailResponse: {
+            data: components["schemas"]["AIScoreBatchDetailData"];
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        AIScoreBatchResponse: {
+            data: {
+                [key: string]: unknown;
+            };
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        AIScoreBatchWrite: {
+            publication_id: string;
+        };
+        AIScoreSuggestionData: {
+            public_id: string;
+            review_id: string;
+            student_id: string;
+            student_name: string;
+            status: components["schemas"]["AIScoreSuggestionDataStatusEnum"];
+            review_row_version: number;
+            criteria: {
+                [key: string]: unknown;
+            }[];
+            /** Format: decimal */
+            total_score: string | null;
+            model_name: string;
+            error_code: string;
+            accepted_by: string | null;
+            /** Format: date-time */
+            accepted_at: string | null;
+            row_version: number;
+        };
+        /**
+         * @description * `QUEUED` - Queued
+         *     * `RUNNING` - Running
+         *     * `READY` - Ready
+         *     * `ACCEPTED` - Accepted
+         *     * `FAILED` - Failed
+         * @enum {string}
+         */
+        AIScoreSuggestionDataStatusEnum: "QUEUED" | "RUNNING" | "READY" | "ACCEPTED" | "FAILED";
+        AIScoreSuggestionResponse: {
+            data: components["schemas"]["AIScoreSuggestionData"];
+            meta: {
+                [key: string]: unknown;
+            };
+        };
         APIClient: {
             name: string;
             scopes?: string[];
@@ -4345,6 +4752,15 @@ export interface components {
          * @enum {string}
          */
         AdminAssignmentUpdateStatusEnum: "REVOKED";
+        AdministrativeClassMemberWrite: {
+            student_id: string;
+        };
+        AdministrativeClassWrite: {
+            code: string;
+            name: string;
+            department?: string;
+            year_of_entry?: number;
+        };
         AgentEnvelope: {
             data: unknown;
             meta: components["schemas"]["AgentResponseMeta"];
@@ -5007,13 +5423,11 @@ export interface components {
                 [key: string]: unknown;
             };
         };
-        /**
-         * @description Write contract for the student REST create-execution-run endpoint.
+        /** @description Write contract for the student REST create-execution-run endpoint.
          *
          *     v1 evaluates the whole test asset for every run; ``test_keys`` and
          *     ``snapshot_id`` are accepted for API compatibility, and ``snapshot_id``
-         *     is forwarded to the execution service as the evaluated snapshot.
-         */
+         *     is forwarded to the execution service as the evaluated snapshot. */
         ExecutionRunCreate: {
             snapshot_id?: string;
             test_keys?: string[];
@@ -5167,6 +5581,12 @@ export interface components {
                 [key: string]: unknown;
             };
             meta: {
+                [key: string]: unknown;
+            };
+        };
+        GenericTimetableResponse: {
+            data: unknown;
+            meta?: {
                 [key: string]: unknown;
             };
         };
@@ -6972,6 +7392,16 @@ export interface components {
             category?: string;
             description?: string;
         };
+        TimetableMapping: {
+            mapping: {
+                [key: string]: string;
+            };
+        };
+        TimetableUpload: {
+            /** Format: uri */
+            file: string;
+            term_id?: string;
+        };
         Token: {
             client_id: string;
             client_secret: string;
@@ -7220,6 +7650,7 @@ export interface components {
         WorkbenchTests: {
             public_count: number;
             count: number;
+            runnable: boolean;
             summary: {
                 [key: string]: unknown;
             }[];
@@ -8333,6 +8764,25 @@ export interface operations {
             };
         };
     };
+    me_learning_history: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GenericResponse"];
+                };
+            };
+        };
+    };
     api_v2_me_oidc_identities_retrieve: {
         parameters: {
             query?: never;
@@ -8436,6 +8886,138 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MeResponse"];
+                };
+            };
+        };
+    };
+    api_v2_me_timetable_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GenericTimetableResponse"];
+                };
+            };
+        };
+    };
+    api_v2_me_timetable_imports_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GenericTimetableResponse"];
+                };
+            };
+        };
+    };
+    api_v2_me_timetable_imports_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TimetableUpload"];
+                "application/x-www-form-urlencoded": components["schemas"]["TimetableUpload"];
+                "multipart/form-data": components["schemas"]["TimetableUpload"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GenericTimetableResponse"];
+                };
+            };
+        };
+    };
+    student_timetable_import_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GenericTimetableResponse"];
+                };
+            };
+        };
+    };
+    student_timetable_import_confirm: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GenericTimetableResponse"];
+                };
+            };
+        };
+    };
+    student_timetable_import_mapping_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TimetableMapping"];
+                "application/x-www-form-urlencoded": components["schemas"]["TimetableMapping"];
+                "multipart/form-data": components["schemas"]["TimetableMapping"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GenericTimetableResponse"];
                 };
             };
         };
@@ -8612,6 +9194,120 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AdminAssignmentResponse"];
+                };
+            };
+        };
+    };
+    api_v2_platform_administrative_classes_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GenericTimetableResponse"];
+                };
+            };
+        };
+    };
+    api_v2_platform_administrative_classes_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdministrativeClassWrite"];
+                "application/x-www-form-urlencoded": components["schemas"]["AdministrativeClassWrite"];
+                "multipart/form-data": components["schemas"]["AdministrativeClassWrite"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GenericTimetableResponse"];
+                };
+            };
+        };
+    };
+    api_v2_platform_administrative_classes_members_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                class_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GenericTimetableResponse"];
+                };
+            };
+        };
+    };
+    api_v2_platform_administrative_classes_members_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                class_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdministrativeClassMemberWrite"];
+                "application/x-www-form-urlencoded": components["schemas"]["AdministrativeClassMemberWrite"];
+                "multipart/form-data": components["schemas"]["AdministrativeClassMemberWrite"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GenericTimetableResponse"];
+                };
+            };
+        };
+    };
+    platform_administrative_class_member_end: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                class_id: string;
+                student_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GenericTimetableResponse"];
                 };
             };
         };
@@ -10006,6 +10702,24 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["AllowlistResponse"];
                 };
+            };
+        };
+    };
+    api_v2_platform_operations_audit_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
@@ -12570,6 +13284,103 @@ export interface operations {
             };
         };
     };
+    api_v2_teaching_courses_ai_score_batches_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AIScoreBatchResponse"];
+                };
+            };
+        };
+    };
+    api_v2_teaching_courses_ai_score_batches_create: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AIScoreBatchWrite"];
+                "application/x-www-form-urlencoded": components["schemas"]["AIScoreBatchWrite"];
+                "multipart/form-data": components["schemas"]["AIScoreBatchWrite"];
+            };
+        };
+        responses: {
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AIScoreBatchResponse"];
+                };
+            };
+        };
+    };
+    teaching_ai_score_batch_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                batch_id: string;
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AIScoreBatchDetailResponse"];
+                };
+            };
+        };
+    };
+    teaching_ai_score_batch_accept: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+                "If-Match": string;
+            };
+            path: {
+                batch_id: string;
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AIScoreBatchDataResponse"];
+                };
+            };
+        };
+    };
     api_v2_teaching_courses_analytics_overview_retrieve: {
         parameters: {
             query?: never;
@@ -13953,6 +14764,32 @@ export interface operations {
             };
         };
     };
+    teaching_ai_score_suggestion_accept: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+                "If-Match": string;
+            };
+            path: {
+                course_id: string;
+                review_id: string;
+                suggestion_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AIScoreSuggestionResponse"];
+                };
+            };
+        };
+    };
     teaching_review_annotations_list: {
         parameters: {
             query?: never;
@@ -14552,6 +15389,27 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["StaffResponse"];
+                };
+            };
+        };
+    };
+    teaching_experiment_tasks_list_2: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskData"][];
                 };
             };
         };
@@ -15406,6 +16264,27 @@ export interface operations {
             };
         };
     };
+    api_v2_teaching_courses_timetable_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GenericTimetableResponse"];
+                };
+            };
+        };
+    };
     api_v2_teaching_courses_transfer_owner_create: {
         parameters: {
             query?: never;
@@ -15429,6 +16308,119 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CourseResponse"];
+                };
+            };
+        };
+    };
+    api_v2_teaching_timetable_imports_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GenericTimetableResponse"];
+                };
+            };
+        };
+    };
+    api_v2_teaching_timetable_imports_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TimetableUpload"];
+                "application/x-www-form-urlencoded": components["schemas"]["TimetableUpload"];
+                "multipart/form-data": components["schemas"]["TimetableUpload"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GenericTimetableResponse"];
+                };
+            };
+        };
+    };
+    teaching_timetable_import_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GenericTimetableResponse"];
+                };
+            };
+        };
+    };
+    teaching_timetable_import_confirm: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GenericTimetableResponse"];
+                };
+            };
+        };
+    };
+    teaching_timetable_import_mapping_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TimetableMapping"];
+                "application/x-www-form-urlencoded": components["schemas"]["TimetableMapping"];
+                "multipart/form-data": components["schemas"]["TimetableMapping"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GenericTimetableResponse"];
                 };
             };
         };

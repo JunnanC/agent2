@@ -433,6 +433,210 @@ class EnrollmentEvent(AppendOnlyModel):
         ]
 
 
+class AdministrativeClass(VersionedModel):
+    class Status(models.TextChoices):
+        ACTIVE = "ACTIVE"
+        ARCHIVED = "ARCHIVED"
+
+    public_id = public_id_field()
+    code = models.CharField(max_length=64, unique=True)
+    name = models.CharField(max_length=160)
+    department = models.CharField(max_length=160, blank=True, default="")
+    year_of_entry = models.PositiveSmallIntegerField(null=True, blank=True)
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.ACTIVE)
+    created_by = models.ForeignKey(
+        User, on_delete=models.PROTECT, related_name="created_administrative_classes"
+    )
+
+    class Meta:
+        db_table = "courses_administrative_class"
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(status__in=("ACTIVE", "ARCHIVED")),
+                name="courses_admin_class_status_ck",
+            ),
+        ]
+
+
+class AdministrativeClassMembership(VersionedModel):
+    public_id = public_id_field()
+    administrative_class = models.ForeignKey(
+        AdministrativeClass, on_delete=models.PROTECT, related_name="memberships"
+    )
+    student = models.ForeignKey(
+        User, on_delete=models.PROTECT, related_name="administrative_class_memberships"
+    )
+    starts_on = models.DateField()
+    ends_on = models.DateField(null=True, blank=True)
+    assigned_by = models.ForeignKey(
+        User, on_delete=models.PROTECT, related_name="assigned_administrative_memberships"
+    )
+    active_slot = models.GeneratedField(
+        expression=models.Case(
+            models.When(ends_on__isnull=True, then=models.Value(1)),
+            default=models.Value(None),
+        ),
+        output_field=models.PositiveSmallIntegerField(null=True),
+        db_persist=True,
+    )
+
+    class Meta:
+        db_table = "courses_administrative_class_membership"
+        constraints = [
+            models.UniqueConstraint(
+                fields=("student", "active_slot"), name="courses_admin_member_active_uniq"
+            ),
+            models.CheckConstraint(
+                condition=models.Q(ends_on__isnull=True)
+                | models.Q(ends_on__gte=models.F("starts_on")),
+                name="courses_admin_member_dates_ck",
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=("administrative_class", "ends_on", "student"),
+                name="courses_admin_member_idx",
+            ),
+        ]
+
+
+class CourseSchedule(VersionedModel):
+    public_id = public_id_field()
+    course = models.ForeignKey(Course, on_delete=models.PROTECT, related_name="weekly_schedules")
+    weekday = models.PositiveSmallIntegerField()
+    start_period = models.PositiveSmallIntegerField()
+    end_period = models.PositiveSmallIntegerField()
+    week_start = models.PositiveSmallIntegerField(default=0)
+    week_end = models.PositiveSmallIntegerField(default=0)
+    classroom = models.CharField(max_length=128, blank=True, default="")
+    instructor_name = models.CharField(max_length=128, blank=True, default="")
+
+    class Meta:
+        db_table = "courses_course_schedule"
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(weekday__gte=1) & models.Q(weekday__lte=7),
+                name="courses_schedule_weekday_ck",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(start_period__gte=1)
+                & models.Q(end_period__gte=models.F("start_period")),
+                name="courses_schedule_period_ck",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    (models.Q(week_start=0) & models.Q(week_end=0))
+                    | (models.Q(week_start__gte=1) & models.Q(week_end__gte=models.F("week_start")))
+                ),
+                name="courses_schedule_weeks_ck",
+            ),
+            models.UniqueConstraint(
+                fields=(
+                    "course",
+                    "weekday",
+                    "start_period",
+                    "end_period",
+                    "week_start",
+                    "week_end",
+                ),
+                name="courses_schedule_slot_uniq",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=("course", "weekday", "start_period"), name="courses_schedule_idx")
+        ]
+
+
+class TimetableImportJob(VersionedModel):
+    class Kind(models.TextChoices):
+        STUDENT = "STUDENT"
+        TEACHER = "TEACHER"
+
+    class Status(models.TextChoices):
+        MAPPING_REQUIRED = "MAPPING_REQUIRED"
+        READY = "READY"
+        RUNNING = "RUNNING"
+        COMPLETED = "COMPLETED"
+        FAILED = "FAILED"
+
+    public_id = public_id_field()
+    owner = models.ForeignKey(User, on_delete=models.PROTECT, related_name="timetable_import_jobs")
+    kind = models.CharField(max_length=16, choices=Kind.choices)
+    term = models.ForeignKey(
+        AcademicTerm, on_delete=models.PROTECT, related_name="timetable_import_jobs"
+    )
+    filename = models.CharField(max_length=255)
+    headers = models.JSONField(default=list)
+    source_rows = models.JSONField(default=list)
+    mapping = models.JSONField(default=dict)
+    row_errors = models.JSONField(default=list)
+    summary = models.JSONField(default=dict)
+    status = models.CharField(
+        max_length=24, choices=Status.choices, default=Status.MAPPING_REQUIRED
+    )
+
+    class Meta:
+        db_table = "courses_timetable_import_job"
+        indexes = [
+            models.Index(fields=("owner", "status", "created_at"), name="courses_timetable_job_idx")
+        ]
+
+
+class StudentScheduleEntry(VersionedModel):
+    public_id = public_id_field()
+    student = models.ForeignKey(User, on_delete=models.PROTECT, related_name="schedule_entries")
+    term = models.ForeignKey(
+        AcademicTerm, on_delete=models.PROTECT, related_name="student_schedule_entries"
+    )
+    course = models.ForeignKey(
+        Course,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="external_schedule_entries",
+    )
+    course_code = models.CharField(max_length=64, blank=True, default="")
+    course_title = models.CharField(max_length=160)
+    instructor_name = models.CharField(max_length=128, blank=True, default="")
+    classroom = models.CharField(max_length=128, blank=True, default="")
+    weekday = models.PositiveSmallIntegerField()
+    start_period = models.PositiveSmallIntegerField()
+    end_period = models.PositiveSmallIntegerField()
+    week_start = models.PositiveSmallIntegerField(default=0)
+    week_end = models.PositiveSmallIntegerField(default=0)
+    schedule_digest = models.CharField(max_length=64, db_collation="ascii_bin")
+
+    class Meta:
+        db_table = "courses_student_schedule_entry"
+        constraints = [
+            models.UniqueConstraint(
+                fields=("student", "term", "schedule_digest"), name="courses_student_schedule_uniq"
+            ),
+            models.CheckConstraint(
+                condition=models.Q(weekday__gte=1) & models.Q(weekday__lte=7),
+                name="courses_student_sched_day_ck",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(start_period__gte=1)
+                & models.Q(end_period__gte=models.F("start_period")),
+                name="courses_student_sched_period_ck",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    (models.Q(week_start=0) & models.Q(week_end=0))
+                    | (models.Q(week_start__gte=1) & models.Q(week_end__gte=models.F("week_start")))
+                ),
+                name="courses_student_sched_weeks_ck",
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=("student", "term", "weekday", "start_period"),
+                name="courses_student_sched_idx",
+            ),
+        ]
+
+
 class Chapter(VersionedModel):
     class Status(models.TextChoices):
         DRAFT = "DRAFT"

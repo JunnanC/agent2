@@ -7,7 +7,7 @@ from typing import Any
 
 from django.conf import settings
 from django.db import IntegrityError, transaction
-from django.db.models import Count, F, Max
+from django.db.models import Count, F, Max, Q
 from django.utils import timezone
 
 from apps.accounts.errors import PortalAccessDenied
@@ -19,7 +19,7 @@ from apps.core.outbox import append_outbox_event, enqueue_relay_after_commit
 from apps.courses.models import Course, CourseCopyItem, CourseCopyJob, CourseStaffGrant
 from apps.courses.selectors import require_course_capability, visible_course
 from apps.courses.services import ActorContext
-from apps.experiments.models import ExperimentTask
+from apps.experiments.models import ExperimentTask, TaskPublication
 from apps.experiments.services import transition_task
 from apps.labtemplates.models import AutoCheckRule
 from apps.labtemplates.services import build_execution_command
@@ -42,6 +42,8 @@ from .errors import (
 )
 from .metrics import AUTO_CHECK_RUNS_TOTAL, REVIEW_DECISIONS_TOTAL, SIMILARITY_RUNS_TOTAL
 from .models import (
+    AIScoreBatch,
+    AIScoreSuggestion,
     AnnotationRevision,
     AutoCheckRun,
     CriterionScore,
@@ -729,6 +731,301 @@ def score_review_criteria(
         payload={"course_id": course.public_id, "task_id": review.task.public_id},
     )
     return changed  # type: ignore[return-value]
+
+
+def _refresh_ai_score_batch_status(batch_id: int) -> AIScoreBatch:
+    batch = AIScoreBatch.objects.select_for_update().get(pk=batch_id)
+    statuses = list(batch.suggestions.values_list("status", flat=True))
+    if any(
+        status in (AIScoreSuggestion.Status.QUEUED, AIScoreSuggestion.Status.RUNNING)
+        for status in statuses
+    ):
+        target = AIScoreBatch.Status.RUNNING
+    elif AIScoreSuggestion.Status.READY in statuses:
+        target = AIScoreBatch.Status.REVIEW_REQUIRED
+    elif AIScoreSuggestion.Status.FAILED in statuses:
+        target = (
+            AIScoreBatch.Status.COMPLETED_WITH_ERRORS
+            if AIScoreSuggestion.Status.ACCEPTED in statuses
+            else AIScoreBatch.Status.FAILED
+        )
+    else:
+        target = AIScoreBatch.Status.COMPLETED
+    if batch.status == target:
+        return batch
+    return compare_and_swap(
+        AIScoreBatch,
+        pk=batch.pk,
+        expected_version=batch.row_version,
+        changes={"status": target},
+    )  # type: ignore[return-value]
+
+
+@transaction.atomic
+def start_ai_score_batch(
+    *, course_id: str, publication_id: str, actor: User, context: ActorContext
+) -> AIScoreBatch:
+    course = _course(course_id, actor)
+    try:
+        publication = TaskPublication.objects.get(public_id=publication_id, course=course)
+    except TaskPublication.DoesNotExist as exc:
+        raise ResourceNotFound() from exc
+    if (
+        publication.status != TaskPublication.Status.CLOSED
+        and publication.window_end > timezone.now()
+    ):
+        raise ReviewStateConflict(detail={"publication": "experiment_not_ended"})
+    reviews = list(
+        Review.objects.filter(
+            course=course,
+            task__publication=publication,
+            task__status=ExperimentTask.Status.UNDER_REVIEW,
+        )
+        .exclude(status=Review.Status.DECIDED)
+        .filter(Q(report_version__isnull=False) | Q(system_artifact__isnull=False))
+        .order_by("id")
+    )
+    if not reviews:
+        raise ReviewValidationError(detail={"publication_id": "no_submissions_ready_for_review"})
+    batch = AIScoreBatch.objects.create(
+        course=course,
+        publication=publication,
+        created_by=actor,
+        entry_count=len(reviews),
+    )
+    suggestions = AIScoreSuggestion.objects.bulk_create(
+        [
+            AIScoreSuggestion(
+                batch=batch,
+                review=review,
+                review_row_version=review.row_version,
+            )
+            for review in reviews
+        ]
+    )
+    _audit(
+        context,
+        action="review.ai_score_batch.create",
+        target_type="ai_score_batch",
+        target_ref=batch.public_id,
+        course_ref=course.public_id,
+        after={"publication_id": publication.public_id, "entry_count": len(suggestions)},
+    )
+
+    def enqueue() -> None:
+        from .tasks import run_ai_score_suggestion
+
+        for suggestion in suggestions:
+            run_ai_score_suggestion.apply_async(
+                kwargs={"suggestion_id": suggestion.public_id, "trace_id": context.trace_id}
+            )
+
+    transaction.on_commit(enqueue, robust=True)
+    return batch
+
+
+def execute_ai_score_suggestion(*, suggestion_id: str) -> AIScoreSuggestion:
+    with transaction.atomic():
+        try:
+            suggestion = AIScoreSuggestion.objects.select_for_update().get(public_id=suggestion_id)
+        except AIScoreSuggestion.DoesNotExist as exc:
+            raise ResourceNotFound() from exc
+        if suggestion.status in (
+            AIScoreSuggestion.Status.READY,
+            AIScoreSuggestion.Status.ACCEPTED,
+            AIScoreSuggestion.Status.FAILED,
+        ):
+            return suggestion
+        if suggestion.status == AIScoreSuggestion.Status.QUEUED:
+            suggestion = compare_and_swap(
+                AIScoreSuggestion,
+                pk=suggestion.pk,
+                expected_version=suggestion.row_version,
+                changes={"status": AIScoreSuggestion.Status.RUNNING},
+            )  # type: ignore[assignment]
+
+    try:
+        from apps.agents.rubric_agent import (
+            RubricAgentConfigurationError,
+            assess_submission,
+        )
+
+        review = suggestion.review
+        if review.report_version_id:
+            submission = review.report_version.body_markdown
+        else:
+            from .checkers import _read_asset
+
+            submission = _read_asset(review.system_artifact.asset).decode("utf-8", errors="replace")
+        criteria = list(
+            RubricCriterion.objects.filter(
+                rubric_version=review.rubric_version, is_active=True
+            ).order_by("position")
+        )
+        rubric = [
+            {
+                "criterion_id": item.public_id,
+                "title": item.title,
+                "description": item.description,
+                "guidance": item.guidance,
+                "max_score": str(item.max_score),
+            }
+            for item in criteria
+        ]
+        assessment = assess_submission(report=submission, rubric=rubric)
+        by_id = {item.public_id: item for item in criteria}
+        values: dict[str, dict[str, str]] = {}
+        for item in assessment.criteria:
+            criterion = by_id.get(item.criterion_id)
+            if criterion is None or item.criterion_id in values:
+                raise ReviewValidationError(detail={"ai_criteria": "invalid_criterion_ids"})
+            score = item.score.quantize(Decimal("0.01"))
+            if score < 0 or score > criterion.max_score:
+                raise ReviewValidationError(detail={"ai_score": "outside_criterion_range"})
+            values[item.criterion_id] = {
+                "criterion_id": item.criterion_id,
+                "score": str(score),
+                "rationale": item.rationale.strip()[:2000],
+                "evidence": item.evidence.strip()[:2000],
+            }
+        if set(values) != set(by_id):
+            raise ReviewValidationError(detail={"ai_criteria": "criteria_incomplete"})
+        total = sum((Decimal(item["score"]) for item in values.values()), Decimal("0"))
+        changes = {
+            "status": AIScoreSuggestion.Status.READY,
+            "criteria": [values[item.public_id] for item in criteria],
+            "total_score": total,
+            "model_name": settings.RUBRIC_AI_MODEL_NAME,
+            "error_code": "",
+        }
+    except Exception as exc:
+        from apps.agents.rubric_agent import RubricAgentConfigurationError
+
+        changes = {
+            "status": AIScoreSuggestion.Status.FAILED,
+            "error_code": (
+                "AI_PROVIDER_NOT_CONFIGURED"
+                if isinstance(exc, RubricAgentConfigurationError)
+                else "AI_SCORE_FAILED"
+            ),
+        }
+
+    with transaction.atomic():
+        suggestion.refresh_from_db()
+        suggestion = compare_and_swap(
+            AIScoreSuggestion,
+            pk=suggestion.pk,
+            expected_version=suggestion.row_version,
+            changes=changes,
+        )  # type: ignore[assignment]
+        _refresh_ai_score_batch_status(suggestion.batch_id)
+    return suggestion
+
+
+@transaction.atomic
+def accept_ai_score_suggestion(
+    *, course_id: str, review_id: str, suggestion_id: str, actor: User,
+    expected_review_version: int, context: ActorContext,
+) -> AIScoreSuggestion:
+    course = _course(course_id, actor)
+    try:
+        suggestion = AIScoreSuggestion.objects.select_for_update().get(
+            public_id=suggestion_id, review__public_id=review_id, batch__course=course
+        )
+    except AIScoreSuggestion.DoesNotExist as exc:
+        raise ResourceNotFound() from exc
+    if suggestion.status != AIScoreSuggestion.Status.READY:
+        raise ReviewStateConflict(detail={"suggestion": suggestion.status})
+    if suggestion.review_row_version != expected_review_version:
+        raise RowVersionConflict(
+            detail={
+                "expected_row_version": suggestion.review_row_version,
+                "actual_row_version": expected_review_version,
+            }
+        )
+    score_review_criteria(
+        course_id=course.public_id,
+        review_id=suggestion.review.public_id,
+        actor=actor,
+        expected_version=expected_review_version,
+        scores=[
+            {
+                "criterion_id": item["criterion_id"],
+                "score": item["score"],
+                "note": item["rationale"],
+            }
+            for item in suggestion.criteria
+        ],
+        context=context,
+    )
+    suggestion = compare_and_swap(
+        AIScoreSuggestion,
+        pk=suggestion.pk,
+        expected_version=suggestion.row_version,
+        changes={
+            "status": AIScoreSuggestion.Status.ACCEPTED,
+            "accepted_by": actor,
+            "accepted_at": timezone.now(),
+        },
+    )  # type: ignore[assignment]
+    _audit(
+        context,
+        action="review.ai_score.accept",
+        target_type="ai_score_suggestion",
+        target_ref=suggestion.public_id,
+        course_ref=course.public_id,
+        after={"review_id": suggestion.review.public_id},
+    )
+    _refresh_ai_score_batch_status(suggestion.batch_id)
+    return suggestion
+
+
+@transaction.atomic
+def accept_ai_score_batch(
+    *, course_id: str, batch_id: str, actor: User, expected_batch_version: int,
+    context: ActorContext,
+) -> AIScoreBatch:
+    course = _course(course_id, actor)
+    try:
+        batch = AIScoreBatch.objects.get(public_id=batch_id, course=course)
+    except AIScoreBatch.DoesNotExist as exc:
+        raise ResourceNotFound() from exc
+    suggestions = list(batch.suggestions.select_for_update().order_by("id"))
+    batch = AIScoreBatch.objects.select_for_update().get(pk=batch.pk)
+    if batch.row_version != expected_batch_version:
+        raise RowVersionConflict(
+            detail={
+                "expected_row_version": expected_batch_version,
+                "actual_row_version": batch.row_version,
+            }
+        )
+    if any(
+        item.status in (AIScoreSuggestion.Status.QUEUED, AIScoreSuggestion.Status.RUNNING)
+        for item in suggestions
+    ):
+        raise ReviewStateConflict(detail={"batch": "scoring_in_progress"})
+    ready = [item for item in suggestions if item.status == AIScoreSuggestion.Status.READY]
+    if not ready:
+        raise ReviewStateConflict(detail={"batch": "no_scores_ready"})
+    for suggestion in ready:
+        accept_ai_score_suggestion(
+            course_id=course.public_id,
+            review_id=suggestion.review.public_id,
+            suggestion_id=suggestion.public_id,
+            actor=actor,
+            expected_review_version=suggestion.review_row_version,
+            context=context,
+        )
+    batch = _refresh_ai_score_batch_status(batch.pk)
+    _audit(
+        context,
+        action="review.ai_score_batch.accept",
+        target_type="ai_score_batch",
+        target_ref=batch.public_id,
+        course_ref=course.public_id,
+        after={"accepted_count": len(ready)},
+    )
+    return batch
 
 
 def _validated_annotation_target(

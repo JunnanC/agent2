@@ -286,6 +286,89 @@ class ReviewDecision(AppendOnlyModel):
         ]
 
 
+class AIScoreBatch(VersionedModel):
+    class Status(models.TextChoices):
+        QUEUED = "QUEUED"
+        RUNNING = "RUNNING"
+        REVIEW_REQUIRED = "REVIEW_REQUIRED"
+        COMPLETED = "COMPLETED"
+        COMPLETED_WITH_ERRORS = "COMPLETED_WITH_ERRORS"
+        FAILED = "FAILED"
+
+    public_id = public_id_field()
+    course = models.ForeignKey(Course, on_delete=models.PROTECT, related_name="ai_score_batches")
+    publication = models.ForeignKey(
+        "experiments.TaskPublication", on_delete=models.PROTECT, related_name="ai_score_batches"
+    )
+    created_by = models.ForeignKey(User, on_delete=models.PROTECT, related_name="ai_score_batches")
+    entry_count = models.PositiveIntegerField()
+    status = models.CharField(max_length=24, choices=Status.choices, default=Status.QUEUED)
+
+    class Meta:
+        db_table = "reviews_ai_score_batch"
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(status__in=(
+                    "QUEUED",
+                    "RUNNING",
+                    "REVIEW_REQUIRED",
+                    "COMPLETED",
+                    "COMPLETED_WITH_ERRORS",
+                    "FAILED",
+                )),
+                name="reviews_ai_batch_status_ck",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(entry_count__gte=1), name="reviews_ai_batch_count_ck"
+            ),
+        ]
+        indexes = [models.Index(fields=("course", "created_at"), name="reviews_ai_batch_idx")]
+
+
+class AIScoreSuggestion(VersionedModel):
+    class Status(models.TextChoices):
+        QUEUED = "QUEUED"
+        RUNNING = "RUNNING"
+        READY = "READY"
+        ACCEPTED = "ACCEPTED"
+        FAILED = "FAILED"
+
+    public_id = public_id_field()
+    batch = models.ForeignKey(AIScoreBatch, on_delete=models.PROTECT, related_name="suggestions")
+    review = models.ForeignKey(
+        Review, on_delete=models.PROTECT, related_name="ai_score_suggestions"
+    )
+    review_row_version = models.PositiveBigIntegerField()
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.QUEUED)
+    criteria = models.JSONField(default=list)
+    total_score = models.DecimalField(max_digits=9, decimal_places=2, null=True, blank=True)
+    model_name = models.CharField(max_length=128, blank=True, default="")
+    error_code = models.CharField(max_length=64, blank=True, default="")
+    accepted_by = models.ForeignKey(
+        User,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="accepted_ai_score_suggestions",
+    )
+    accepted_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = "reviews_ai_score_suggestion"
+        constraints = [
+            models.UniqueConstraint(fields=("batch", "review"), name="reviews_ai_suggest_uniq"),
+            models.CheckConstraint(
+                condition=models.Q(status__in=("QUEUED", "RUNNING", "READY", "ACCEPTED", "FAILED")),
+                name="reviews_ai_suggest_status_ck",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(total_score__isnull=True) | models.Q(total_score__gte=0),
+                name="reviews_ai_suggest_score_ck",
+            ),
+        ]
+        indexes = [models.Index(fields=("batch", "status"), name="reviews_ai_suggest_batch_idx")]
+
+
 class ReviewAnnotation(VersionedModel):
     class TargetType(models.TextChoices):
         REPORT_TEXT = "REPORT_TEXT"

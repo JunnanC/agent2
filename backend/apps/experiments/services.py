@@ -23,7 +23,7 @@ from apps.governance.models import ResourceProfile
 from apps.labtemplates.errors import TemplateValidationError
 from apps.labtemplates.models import ExperimentImage, TemplateChapter, TemplateTask, TemplateVersion
 from apps.labtemplates.services import _normalize_execution_spec
-from apps.reviews.models import RubricVersion
+from apps.reviews.models import ReviewDecision, RubricVersion
 
 from . import events
 from .errors import (
@@ -1692,4 +1692,157 @@ def teaching_progress(*, course_id: str, actor: User) -> dict[str, Any]:
         .values("status")
         .annotate(count=Count("id"))
     }
-    return {"course_id": course.public_id, "task_counts": counts, "total": sum(counts.values())}
+    experiments: dict[str, dict[str, Any]] = {}
+    for item in (
+        ExperimentTask.objects.filter(course=course)
+        .values("publication__public_id", "publication__title", "status")
+        .annotate(count=Count("id"))
+    ):
+        publication_id = item["publication__public_id"]
+        progress = experiments.setdefault(
+            publication_id,
+            {
+                "publication_id": publication_id,
+                "title": item["publication__title"],
+                "task_counts": {},
+                "total": 0,
+            },
+        )
+        progress["task_counts"][item["status"]] = item["count"]
+        progress["total"] += item["count"]
+    course_tasks = list(
+        ExperimentTask.objects.filter(course=course)
+        .select_related("publication", "student")
+        .order_by("publication__created_at", "student__display_name", "id")
+    )
+    latest_decisions: dict[int, ReviewDecision] = {}
+    for decision in ReviewDecision.objects.filter(review__task__in=course_tasks).select_related(
+        "review"
+    ).order_by("review__task_id", "-review__round_no"):
+        latest_decisions.setdefault(decision.review.task_id, decision)
+    for task in course_tasks:
+        progress = experiments[task.publication.public_id]
+        progress.setdefault("students", []).append(
+            {
+                "task_id": task.public_id,
+                "student_id": task.student.public_id,
+                "student_name": task.student.display_name,
+                "status": task.status,
+                "progress": task.progress,
+                "completed_at": task.completed_at,
+                "decision": (
+                    latest_decisions[task.pk].decision if task.pk in latest_decisions else None
+                ),
+                "score": (
+                    str(latest_decisions[task.pk].score)
+                    if task.pk in latest_decisions
+                    else None
+                ),
+            }
+        )
+    return {
+        "course_id": course.public_id,
+        "task_counts": counts,
+        "total": sum(counts.values()),
+        "student_count": ExperimentTask.objects.filter(course=course)
+        .values("student_id")
+        .distinct()
+        .count(),
+        "experiments": list(experiments.values()),
+    }
+
+
+def student_learning_history(*, actor: User) -> dict[str, Any]:
+    enrollments = list(
+        Enrollment.objects.filter(
+            student=actor,
+            status__in=(
+                Enrollment.Status.ACTIVE,
+                Enrollment.Status.DROPPED,
+                Enrollment.Status.REMOVED,
+            ),
+        )
+        .select_related("course__term")
+        .order_by("course__term__starts_at", "course__title", "cycle_no")
+    )
+    tasks = list(
+        ExperimentTask.objects.filter(enrollment__in=enrollments)
+        .select_related("publication", "enrollment", "course__term")
+        .order_by("created_at", "id")
+    )
+    latest_decisions: dict[int, ReviewDecision] = {}
+    for decision in ReviewDecision.objects.filter(review__task__in=tasks).select_related(
+        "review"
+    ).order_by("review__task_id", "-review__round_no"):
+        latest_decisions.setdefault(decision.review.task_id, decision)
+    tasks_by_enrollment: dict[int, list[ExperimentTask]] = {}
+    for task in tasks:
+        tasks_by_enrollment.setdefault(task.enrollment_id, []).append(task)
+
+    academic_years = {
+        enrollment.course.term.starts_at.year
+        if enrollment.course.term.starts_at.month >= 8
+        else enrollment.course.term.starts_at.year - 1
+        for enrollment in enrollments
+    }
+    if not academic_years:
+        return {"years": []}
+    first_year = min(academic_years)
+    year_count = max(4, max(academic_years) - first_year + 1)
+    years: list[dict[str, Any]] = [
+        {
+            "university_year": index + 1,
+            "academic_year": f"{first_year + index}-{first_year + index + 1}",
+            "terms": {},
+        }
+        for index in range(year_count)
+    ]
+    for enrollment in enrollments:
+        term = enrollment.course.term
+        academic_year = (
+            term.starts_at.year if term.starts_at.month >= 8 else term.starts_at.year - 1
+        )
+        year = years[academic_year - first_year]
+        terms: dict[str, Any] = year["terms"]
+        term_data = terms.setdefault(
+            term.public_id,
+            {"term_id": term.public_id, "code": term.code, "name": term.name, "courses": []},
+        )
+        course_tasks = tasks_by_enrollment.get(enrollment.pk, [])
+        term_data["courses"].append(
+            {
+                "course_id": enrollment.course.public_id,
+                "course_code": enrollment.course.code,
+                "course_title": enrollment.course.title,
+                "class_type": "TEACHING",
+                "enrollment": {
+                    "public_id": enrollment.public_id,
+                    "cycle_no": enrollment.cycle_no,
+                    "status": enrollment.status,
+                    "activated_at": enrollment.activated_at,
+                    "ended_at": enrollment.ended_at,
+                },
+                "experiments": [
+                    {
+                        "task_id": task.public_id,
+                        "publication_id": task.publication.public_id,
+                        "title": task.publication.title,
+                        "status": task.status,
+                        "progress": task.progress,
+                        "completed_at": task.completed_at,
+                        "decision": (
+                            latest_decisions[task.pk].decision
+                            if task.pk in latest_decisions
+                            else None
+                        ),
+                        "score": (
+                            str(latest_decisions[task.pk].score)
+                            if task.pk in latest_decisions
+                            else None
+                        ),
+                    }
+                    for task in course_tasks
+                ],
+            }
+        )
+    return {"years": [{**year, "terms": list(year["terms"].values())} for year in years]}

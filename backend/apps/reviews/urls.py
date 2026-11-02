@@ -6,6 +6,10 @@ from .views import (
     RubricVersionDetailView,
     RubricVersionListView,
     RubricVersionPublishView,
+    TeachingAIScoreBatchAcceptView,
+    TeachingAIScoreBatchDetailView,
+    TeachingAIScoreBatchListView,
+    TeachingAIScoreSuggestionAcceptView,
     TeachingAnnotationRevisionView,
     TeachingAnnotationRevokeView,
     TeachingCriterionScoresView,
@@ -34,6 +38,23 @@ urlpatterns = [
         RubricVersionPublishView.as_view(),
     ),
     path("teaching/courses/<str:course_id>/reviews", TeachingReviewListView.as_view()),
+    path(
+        "teaching/courses/<str:course_id>/ai-score-batches",
+        TeachingAIScoreBatchListView.as_view(),
+    ),
+    path(
+        "teaching/courses/<str:course_id>/ai-score-batches/<str:batch_id>",
+        TeachingAIScoreBatchDetailView.as_view(),
+    ),
+    path(
+        "teaching/courses/<str:course_id>/ai-score-batches/<str:batch_id>/accept",
+        TeachingAIScoreBatchAcceptView.as_view(),
+    ),
+    path(
+        "teaching/courses/<str:course_id>/reviews/<str:review_id>/ai-score-suggestions/"
+        "<str:suggestion_id>/accept",
+        TeachingAIScoreSuggestionAcceptView.as_view(),
+    ),
     path(
         "teaching/courses/<str:course_id>/reviews/<str:review_id>",
         TeachingReviewDetailView.as_view(),

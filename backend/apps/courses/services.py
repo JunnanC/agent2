@@ -201,21 +201,23 @@ def create_course(
     teaching_start: Any,
     teaching_end: Any,
     context: ActorContext,
+    term: AcademicTerm | None = None,
 ) -> Course:
     actor = User.objects.select_for_update().get(pk=actor.pk)
     _active_teacher(actor)
-    try:
-        term = current_academic_term()
-    except AcademicTerm.DoesNotExist:
-        now = timezone.now()
-        term = AcademicTerm.objects.create(
-            code="LEGACY-CURRENT",
-            name="Legacy Current Term",
-            starts_at=now,
-            ends_at=now.replace(year=now.year + 1),
-            status=AcademicTerm.Status.CURRENT,
-            is_current=True,
-        )
+    if term is None:
+        try:
+            term = current_academic_term()
+        except AcademicTerm.DoesNotExist:
+            now = timezone.now()
+            term = AcademicTerm.objects.create(
+                code="LEGACY-CURRENT",
+                name="Legacy Current Term",
+                starts_at=now,
+                ends_at=now.replace(year=now.year + 1),
+                status=AcademicTerm.Status.CURRENT,
+                is_current=True,
+            )
     try:
         course = Course.objects.create(
             code=code.strip().upper(),

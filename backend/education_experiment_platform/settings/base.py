@@ -3,7 +3,14 @@ import os
 import re
 from pathlib import Path
 
+from dotenv import dotenv_values
+
 BASE_DIR = Path(__file__).resolve().parents[2]
+LOCAL_AI_ENV = {
+    key: value
+    for key, value in dotenv_values(BASE_DIR.parent / ".env").items()
+    if key.startswith("RUBRIC_AI_")
+}
 
 
 def env(name: str, default: str | None = None, *, required: bool = False) -> str:
@@ -378,6 +385,10 @@ AGENT_RETRIEVAL_LIMIT = int(env("AGENT_RETRIEVAL_LIMIT", "5"))
 AGENT_TOOL_APPROVAL_TTL_SECONDS = int(env("AGENT_TOOL_APPROVAL_TTL_SECONDS", "300"))
 AGENT_SOURCE_MAX_BYTES = int(env("AGENT_SOURCE_MAX_BYTES", str(2 * 1024 * 1024)))
 AGENT_SOURCE_UPLOAD_EXPIRES_SECONDS = int(env("AGENT_SOURCE_UPLOAD_EXPIRES_SECONDS", "300"))
+RUBRIC_AI_API_KEY = env("RUBRIC_AI_API_KEY", LOCAL_AI_ENV.get("RUBRIC_AI_API_KEY"))
+RUBRIC_AI_BASE_URL = env("RUBRIC_AI_BASE_URL", LOCAL_AI_ENV.get("RUBRIC_AI_BASE_URL"))
+RUBRIC_AI_MODEL_NAME = env("RUBRIC_AI_MODEL_NAME", LOCAL_AI_ENV.get("RUBRIC_AI_MODEL_NAME"))
+RUBRIC_AI_TIMEOUT_SECONDS = int(env("RUBRIC_AI_TIMEOUT_SECONDS", "60"))
 
 LOGGING = {
     "version": 1,

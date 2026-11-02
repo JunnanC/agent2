@@ -146,6 +146,11 @@ class SettingsTests(SimpleTestCase):
             "courses_enrollment_import_item",
             "courses_copy_job",
             "courses_copy_item",
+            "courses_administrative_class",
+            "courses_administrative_class_membership",
+            "courses_course_schedule",
+            "courses_timetable_import_job",
+            "courses_student_schedule_entry",
         }
         assert {
             model._meta.db_table for model in apps.get_app_config("governance").get_models()
@@ -184,6 +189,8 @@ class SettingsTests(SimpleTestCase):
             "reviews_auto_check_run",
             "reviews_similarity_run",
             "reviews_similarity_match",
+            "reviews_ai_score_batch",
+            "reviews_ai_score_suggestion",
         }
         assert {
             model._meta.db_table for model in apps.get_app_config("experiments").get_models()

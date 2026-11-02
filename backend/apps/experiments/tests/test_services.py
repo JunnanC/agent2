@@ -37,6 +37,8 @@ from ..services import (
     request_extension,
     start_task,
     start_task_runtime,
+    student_learning_history,
+    teaching_progress,
     transition_task,
     update_publication,
     withdraw_publication,
@@ -79,6 +81,31 @@ class ExperimentServiceTests(TestCase):
         )
         self.assertEqual(status, 201)
         return publication
+
+    def test_student_history_and_course_progress_include_student_experiment_rows(self) -> None:
+        publication = self._publish()
+        task = ExperimentTask.objects.get(publication=publication, student=self.enrollment.student)
+
+        history = student_learning_history(actor=self.enrollment.student)
+        course = next(
+            course
+            for year in history["years"]
+            for term in year["terms"]
+            for course in term["courses"]
+            if course["course_id"] == self.course.public_id
+        )
+        self.assertGreaterEqual(len(history["years"]), 4)
+        self.assertEqual(course["experiments"][0]["task_id"], task.public_id)
+        self.assertEqual(course["experiments"][0]["status"], task.status)
+
+        progress = teaching_progress(course_id=self.course.public_id, actor=self.owner)
+        experiment = next(
+            item
+            for item in progress["experiments"]
+            if item["publication_id"] == publication.public_id
+        )
+        self.assertEqual(experiment["students"][0]["student_id"], self.enrollment.student.public_id)
+        self.assertEqual(experiment["students"][0]["task_id"], task.public_id)
 
     def test_sync_publish_freezes_all_active_audience_and_assigns_once(self) -> None:
         published = self._publish()

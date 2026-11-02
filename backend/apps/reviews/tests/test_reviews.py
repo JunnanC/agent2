@@ -13,7 +13,7 @@ from apps.core.errors import ImmutableRecordError, RowVersionConflict
 from apps.core.models import FailureRecord, ObjectAsset, OutboxEvent
 from apps.courses.models import Course, CourseStaff
 from apps.courses.services import ActorContext
-from apps.experiments.models import ExperimentTask
+from apps.experiments.models import ExperimentTask, TaskPublication
 from apps.experiments.services import publish_publication
 from apps.experiments.tests.helpers import (
     create_domain,
@@ -31,6 +31,8 @@ from apps.workspaces.models import WorkspaceSession, WorkspaceSnapshot
 from ..checkers import AutoCheckResult, DockerLocalAutoCheckExecutor
 from ..errors import AutoCheckPending, ReviewStateConflict
 from ..models import (
+    AIScoreBatch,
+    AIScoreSuggestion,
     AnnotationRevision,
     AutoCheckRun,
     CriterionScoreEvent,
@@ -42,13 +44,16 @@ from ..models import (
 )
 from ..serializers import review_result_data
 from ..services import (
+    accept_ai_score_batch,
     add_review_annotation,
     create_review_for_submission,
     decide_review,
+    execute_ai_score_suggestion,
     execute_auto_check,
     execute_similarity_run,
     revise_review_annotation,
     score_review_criteria,
+    start_ai_score_batch,
     start_similarity_run,
 )
 
@@ -836,3 +841,161 @@ class ReviewServiceTests(TestCase):
             ReviewDecision.objects.filter(pk=decision.pk).delete()
         event = OutboxEvent.objects.filter(event_type="review.decided").latest("created_at")
         self.assertEqual(event.payload["user_id"], self.task.student.public_id)
+
+    def _ready_ai_score_batch(self) -> AIScoreBatch:
+        TaskPublication.objects.filter(pk=self.publication.pk).update(
+            status=TaskPublication.Status.CLOSED,
+            closed_at=timezone.now(),
+            closed_by=self.teacher,
+        )
+        batch = start_ai_score_batch(
+            course_id=self.course.public_id,
+            publication_id=self.publication.public_id,
+            actor=self.teacher,
+            context=self.context(self.teacher),
+        )
+
+        from apps.agents.rubric_agent import CriterionAssessment, RubricAssessment
+
+        def assessment(**_kwargs: object) -> RubricAssessment:
+            return RubricAssessment(
+                criteria=[
+                    CriterionAssessment(
+                        criterion_id=self.criteria[0].public_id,
+                        score=Decimal("50"),
+                        rationale="The report supports this score.",
+                        evidence="Shared report body",
+                    ),
+                    CriterionAssessment(
+                        criterion_id=self.criteria[1].public_id,
+                        score=Decimal("30"),
+                        rationale="The explanation is incomplete.",
+                        evidence="reviews checking",
+                    ),
+                ]
+            )
+
+        with patch("apps.agents.rubric_agent.assess_submission", side_effect=assessment):
+            for item in batch.suggestions.order_by("id"):
+                execute_ai_score_suggestion(suggestion_id=item.public_id)
+        batch.refresh_from_db()
+        return batch
+
+    def test_ai_scores_need_teacher_confirmation_and_do_not_approve_reports(self) -> None:
+        batch = self._ready_ai_score_batch()
+        self.assertEqual(batch.status, AIScoreBatch.Status.REVIEW_REQUIRED)
+        self.assertEqual(batch.suggestions.filter(status=AIScoreSuggestion.Status.READY).count(), 2)
+
+        changed = accept_ai_score_batch(
+            course_id=self.course.public_id,
+            batch_id=batch.public_id,
+            actor=self.teacher,
+            expected_batch_version=batch.row_version,
+            context=self.context(self.teacher),
+        )
+
+        self.assertEqual(changed.status, AIScoreBatch.Status.COMPLETED)
+        self.assertEqual(
+            batch.suggestions.filter(status=AIScoreSuggestion.Status.ACCEPTED).count(), 2
+        )
+        self.assertEqual(
+            CriterionScoreEvent.objects.filter(
+                review__in=[self.review, self.peer_review]
+            ).count(),
+            4,
+        )
+        self.assertFalse(
+            ReviewDecision.objects.filter(review__in=[self.review, self.peer_review]).exists()
+        )
+        self.assertEqual(self.task.status, ExperimentTask.Status.UNDER_REVIEW)
+        self.assertEqual(self.peer_task.status, ExperimentTask.Status.UNDER_REVIEW)
+
+    def test_ai_batch_acceptance_rolls_back_when_any_review_changed(self) -> None:
+        batch = self._ready_ai_score_batch()
+        self._score(self.peer_review)
+
+        with self.assertRaises(RowVersionConflict):
+            accept_ai_score_batch(
+                course_id=self.course.public_id,
+                batch_id=batch.public_id,
+                actor=self.teacher,
+                expected_batch_version=batch.row_version,
+                context=self.context(self.teacher),
+            )
+
+        self.assertFalse(CriterionScoreEvent.objects.filter(review=self.review).exists())
+        self.assertEqual(
+            batch.suggestions.filter(status=AIScoreSuggestion.Status.READY).count(), 2
+        )
+
+    def test_ai_batch_api_creates_lists_and_accepts_suggestions(self) -> None:
+        TaskPublication.objects.filter(pk=self.publication.pk).update(
+            status=TaskPublication.Status.CLOSED,
+            closed_at=timezone.now(),
+            closed_by=self.teacher,
+        )
+        client, csrf = self._client(identifier=self.teacher.email, portal="TEACHING")
+        url = f"/api/v2/teaching/courses/{self.course.public_id}/ai-score-batches"
+        headers = {
+            "HTTP_X_CSRFTOKEN": csrf,
+            "HTTP_X_PORTAL": "TEACHING",
+            "HTTP_X_PROXY_CONTEXT": "ingress-v1",
+            "REMOTE_ADDR": "127.0.0.1",
+        }
+        with (
+            patch("apps.reviews.tasks.run_ai_score_suggestion.apply_async") as enqueue,
+            self.captureOnCommitCallbacks(execute=True),
+        ):
+            created = client.post(
+                url,
+                {"publication_id": self.publication.public_id},
+                content_type="application/json",
+                HTTP_IDEMPOTENCY_KEY="reviews-ai-batch-api",
+                **headers,
+            )
+        self.assertEqual(created.status_code, 202, created.content)
+        self.assertEqual(enqueue.call_count, 2)
+        batch_id = created.json()["data"]["public_id"]
+
+        detail = client.get(
+            f"{url}/{batch_id}?page_size=100",
+            HTTP_X_PORTAL="TEACHING",
+            HTTP_X_PROXY_CONTEXT="ingress-v1",
+            REMOTE_ADDR="127.0.0.1",
+        )
+        self.assertEqual(detail.status_code, 200, detail.content)
+        self.assertEqual(len(detail.json()["data"]["suggestions"]), 2)
+
+        from apps.agents.rubric_agent import CriterionAssessment, RubricAssessment
+
+        def assessment(**_kwargs: object) -> RubricAssessment:
+            return RubricAssessment(
+                criteria=[
+                    CriterionAssessment(
+                        criterion_id=criterion.public_id,
+                        score=Decimal("50" if index == 0 else "30"),
+                        rationale="Evidence-based score.",
+                        evidence="Shared report body",
+                    )
+                    for index, criterion in enumerate(self.criteria)
+                ]
+            )
+
+        batch = AIScoreBatch.objects.get(public_id=batch_id)
+        with patch("apps.agents.rubric_agent.assess_submission", side_effect=assessment):
+            for suggestion in batch.suggestions.order_by("id"):
+                execute_ai_score_suggestion(suggestion_id=suggestion.public_id)
+        batch.refresh_from_db()
+        accepted = client.post(
+            f"{url}/{batch_id}/accept",
+            {},
+            content_type="application/json",
+            HTTP_IF_MATCH=f'"{batch.row_version}"',
+            HTTP_IDEMPOTENCY_KEY="reviews-ai-batch-accept-api",
+            **headers,
+        )
+        self.assertEqual(accepted.status_code, 200, accepted.content)
+        self.assertEqual(accepted.json()["data"]["status"], AIScoreBatch.Status.COMPLETED)
+        self.assertFalse(
+            ReviewDecision.objects.filter(review__in=[self.review, self.peer_review]).exists()
+        )
