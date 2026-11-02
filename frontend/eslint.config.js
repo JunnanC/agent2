@@ -19,7 +19,7 @@ export default tseslint.config(
     },
   },
   {
-    files: ["packages/ui/src/index.tsx", "packages/ui/src/toast.tsx", "**/providers.tsx"],
+    files: ["packages/ui/src/index.tsx", "packages/ui/src/toast.tsx", "apps/admin-web/src/legacy/ui.tsx", "**/providers.tsx"],
     rules: { "react-refresh/only-export-components": "off" },
   },
 );

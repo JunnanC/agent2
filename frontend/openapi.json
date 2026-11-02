@@ -3,7 +3,7 @@
     "info": {
         "title": "Education Agent Platform API",
         "version": "v2-p15",
-        "description": "P15 student experiment workbench and platform operations."
+        "description": "Student experiment workbench and platform operations."
     },
     "paths": {
         "/api/v2/agent-messages/{message_id}/feedback": {

@@ -53,6 +53,8 @@ export function Workbench() {
   const executionRuns = useQuery({
     queryKey: [...keys.executionRuns(taskId), storedSession?.session_id ?? "none"],
     queryFn: () => workspaceApi.executionRuns(taskId, { page_size: 10 }, workspaceToken),
+    enabled: Boolean(workspaceToken),
+    refetchInterval: (query) => query.state.data?.rows.some((run) => runIsRunning(run.status)) ? 2000 : false,
   });
   const [chapterId, setChapterId] = useState<string | null>(null);
   const [view, setView] = useState<"brief" | "report">("brief");
@@ -68,7 +70,8 @@ export function Workbench() {
   const [checkpointOpen, setCheckpointOpen] = useState(false);
   const [checkpointName, setCheckpointName] = useState("");
   const [submitOpen, setSubmitOpen] = useState(false);
-  const [fileContent, setFileContent] = useState("nameserver 10.10.0.53\noptions timeout:2 attempts:2");
+  const draftBaseRef = useRef<ReportDraft | null>(null);
+  const saveQueue = useRef<Promise<boolean>>(Promise.resolve(true));
   const draftRef = useRef(draftHtml);
   draftRef.current = draftHtml;
 
@@ -77,6 +80,7 @@ export function Workbench() {
   useEffect(() => {
     if (draftQuery.data && draftBase == null) {
       setDraftBase(draftQuery.data);
+      draftBaseRef.current = draftQuery.data;
       if (!draftRef.current) setDraftHtml(markdownToHtml(draftQuery.data.body_markdown ?? ""));
       setSaveStatus({ label: "已保存", tone: "good" });
     }
@@ -98,36 +102,51 @@ export function Workbench() {
   }, [draftHtml]);
 
   const saveDraftNow = useCallback(async (silent = false) => {
-    if (!draftRef.current) return;
-    try {
+    if (!draftRef.current) return false;
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    const html = draftRef.current;
+    const save = saveQueue.current.then(async () => {
+      // A genuine server conflict blocks queued writes until the user resolves it.
+      if (draftBaseRef.current == null) return false;
+      try {
       const result = await reportApi.saveDraft(
         taskId,
-        { body_markdown: htmlToMarkdown(draftRef.current) },
-        draftBase?.row_version ?? null,
+        { body_markdown: htmlToMarkdown(html) },
+        draftBaseRef.current.row_version,
       );
+      draftBaseRef.current = result.data;
       setDraftBase(result.data);
       setConflict(null);
-      if (!silent) setSaveStatus({ label: "已保存", tone: "good" });
+      if (html === draftRef.current) setSaveStatus({ label: "已保存", tone: "good" });
       void queryClient.invalidateQueries({ queryKey: keys.reportDraft(taskId) });
+      return true;
     } catch (error) {
       if (error instanceof ApiError && error.kind === "conflict") {
+        draftBaseRef.current = null;
         setConflict("报告在服务器上已被更新，你的本地内容已保留。请确认以哪个版本为准。");
         setSaveStatus({ label: "存在冲突", tone: "bad" });
       } else if (error instanceof ApiError) {
         setSaveStatus({ label: "保存失败", tone: "bad" });
         if (!silent) toast.notify(error.payload?.message ?? "保存失败，稍后自动重试", "error");
       }
-    }
-  }, [draftBase, taskId, toast, queryClient]);
+      }
+      return false;
+    });
+    saveQueue.current = save;
+    return save;
+  }, [taskId, toast, queryClient]);
 
   const createCheckpoint = useMutation({
-    mutationFn: () =>
-      workspaceApi.createCheckpoint(taskId, { label: checkpointName.trim() || "阶段检查点" }, workspaceToken),
+    mutationFn: async () => {
+      await workspaceApi.captureSnapshot(taskId, workspaceToken);
+      return workspaceApi.createCheckpoint(taskId, { label: checkpointName.trim() || "阶段检查点" }, workspaceToken);
+    },
     onSuccess: (checkpoint) => {
-      toast.notify(`检查点已保存：${checkpoint.label ?? checkpoint.public_id}`);
+      toast.notify(`检查点已保存：${checkpoint.name ?? checkpoint.label ?? checkpoint.public_id}`);
       setCheckpointOpen(false);
       setCheckpointName("");
       void checkpoints.refetch();
+      void workbench.refetch();
     },
     onError: (error) => toast.notify(serializeError(error), "error"),
   });
@@ -197,10 +216,13 @@ export function Workbench() {
   }, [aggregateTaskStatus, storedSession, aggregateAllowed]);
 
   const runTests = useMutation({
-    mutationFn: (testKeys?: string[]) =>
-      workspaceApi.createExecutionRun(taskId, { test_keys: testKeys }, workspaceToken),
+    mutationFn: async (testKeys?: string[]) => {
+      const snapshot = await workspaceApi.captureSnapshot(taskId, workspaceToken);
+      return workspaceApi.createExecutionRun(taskId, { snapshot_id: snapshot.result_snapshot_id!, test_keys: testKeys }, workspaceToken);
+    },
     onSuccess: (run) => {
       void queryClient.invalidateQueries({ queryKey: keys.executionRuns(taskId) });
+      void workbench.refetch();
       currentRunId.current = run.public_id;
     },
     onError: (error) => toast.notify(serializeError(error), "error"),
@@ -217,6 +239,7 @@ export function Workbench() {
   const submitReport = useMutation({
     /* If-Match 锁的是任务 row_version；保存草稿会推进任务状态，缓存里的版本会过期，提交前现取最新 */
     mutationFn: async () => {
+      if (!await saveDraftNow()) throw new Error("请先保存报告并解决保存冲突");
       const latest = await taskApi.detail(taskId);
       return reportApi.submitReport(taskId, undefined, latest.row_version);
     },
@@ -282,13 +305,14 @@ export function Workbench() {
   const chapters = aggregate?.chapters ?? [];
   const activeChapter = chapters.find((chapter) => chapter.public_id === chapterId) ?? chapters[0];
   const tests = aggregate?.tests ?? [];
+  const testsAvailable = aggregate?.tests_available ?? tests.length > 0;
   const blockers = task?.blockers ?? [];
   const allowed = task?.allowed_actions ?? [];
 
-  /* 无测试用例的阶段不强制"通过测试"检查(后端同样按 auto_check_rules 豁免) */
+  /* 判题资源可能不公开分项用例，由服务端声明是否需要测试。 */
   const submitChecks = [
     { label: "实验报告已保存", ok: saveStatus.tone === "good", failReason: "请等待报告草稿保存完成" },
-    ...(tests.length > 0
+    ...(testsAvailable
       ? [{ label: "本阶段测试已通过", ok: lastRun?.status === "PASSED", failReason: "请先运行并通过本阶段测试" }]
       : []),
     ...blockers.map((blocker) => ({ label: blocker.reason ?? "服务端阻塞", ok: false, failReason: blocker.reason ?? "存在未解除的阻塞" })),
@@ -397,7 +421,12 @@ export function Workbench() {
                   <span style={{ color: "var(--amber)" }}>!</span>
                   <span>{conflict}</span>
                   <Button size="sm" style={{ marginLeft: "auto" }}
-                    onClick={() => { void saveDraftNow(); setConflict(null); }}>
+                    onClick={async () => {
+                      try {
+                        draftBaseRef.current = await reportApi.draft(taskId);
+                        await saveDraftNow();
+                      } catch (error) { toast.notify(serializeError(error), "error"); }
+                    }}>
                     以我的版本覆盖
                   </Button>
                 </div>
@@ -456,18 +485,11 @@ export function Workbench() {
                 )
               ) : null}
               {workspaceTab === "editor" ? (
-                <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
-                  <div className="terminal-head"><span>文件编辑</span><span>/etc/resolv.conf</span></div>
-                  <div style={{ padding: 9, flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
-                    <textarea className="field" style={{ flex: 1, minHeight: 120, fontFamily: "Consolas, monospace", resize: "none" }}
-                      aria-label="实验文件编辑器" value={fileContent}
-                      onChange={(event) => setFileContent(event.target.value)} />
-                    <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-                      <Button size="sm">保存文件</Button>
-                      <small>编辑实验文件后，运行测试用例验证配置。</small>
-                    </div>
-                  </div>
-                </div>
+                storedSession?.capabilities?.["webide"] === true ? (
+                  <iframe title="实验文件编辑器"
+                    src={storedSession.workspace_urls?.["webide"] ?? `/workspace/${storedSession.session_id}/webide/`}
+                    style={{ flex: 1, width: "100%", minHeight: 0, border: 0 }} />
+                ) : <EmptyState title="文件编辑器尚未就绪" hint="工作区连接后，启用了 Web IDE 的实验可在这里编辑和保存文件。" />
               ) : null}
               {workspaceTab === "preview" ? (
                 lastRun && (lastRun.status === "PASSED" || runIsRunning(lastRun.status) || runIsFailed(lastRun.status)) ? (
@@ -501,7 +523,7 @@ export function Workbench() {
             <section className="test-panel" aria-label="测试用例">
               <div className="test-panel-heading">
                 <h2>测试用例</h2>
-                <span className="test-summary">本阶段共 {tests.length} 项 · {lastRun?.status === "PASSED" ? `通过 ${lastRun.test_cases?.filter((c) => c.status === "PASSED").length ?? tests.length}` : runIsRunning(lastRun?.status) ? "运行中" : "尚未运行"}</span>
+                <span className="test-summary">{tests.length ? `本阶段共 ${tests.length} 项` : testsAvailable ? "分项用例未公开" : "暂无测试"} · {lastRun?.status === "PASSED" ? "全部通过" : runIsRunning(lastRun?.status) ? "运行中" : runIsFailed(lastRun?.status) ? `测试失败${lastRun?.error_code ? ` · ${lastRun.error_code}` : ""}` : "尚未运行"}</span>
                 <span className={`test-status ${lastRun?.status === "PASSED" ? "passed" : runIsRunning(lastRun?.status) ? "running" : runIsFailed(lastRun?.status) ? "failed" : ""}`}>
                   {lastRun?.status === "PASSED" ? "通过" : runIsRunning(lastRun?.status) ? "运行中" : runIsFailed(lastRun?.status) ? "失败" : "待运行"}
                 </span>
@@ -511,10 +533,10 @@ export function Workbench() {
                   <div className="test-case" key={String(testCase.key ?? index)}>
                     <span className="test-case-icon"><Icon name={lastRun?.status === "PASSED" ? "circle-check" : "circle-dashed"} /></span>
                     <span><strong>{testCase.name}</strong><small>{testCase.description}</small></span>
-                    <span className="test-case-result">{lastRun?.status === "PASSED" ? "通过" : "待测试"}</span>
+                    <span className="test-case-result">{lastRun?.status === "PASSED" ? "通过" : runIsRunning(lastRun?.status) ? "运行中" : runIsFailed(lastRun?.status) ? "未返回分项结果" : "待测试"}</span>
                   </div>
                 )) : (
-                  <div className="state-block" style={{ padding: 14 }}><strong>本阶段暂无测试用例</strong></div>
+                  <div className="state-block" style={{ padding: 14 }}><strong>{testsAvailable ? "运行测试以检查本阶段代码，分项用例未公开" : "本阶段暂无测试用例"}</strong></div>
                 )}
               </div>
               <div className="test-panel-actions">
@@ -522,7 +544,7 @@ export function Workbench() {
                   <Icon name="bookmark-plus" size={13} /> 保存检查点
                 </Button>
                 <div>
-                  <Button size="sm" disabled={!sessionActive || runTests.isPending || tests.length === 0}
+                  <Button size="sm" disabled={!sessionActive || runTests.isPending || runIsRunning(lastRun?.status) || createCheckpoint.isPending || restoreCheckpoint.isPending || !testsAvailable}
                     onClick={() => runTests.mutate(undefined)}>
                     <Icon name="play" size={13} />
                     {sessionActive
@@ -577,7 +599,7 @@ export function Workbench() {
         actions={(
           <>
             <Button onClick={() => setCheckpointOpen(false)}>关闭</Button>
-            <Button variant="primary" disabled={createCheckpoint.isPending || !sessionActive} onClick={() => createCheckpoint.mutate()}>
+            <Button variant="primary" disabled={createCheckpoint.isPending || runTests.isPending || runIsRunning(lastRun?.status) || restoreCheckpoint.isPending || !sessionActive} onClick={() => createCheckpoint.mutate()}>
               {createCheckpoint.isPending ? "保存中…" : "保存检查点"}
             </Button>
           </>
@@ -594,10 +616,10 @@ export function Workbench() {
               checkpoints.data.rows.map((checkpoint) => (
                 <div className="status-line" key={checkpoint.public_id} style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <span style={{ flex: 1 }}>
-                    {checkpoint.label ?? checkpoint.public_id}
-                    <small style={{ display: "block" }}>{checkpoint.saved_at}</small>
+                    {checkpoint.name ?? checkpoint.label ?? checkpoint.public_id}
+                    <small style={{ display: "block" }}>{checkpoint.created_at ?? checkpoint.saved_at}</small>
                   </span>
-                  <Button size="sm" disabled={restoreCheckpoint.isPending || !sessionActive}
+                  <Button size="sm" disabled={restoreCheckpoint.isPending || createCheckpoint.isPending || runTests.isPending || runIsRunning(lastRun?.status) || !sessionActive}
                     onClick={() => restoreCheckpoint.mutate(checkpoint.public_id)}>
                     恢复
                   </Button>
@@ -639,5 +661,6 @@ export function Workbench() {
 
 function serializeError(error: unknown): string {
   if (error instanceof ApiError) return error.payload?.message ?? "操作失败，请稍后重试";
+  if (error instanceof Error) return error.message;
   return "操作失败，请稍后重试";
 }

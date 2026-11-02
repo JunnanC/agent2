@@ -1,4 +1,4 @@
-import { taskApi, workspaceApi } from "./index";
+import { reportApi, taskApi, workspaceApi } from "./index";
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 
 function jsonResponse(status: number, body: unknown, headers?: Record<string, string>): Response {
@@ -36,6 +36,7 @@ describe("task 数据边界规范化", () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     vi.unstubAllGlobals();
   });
 
@@ -88,5 +89,49 @@ describe("task 数据边界规范化", () => {
     const headers = new Headers((postCall as [string | URL, RequestInit])[1].headers as HeadersInit);
     expect(headers.get("X-Workspace-Token")).toBe("ws-token");
     expect(headers.get("Idempotency-Key")).toBeTruthy();
+  });
+
+  it("等待快照任务完成，并携带会话版本与工作区令牌", async () => {
+    vi.useFakeTimers();
+    let reads = 0;
+    const fetchMock = vi.fn(async (input: string | URL, init?: RequestInit) => {
+      const url = String(input);
+      const data = url.endsWith("/checkpoints")
+        ? { items: [], current_version: 2, row_version: 7 }
+        : init?.method === "POST"
+          ? { public_id: "capture-1", status: "QUEUED", result_snapshot_id: null }
+          : { public_id: "capture-1", status: ++reads === 1 ? "RUNNING" : "PASSED", result_snapshot_id: reads === 1 ? null : "snapshot-3" };
+      return jsonResponse(200, { ...okEnvelope, data });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const capturing = workspaceApi.captureSnapshot("t-1", "token");
+    await vi.runAllTimersAsync();
+    expect((await capturing).result_snapshot_id).toBe("snapshot-3");
+    expect(reads).toBe(2);
+    const [, init] = fetchMock.mock.calls.find(([, options]) => options?.method === "POST")!;
+    expect(new Headers(init?.headers).get("If-Match")).toBe('"7"');
+    expect(new Headers(init?.headers).get("X-Workspace-Token")).toBe("token");
+    expect(JSON.parse(init?.body as string)).toMatchObject({ kind: "CAPTURE", base_version: 2 });
+  });
+
+  it("判题资源可运行时不依赖公开用例的数量", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse(200, {
+      ...okEnvelope,
+      data: { task: { public_id: "t-1" }, tests: { runnable: true, summary: [] } },
+    })));
+    const data = await workspaceApi.workbench("t-1");
+    expect(data.tests_available).toBe(true);
+    expect(data.tests).toEqual([]);
+  });
+
+  it("从最新已决策评审轮次读取成绩，保留零分", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse(200, {
+      ...okEnvelope,
+      data: { task_id: "t-1", rounds: [
+        { round_no: 2, decision: null },
+        { round_no: 1, decision: { decision: "REJECT", score: 0 } },
+      ] },
+    })));
+    expect((await reportApi.reviewResult("t-1")).score).toBe(0);
   });
 });

@@ -208,7 +208,12 @@ export async function request<T>(
     ...(options.headers ?? {}),
   };
 
-  if (options.body != null) headers["Content-Type"] = "application/json";
+  if (options.body != null) {
+    for (const name of Object.keys(headers)) {
+      if (name.toLowerCase() === "content-type") delete headers[name];
+    }
+    headers["Content-Type"] = "application/json";
+  }
   if (isMutation) {
     // 请求层统一补充 CSRF；相对路径由同源代理/网关决定门户
     await ensureCsrf();

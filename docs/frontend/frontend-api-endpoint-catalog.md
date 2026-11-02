@@ -1,6 +1,6 @@
 # Edu Agent Platform 前端 API 逐项目录
 
-本目录由历史 `frontend/openapi.json` 生成，覆盖当时契约中的 315 个 API 操作；末尾另列 14 个源码已注册但当时导出缺失的接口。当前工作树的 `frontend/` 目录已被删除，且后端 URL 源码持续演进，因此本文只作为接口导航，不是当前生成契约。请求体、响应体、参数、枚举和 schema 请以在线 `GET /api/v2/schema`、`backend/education_experiment_platform/apps/*/urls.py` 和对应视图 serializer 为准；恢复前端后用 `scripts/export-openapi.ps1` 重新生成。
+本目录由历史 `frontend/openapi.json` 生成，覆盖当时契约中的 315 个 API 操作；末尾另列 14 个源码已注册但当时导出缺失的接口。当前工作树的 `frontend/` 目录已被删除，且后端 URL 源码持续演进，因此本文只作为接口导航，不是当前生成契约。请求体、响应体、参数、枚举和 schema 请以在线 `GET /api/v2/schema`、`backend/apps/*/urls.py` 和对应视图 serializer 为准；恢复前端后用 `scripts/dev/export-openapi.ps1` 重新生成。
 
 | 方法 | 路径 | operationId | 标签 | 门户 |
 | --- | --- | --- | --- | --- |

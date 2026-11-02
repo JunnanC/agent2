@@ -6,6 +6,7 @@ import { ToastProvider } from "@edu/ui";
 import type { Mock } from "vitest";
 
 vi.mock("@edu/api-client", () => ({
+  reportApi: { reviewResult: vi.fn() },
   taskApi: {
     detail: vi.fn(),
     start: vi.fn(),
@@ -30,7 +31,7 @@ const taskFixture = {
   row_version: "v-1",
 };
 
-import { taskApi } from "@edu/api-client";
+import { reportApi, taskApi } from "@edu/api-client";
 import { TaskDetail } from "./task-detail";
 
 function renderTaskDetail(): void {
@@ -53,6 +54,7 @@ describe("TaskDetail 渲染", () => {
     sessionStorage.clear();
     (taskApi.detail as unknown as Mock).mockReset();
     (taskApi.detail as unknown as Mock).mockResolvedValue(taskFixture);
+    (reportApi.reviewResult as unknown as Mock).mockReset();
   });
 
   it("正常渲染任务标题、进度与操作区", async () => {
@@ -60,6 +62,21 @@ describe("TaskDetail 渲染", () => {
     expect(await screen.findByText("Linux 网络故障排查", { selector: "b" })).toBeInTheDocument();
     expect(await screen.findByRole("button", { name: "进入实验工作台" })).toBeInTheDocument();
     expect(screen.getAllByText("进行中").length).toBeGreaterThan(0);
+  });
+
+  it("已完成任务展示真实成绩、分项评分和教师批注", async () => {
+    (taskApi.detail as unknown as Mock).mockResolvedValue({ ...taskFixture, status: "COMPLETED", allowed_actions: [] });
+    (reportApi.reviewResult as unknown as Mock).mockResolvedValue({
+      score: 98,
+      rounds: [{ review_id: "review-1", round_no: 1, status: "DECIDED", decision: { decision: "APPROVE", score: 98, feedback: "完成得很好" },
+        scores: { criteria: [{ public_id: "criterion-1", title: "功能正确性", score: 60, max_score: 60 }] },
+        annotations: [{ public_id: "annotation-1", body: "请补充边界条件说明" }] }],
+    });
+    renderTaskDetail();
+    expect(await screen.findByText("98 分")).toBeInTheDocument();
+    expect(screen.getByText("60 / 60")).toBeInTheDocument();
+    expect(screen.getByText("请补充边界条件说明")).toBeInTheDocument();
+    expect(screen.getByText("完成得很好")).toBeInTheDocument();
   });
 
   it("服务端 blockers 时展示阻塞说明且不显示进入工作台按钮", async () => {

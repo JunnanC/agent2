@@ -57,15 +57,7 @@ export function Home() {
           : `比上周少 ${lastWeekMinutes - totalMinutes} 分钟`
         : "上周没有执行记录");
 
-  const pickedScore = (value: unknown): number | null => {
-    if (value == null || typeof value !== "object") return null;
-    for (const key of ["score", "score_total", "total_score", "final_score"]) {
-      const candidate = (value as Record<string, unknown>)[key];
-      if (typeof candidate === "number") return candidate;
-    }
-    return null;
-  };
-  const latestScore = (recentReviews.data ?? []).map(pickedScore).find((score) => score != null) ?? null;
+  const latestScore = (recentReviews.data ?? []).find(review => review?.score != null)?.score ?? null;
   const reviewedSub = completedTasks.length === 0
     ? "尚未获得评审"
     : latestScore != null

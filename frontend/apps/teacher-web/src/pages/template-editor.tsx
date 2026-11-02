@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { teachingApi } from "@edu/api-client";
 import { keys } from "@edu/query-keys";
@@ -15,6 +15,7 @@ export function TemplateEditor() {
   const { courseId = "", templateId = "" } = useParams();
   const navigate = useNavigate();
   const toast = useToast();
+  const queryClient = useQueryClient();
   const [step, setStep] = useState<(typeof STEPS)[number]>("基础信息");
   const [chapterTitle, setChapterTitle] = useState("");
   const [chapterDescription, setChapterDescription] = useState("");
@@ -34,6 +35,7 @@ export function TemplateEditor() {
   const versions = useQuery({
     queryKey: keys.templateVersions(courseId, templateId),
     queryFn: () => teachingApi.templateVersions(courseId, templateId),
+    refetchInterval: (query) => query.state.data?.rows.some((version) => version.status === "PRECHECKING") ? 2000 : false,
   });
 
   const currentVersion = versions.data?.rows
@@ -130,10 +132,11 @@ export function TemplateEditor() {
   });
 
   const runPrecheck = useMutation({
-    mutationFn: () => teachingApi.precheck(courseId, versionId, currentVersion?.row_version ?? ""),
+    mutationFn: (rowVersion?: number | string) => teachingApi.precheck(courseId, versionId, rowVersion ?? currentVersion?.row_version ?? ""),
     onSuccess: () => {
       toast.notify("预检作业已提交，可查看阶段进度");
       void versions.refetch();
+      void queryClient.invalidateQueries({ queryKey: keys.precheckRuns(versionId) });
     },
     onError: (error) => toast.notify(apiErrorMessage(error), "error"),
   });
@@ -154,10 +157,10 @@ export function TemplateEditor() {
       },
       currentVersion?.row_version ?? "",
     ),
-    onSuccess: () => {
+    onSuccess: (saved) => {
       toast.notify("执行规格已保存，正在运行预检");
       void versions.refetch();
-      runPrecheck.mutate();
+      runPrecheck.mutate(saved.row_version);
     },
     onError: (error) => toast.notify(apiErrorMessage(error), "error"),
   });
@@ -190,6 +193,7 @@ export function TemplateEditor() {
     queryKey: keys.precheckRuns(versionId),
     queryFn: () => teachingApi.precheckRuns(courseId, versionId),
     enabled: Boolean(versionId),
+    refetchInterval: (query) => query.state.data?.rows.some((run) => ["QUEUED", "RUNNING", "RETRY"].includes(run.status)) ? 2000 : false,
   });
 
   // 选中草稿版本后,回填其运行环境选择
@@ -201,13 +205,12 @@ export function TemplateEditor() {
   }, [currentVersion?.image_id, currentVersion?.resource_profile_id, selectedImageId, selectedProfileId]);
   const latestPrecheck = precheckRuns.data?.rows?.[0];
 
-  const precheckStages: JobStage[] = (latestPrecheck?.stages ?? []).map((stage, index) => ({
+  const precheckStages: JobStage[] = (latestPrecheck?.stage_results ?? []).map((stage, index) => ({
     key: String(index),
-    label: stage.name,
-    state: stage.status === "SUCCEEDED" ? "done"
-      : stage.status === "FAILED" ? "failed"
-        : stage.status === "RUNNING" ? "running" : "pending",
-    detail: stage.error_code ? `错误码 ${stage.error_code}` : undefined,
+    label: stage.stage,
+    state: stage.result === "PASSED" ? "done"
+      : stage.result === "FAILED" ? "failed"
+        : stage.result === "RUNNING" ? "running" : "pending",
   }));
 
   return (
@@ -424,8 +427,8 @@ export function TemplateEditor() {
             <div>
               <div className="panel-title">
                 <h2>预检与发布</h2>
-                {latestPrecheck ? <StatusBadge tone={latestPrecheck.status === "SUCCEEDED" ? "good" : latestPrecheck.status === "FAILED" ? "bad" : "blue"}>
-                  {latestPrecheck.status === "SUCCEEDED" ? "预检通过" : latestPrecheck.status === "FAILED" ? "预检失败" : "预检进行中"}
+                {latestPrecheck ? <StatusBadge tone={latestPrecheck.status === "PASSED" ? "good" : latestPrecheck.status === "FAILED" ? "bad" : "blue"}>
+                  {latestPrecheck.status === "PASSED" ? "预检通过" : latestPrecheck.status === "FAILED" ? "预检失败" : "预检进行中"}
                 </StatusBadge> : <span className="subtle">尚未预检</span>}
               </div>
               {canPublish ? (
@@ -486,7 +489,7 @@ export function TemplateEditor() {
               ) : null}
               {latestPrecheck ? (
                 <AsyncJobProgress
-                  status={latestPrecheck.status === "SUCCEEDED" ? "succeeded" : latestPrecheck.status === "FAILED" ? "failed" : "processing"}
+                  status={latestPrecheck.status === "PASSED" ? "succeeded" : latestPrecheck.status === "FAILED" ? "failed" : "processing"}
                   stages={precheckStages}
                   failureReason="预检失败时，请修正对应章节或资源配置后重新运行。"
                   onRetry={() => runPrecheck.mutate()}

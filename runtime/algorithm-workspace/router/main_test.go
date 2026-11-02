@@ -16,7 +16,7 @@ import (
 	"time"
 )
 
-const testToken = "p16-b-test-token-with-at-least-thirty-two-bytes"
+const testToken = "workspace-test-token-with-at-least-thirty-two-bytes"
 
 func targetURL(t *testing.T, value string) *url.URL {
 	t.Helper()

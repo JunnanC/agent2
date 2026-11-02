@@ -14,7 +14,7 @@ vi.mock('@edu/event-client', () => ({
 
 afterEach(() => vi.restoreAllMocks())
 
-describe('P11 platform recovery', () => {
+describe('Platform runtime recovery', () => {
   it('distinguishes an external orphan from a terminal resource leak', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
       data: [

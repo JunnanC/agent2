@@ -6,7 +6,7 @@ import { ReviewMonitorPage } from './reviewMonitor'
 
 afterEach(() => vi.restoreAllMocks())
 
-describe('P10 platform review monitor', () => {
+describe('Platform review monitor', () => {
   it('renders only aggregate review governance facts', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
       data: {
