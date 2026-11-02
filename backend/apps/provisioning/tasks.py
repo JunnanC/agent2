@@ -9,6 +9,24 @@ from .services import (
 )
 
 
+@shared_task(bind=True, max_retries=5, queue="q_provision", acks_late=True)
+def destroy_student_runtime(self: Any, runtime_id: str, actor_ref: str, trace_id: str = "") -> str:
+    from apps.courses.services import ActorContext
+
+    from .models import ProvisioningInstance
+    from .services import destroy_task_instance
+
+    instance = ProvisioningInstance.objects.select_related("task").get(public_id=runtime_id)
+    try:
+        destroy_task_instance(
+            task_id=instance.task.public_id, idempotency_key=f"student-stop:{runtime_id}",
+            context=ActorContext(actor_ref, "USER", trace_id),
+        )
+    except Exception as exc:
+        raise self.retry(exc=exc, countdown=min(30 * (2 ** self.request.retries), 300)) from exc
+    return runtime_id
+
+
 @shared_task(bind=True, max_retries=2, queue="q_provision", acks_late=True)
 def run_provisioning_job(self: Any, job_id: str, trace_id: str = "") -> str:
     execute_provisioning_job(job_id=job_id, trace_id=trace_id)

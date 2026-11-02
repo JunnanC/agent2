@@ -595,7 +595,7 @@ class UserTaskStopView(APIView):
                 expected_version=expected,
             )
             return StoredResponse(
-                200,
+                202 if instance.status == "DESTROYING" else 200,
                 _body(
                     request,
                     {

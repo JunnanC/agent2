@@ -50,7 +50,7 @@ class ProvisioningServiceTests(TestCase):
     def setUp(self) -> None:
         reset_fake_runtime()
         self.owner, self.course, self.template_version, self.rubric_version = create_domain(
-            suffix="p07"
+            suffix="provisioning"
         )
         self.adapter = self.template_version.runtime_adapter
         RuntimeAdapter.objects.filter(pk=self.adapter.pk).update(
@@ -59,13 +59,13 @@ class ProvisioningServiceTests(TestCase):
             health_status=RuntimeAdapter.HealthStatus.HEALTHY,
         )
         self.adapter.refresh_from_db()
-        self.enrollment = create_enrollment(self.course, suffix="p07-student")
+        self.enrollment = create_enrollment(self.course, suffix="provisioning-student")
         self.publication = create_draft_publication(
             owner=self.owner,
             course=self.course,
             template_version=self.template_version,
             rubric_version=self.rubric_version,
-            suffix="p07",
+            suffix="provisioning",
         )
         self.platform_quota = Quota.objects.create(
             scope_type=Quota.ScopeType.PLATFORM,
@@ -75,7 +75,7 @@ class ProvisioningServiceTests(TestCase):
             max_cpu_millicores=20000,
             max_memory_mb=40000,
             max_disk_gb=200,
-            change_reason="P07 test quota",
+            change_reason="provisioning test quota",
         )
         Quota.objects.create(
             scope_type=Quota.ScopeType.COURSE,
@@ -86,7 +86,7 @@ class ProvisioningServiceTests(TestCase):
             max_cpu_millicores=20000,
             max_memory_mb=40000,
             max_disk_gb=200,
-            change_reason="P07 test quota",
+            change_reason="provisioning test quota",
         )
         Quota.objects.create(
             scope_type=Quota.ScopeType.USER,
@@ -97,7 +97,7 @@ class ProvisioningServiceTests(TestCase):
             max_cpu_millicores=20000,
             max_memory_mb=40000,
             max_disk_gb=200,
-            change_reason="P07 test quota",
+            change_reason="provisioning test quota",
         )
         published, _ = publish_publication(
             course_id=self.course.public_id,
@@ -111,7 +111,7 @@ class ProvisioningServiceTests(TestCase):
         self.context = ActorContext(
             self.task.student.public_id,
             "USER",
-            "p07" * 8,
+            "provisioning".ljust(32, "0"),
         )
 
     def tearDown(self) -> None:
@@ -146,6 +146,41 @@ class ProvisioningServiceTests(TestCase):
         )
         return published.tasks.get(student=enrollment.student), enrollment.student
 
+    def test_student_stop_dispatches_docker_work_after_commit_and_releases_quota(self) -> None:
+        from apps.experiments.services import stop_task_runtime
+        from apps.provisioning.tasks import destroy_student_runtime
+
+        job = self._start()
+        execute_provisioning_job(job_id=job.public_id)
+        self.task.refresh_from_db()
+        instance = ProvisioningInstance.objects.get(task=self.task)
+        with (
+            patch("apps.provisioning.tasks.destroy_student_runtime.delay") as dispatch,
+            patch("apps.core.tasks.relay_outbox.apply_async"),
+        ):
+            with self.captureOnCommitCallbacks(execute=True):
+                stopped = stop_task_runtime(
+                    runtime_id=instance.public_id,
+                    actor=self.task.student,
+                    context=self.context,
+                    expected_version=self.task.row_version,
+                )
+            self.assertEqual(stopped.status, ProvisioningInstance.Status.DESTROYING)
+            dispatch.assert_called_once_with(
+                instance.public_id, self.task.student.public_id, self.context.trace_id
+            )
+        destroy_student_runtime.run(
+            instance.public_id, self.task.student.public_id, self.context.trace_id
+        )
+        instance.refresh_from_db()
+        job.reservation.refresh_from_db()
+        self.assertEqual(instance.status, ProvisioningInstance.Status.DESTROYED)
+        self.assertEqual(job.reservation.status, QuotaReservation.Status.RELEASED)
+        # A duplicate delivery remains safe after cleanup completed.
+        destroy_student_runtime.run(
+            instance.public_id, self.task.student.public_id, self.context.trace_id
+        )
+
     def test_template_creation_does_not_change_runtime_capacity(self) -> None:
         RuntimeAdapter.objects.filter(pk=self.adapter.pk).update(
             capacity_cpu_millicores=4000,
@@ -162,7 +197,7 @@ class ProvisioningServiceTests(TestCase):
             course=self.course,
             template_version=self.template_version,
             rubric_version=self.rubric_version,
-            suffix="p07-capacity-publication",
+            suffix="provisioning-capacity-publication",
         )
 
         self.assertEqual(
@@ -324,9 +359,7 @@ class ProvisioningServiceTests(TestCase):
         )
 
     def test_multiple_publication_tasks_use_publication_frozen_runtime_snapshot(self) -> None:
-        first = PublicationTask.objects.get(
-            publication_chapter__publication=self.publication
-        )
+        first = PublicationTask.objects.get(publication_chapter__publication=self.publication)
         PublicationTask.objects.create(
             publication_chapter=first.publication_chapter,
             source_task_id="01SECOND-PUBLICATION-TASK",
@@ -400,7 +433,7 @@ class ProvisioningServiceTests(TestCase):
         for index, stage in enumerate(ProvisioningJob.Stage.values):
             with self.subTest(stage=stage):
                 reset_fake_runtime()
-                task, student = self._new_task(f"p07-failure-{index}")
+                task, student = self._new_task(f"provisioning-failure-{index}")
                 fake_runtime().failures[stage] = f"FAKE_{stage}_FAILED"
                 _, job = start_provisioning(
                     task_id=task.public_id,

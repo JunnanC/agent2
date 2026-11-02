@@ -165,9 +165,9 @@ services:
         limits: { cpus: "1.00", memory: 768M }
       update_config: { parallelism: 1, order: stop-first, failure_action: rollback }
 
-  runtime-worker:
+  runtime-worker: &runtime-worker
     image: ${REGISTRY}/experimental-platform-backend:${IMAGE_TAG}
-    command: ["celery", "-A", "education_experiment_platform", "worker", "--loglevel=INFO", "--concurrency=${RUNTIME_WORKER_CONCURRENCY:-2}", "--queues=q_provision,q_archive,q_compensate,q_workspace_storage"]
+    command: ["celery", "-A", "education_experiment_platform", "worker", "--loglevel=INFO", "--concurrency=${RUNTIME_WORKER_CONCURRENCY:-2}", "--queues=q_provision,q_archive,q_compensate"]
     environment:
       <<: *app-environment
       DJANGO_SECRET_KEY_FILE: /run/secrets/django_secret_key
@@ -185,6 +185,10 @@ services:
         reservations: { cpus: "0.25", memory: 256M }
         limits: { cpus: "1.00", memory: 768M }
       update_config: { parallelism: 1, order: stop-first, failure_action: rollback }
+
+  workspace-storage-worker:
+    <<: *runtime-worker
+    command: ["celery", "-A", "education_experiment_platform", "worker", "--loglevel=INFO", "--concurrency=1", "--queues=q_workspace_storage"]
 
   workspace-gateway:
     image: ${REGISTRY}/experimental-platform-backend:${IMAGE_TAG}

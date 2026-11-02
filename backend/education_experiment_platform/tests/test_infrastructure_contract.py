@@ -173,7 +173,7 @@ def test_local_runtime_docker_access_is_scoped_to_runtime_worker() -> None:
     services = compose["services"]
     assert "/var/run/docker.sock:/var/run/docker.sock" in services["runtime-worker"]["volumes"]
     for service, definition in services.items():
-        if service == "runtime-worker":
+        if service in {"runtime-worker", "workspace-storage-worker"}:
             continue
         assert not any("docker.sock" in str(item) for item in definition.get("volumes", []))
     environment = compose["x-app-environment"]
@@ -191,7 +191,12 @@ def test_local_runtime_docker_access_is_scoped_to_runtime_worker() -> None:
     assert environment["RUNTIME_ADAPTER_CONFIGS"] == (
         '${RUNTIME_ADAPTER_CONFIGS:-{"runtime/local-docker":{"pids_limit":128}}}'
     )
-    assert "q_workspace_storage" in services["runtime-worker"]["command"][-1]
+    assert "q_workspace_storage" not in services["runtime-worker"]["command"][-1]
+    assert services["workspace-storage-worker"]["command"][-1] == "--queues=q_workspace_storage"
+    assert (
+        "/var/run/docker.sock:/var/run/docker.sock"
+        in services["workspace-storage-worker"]["volumes"]
+    )
 
 
 def test_swarm_runtime_access_is_injected_only_into_runtime_worker() -> None:
@@ -212,7 +217,8 @@ def test_swarm_runtime_access_is_injected_only_into_runtime_worker() -> None:
             "swarm_docker_cert",
             "swarm_docker_key",
         } & set(services[service].get("secrets", []))
-    assert "q_workspace_storage" in services["runtime-worker"]["command"][-1]
+    assert "q_workspace_storage" not in services["runtime-worker"]["command"][-1]
+    assert services["workspace-storage-worker"]["command"][-1] == "--queues=q_workspace_storage"
 
 
 def test_compose_declares_foundation_services_and_isolated_app_network() -> None:

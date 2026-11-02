@@ -337,12 +337,12 @@ services:
         limits: { cpus: "1.00", memory: 768M }
       update_config: { parallelism: 1, order: stop-first, failure_action: rollback }
 
-  runtime-worker:
+  runtime-worker: &runtime-worker
     container_name: ${COMPOSE_PROJECT_NAME}-runtime-worker
     image: experimental-platform-backend:local
     profiles: ["runtime"]
     build: *backend-build
-    command: ["celery", "-A", "education_experiment_platform", "worker", "--loglevel=INFO", "--concurrency=${RUNTIME_WORKER_CONCURRENCY:-2}", "--queues=q_provision,q_archive,q_compensate,q_workspace_storage"]
+    command: ["celery", "-A", "education_experiment_platform", "worker", "--loglevel=INFO", "--concurrency=${RUNTIME_WORKER_CONCURRENCY:-2}", "--queues=q_provision,q_archive,q_compensate"]
     environment: *app-environment
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
@@ -358,6 +358,11 @@ services:
         reservations: { cpus: "0.25", memory: 256M }
         limits: { cpus: "1.00", memory: 768M }
       update_config: { parallelism: 1, order: stop-first, failure_action: rollback }
+
+  workspace-storage-worker:
+    <<: *runtime-worker
+    container_name: ${COMPOSE_PROJECT_NAME}-workspace-storage-worker
+    command: ["celery", "-A", "education_experiment_platform", "worker", "--loglevel=INFO", "--concurrency=1", "--queues=q_workspace_storage"]
 
   workspace-gateway:
     container_name: ${COMPOSE_PROJECT_NAME}-workspace-gateway

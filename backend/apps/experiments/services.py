@@ -1484,18 +1484,20 @@ def start_task_runtime(
     )
 
 
+@transaction.atomic
 def stop_task_runtime(
     *, runtime_id: str, actor: User, context: Any, expected_version: int | None = None
 ) -> Any:
-    """Destroy a student-owned runtime and revoke its workspace sessions."""
+    """Revoke access immediately; let the Docker-enabled worker destroy the runtime."""
 
+    from apps.core.concurrency import compare_and_swap
     from apps.provisioning.models import ProvisioningInstance
-    from apps.provisioning.services import destroy_task_instance
+    from apps.provisioning.tasks import destroy_student_runtime
     from apps.workspaces.services import revoke_task_sessions
 
     try:
         instance = (
-            ProvisioningInstance.objects.select_related("task", "task__student")
+            ProvisioningInstance.objects.select_for_update().select_related("task", "task__student")
             .get(public_id=runtime_id, task__student=actor)
         )
     except ProvisioningInstance.DoesNotExist as exc:
@@ -1509,19 +1511,22 @@ def stop_task_runtime(
                 "actual_row_version": instance.task.row_version,
             }
         )
-    instance_version = instance.row_version
     revoke_task_sessions(
         task_id=instance.task.public_id,
         reason="student stopped runtime",
         context=context,
     )
-    destroyed = destroy_task_instance(
-        task_id=instance.task.public_id,
-        idempotency_key=f"student-stop:{runtime_id}",
-        context=context,
-        expected_version=instance_version,
-    )
-    return destroyed or instance
+    if instance.status == ProvisioningInstance.Status.DESTROYED:
+        return instance
+    if instance.status != ProvisioningInstance.Status.DESTROYING:
+        instance = compare_and_swap(
+            ProvisioningInstance, pk=instance.pk, expected_version=instance.row_version,
+            changes={"status": ProvisioningInstance.Status.DESTROYING, "endpoint": ""},
+        )
+    transaction.on_commit(lambda: destroy_student_runtime.delay(
+        runtime_id, actor.public_id, str(getattr(context, "trace_id", "")),
+    ))
+    return instance
 
 
 @transaction.atomic
