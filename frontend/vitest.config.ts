@@ -22,10 +22,14 @@ export default defineConfig({
       {
         find: /^@\/(.*)$/,
         replacement: "@app-src/$1",
-        customResolver: (id: string, importer?: string) => {
+        customResolver(id: string, importer?: string) {
           const appMatch = importer?.replace(/\\/g, "/").match(/apps\/([^/]+)\/src\//);
           if (!appMatch) return id.replace("@app-src/", "");
-          return path.resolve(__dirname, "apps", appMatch[1], "src", id.replace("@app-src/", ""));
+          return this.resolve(
+            path.resolve(__dirname, "apps", appMatch[1], "src", id.replace("@app-src/", "")),
+            importer,
+            { skipSelf: true },
+          );
         },
       },
     ],

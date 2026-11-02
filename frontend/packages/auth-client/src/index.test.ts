@@ -50,6 +50,15 @@ describe("auth-client request", () => {
     expect(result.etag ?? null).toBeNull();
   });
 
+  it("normalizes Content-Type casing without duplicate JSON media types", async () => {
+    await request("/tasks", {
+      method: "POST", body: {}, idempotencyKey: "header-regression",
+      headers: { "content-type": "application/json" },
+    });
+    const init = vi.mocked(fetch).mock.calls.at(-1)?.[1] as RequestInit;
+    expect(new Headers(init.headers).get("content-type")).toBe("application/json");
+  });
+
   it("POST 缺少幂等键时抛出 428 业务错误", async () => {
     await expect(request("/tasks", { method: "POST", body: { a: 1 } }))
       .rejects.toMatchObject({ payload: { code: "IDEMPOTENCY_KEY_REQUIRED" }, status: 428 });
