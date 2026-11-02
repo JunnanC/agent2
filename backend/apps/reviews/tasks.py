@@ -4,7 +4,12 @@ from celery import shared_task
 
 from apps.core.tasks import TraceTask
 
-from .services import execute_auto_check, execute_similarity_run, purge_expired_similarity_evidence
+from .services import (
+    execute_ai_score_suggestion,
+    execute_auto_check,
+    execute_similarity_run,
+    purge_expired_similarity_evidence,
+)
 
 
 @shared_task(
@@ -35,6 +40,18 @@ def run_auto_check(_task: Any, *, run_id: str) -> str:
 )
 def run_similarity_check(_task: Any, *, run_id: str) -> str:
     return execute_similarity_run(run_id=run_id).public_id
+
+
+@shared_task(
+    bind=True,
+    base=TraceTask,
+    acks_late=True,
+    queue="q_agent",
+    name="apps.reviews.run_ai_score_suggestion",
+)
+def run_ai_score_suggestion(_task: Any, *, suggestion_id: str, trace_id: str = "") -> str:
+    del trace_id
+    return execute_ai_score_suggestion(suggestion_id=suggestion_id).public_id
 
 
 @shared_task(queue="q_default", name="apps.reviews.purge_similarity_evidence")

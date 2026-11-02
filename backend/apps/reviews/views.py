@@ -10,10 +10,12 @@ from apps.accounts.models import User
 from apps.accounts.permissions import IsPlatformPortal, IsTeachingPortal, IsUserPortal
 from apps.accounts.security import client_ip
 from apps.core.concurrency import etag_for_version, parse_if_match
+from apps.core.errors import ResourceNotFound
 from apps.core.idempotency import PrincipalScope, StoredResponse, execute_idempotent
 from apps.core.pagination import PageSpec
 from apps.courses.services import ActorContext
 
+from .models import AIScoreBatch
 from .selectors import (
     review_for_course,
     reviews_for_course,
@@ -22,9 +24,15 @@ from .selectors import (
     rubrics_for_course,
     similarity_matches_for_course,
     similarity_run_for_course,
+    teaching_course,
     version_for_course,
 )
 from .serializers import (
+    AIScoreBatchDataResponseSerializer,
+    AIScoreBatchDetailResponseSerializer,
+    AIScoreBatchResponseSerializer,
+    AIScoreBatchWriteSerializer,
+    AIScoreSuggestionResponseSerializer,
     AnnotationListResponseSerializer,
     AnnotationResponseSerializer,
     AnnotationRevisionWriteSerializer,
@@ -47,6 +55,8 @@ from .serializers import (
     SimilarityMatchListResponseSerializer,
     SimilarityRunResponseSerializer,
     SimilarityStartSerializer,
+    ai_score_batch_data,
+    ai_score_suggestion_data,
     annotation_data,
     criterion_scores_data,
     decision_data,
@@ -59,6 +69,8 @@ from .serializers import (
     version_data,
 )
 from .services import (
+    accept_ai_score_batch,
+    accept_ai_score_suggestion,
     add_review_annotation,
     clone_rubric_version,
     create_rubric,
@@ -68,6 +80,7 @@ from .services import (
     review_monitor_summary,
     revise_review_annotation,
     score_review_criteria,
+    start_ai_score_batch,
     start_similarity_run,
     update_rubric_version,
 )
@@ -333,6 +346,164 @@ class TeachingReviewListView(APIView):
         )
         response["Cache-Control"] = "private, no-store"
         return response
+
+
+class TeachingAIScoreBatchListView(APIView):
+    permission_classes = [IsTeachingPortal]
+
+    @extend_schema(
+        request=AIScoreBatchWriteSerializer,
+        responses={202: AIScoreBatchResponseSerializer},
+        parameters=[IDEMPOTENCY_KEY],
+        tags=["teaching-reviews"],
+        extensions={"x-portals": ["TEACHING"]},
+    )
+    def post(self, request: HttpRequest, course_id: str) -> Response:
+        serializer = AIScoreBatchWriteSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        def operation() -> StoredResponse:
+            batch = start_ai_score_batch(
+                course_id=course_id,
+                publication_id=serializer.validated_data["publication_id"],
+                actor=request.user,
+                context=_context(request),
+            )
+            return StoredResponse(
+                202,
+                _body(request, ai_score_batch_data(batch)),
+                {"ETag": etag_for_version(batch.row_version)},
+            )
+
+        return _idempotent(request, payload=serializer.validated_data, operation=operation)
+
+    @extend_schema(
+        responses={200: AIScoreBatchResponseSerializer},
+        tags=["teaching-reviews"],
+        extensions={"x-portals": ["TEACHING"]},
+    )
+    def get(self, request: HttpRequest, course_id: str) -> Response:
+        course = teaching_course(actor=request.user, course_id=course_id)
+        spec = PageSpec.parse(request.GET.get("page", 1), request.GET.get("page_size", 20))
+        queryset = AIScoreBatch.objects.filter(course=course).select_related(
+            "course", "publication", "created_by"
+        ).order_by("-created_at", "-id")
+        total = queryset.count()
+        values = list(queryset[spec.offset : spec.offset + spec.page_size])
+        return _response(
+            request,
+            {
+                "batches": [ai_score_batch_data(item) for item in values],
+                "page": spec.page,
+                "page_size": spec.page_size,
+                "total": total,
+            },
+        )
+
+
+class TeachingAIScoreBatchDetailView(APIView):
+    permission_classes = [IsTeachingPortal]
+    http_method_names = ["get", "head", "options"]
+
+    @extend_schema(
+        operation_id="teaching_ai_score_batch_retrieve",
+        request=None,
+        responses={200: AIScoreBatchDetailResponseSerializer},
+        tags=["teaching-reviews"],
+        extensions={"x-portals": ["TEACHING"]},
+    )
+    def get(self, request: HttpRequest, course_id: str, batch_id: str) -> Response:
+        course = teaching_course(actor=request.user, course_id=course_id)
+        try:
+            batch = AIScoreBatch.objects.select_related("course", "publication", "created_by").get(
+                public_id=batch_id, course=course
+            )
+        except AIScoreBatch.DoesNotExist as exc:
+            raise ResourceNotFound() from exc
+        spec = PageSpec.parse(request.GET.get("page", 1), request.GET.get("page_size", 20))
+        queryset = batch.suggestions.select_related("review__task__student").order_by("id")
+        total = queryset.count()
+        values = list(queryset[spec.offset : spec.offset + spec.page_size])
+        return _response(
+            request,
+            {
+                "batch": ai_score_batch_data(batch),
+                "suggestions": [ai_score_suggestion_data(item) for item in values],
+                "page": spec.page,
+                "page_size": spec.page_size,
+                "total": total,
+            },
+            etag=batch.row_version,
+        )
+
+    @extend_schema(
+        operation_id="teaching_ai_score_batch_accept",
+        parameters=[IF_MATCH, IDEMPOTENCY_KEY],
+        request=None,
+        responses={200: AIScoreBatchDataResponseSerializer},
+        tags=["teaching-reviews"],
+        extensions={"x-portals": ["TEACHING"]},
+    )
+    def post(self, request: HttpRequest, course_id: str, batch_id: str) -> Response:
+        expected = parse_if_match(request.headers.get("If-Match"))
+
+        def operation() -> StoredResponse:
+            batch = accept_ai_score_batch(
+                course_id=course_id,
+                batch_id=batch_id,
+                actor=request.user,
+                expected_batch_version=expected,
+                context=_context(request),
+            )
+            return StoredResponse(
+                200,
+                _body(request, ai_score_batch_data(batch)),
+                {"ETag": etag_for_version(batch.row_version)},
+            )
+
+        return _idempotent(request, payload={}, operation=operation)
+
+
+class TeachingAIScoreBatchAcceptView(TeachingAIScoreBatchDetailView):
+    http_method_names = ["post", "options"]
+
+
+class TeachingAIScoreSuggestionAcceptView(APIView):
+    permission_classes = [IsTeachingPortal]
+
+    @extend_schema(
+        operation_id="teaching_ai_score_suggestion_accept",
+        parameters=[IF_MATCH, IDEMPOTENCY_KEY],
+        request=None,
+        responses={200: AIScoreSuggestionResponseSerializer},
+        tags=["teaching-reviews"],
+        extensions={"x-portals": ["TEACHING"]},
+    )
+    def post(
+        self,
+        request: HttpRequest,
+        course_id: str,
+        review_id: str,
+        suggestion_id: str,
+    ) -> Response:
+        expected = parse_if_match(request.headers.get("If-Match"))
+
+        def operation() -> StoredResponse:
+            suggestion = accept_ai_score_suggestion(
+                course_id=course_id,
+                review_id=review_id,
+                suggestion_id=suggestion_id,
+                actor=request.user,
+                expected_review_version=expected,
+                context=_context(request),
+            )
+            return StoredResponse(
+                200,
+                _body(request, ai_score_suggestion_data(suggestion)),
+                {"ETag": etag_for_version(suggestion.review.row_version)},
+            )
+
+        return _idempotent(request, payload={}, operation=operation)
 
 
 class TeachingReviewDetailView(APIView):

@@ -57,6 +57,7 @@ from .services import (
     request_extension,
     start_task_runtime,
     stop_task_runtime,
+    student_learning_history,
     teaching_progress,
     update_publication,
     withdraw_publication,
@@ -338,6 +339,7 @@ class TeachingTaskListView(APIView):
             publication_id=publication_id,
             spec=spec,
             status=request.query_params.get("status", ""),
+            student_id=request.query_params.get("student_id", ""),
             query=request.query_params.get("q", ""),
         )
         return _page_response(
@@ -467,6 +469,18 @@ class UserDashboardView(APIView):
                 ],
             },
         )
+
+
+class UserLearningHistoryView(APIView):
+    permission_classes = [IsUserPortal]
+
+    @extend_schema(
+        operation_id="me_learning_history",
+        responses=GenericResponseSerializer,
+        extensions={"x-portals": ["USER"]},
+    )
+    def get(self, request: HttpRequest) -> Response:
+        return _response(request, student_learning_history(actor=request.user))
 
 
 class UserTaskListView(APIView):

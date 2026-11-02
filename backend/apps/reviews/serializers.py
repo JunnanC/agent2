@@ -1,6 +1,7 @@
 from decimal import Decimal
 from typing import Any
 
+from django.db.models import Count
 from rest_framework import serializers
 
 from apps.reports.serializers import (
@@ -11,6 +12,8 @@ from apps.reports.serializers import (
 )
 
 from .models import (
+    AIScoreBatch,
+    AIScoreSuggestion,
     AnnotationRevision,
     AutoCheckRun,
     Review,
@@ -27,6 +30,10 @@ from .models import (
 class RubricWriteSerializer(serializers.Serializer):
     name = serializers.CharField(max_length=160)
     description = serializers.CharField(required=False, allow_blank=True)
+
+
+class AIScoreBatchWriteSerializer(serializers.Serializer):
+    publication_id = serializers.CharField(max_length=26)
 
 
 class RubricVersionCreateSerializer(serializers.Serializer):
@@ -391,6 +398,62 @@ class ReviewMonitorResponseSerializer(serializers.Serializer):
     meta = serializers.DictField()
 
 
+class AIScoreSuggestionDataSerializer(serializers.Serializer):
+    public_id = serializers.CharField()
+    review_id = serializers.CharField()
+    student_id = serializers.CharField()
+    student_name = serializers.CharField()
+    status = serializers.ChoiceField(choices=AIScoreSuggestion.Status.choices)
+    review_row_version = serializers.IntegerField()
+    criteria = serializers.ListField(child=serializers.DictField())
+    total_score = serializers.DecimalField(max_digits=9, decimal_places=2, allow_null=True)
+    model_name = serializers.CharField()
+    error_code = serializers.CharField()
+    accepted_by = serializers.CharField(allow_null=True)
+    accepted_at = serializers.DateTimeField(allow_null=True)
+    row_version = serializers.IntegerField()
+
+
+class AIScoreBatchDataSerializer(serializers.Serializer):
+    public_id = serializers.CharField()
+    course_id = serializers.CharField()
+    publication_id = serializers.CharField()
+    publication_title = serializers.CharField()
+    created_by = serializers.CharField()
+    status = serializers.ChoiceField(choices=AIScoreBatch.Status.choices)
+    entry_count = serializers.IntegerField()
+    counts = serializers.DictField(child=serializers.IntegerField())
+    row_version = serializers.IntegerField()
+
+
+class AIScoreBatchResponseSerializer(serializers.Serializer):
+    data = serializers.DictField()
+    meta = serializers.DictField()
+
+
+class AIScoreBatchDataResponseSerializer(serializers.Serializer):
+    data = AIScoreBatchDataSerializer()
+    meta = serializers.DictField()
+
+
+class AIScoreBatchDetailDataSerializer(serializers.Serializer):
+    batch = AIScoreBatchDataSerializer()
+    suggestions = AIScoreSuggestionDataSerializer(many=True)
+    page = serializers.IntegerField()
+    page_size = serializers.IntegerField()
+    total = serializers.IntegerField()
+
+
+class AIScoreBatchDetailResponseSerializer(serializers.Serializer):
+    data = AIScoreBatchDetailDataSerializer()
+    meta = serializers.DictField()
+
+
+class AIScoreSuggestionResponseSerializer(serializers.Serializer):
+    data = AIScoreSuggestionDataSerializer()
+    meta = serializers.DictField()
+
+
 def review_list_data(item: Review) -> dict[str, Any]:
     return {
         "public_id": item.public_id,
@@ -403,6 +466,42 @@ def review_list_data(item: Review) -> dict[str, Any]:
         "status": item.status,
         "target_kind": "REPORT" if item.report_version_id else "SYSTEM_ARTIFACT",
         "created_at": item.created_at,
+        "row_version": item.row_version,
+    }
+
+
+def ai_score_suggestion_data(item: AIScoreSuggestion) -> dict[str, Any]:
+    return {
+        "public_id": item.public_id,
+        "review_id": item.review.public_id,
+        "student_id": item.review.task.student.public_id,
+        "student_name": item.review.task.student.display_name,
+        "status": item.status,
+        "review_row_version": item.review_row_version,
+        "criteria": item.criteria,
+        "total_score": item.total_score,
+        "model_name": item.model_name,
+        "error_code": item.error_code,
+        "accepted_by": item.accepted_by.public_id if item.accepted_by_id else None,
+        "accepted_at": item.accepted_at,
+        "row_version": item.row_version,
+    }
+
+
+def ai_score_batch_data(item: AIScoreBatch) -> dict[str, Any]:
+    counts = {
+        row["status"]: row["count"]
+        for row in item.suggestions.values("status").annotate(count=Count("id"))
+    }
+    return {
+        "public_id": item.public_id,
+        "course_id": item.course.public_id,
+        "publication_id": item.publication.public_id,
+        "publication_title": item.publication.title,
+        "created_by": item.created_by.public_id,
+        "status": item.status,
+        "entry_count": item.entry_count,
+        "counts": counts,
         "row_version": item.row_version,
     }
 

@@ -1672,6 +1672,34 @@
                 ]
             }
         },
+        "/api/v2/me/learning-history": {
+            "get": {
+                "operationId": "me_learning_history",
+                "tags": [
+                    "api"
+                ],
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/GenericResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                },
+                "x-portals": [
+                    "USER"
+                ]
+            }
+        },
         "/api/v2/me/oidc-identities": {
             "get": {
                 "operationId": "api_v2_me_oidc_identities_retrieve",
@@ -1842,6 +1870,224 @@
                     "TEACHING",
                     "PLATFORM"
                 ]
+            }
+        },
+        "/api/v2/me/timetable": {
+            "get": {
+                "operationId": "api_v2_me_timetable_retrieve",
+                "tags": [
+                    "api"
+                ],
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/GenericTimetableResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/v2/me/timetable-imports": {
+            "get": {
+                "operationId": "api_v2_me_timetable_imports_retrieve",
+                "tags": [
+                    "api"
+                ],
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/GenericTimetableResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            },
+            "post": {
+                "operationId": "api_v2_me_timetable_imports_create",
+                "tags": [
+                    "api"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/TimetableUpload"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/TimetableUpload"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/TimetableUpload"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/GenericTimetableResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/v2/me/timetable-imports/{job_id}": {
+            "get": {
+                "operationId": "student_timetable_import_retrieve",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "job_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "api"
+                ],
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/GenericTimetableResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/v2/me/timetable-imports/{job_id}/confirm": {
+            "post": {
+                "operationId": "student_timetable_import_confirm",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "job_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "api"
+                ],
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/GenericTimetableResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/v2/me/timetable-imports/{job_id}/mapping": {
+            "put": {
+                "operationId": "student_timetable_import_mapping_update",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "job_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "api"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/TimetableMapping"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/TimetableMapping"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/TimetableMapping"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/GenericTimetableResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
             }
         },
         "/api/v2/me/verification": {
@@ -2154,6 +2400,205 @@
                 "x-portals": [
                     "PLATFORM"
                 ]
+            }
+        },
+        "/api/v2/platform/administrative-classes": {
+            "get": {
+                "operationId": "api_v2_platform_administrative_classes_retrieve",
+                "tags": [
+                    "api"
+                ],
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/GenericTimetableResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            },
+            "post": {
+                "operationId": "api_v2_platform_administrative_classes_create",
+                "tags": [
+                    "api"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/AdministrativeClassWrite"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/AdministrativeClassWrite"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/AdministrativeClassWrite"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/GenericTimetableResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/v2/platform/administrative-classes/{class_id}/members": {
+            "get": {
+                "operationId": "api_v2_platform_administrative_classes_members_retrieve",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "class_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "api"
+                ],
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/GenericTimetableResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            },
+            "post": {
+                "operationId": "api_v2_platform_administrative_classes_members_create",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "class_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "api"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/AdministrativeClassMemberWrite"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/AdministrativeClassMemberWrite"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/AdministrativeClassMemberWrite"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/GenericTimetableResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/v2/platform/administrative-classes/{class_id}/members/{student_id}/end": {
+            "post": {
+                "operationId": "platform_administrative_class_member_end",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "class_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "student_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "api"
+                ],
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/GenericTimetableResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
             }
         },
         "/api/v2/platform/agent/eval-runs": {
@@ -4575,6 +5020,27 @@
                             }
                         },
                         "description": ""
+                    }
+                },
+                "x-portals": [
+                    "PLATFORM"
+                ]
+            }
+        },
+        "/api/v2/platform/operations/audit": {
+            "get": {
+                "operationId": "api_v2_platform_operations_audit_retrieve",
+                "tags": [
+                    "platform-analytics"
+                ],
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "No response body"
                     }
                 },
                 "x-portals": [
@@ -9791,6 +10257,216 @@
                 ]
             }
         },
+        "/api/v2/teaching/courses/{course_id}/ai-score-batches": {
+            "get": {
+                "operationId": "api_v2_teaching_courses_ai_score_batches_retrieve",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "course_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "teaching-reviews"
+                ],
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AIScoreBatchResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                },
+                "x-portals": [
+                    "TEACHING"
+                ]
+            },
+            "post": {
+                "operationId": "api_v2_teaching_courses_ai_score_batches_create",
+                "parameters": [
+                    {
+                        "in": "header",
+                        "name": "Idempotency-Key",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "course_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "teaching-reviews"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/AIScoreBatchWrite"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/AIScoreBatchWrite"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/AIScoreBatchWrite"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AIScoreBatchResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                },
+                "x-portals": [
+                    "TEACHING"
+                ]
+            }
+        },
+        "/api/v2/teaching/courses/{course_id}/ai-score-batches/{batch_id}": {
+            "get": {
+                "operationId": "teaching_ai_score_batch_retrieve",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "batch_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "course_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "teaching-reviews"
+                ],
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AIScoreBatchDetailResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                },
+                "x-portals": [
+                    "TEACHING"
+                ]
+            }
+        },
+        "/api/v2/teaching/courses/{course_id}/ai-score-batches/{batch_id}/accept": {
+            "post": {
+                "operationId": "teaching_ai_score_batch_accept",
+                "parameters": [
+                    {
+                        "in": "header",
+                        "name": "Idempotency-Key",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "header",
+                        "name": "If-Match",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "batch_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "course_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "teaching-reviews"
+                ],
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AIScoreBatchDataResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                },
+                "x-portals": [
+                    "TEACHING"
+                ]
+            }
+        },
         "/api/v2/teaching/courses/{course_id}/analytics/overview": {
             "get": {
                 "operationId": "api_v2_teaching_courses_analytics_overview_retrieve",
@@ -12646,6 +13322,76 @@
                 ]
             }
         },
+        "/api/v2/teaching/courses/{course_id}/reviews/{review_id}/ai-score-suggestions/{suggestion_id}/accept": {
+            "post": {
+                "operationId": "teaching_ai_score_suggestion_accept",
+                "parameters": [
+                    {
+                        "in": "header",
+                        "name": "Idempotency-Key",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "header",
+                        "name": "If-Match",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "course_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "review_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "suggestion_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "teaching-reviews"
+                ],
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AIScoreSuggestionResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                },
+                "x-portals": [
+                    "TEACHING"
+                ]
+            }
+        },
         "/api/v2/teaching/courses/{course_id}/reviews/{review_id}/annotations": {
             "get": {
                 "operationId": "teaching_review_annotations_list",
@@ -14037,6 +14783,47 @@
                             "application/json": {
                                 "schema": {
                                     "$ref": "#/components/schemas/StaffResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                },
+                "x-portals": [
+                    "TEACHING"
+                ]
+            }
+        },
+        "/api/v2/teaching/courses/{course_id}/tasks": {
+            "get": {
+                "operationId": "teaching_experiment_tasks_list_2",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "course_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "api"
+                ],
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/TaskData"
+                                    }
                                 }
                             }
                         },
@@ -15991,6 +16778,41 @@
                 ]
             }
         },
+        "/api/v2/teaching/courses/{course_id}/timetable": {
+            "get": {
+                "operationId": "api_v2_teaching_courses_timetable_retrieve",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "course_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "api"
+                ],
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/GenericTimetableResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
         "/api/v2/teaching/courses/{course_id}/transfer-owner": {
             "post": {
                 "operationId": "api_v2_teaching_courses_transfer_owner_create",
@@ -16047,6 +16869,199 @@
                 "x-portals": [
                     "TEACHING"
                 ]
+            }
+        },
+        "/api/v2/teaching/timetable-imports": {
+            "get": {
+                "operationId": "api_v2_teaching_timetable_imports_retrieve",
+                "tags": [
+                    "api"
+                ],
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/GenericTimetableResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            },
+            "post": {
+                "operationId": "api_v2_teaching_timetable_imports_create",
+                "tags": [
+                    "api"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/TimetableUpload"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/TimetableUpload"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/TimetableUpload"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/GenericTimetableResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/v2/teaching/timetable-imports/{job_id}": {
+            "get": {
+                "operationId": "teaching_timetable_import_retrieve",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "job_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "api"
+                ],
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/GenericTimetableResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/v2/teaching/timetable-imports/{job_id}/confirm": {
+            "post": {
+                "operationId": "teaching_timetable_import_confirm",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "job_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "api"
+                ],
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/GenericTimetableResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/v2/teaching/timetable-imports/{job_id}/mapping": {
+            "put": {
+                "operationId": "teaching_timetable_import_mapping_update",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "job_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "api"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/TimetableMapping"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/TimetableMapping"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/TimetableMapping"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/GenericTimetableResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
             }
         },
         "/api/v2/workspace-sessions/{session_id}/renew": {
@@ -16278,6 +17293,251 @@
     },
     "components": {
         "schemas": {
+            "AIScoreBatchData": {
+                "type": "object",
+                "properties": {
+                    "public_id": {
+                        "type": "string"
+                    },
+                    "course_id": {
+                        "type": "string"
+                    },
+                    "publication_id": {
+                        "type": "string"
+                    },
+                    "publication_title": {
+                        "type": "string"
+                    },
+                    "created_by": {
+                        "type": "string"
+                    },
+                    "status": {
+                        "$ref": "#/components/schemas/AIScoreBatchDataStatusEnum"
+                    },
+                    "entry_count": {
+                        "type": "integer"
+                    },
+                    "counts": {
+                        "type": "object",
+                        "additionalProperties": {
+                            "type": "integer"
+                        }
+                    },
+                    "row_version": {
+                        "type": "integer"
+                    }
+                },
+                "required": [
+                    "counts",
+                    "course_id",
+                    "created_by",
+                    "entry_count",
+                    "public_id",
+                    "publication_id",
+                    "publication_title",
+                    "row_version",
+                    "status"
+                ]
+            },
+            "AIScoreBatchDataResponse": {
+                "type": "object",
+                "properties": {
+                    "data": {
+                        "$ref": "#/components/schemas/AIScoreBatchData"
+                    },
+                    "meta": {
+                        "type": "object",
+                        "additionalProperties": {}
+                    }
+                },
+                "required": [
+                    "data",
+                    "meta"
+                ]
+            },
+            "AIScoreBatchDataStatusEnum": {
+                "enum": [
+                    "QUEUED",
+                    "RUNNING",
+                    "REVIEW_REQUIRED",
+                    "COMPLETED",
+                    "COMPLETED_WITH_ERRORS",
+                    "FAILED"
+                ],
+                "type": "string",
+                "description": "* `QUEUED` - Queued\n* `RUNNING` - Running\n* `REVIEW_REQUIRED` - Review Required\n* `COMPLETED` - Completed\n* `COMPLETED_WITH_ERRORS` - Completed With Errors\n* `FAILED` - Failed"
+            },
+            "AIScoreBatchDetailData": {
+                "type": "object",
+                "properties": {
+                    "batch": {
+                        "$ref": "#/components/schemas/AIScoreBatchData"
+                    },
+                    "suggestions": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/AIScoreSuggestionData"
+                        }
+                    },
+                    "page": {
+                        "type": "integer"
+                    },
+                    "page_size": {
+                        "type": "integer"
+                    },
+                    "total": {
+                        "type": "integer"
+                    }
+                },
+                "required": [
+                    "batch",
+                    "page",
+                    "page_size",
+                    "suggestions",
+                    "total"
+                ]
+            },
+            "AIScoreBatchDetailResponse": {
+                "type": "object",
+                "properties": {
+                    "data": {
+                        "$ref": "#/components/schemas/AIScoreBatchDetailData"
+                    },
+                    "meta": {
+                        "type": "object",
+                        "additionalProperties": {}
+                    }
+                },
+                "required": [
+                    "data",
+                    "meta"
+                ]
+            },
+            "AIScoreBatchResponse": {
+                "type": "object",
+                "properties": {
+                    "data": {
+                        "type": "object",
+                        "additionalProperties": {}
+                    },
+                    "meta": {
+                        "type": "object",
+                        "additionalProperties": {}
+                    }
+                },
+                "required": [
+                    "data",
+                    "meta"
+                ]
+            },
+            "AIScoreBatchWrite": {
+                "type": "object",
+                "properties": {
+                    "publication_id": {
+                        "type": "string",
+                        "maxLength": 26
+                    }
+                },
+                "required": [
+                    "publication_id"
+                ]
+            },
+            "AIScoreSuggestionData": {
+                "type": "object",
+                "properties": {
+                    "public_id": {
+                        "type": "string"
+                    },
+                    "review_id": {
+                        "type": "string"
+                    },
+                    "student_id": {
+                        "type": "string"
+                    },
+                    "student_name": {
+                        "type": "string"
+                    },
+                    "status": {
+                        "$ref": "#/components/schemas/AIScoreSuggestionDataStatusEnum"
+                    },
+                    "review_row_version": {
+                        "type": "integer"
+                    },
+                    "criteria": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "additionalProperties": {}
+                        }
+                    },
+                    "total_score": {
+                        "type": "string",
+                        "format": "decimal",
+                        "pattern": "^-?\\d{0,7}(?:\\.\\d{0,2})?$",
+                        "nullable": true
+                    },
+                    "model_name": {
+                        "type": "string"
+                    },
+                    "error_code": {
+                        "type": "string"
+                    },
+                    "accepted_by": {
+                        "type": "string",
+                        "nullable": true
+                    },
+                    "accepted_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "nullable": true
+                    },
+                    "row_version": {
+                        "type": "integer"
+                    }
+                },
+                "required": [
+                    "accepted_at",
+                    "accepted_by",
+                    "criteria",
+                    "error_code",
+                    "model_name",
+                    "public_id",
+                    "review_id",
+                    "review_row_version",
+                    "row_version",
+                    "status",
+                    "student_id",
+                    "student_name",
+                    "total_score"
+                ]
+            },
+            "AIScoreSuggestionDataStatusEnum": {
+                "enum": [
+                    "QUEUED",
+                    "RUNNING",
+                    "READY",
+                    "ACCEPTED",
+                    "FAILED"
+                ],
+                "type": "string",
+                "description": "* `QUEUED` - Queued\n* `RUNNING` - Running\n* `READY` - Ready\n* `ACCEPTED` - Accepted\n* `FAILED` - Failed"
+            },
+            "AIScoreSuggestionResponse": {
+                "type": "object",
+                "properties": {
+                    "data": {
+                        "$ref": "#/components/schemas/AIScoreSuggestionData"
+                    },
+                    "meta": {
+                        "type": "object",
+                        "additionalProperties": {}
+                    }
+                },
+                "required": [
+                    "data",
+                    "meta"
+                ]
+            },
             "APIClient": {
                 "type": "object",
                 "properties": {
@@ -16485,6 +17745,44 @@
                 ],
                 "type": "string",
                 "description": "* `REVOKED` - REVOKED"
+            },
+            "AdministrativeClassMemberWrite": {
+                "type": "object",
+                "properties": {
+                    "student_id": {
+                        "type": "string",
+                        "maxLength": 26
+                    }
+                },
+                "required": [
+                    "student_id"
+                ]
+            },
+            "AdministrativeClassWrite": {
+                "type": "object",
+                "properties": {
+                    "code": {
+                        "type": "string",
+                        "maxLength": 64
+                    },
+                    "name": {
+                        "type": "string",
+                        "maxLength": 160
+                    },
+                    "department": {
+                        "type": "string",
+                        "maxLength": 160
+                    },
+                    "year_of_entry": {
+                        "type": "integer",
+                        "maximum": 2200,
+                        "minimum": 1900
+                    }
+                },
+                "required": [
+                    "code",
+                    "name"
+                ]
             },
             "AgentEnvelope": {
                 "type": "object",
@@ -18978,6 +20276,19 @@
                 "required": [
                     "data",
                     "meta"
+                ]
+            },
+            "GenericTimetableResponse": {
+                "type": "object",
+                "properties": {
+                    "data": {},
+                    "meta": {
+                        "type": "object",
+                        "additionalProperties": {}
+                    }
+                },
+                "required": [
+                    "data"
                 ]
             },
             "GovernancePageMeta": {
@@ -24640,6 +25951,36 @@
                     "name"
                 ]
             },
+            "TimetableMapping": {
+                "type": "object",
+                "properties": {
+                    "mapping": {
+                        "type": "object",
+                        "additionalProperties": {
+                            "type": "string"
+                        }
+                    }
+                },
+                "required": [
+                    "mapping"
+                ]
+            },
+            "TimetableUpload": {
+                "type": "object",
+                "properties": {
+                    "file": {
+                        "type": "string",
+                        "format": "uri"
+                    },
+                    "term_id": {
+                        "type": "string",
+                        "maxLength": 26
+                    }
+                },
+                "required": [
+                    "file"
+                ]
+            },
             "Token": {
                 "type": "object",
                 "properties": {
@@ -25485,6 +26826,9 @@
                     "count": {
                         "type": "integer"
                     },
+                    "runnable": {
+                        "type": "boolean"
+                    },
                     "summary": {
                         "type": "array",
                         "items": {
@@ -25505,6 +26849,7 @@
                     "count",
                     "public_count",
                     "recent_execution",
+                    "runnable",
                     "summary"
                 ]
             },

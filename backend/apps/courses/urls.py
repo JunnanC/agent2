@@ -20,6 +20,21 @@ from .content_views import (
     UserCourseContentView,
     UserQuestionCreateView,
 )
+from .timetable_views import (
+    AdministrativeClassCollectionView,
+    AdministrativeClassMemberEndView,
+    AdministrativeClassMembersView,
+    StudentTimetableImportConfirmView,
+    StudentTimetableImportDetailView,
+    StudentTimetableImportMappingView,
+    StudentTimetableImportView,
+    TeachingCourseTimetableView,
+    TeachingTimetableImportConfirmView,
+    TeachingTimetableImportDetailView,
+    TeachingTimetableImportMappingView,
+    TeachingTimetableImportView,
+    UserTimetableView,
+)
 from .views import (
     ContextView,
     CourseEnrollmentApplyView,
@@ -54,6 +69,67 @@ from .views import (
 
 urlpatterns = [
     path("context", ContextView.as_view(), name="context"),
+    path("me/timetable", UserTimetableView.as_view(), name="my-timetable"),
+    path(
+        "me/timetable-imports",
+        StudentTimetableImportView.as_view(),
+        name="student-timetable-imports",
+    ),
+    path(
+        "me/timetable-imports/<str:job_id>",
+        StudentTimetableImportDetailView.as_view(),
+        name="student-timetable-import-detail",
+    ),
+    path(
+        "me/timetable-imports/<str:job_id>/mapping",
+        StudentTimetableImportMappingView.as_view(),
+        name="student-timetable-import-mapping",
+    ),
+    path(
+        "me/timetable-imports/<str:job_id>/confirm",
+        StudentTimetableImportConfirmView.as_view(),
+        name="student-timetable-import-confirm",
+    ),
+    path(
+        "teaching/timetable-imports",
+        TeachingTimetableImportView.as_view(),
+        name="teaching-timetable-imports",
+    ),
+    path(
+        "teaching/timetable-imports/<str:job_id>",
+        TeachingTimetableImportDetailView.as_view(),
+        name="teaching-timetable-import-detail",
+    ),
+    path(
+        "teaching/timetable-imports/<str:job_id>/mapping",
+        TeachingTimetableImportMappingView.as_view(),
+        name="teaching-timetable-import-mapping",
+    ),
+    path(
+        "teaching/timetable-imports/<str:job_id>/confirm",
+        TeachingTimetableImportConfirmView.as_view(),
+        name="teaching-timetable-import-confirm",
+    ),
+    path(
+        "teaching/courses/<str:course_id>/timetable",
+        TeachingCourseTimetableView.as_view(),
+        name="teaching-course-timetable",
+    ),
+    path(
+        "platform/administrative-classes",
+        AdministrativeClassCollectionView.as_view(),
+        name="administrative-classes",
+    ),
+    path(
+        "platform/administrative-classes/<str:class_id>/members",
+        AdministrativeClassMembersView.as_view(),
+        name="administrative-class-members",
+    ),
+    path(
+        "platform/administrative-classes/<str:class_id>/members/<str:student_id>/end",
+        AdministrativeClassMemberEndView.as_view(),
+        name="administrative-class-member-end",
+    ),
     path("courses", PublicCourseListView.as_view(), name="course-list"),
     path("courses/<str:course_id>", PublicCourseDetailView.as_view(), name="course-detail"),
     path(

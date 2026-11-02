@@ -184,6 +184,7 @@ def paged_teaching_tasks(
     publication_id: str,
     spec: PageSpec,
     status: str = "",
+    student_id: str = "",
     query: str = "",
 ) -> tuple[QuerySet[ExperimentTask], int]:
     course = teaching_course(
@@ -205,6 +206,8 @@ def paged_teaching_tasks(
         tasks = tasks.filter(publication__public_id=publication_id)
     if status:
         tasks = tasks.filter(status=status)
+    if student_id:
+        tasks = tasks.filter(student__public_id=student_id)
     if query:
         tasks = tasks.filter(
             Q(public_id__icontains=query) | Q(student__display_name__icontains=query)
