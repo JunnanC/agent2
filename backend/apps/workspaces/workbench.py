@@ -223,6 +223,7 @@ def _tests_data(task: ExperimentTask) -> dict[str, Any]:
     return {
         "public_count": len(rules),
         "count": len(rules),
+        "runnable": task_has_active_test_rules(task),
         "summary": [_rule_summary(rule) for rule in rules],
         "recent_execution": recent_data,
     }

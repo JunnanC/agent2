@@ -201,6 +201,7 @@ class WorkbenchRecentExecutionSerializer(serializers.Serializer):
 class WorkbenchTestsSerializer(serializers.Serializer):
     public_count = serializers.IntegerField()
     count = serializers.IntegerField()
+    runnable = serializers.BooleanField()
     summary = serializers.ListField(child=serializers.DictField())
     recent_execution = WorkbenchRecentExecutionSerializer(allow_null=True)
 

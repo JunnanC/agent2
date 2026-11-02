@@ -1,6 +1,7 @@
 import hashlib
 import json
 from datetime import timedelta
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from django.test import Client, TestCase, override_settings
@@ -38,6 +39,7 @@ from ..models import (
 from ..permissions import require_workspace_session
 from ..serializers import execution_run_data
 from ..services import (
+    _output_asset,
     _runtime_spec_for_execution,
     create_storage_job,
     enter_task,
@@ -62,19 +64,21 @@ from ..workbench import workbench_data
 class WorkspaceSessionServiceTests(TestCase):
     def setUp(self) -> None:
         reset_fake_runtime()
-        self.teacher, self.course, template_version, rubric_version = create_domain(suffix="p08")
+        self.teacher, self.course, template_version, rubric_version = create_domain(
+            suffix="workspaces"
+        )
         RuntimeAdapter.objects.filter(pk=template_version.runtime_adapter_id).update(
             driver=RuntimeAdapter.Driver.FAKE,
             status=RuntimeAdapter.Status.ENABLED,
             health_status=RuntimeAdapter.HealthStatus.HEALTHY,
         )
-        self.student_enrollment = create_enrollment(self.course, suffix="p08-student")
+        self.student_enrollment = create_enrollment(self.course, suffix="workspaces-student")
         self.publication = create_draft_publication(
             owner=self.teacher,
             course=self.course,
             template_version=template_version,
             rubric_version=rubric_version,
-            suffix="p08",
+            suffix="workspaces",
         )
         values = {
             "max_concurrent_instances": 10,
@@ -102,7 +106,7 @@ class WorkspaceSessionServiceTests(TestCase):
             actor=self.teacher,
             expected_version=self.publication.row_version,
             selected_ids=[],
-            context=ActorContext(self.teacher.public_id, "TEACHING", "p08" * 8),
+            context=ActorContext(self.teacher.public_id, "TEACHING", "workspaces".ljust(32, "0")),
         )
         self.task = published.tasks.get(student=self.student_enrollment.student)
         _, job = start_provisioning(
@@ -118,16 +122,40 @@ class WorkspaceSessionServiceTests(TestCase):
     def tearDown(self) -> None:
         reset_fake_runtime()
 
+    def test_frozen_tests_asset_enables_execution_without_public_rules(self) -> None:
+        self.task.execution_spec = {"tests_asset": "private-tests-asset"}
+        ExperimentTask.objects.filter(pk=self.task.pk).update(execution_spec=self.task.execution_spec)
+        self.assertFalse(self.task.template_version.auto_check_rules.exists())
+        self.assertTrue(task_has_active_test_rules(self.task))
+        data = workbench_data(actor=self.task.student, task_id=self.task.public_id)
+        self.assertTrue(data["tests"]["runnable"])
+        self.assertEqual(data["tests"]["summary"], [])
+        self.assertNotIn("private-tests-asset", json.dumps(data, default=str))
+
+    def test_execution_evidence_uses_the_permitted_storage_prefix_and_exposes_failures(
+        self,
+    ) -> None:
+        run = WorkspaceExecutionRun(public_id="execution-evidence")
+        with patch("apps.workspaces.services.object_storage") as storage:
+            storage.return_value.put_stream.return_value = SimpleNamespace(version_id="v1")
+            asset = _output_asset(run=run, kind="TEST_REPORT", content=b'{"status":"PASSED"}')
+            key = storage.return_value.put_stream.call_args.kwargs["object_key"]
+            self.assertTrue(key.startswith("workspaces/"), key)
+            assert asset is not None
+            asset.refresh_from_db()
+            self.assertEqual(asset.scan_status, ObjectAsset.ScanStatus.CLEAN)
+            storage.return_value.put_stream.side_effect = OSError("storage unavailable")
+            with self.assertRaisesRegex(RuntimeError, "EXECUTION_OUTPUT_STORAGE_FAILED"):
+                _output_asset(run=run, kind="STDOUT", content=b"HELLO")
+
     def test_execution_spec_uses_frozen_legacy_resource_profile(self) -> None:
         snapshot = dict(self.task.resource_profile_snapshot)
-        snapshot.update(
-            {
-                "cpu_millicores": 1200,
-                "memory_mb": 2048,
-                "disk_gb": 7,
-                "network_mode": "DENY_ALL",
-            }
-        )
+        snapshot.update({
+            "cpu_millicores": 1200,
+            "memory_mb": 2048,
+            "disk_gb": 7,
+            "network_mode": "DENY_ALL",
+        })
         for field in (
             "cpu_request_millicores",
             "cpu_limit_millicores",
@@ -439,9 +467,7 @@ class WorkspaceSessionServiceTests(TestCase):
         self.assertEqual(response.status_code, 202, response.content)
         job = response.json()["data"]
         self.assertEqual(job["status"], WorkspaceStorageJob.Status.QUEUED)
-        self.assertEqual(
-            response["Location"], f"/api/v2/workspace-storage-jobs/{job['public_id']}"
-        )
+        self.assertEqual(response["Location"], f"/api/v2/workspace-storage-jobs/{job['public_id']}")
         self.assertEqual(response["ETag"], f'"{session.row_version + 1}"')
 
         replay = client.post(path, payload, content_type="application/json", **headers)
@@ -610,8 +636,10 @@ class WorkspaceSessionServiceTests(TestCase):
             config_ref="runtime/local-docker",
         )
         ExperimentTask.objects.filter(pk=self.task.pk).update(
-            runtime_adapter_driver=RuntimeAdapter.Driver.DOCKER_LOCAL
+            runtime_adapter_driver=RuntimeAdapter.Driver.DOCKER_LOCAL,
+            execution_spec={},
         )
+        self.task.refresh_from_db()
         _, session, _token = enter_task(
             task_id=self.task.public_id,
             actor=self.task.student,
@@ -663,7 +691,7 @@ class WorkspaceSessionServiceTests(TestCase):
         AutoCheckRule.objects.create(
             template_version=self.task.template_version,
             position=1,
-            position_key="p08-rule",
+            position_key="workspaces-rule",
             checker_type="PYTEST",
             input_schema={"type": "object"},
             output_schema={"type": "object"},
@@ -792,9 +820,7 @@ class WorkspaceSessionServiceTests(TestCase):
             HTTP_X_WORKSPACE_TOKEN=token,
         )
         self.assertEqual(internal_denied.status_code, 403)
-        self.assertEqual(
-            internal_denied.json()["error"]["code"], "WORKSPACE_INTERNAL_DENIED"
-        )
+        self.assertEqual(internal_denied.json()["error"]["code"], "WORKSPACE_INTERNAL_DENIED")
 
     @override_settings(WORKSPACE_INTERNAL_KEY="internal-secret")
     def test_run_check_creates_a_fake_execution_and_replays_by_request_key(self) -> None:

@@ -206,11 +206,10 @@ def _task_for_actor(*, task_id: str, actor: User) -> ExperimentTask:
 
 
 def task_has_active_test_rules(task: ExperimentTask) -> bool:
-    """Whether the frozen template declares any active auto-check (test) rules.
-
-    任务模板没有声明测试用例时,提交报告不应要求存在执行运行结果。
-    """
-    return task.template_version.auto_check_rules.filter(is_active=True).exists()
+    """Include the frozen algorithm tests as well as public auto-check rules."""
+    return bool((task.execution_spec or {}).get("tests_asset")) or (
+        task.template_version.auto_check_rules.filter(is_active=True).exists()
+    )
 
 
 def _assert_enterable(task: ExperimentTask) -> None:
@@ -541,8 +540,8 @@ def create_storage_job(
 ) -> tuple[WorkspaceSession, WorkspaceStorageJob]:
     """Declare a storage operation without performing external I/O.
 
-    P16-A owns the durable request boundary.  Worker execution is deliberately
-    left to the later storage-worker phase.
+    The transaction records a durable storage job; the storage worker performs
+    the external I/O after the request commits.
     """
 
     task = _task_for_actor(task_id=task_id, actor=actor)
@@ -1315,7 +1314,7 @@ def _output_asset(
     if not content:
         return None
     try:
-        key = f"workspace/executions/{run.public_id}/{kind.lower()}"
+        key = f"workspaces/executions/{run.public_id}/{kind.lower()}"
         media_type = "application/json" if kind == "TEST_REPORT" else "text/plain"
         stored = object_storage().put_stream(
             bucket=settings.MINIO_BUCKET,
@@ -1345,8 +1344,8 @@ def _output_asset(
             scan_status=ObjectAsset.ScanStatus.CLEAN,
         )
         return asset
-    except Exception:  # noqa: BLE001 - storage failure must remain visible in the run state
-        return None
+    except Exception as exc:  # noqa: BLE001 - never publish success without its evidence
+        raise RuntimeError("EXECUTION_OUTPUT_STORAGE_FAILED") from exc
 
 
 def _finish_execution(

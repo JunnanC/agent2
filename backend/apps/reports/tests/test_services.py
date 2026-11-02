@@ -61,19 +61,21 @@ class ReportServiceTests(TestCase):
 
     def setUp(self) -> None:
         reset_fake_runtime()
-        self.teacher, self.course, template_version, rubric_version = create_domain(suffix="p09")
+        self.teacher, self.course, template_version, rubric_version = create_domain(
+            suffix="reports"
+        )
         RuntimeAdapter.objects.filter(pk=template_version.runtime_adapter_id).update(
             driver=RuntimeAdapter.Driver.FAKE,
             status=RuntimeAdapter.Status.ENABLED,
             health_status=RuntimeAdapter.HealthStatus.HEALTHY,
         )
-        self.enrollment = create_enrollment(self.course, suffix="p09-student")
+        self.enrollment = create_enrollment(self.course, suffix="reports-student")
         self.publication = create_draft_publication(
             owner=self.teacher,
             course=self.course,
             template_version=template_version,
             rubric_version=rubric_version,
-            suffix="p09",
+            suffix="reports",
         )
         values = {
             "max_concurrent_instances": 10,
@@ -101,7 +103,7 @@ class ReportServiceTests(TestCase):
             actor=self.teacher,
             expected_version=self.publication.row_version,
             selected_ids=[],
-            context=ActorContext(self.teacher.public_id, "TEACHING", "p09" * 8),
+            context=ActorContext(self.teacher.public_id, "TEACHING", "reports".ljust(32, "0")),
         )
         self.task = publication.tasks.get(student=self.enrollment.student)
         _, job = start_provisioning(
@@ -123,7 +125,7 @@ class ReportServiceTests(TestCase):
     def tearDown(self) -> None:
         reset_fake_runtime()
 
-    def _snapshot(self, *, payload: bytes = b"snapshot-v1") -> WorkspaceSnapshot:
+    def _snapshot(self, *, payload: bytes = b"snapshot_v1") -> WorkspaceSnapshot:
         digest = hashlib.sha256(payload).hexdigest()
         asset = ObjectAsset.objects.create(
             bucket="edu-platform",
@@ -394,7 +396,7 @@ class ReportServiceTests(TestCase):
         AutoCheckRule.objects.create(
             template_version=self.task.template_version,
             position=1,
-            position_key="p09-rule",
+            position_key="reports-rule",
             checker_type="PYTEST",
             input_schema={"type": "object"},
             output_schema={"type": "object"},
@@ -430,6 +432,7 @@ class ReportServiceTests(TestCase):
             runtime_adapter_driver=RuntimeAdapter.Driver.DOCKER_LOCAL,
             runtime_adapter_config_ref="runtime/local-algorithm",
         )
+        ExperimentTask.objects.filter(pk=self.task.pk).update(execution_spec={})
         snapshot = self._snapshot()
         draft = ReportDraft.objects.get(task=self.task)
         update_report_draft(
@@ -449,13 +452,11 @@ class ReportServiceTests(TestCase):
         self.assertEqual(changed.status, ExperimentTask.Status.UNDER_REVIEW)
         self.assertEqual(version.execution_snapshot_id, snapshot.pk)
         self.assertEqual(version.execution_run.snapshot_id, snapshot.pk)
-        self.assertEqual(
-            version.execution_run.status, WorkspaceExecutionRun.Status.PASSED
-        )
+        self.assertEqual(version.execution_run.status, WorkspaceExecutionRun.Status.PASSED)
         self.assertFalse(
-            WorkspaceExecutionRun.objects.filter(task=self.task).exclude(
-                pk=version.execution_run_id
-            ).exists()
+            WorkspaceExecutionRun.objects.filter(task=self.task)
+            .exclude(pk=version.execution_run_id)
+            .exists()
         )
 
     def test_submit_rejects_execution_asset_owned_by_another_run(self) -> None:
