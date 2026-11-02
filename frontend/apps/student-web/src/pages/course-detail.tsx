@@ -1,3 +1,4 @@
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
 import { studentApi, taskApi } from "@edu/api-client";
@@ -7,12 +8,17 @@ import { formatDate, formatDateTime, taskStatusLabel, taskStatusTone } from "@/l
 
 export function CourseDetail() {
   const { courseId = "" } = useParams();
+  const [selectedChapterId, setSelectedChapterId] = useState<string | null>(null);
   const detail = useQuery({ queryKey: keys.course(courseId), queryFn: () => studentApi.courseDetail(courseId) });
   const chapters = useQuery({ queryKey: keys.courseResource(courseId, "chapters"), queryFn: () => studentApi.courseChapters(courseId) });
   const materials = useQuery({ queryKey: keys.courseResource(courseId, "materials"), queryFn: () => studentApi.courseMaterials(courseId) });
   const announcements = useQuery({ queryKey: keys.courseResource(courseId, "announcements"), queryFn: () => studentApi.courseAnnouncements(courseId) });
   const events = useQuery({ queryKey: keys.courseResource(courseId, "calendar-events"), queryFn: () => studentApi.courseCalendarEvents(courseId) });
   const tasks = useQuery({ queryKey: keys.tasks({ course_id: courseId }), queryFn: () => taskApi.list({ course_id: courseId }) });
+  const selectedChapter = useMemo(() => {
+    const rows = chapters.data?.rows ?? [];
+    return rows.find((chapter) => chapter.public_id === selectedChapterId) ?? rows[0] ?? null;
+  }, [chapters.data, selectedChapterId]);
 
   return (
     <>
@@ -33,7 +39,9 @@ export function CourseDetail() {
             <div>
               {(chapters.data?.rows ?? []).map((chapter, index) => (
                 <button type="button" key={chapter.public_id}
-                  className={`course-chapter-row${index === 0 ? " active" : ""}`}>
+                  className={`course-chapter-row${chapter.public_id === selectedChapter?.public_id ? " active" : ""}`}
+                  aria-pressed={chapter.public_id === selectedChapter?.public_id}
+                  onClick={() => setSelectedChapterId(chapter.public_id)}>
                   <span>{index + 1}</span>
                   <strong>{chapter.title}</strong>
                   {chapter.description ? <small>章节说明</small> : null}
@@ -67,7 +75,15 @@ export function CourseDetail() {
             </div>
           </Panel>
 
-          <Panel title={<><h2>本课程实验任务</h2><span className="subtle">按截止时间处理</span></>}>
+          {selectedChapter ? (
+            <Panel title={<><h2>{selectedChapter.title}</h2><span className="subtle">课程章节</span></>}>
+              <p className="course-chapter-description">
+                {selectedChapter.description || "本章节暂未提供说明。"}
+              </p>
+            </Panel>
+          ) : null}
+
+          <Panel id="course-tasks" title={<><h2>本课程实验任务</h2><span className="subtle">按截止时间处理</span></>}>
             <RequestStateView loading={tasks.isLoading} error={tasks.error}
               onRetry={() => void tasks.refetch()}
               empty={!tasks.data?.rows.length}
