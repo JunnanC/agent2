@@ -191,7 +191,7 @@ def _execution_asset_is_valid(asset: ObjectAsset | None, run: WorkspaceExecution
 def _legacy_fake_execution(
     *, task: ExperimentTask, snapshot: WorkspaceSnapshot
 ) -> WorkspaceExecutionRun:
-    """Materialize the pre-P08 FakeRuntime submit behavior once per snapshot."""
+    """Materialize the legacy simulated-runtime submission once per snapshot."""
 
     summary = dict(getattr(task, "execution_spec", None) or {})
     digest = hashlib.sha256(

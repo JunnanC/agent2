@@ -191,7 +191,7 @@ class DockerSwarmAdapterTests(SimpleTestCase):
         self.assertNotIn("ports", request)
         self.assertNotIn("email", str(request).casefold())
         self.assertEqual(self.adapter.status(first.external_id), "READY")
-        self.assertTrue(first.endpoint.startswith("http://tasks.edu-lab-"))
+        self.assertTrue(first.endpoint.startswith("http://tasks.experimental-platform-lab-"))
 
     def test_allowlist_without_approved_egress_network_fails_closed(self) -> None:
         with self.assertRaises(RuntimeAdapterFailure) as raised:

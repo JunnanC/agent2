@@ -3,7 +3,7 @@ from rest_framework import serializers
 from .models import Notification, Preference
 
 
-class P13NotificationResponseSerializer(serializers.Serializer):
+class NotificationResponseSerializer(serializers.Serializer):
     """Named placeholder for envelope responses represented by view helpers."""
 
     pass

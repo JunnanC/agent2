@@ -1,1 +1,1 @@
-"""Archive domain; implemented in P11."""
+"""Archive domain."""

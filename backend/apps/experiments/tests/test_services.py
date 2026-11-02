@@ -57,7 +57,7 @@ class ExperimentServiceTests(TestCase):
             image_asset=self.template_version.image,
             status=ExperimentImage.Status.READY,
             scan_status=ExperimentImage.ScanStatus.CLEAN,
-            trace_id="p06-test".ljust(32, "0"),
+            trace_id="publications-test".ljust(32, "0"),
             created_by=self.owner,
         )
         self.enrollment = create_enrollment(self.course)
@@ -115,7 +115,7 @@ class ExperimentServiceTests(TestCase):
             "resource_profile_snapshot": task.resource_profile_snapshot,
         }
         replacement = RuntimeAdapter.objects.create(
-            code="runtime-p06-replacement",
+            code="runtime-publications-replacement",
             name="Replacement runtime",
             runtime_type=RuntimeAdapter.RuntimeType.CONTAINER,
             driver=RuntimeAdapter.Driver.DOCKER_LOCAL,
@@ -220,7 +220,7 @@ class ExperimentServiceTests(TestCase):
 
     def test_selected_audience_order_does_not_change_publication_digest(self) -> None:
         first_student = self.enrollment
-        second_student = create_enrollment(self.course, suffix="p06-selected-second")
+        second_student = create_enrollment(self.course, suffix="publications-selected-second")
         first = create_draft_publication(
             owner=self.owner,
             course=self.course,
@@ -289,7 +289,7 @@ class ExperimentServiceTests(TestCase):
             image_asset=image,
             status=ExperimentImage.Status.READY,
             scan_status=ExperimentImage.ScanStatus.CLEAN,
-            trace_id="p06-missing".ljust(32, "0"),
+            trace_id="publications-missing".ljust(32, "0"),
             created_by=self.owner,
         )
         with self.assertRaises(PublicationValidationError) as task_error:
@@ -322,7 +322,7 @@ class ExperimentServiceTests(TestCase):
             precheck_template_version(template_version=version)
         self.assertEqual(image_error.exception.detail["image"], "READY_REQUIRED")
 
-    @override_settings(P06_PUBLICATION_SYNC_LIMIT=1)
+    @override_settings(PUBLICATION_SYNC_LIMIT=1)
     @patch("apps.experiments.tasks.assign_publication_tasks.delay")
     def test_async_boundary_uses_frozen_snapshot_and_worker_replay_is_idempotent(
         self, delay: object
@@ -359,8 +359,8 @@ class ExperimentServiceTests(TestCase):
             suffix="selected",
             audience_mode=TaskPublication.AudienceMode.SELECTED,
         )
-        other_owner = create_teacher(suffix="p06-other-owner")
-        other_course = create_draft_course(other_owner, code="P06-OTHER")
+        other_owner = create_teacher(suffix="publications-other-owner")
+        other_course = create_draft_course(other_owner, code="publications-OTHER")
         Course.objects.filter(pk=other_course.pk).update(status=Course.Status.PUBLISHED)
         other_course.refresh_from_db()
         other = create_enrollment(other_course, suffix="other-student")
@@ -578,8 +578,8 @@ class ExperimentServiceTests(TestCase):
 
     def test_cross_course_late_enrollment_never_creates_task(self) -> None:
         published = self._publish()
-        other_owner = create_teacher(suffix="p06-late-owner")
-        other_course = create_draft_course(other_owner, code="P06-LATE-OTHER")
+        other_owner = create_teacher(suffix="publications-late-owner")
+        other_course = create_draft_course(other_owner, code="publications-LATE-OTHER")
         Course.objects.filter(pk=other_course.pk).update(status=Course.Status.PUBLISHED)
         other_course.refresh_from_db()
         other = create_enrollment(other_course, suffix="late-other-student")

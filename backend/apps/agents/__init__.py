@@ -1,1 +1,1 @@
-"""Agent domain; implemented in P12."""
+"""Agent domain."""

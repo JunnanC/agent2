@@ -14,8 +14,8 @@ from education_experiment_platform.events import _event_id, _event_stream, _visi
 
 class WorkspaceEventScopeTests(TestCase):
     def setUp(self) -> None:
-        self.owner = create_teacher(suffix="p08-event-owner")
-        self.course = create_draft_course(self.owner, code="P08-EVENT-SCOPE")
+        self.owner = create_teacher(suffix="workspaces-event-owner")
+        self.course = create_draft_course(self.owner, code="workspaces-EVENT-SCOPE")
 
     def event(self, payload: dict[str, str]) -> OutboxEvent:
         return OutboxEvent(
@@ -27,7 +27,7 @@ class WorkspaceEventScopeTests(TestCase):
         )
 
     def test_teaching_visibility_requires_a_live_view_progress_grant(self) -> None:
-        assistant = create_teacher(suffix="p08-event-assistant")
+        assistant = create_teacher(suffix="workspaces-event-assistant")
         staff = CourseStaff.objects.create(
             course=self.course,
             user=assistant,
@@ -55,9 +55,9 @@ class WorkspaceEventScopeTests(TestCase):
 
     def test_user_visibility_requires_a_live_enrollment(self) -> None:
         student = create_user(
-            email="p08-event-student@example.edu",
-            username="p08-event-student",
-            display_name="P08 Event Student",
+            email="workspaces-event-student@example.edu",
+            username="workspaces-event-student",
+            display_name="workspaces Event Student",
         )
         enrollment = Enrollment.objects.create(
             course=self.course,
@@ -81,9 +81,9 @@ class WorkspaceEventScopeTests(TestCase):
         self, _replay: object
     ) -> None:
         student = create_user(
-            email="p08-cursor-student@example.edu",
-            username="p08-cursor-student",
-            display_name="P08 Cursor Student",
+            email="workspaces-cursor-student@example.edu",
+            username="workspaces-cursor-student",
+            display_name="workspaces Cursor Student",
         )
         event = OutboxEvent.objects.create(
             event_type="account.changed",
@@ -106,9 +106,9 @@ class WorkspaceEventScopeTests(TestCase):
     @patch("education_experiment_platform.events._redis_replay", return_value=[])
     def test_unknown_cursor_requires_resync(self, _replay: object) -> None:
         student = create_user(
-            email="p08-expired-cursor@example.edu",
-            username="p08-expired-cursor",
-            display_name="P08 Expired Cursor",
+            email="workspaces-expired-cursor@example.edu",
+            username="workspaces-expired-cursor",
+            display_name="workspaces Expired Cursor",
         )
         cursor = f"{timezone.now().isoformat()}|{uuid.uuid4()}"
         request = SimpleNamespace(

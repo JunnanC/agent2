@@ -823,7 +823,7 @@ def _enrollment_window_open(course: Course) -> bool:
 
 
 def prerequisite_blockers(*, course: Course, student: User) -> list[dict[str, object]]:
-    # P03-B replaces this empty relation set with persisted prerequisite evaluation.
+    # Prerequisite evaluation is not implemented; enrollment currently has no prerequisite blockers.
     return []
 
 

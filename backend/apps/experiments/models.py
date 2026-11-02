@@ -385,7 +385,7 @@ class ExperimentTask(VersionedModel):
         TemplateVersion, on_delete=models.PROTECT, related_name="experiment_tasks"
     )
     runtime_type = models.CharField(max_length=16)
-    # Nullable for P07/P08 historical FakeRuntime rows. New tasks always get
+    # Nullable for historical FakeRuntime rows. New tasks always get
     # these values from the publication snapshot at assignment time.
     template_spec_digest = models.CharField(
         max_length=64, null=True, blank=True, db_collation="ascii_bin"

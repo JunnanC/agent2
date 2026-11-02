@@ -1,1 +1,1 @@
-"""Lab template domain; implemented in P05."""
+"""Lab template domain."""

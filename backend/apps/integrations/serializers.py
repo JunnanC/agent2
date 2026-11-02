@@ -11,7 +11,7 @@ from .models import (
 )
 
 
-class P13IntegrationResponseSerializer(serializers.Serializer):
+class IntegrationResponseSerializer(serializers.Serializer):
     """Named placeholder for envelope responses represented by view helpers."""
 
     pass

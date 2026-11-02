@@ -3,7 +3,7 @@ from typing import Any
 from rest_framework import serializers
 
 
-class P13AnalyticsResponseSerializer(serializers.Serializer):
+class AnalyticsResponseSerializer(serializers.Serializer):
     """Named placeholder for envelope responses represented by view helpers."""
 
     pass

@@ -1,1 +1,1 @@
-"""Notification domain; implemented in P13."""
+"""Notification domain."""

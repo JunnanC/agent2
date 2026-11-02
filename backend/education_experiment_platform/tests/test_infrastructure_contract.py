@@ -134,7 +134,7 @@ def test_workspace_edge_allows_only_same_origin_embedding() -> None:
         assert "frame-ancestors 'self'" in workspace
 
 
-def test_p14_workspace_internal_key_is_scoped_to_gateway_and_authority() -> None:
+def test_swarm_workspace_internal_key_is_scoped_to_gateway_and_authority() -> None:
     stack = load_yaml("infrastructure/swarm/stack.yml")
 
     assert "WORKSPACE_INTERNAL_KEY_FILE" not in stack["x-app-environment"]
@@ -148,7 +148,7 @@ def test_p14_workspace_internal_key_is_scoped_to_gateway_and_authority() -> None
         assert "workspace_internal_key" not in stack["services"][service]["secrets"]
 
 
-def test_p14_swarm_hosts_network_and_support_images_are_deployment_injected() -> None:
+def test_swarm_swarm_hosts_network_and_support_images_are_deployment_injected() -> None:
     stack = load_yaml("infrastructure/swarm/stack.yml")
     environment = stack["x-app-environment"]
 
@@ -157,6 +157,12 @@ def test_p14_swarm_hosts_network_and_support_images_are_deployment_injected() ->
     assert environment["WORKSPACE_ALLOWED_ORIGINS"] == "${WORKSPACE_ALLOWED_ORIGINS}"
     assert environment["TRUSTED_PROXY_CIDRS"] == "${TRUSTED_PROXY_CIDRS}"
     assert stack["networks"]["app"]["ipam"]["config"][0]["subnet"] == "${APP_NETWORK_SUBNET}"
+    runtime_network = "${SWARM_RUNTIME_NETWORK:-experimental-platform-swarm-runtime}"
+    assert stack["networks"]["runtime"] == {"external": True, "name": runtime_network}
+    assert environment["SWARM_RUNTIME_NETWORK"] == runtime_network
+    assert environment["RUNTIME_ADAPTER_CONFIGS"] == (
+        '${RUNTIME_ADAPTER_CONFIGS:-{"runtime/swarm":{"request_timeout":30}}}'
+    )
     assert "example.edu" not in (ROOT / "infrastructure/swarm/stack.yml").read_text(
         encoding="utf-8"
     )
@@ -169,28 +175,21 @@ def test_local_runtime_docker_access_is_scoped_to_runtime_worker() -> None:
     for service, definition in services.items():
         if service == "runtime-worker":
             continue
-        assert not any(
-            "docker.sock" in str(item) for item in definition.get("volumes", [])
-        )
+        assert not any("docker.sock" in str(item) for item in definition.get("volumes", []))
     environment = compose["x-app-environment"]
     assert environment["RUNTIME_MODE"] == "${RUNTIME_MODE:-local}"
     assert environment["RUNTIME_ADAPTER_CODE"] == "${RUNTIME_ADAPTER_CODE:-runtime/local-docker}"
     assert environment["LOCAL_RUNTIME_MODE"] == "${LOCAL_RUNTIME_MODE:-REAL}"
-    assert environment["AUTO_PROVISION_ON_ASSIGNMENT"] == (
-        "${AUTO_PROVISION_ON_ASSIGNMENT:-true}"
-    )
+    assert environment["AUTO_PROVISION_ON_ASSIGNMENT"] == ("${AUTO_PROVISION_ON_ASSIGNMENT:-true}")
     assert environment["LOCAL_RUNTIME_IMAGE"] == (
-        "${LOCAL_RUNTIME_IMAGE:-edu-platform-algorithm-workspace:local}"
+        "${LOCAL_RUNTIME_IMAGE:-experimental-platform-workspace:local}"
     )
     assert environment["LOCAL_RUNTIME_NETWORK"] == (
-        "${LOCAL_RUNTIME_NETWORK:-edu-platform-p14_runtime}"
+        "${LOCAL_RUNTIME_NETWORK:-${COMPOSE_PROJECT_NAME}-runtime}"
     )
-    assert environment["LOCAL_DOCKER_HOST"] == (
-        "${LOCAL_DOCKER_HOST:-unix:///var/run/docker.sock}"
-    )
+    assert environment["LOCAL_DOCKER_HOST"] == ("${LOCAL_DOCKER_HOST:-unix:///var/run/docker.sock}")
     assert environment["RUNTIME_ADAPTER_CONFIGS"] == (
-        '${RUNTIME_ADAPTER_CONFIGS:-{"runtime/local-docker":'
-        '{"runtime_network":"edu-platform-p14_runtime","pids_limit":128}}}'
+        '${RUNTIME_ADAPTER_CONFIGS:-{"runtime/local-docker":{"pids_limit":128}}}'
     )
     assert "q_workspace_storage" in services["runtime-worker"]["command"][-1]
 
@@ -249,7 +248,7 @@ def test_compose_declares_foundation_services_and_isolated_app_network() -> None
         assert "fluent-bit" in compose["services"][service]["depends_on"]
 
 
-def test_p01_splits_migration_and_runtime_database_accounts() -> None:
+def test_core_splits_migration_and_runtime_database_accounts() -> None:
     compose = load_yaml("docker-compose.dev.yml")
     app_environment = compose["x-app-environment"]
     migrate_environment = compose["services"]["migrate"]["environment"]
@@ -266,7 +265,7 @@ def test_p01_splits_migration_and_runtime_database_accounts() -> None:
         assert f"GRANT SELECT, INSERT ON \\`${{MYSQL_DATABASE}}\\`.{table}" in bootstrap
 
 
-def test_p08_runtime_database_grants_workspace_append_only_tables_read_insert_only() -> None:
+def test_workspaces_runtime_database_grants_workspace_append_only_tables_read_insert_only() -> None:
     bootstrap = (ROOT / "infrastructure/mysql/configure-users.sh").read_text(encoding="utf-8")
     assert (
         "GRANT SELECT, INSERT, UPDATE ON \\`${MYSQL_DATABASE}\\`.workspaces_workspace_session"
@@ -286,15 +285,14 @@ def test_p08_runtime_database_grants_workspace_append_only_tables_read_insert_on
     )
 
 
-def test_p09_runtime_database_grants_reports_and_download_grants_least_privilege() -> None:
+def test_reports_runtime_database_grants_reports_and_download_grants_least_privilege() -> None:
     bootstrap = (ROOT / "infrastructure/mysql/configure-users.sh").read_text(encoding="utf-8")
     assert (
         "GRANT SELECT, INSERT, UPDATE ON \\`${MYSQL_DATABASE}\\`.core_file_download_grant"
         in bootstrap
     )
     assert (
-        "GRANT SELECT, INSERT, UPDATE ON \\`${MYSQL_DATABASE}\\`.reports_report_draft"
-        in bootstrap
+        "GRANT SELECT, INSERT, UPDATE ON \\`${MYSQL_DATABASE}\\`.reports_report_draft" in bootstrap
     )
     for table in (
         "reports_report_attachment",
@@ -305,14 +303,14 @@ def test_p09_runtime_database_grants_reports_and_download_grants_least_privilege
         assert f"GRANT SELECT, INSERT ON \\`${{MYSQL_DATABASE}}\\`.{table}" in bootstrap
         assert f"GRANT SELECT, INSERT, UPDATE ON \\`${{MYSQL_DATABASE}}\\`.{table}" not in bootstrap
     compose = load_yaml("docker-compose.dev.yml")
-    assert compose["services"]["minio"]["ports"][0] == (
-        "127.0.0.1:${MINIO_API_PORT:-9000}:9000"
-    )
+    assert compose["services"]["minio"]["ports"][0] == ("127.0.0.1:${MINIO_API_PORT:-9000}:9000")
     assert set(compose["services"]["minio"]["networks"]) == {"data", "minio-host-access"}
-    assert compose["networks"]["minio-host-access"] == {}
+    assert compose["networks"]["minio-host-access"] == {
+        "name": "${COMPOSE_PROJECT_NAME}-minio-host-access"
+    }
 
 
-def test_p10_runtime_database_grants_keep_review_history_append_only() -> None:
+def test_reviews_runtime_database_grants_keep_review_history_append_only() -> None:
     bootstrap = (ROOT / "infrastructure/mysql/configure-users.sh").read_text(encoding="utf-8")
     for table in (
         "reviews_review",
@@ -332,11 +330,10 @@ def test_p10_runtime_database_grants_keep_review_history_append_only() -> None:
         assert rf"GRANT SELECT, INSERT, UPDATE ON \`${{MYSQL_DATABASE}}\`.{table}" not in bootstrap
 
 
-def test_p11_archive_permissions_and_scheduler_are_least_privilege() -> None:
+def test_archives_archive_permissions_and_scheduler_are_least_privilege() -> None:
     bootstrap = (ROOT / "infrastructure/mysql/configure-users.sh").read_text(encoding="utf-8")
     assert (
-        r"GRANT SELECT, INSERT, UPDATE ON \`${MYSQL_DATABASE}\`.archives_archive_job"
-        in bootstrap
+        r"GRANT SELECT, INSERT, UPDATE ON \`${MYSQL_DATABASE}\`.archives_archive_job" in bootstrap
     )
     for table in (
         "archives_archive_manifest",
@@ -349,7 +346,7 @@ def test_p11_archive_permissions_and_scheduler_are_least_privilege() -> None:
     assert compose["services"]["celery-beat"]["command"][3] == "beat"
 
 
-def test_p15_new_experiment_tables_are_available_to_the_application_user() -> None:
+def test_workbench_new_experiment_tables_are_available_to_the_application_user() -> None:
     bootstrap = (ROOT / "infrastructure/mysql/configure-users.sh").read_text(encoding="utf-8")
     writable_tables = (
         "courses_academic_term",
@@ -370,10 +367,8 @@ def test_p15_new_experiment_tables_are_available_to_the_application_user() -> No
         assert rf"GRANT SELECT, INSERT ON \`${{MYSQL_DATABASE}}\`.{table}" in bootstrap
 
 
-def test_p08_minio_policy_scopes_versioned_workspace_objects() -> None:
-    policy = json.loads(
-        (ROOT / "infrastructure/minio/app-policy.json").read_text(encoding="utf-8")
-    )
+def test_workspaces_minio_policy_scopes_versioned_workspace_objects() -> None:
+    policy = json.loads((ROOT / "infrastructure/minio/app-policy.json").read_text(encoding="utf-8"))
     object_statement = policy["Statement"][1]
     assert set(object_statement["Resource"]) == {
         "arn:aws:s3:::edu-platform/template-assets/*",
@@ -384,11 +379,10 @@ def test_p08_minio_policy_scopes_versioned_workspace_objects() -> None:
     assert {"s3:GetObjectVersion", "s3:DeleteObjectVersion"} <= set(object_statement["Action"])
 
 
-def test_p01_declares_architecture_queue_names() -> None:
-    settings = (
-        ROOT
-        / "backend/education_experiment_platform/settings/base.py"
-    ).read_text(encoding="utf-8")
+def test_core_declares_architecture_queue_names() -> None:
+    settings = (ROOT / "backend/education_experiment_platform/settings/base.py").read_text(
+        encoding="utf-8"
+    )
     queues = {
         "q_default",
         "q_relay",

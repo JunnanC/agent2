@@ -36,8 +36,8 @@ from .models import (
 from .serializers import (
     APIClientGrantSerializer,
     APIClientSerializer,
+    IntegrationResponseSerializer,
     OIDCProviderSerializer,
-    P13IntegrationResponseSerializer,
     TokenSerializer,
     WebhookSerializer,
     attempt_data,
@@ -63,8 +63,8 @@ IDEMPOTENCY_KEY = OpenApiParameter("Idempotency-Key", str, OpenApiParameter.HEAD
 IF_MATCH = OpenApiParameter("If-Match", str, OpenApiParameter.HEADER, required=True)
 
 
-class P13APIView(APIView):
-    serializer_class = P13IntegrationResponseSerializer
+class IntegrationsAPIView(APIView):
+    serializer_class = IntegrationResponseSerializer
 
 
 def _body(request: HttpRequest, data: Any) -> dict[str, Any]:
@@ -102,7 +102,7 @@ class IsIntegrationPrincipal(BasePermission):
         return isinstance(getattr(request, "user", None), IntegrationPrincipal)
 
 
-class OAuthTokenView(P13APIView):
+class OAuthTokenView(IntegrationsAPIView):
     authentication_classes: list = []
     permission_classes: list = []
 
@@ -151,7 +151,7 @@ def _course_granted(request: HttpRequest, course: Course) -> bool:
     )
 
 
-class OpenCoursesView(P13APIView):
+class OpenCoursesView(IntegrationsAPIView):
     authentication_classes = [IntegrationTokenAuthentication]
     permission_classes = [IsIntegrationPrincipal]
 
@@ -178,7 +178,7 @@ class OpenCoursesView(P13APIView):
         )
 
 
-class OpenCourseExperimentsView(P13APIView):
+class OpenCourseExperimentsView(IntegrationsAPIView):
     authentication_classes = [IntegrationTokenAuthentication]
     permission_classes = [IsIntegrationPrincipal]
 
@@ -195,7 +195,7 @@ class OpenCourseExperimentsView(P13APIView):
         return Response(_body(request, list(rows)))
 
 
-class OpenCourseProgressView(P13APIView):
+class OpenCourseProgressView(IntegrationsAPIView):
     authentication_classes = [IntegrationTokenAuthentication]
     permission_classes = [IsIntegrationPrincipal]
 
@@ -212,7 +212,7 @@ class OpenCourseProgressView(P13APIView):
         return Response(_body(request, list(rows)))
 
 
-class PlatformOIDCProviderView(P13APIView):
+class PlatformOIDCProviderView(IntegrationsAPIView):
     permission_classes = [IsPlatformPortal]
 
     @extend_schema(
@@ -250,7 +250,7 @@ class PlatformOIDCProviderView(P13APIView):
         return _idempotent(request, payload=payload, operation=operation)
 
 
-class PlatformOIDCProviderDetailView(P13APIView):
+class PlatformOIDCProviderDetailView(IntegrationsAPIView):
     permission_classes = [IsPlatformPortal]
 
     @extend_schema(operation_id="platform_integrations_oidc_providers_detail")
@@ -288,7 +288,7 @@ class PlatformOIDCProviderDetailView(P13APIView):
         )
 
 
-class PlatformOIDCProviderRotateView(P13APIView):
+class PlatformOIDCProviderRotateView(IntegrationsAPIView):
     permission_classes = [IsPlatformPortal]
 
     @extend_schema(parameters=[IDEMPOTENCY_KEY, IF_MATCH])
@@ -313,7 +313,7 @@ class PlatformOIDCProviderRotateView(P13APIView):
         return _idempotent(request, payload={"provider_id": provider_id}, operation=operation)
 
 
-class PlatformOIDCIdentityView(P13APIView):
+class PlatformOIDCIdentityView(IntegrationsAPIView):
     permission_classes = [IsPlatformPortal]
 
     def get(self, request: HttpRequest) -> Response:
@@ -342,7 +342,7 @@ class PlatformOIDCIdentityView(P13APIView):
         return _idempotent(request, payload={"identity_id": identity_id}, operation=operation)
 
 
-class PlatformAPIClientView(P13APIView):
+class PlatformAPIClientView(IntegrationsAPIView):
     permission_classes = [IsPlatformPortal]
 
     @extend_schema(operation_id="platform_integrations_api_clients_list")
@@ -377,7 +377,7 @@ class PlatformAPIClientView(P13APIView):
         return _idempotent(request, payload=serializer.validated_data, operation=operation)
 
 
-class PlatformAPIClientGrantView(P13APIView):
+class PlatformAPIClientGrantView(IntegrationsAPIView):
     permission_classes = [IsPlatformPortal]
 
     @extend_schema(operation_id="platform_integrations_api_client_grants_list")
@@ -422,7 +422,7 @@ class PlatformAPIClientGrantView(P13APIView):
         return _idempotent(request, payload=serializer.validated_data, operation=operation)
 
 
-class PlatformAPIClientDetailView(P13APIView):
+class PlatformAPIClientDetailView(IntegrationsAPIView):
     permission_classes = [IsPlatformPortal]
 
     @extend_schema(operation_id="platform_integrations_api_clients_detail")
@@ -462,7 +462,7 @@ class PlatformAPIClientDetailView(P13APIView):
         )
 
 
-class PlatformAPIClientRotateView(P13APIView):
+class PlatformAPIClientRotateView(IntegrationsAPIView):
     permission_classes = [IsPlatformPortal]
 
     @extend_schema(parameters=[IDEMPOTENCY_KEY, IF_MATCH])
@@ -487,7 +487,7 @@ class PlatformAPIClientRotateView(P13APIView):
         return _idempotent(request, payload={"client_id": client_id}, operation=operation)
 
 
-class PlatformWebhookEndpointView(P13APIView):
+class PlatformWebhookEndpointView(IntegrationsAPIView):
     permission_classes = [IsPlatformPortal]
 
     @extend_schema(operation_id="platform_integrations_webhook_endpoints_list")
@@ -538,7 +538,7 @@ class PlatformWebhookEndpointView(P13APIView):
         return _idempotent(request, payload=serializer.validated_data, operation=operation)
 
 
-class PlatformWebhookEndpointDetailView(P13APIView):
+class PlatformWebhookEndpointDetailView(IntegrationsAPIView):
     permission_classes = [IsPlatformPortal]
 
     @extend_schema(operation_id="platform_integrations_webhook_endpoints_detail")
@@ -586,7 +586,7 @@ class PlatformWebhookEndpointDetailView(P13APIView):
         )
 
 
-class PlatformWebhookRotateView(P13APIView):
+class PlatformWebhookRotateView(IntegrationsAPIView):
     permission_classes = [IsPlatformPortal]
 
     @extend_schema(parameters=[IDEMPOTENCY_KEY, IF_MATCH])
@@ -617,7 +617,7 @@ class PlatformWebhookRotateView(P13APIView):
         return _idempotent(request, payload={"endpoint_id": endpoint_id}, operation=operation)
 
 
-class PlatformWebhookDeliveryView(P13APIView):
+class PlatformWebhookDeliveryView(IntegrationsAPIView):
     permission_classes = [IsPlatformPortal]
 
     def get(self, request: HttpRequest) -> Response:
@@ -625,7 +625,7 @@ class PlatformWebhookDeliveryView(P13APIView):
         return Response(_body(request, [delivery_data(item) for item in rows]))
 
 
-class PlatformWebhookAttemptView(P13APIView):
+class PlatformWebhookAttemptView(IntegrationsAPIView):
     permission_classes = [IsPlatformPortal]
 
     def get(self, request: HttpRequest, delivery_id: str) -> Response:
@@ -639,7 +639,7 @@ class PlatformWebhookAttemptView(P13APIView):
         )
 
 
-class PlatformWebhookRetryView(P13APIView):
+class PlatformWebhookRetryView(IntegrationsAPIView):
     permission_classes = [IsPlatformPortal]
 
     @extend_schema(parameters=[IDEMPOTENCY_KEY, IF_MATCH])
@@ -673,7 +673,7 @@ class PlatformWebhookRetryView(P13APIView):
         return _idempotent(request, payload={"delivery_id": delivery_id}, operation=operation)
 
 
-class UserOIDCIdentityView(P13APIView):
+class UserOIDCIdentityView(IntegrationsAPIView):
     permission_classes = [IsAuthenticatedAccount]
 
     def get(self, request: HttpRequest) -> Response:
@@ -711,7 +711,7 @@ class UserOIDCIdentityView(P13APIView):
         return _idempotent(request, payload={"identity_id": identity_id}, operation=operation)
 
 
-class OIDCStartView(P13APIView):
+class OIDCStartView(IntegrationsAPIView):
     permission_classes: list[type[BasePermission]] = []
 
     def get(self, request: HttpRequest, provider_key: str) -> Response:
@@ -759,7 +759,7 @@ class OIDCStartView(P13APIView):
         )
 
 
-class OIDCCallbackView(P13APIView):
+class OIDCCallbackView(IntegrationsAPIView):
     permission_classes: list[type[BasePermission]] = []
 
     def get(self, request: HttpRequest, provider_key: str) -> Response:

@@ -47,7 +47,7 @@ class ContentScanner:
 
 class TemplateAssetTests(TestCase):
     @staticmethod
-    def _gzip_tar(payload: bytes = b"FROM python:3.12-slim\n") -> bytes:
+    def _gzip_tar(payload: bytes = b"FROM python:3.12_slim\n") -> bytes:
         archive = BytesIO()
         with tarfile.open(fileobj=archive, mode="w") as tar:
             info = tarfile.TarInfo("Dockerfile")

@@ -13,7 +13,7 @@ from apps.courses.services import ActorContext
 from .models import Notification
 from .selectors import preference_for, visible_notifications
 from .serializers import (
-    P13NotificationResponseSerializer,
+    NotificationResponseSerializer,
     PreferenceSerializer,
     notification_data,
     preference_data,
@@ -24,8 +24,8 @@ IDEMPOTENCY_KEY = OpenApiParameter("Idempotency-Key", str, OpenApiParameter.HEAD
 IF_MATCH = OpenApiParameter("If-Match", str, OpenApiParameter.HEADER, required=True)
 
 
-class P13APIView(APIView):
-    serializer_class = P13NotificationResponseSerializer
+class NotificationsAPIView(APIView):
+    serializer_class = NotificationResponseSerializer
 
 
 def _body(request: HttpRequest, data: Any) -> dict[str, Any]:
@@ -38,7 +38,7 @@ def _ctx(request: HttpRequest) -> ActorContext:
     )
 
 
-class NotificationListView(P13APIView):
+class NotificationListView(NotificationsAPIView):
     permission_classes = [IsAuthenticatedAccount]
 
     @extend_schema(
@@ -58,7 +58,7 @@ class NotificationListView(P13APIView):
         )
 
 
-class NotificationDetailView(P13APIView):
+class NotificationDetailView(NotificationsAPIView):
     permission_classes = [IsAuthenticatedAccount]
 
     @extend_schema(
@@ -101,7 +101,7 @@ class NotificationDetailView(P13APIView):
         return response
 
 
-class NotificationPreferenceView(P13APIView):
+class NotificationPreferenceView(NotificationsAPIView):
     permission_classes = [IsAuthenticatedAccount]
 
     @extend_schema(

@@ -336,7 +336,7 @@ class FakeDockerEngine:
         container_id = f"container-{self.next_id}"
         self.next_id += 1
         labels = dict(kwargs.get("labels") or {})
-        is_judge = str(kwargs.get("name", "")).startswith("edu-judge-")
+        is_judge = (kwargs.get("labels") or {}).get("edu.platform.kind") == "judge"
         mount = {
             "Name": next(iter(self.volumes_state), ""),
             "Destination": "/workspace",
@@ -423,7 +423,7 @@ class DockerLocalAdapterTests(SimpleTestCase):
         adapter = DockerLocalAdapter(
             client=client,
             config={
-                "image": "edu-platform-algorithm-workspace:local",
+                "image": "experimental-platform-workspace:local",
                 "runtime_network": "edu-runtime",
             },
         )
@@ -444,7 +444,7 @@ class DockerLocalAdapterTests(SimpleTestCase):
         self.assertEqual(labels["edu.platform.managed"], "true")
         self.assertEqual(client.networks_state[0]["driver"], "bridge")
         container_config = client.containers_state[created.external_id]["_kwargs"]
-        self.assertEqual(container_config["image"], "edu-platform-algorithm-workspace:local")
+        self.assertEqual(container_config["image"], "experimental-platform-workspace:local")
         self.assertEqual(
             container_config["healthcheck"]["Test"],
             ["CMD", "/usr/local/bin/workspace-router", "healthcheck"],
@@ -470,7 +470,7 @@ class DockerLocalAdapterTests(SimpleTestCase):
         adapter = DockerLocalAdapter(
             client=client,
             config={
-                "image": "edu-platform-algorithm-workspace:local",
+                "image": "experimental-platform-workspace:local",
                 "runtime_network": "edu-runtime",
             },
         )

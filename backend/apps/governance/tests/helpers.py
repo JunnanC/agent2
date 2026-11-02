@@ -4,7 +4,7 @@ from apps.courses.models import Course
 from apps.courses.services import ActorContext, create_course
 
 
-def create_governance_admin(*, suffix: str = "governance-admin") -> User:
+def create_governance_admin(*, suffix: str = "governance_admin") -> User:
     user = create_user(
         email=f"{suffix}@example.edu",
         username=suffix,
@@ -14,7 +14,7 @@ def create_governance_admin(*, suffix: str = "governance-admin") -> User:
     return user
 
 
-def create_governance_teacher(*, suffix: str = "governance-teacher") -> User:
+def create_governance_teacher(*, suffix: str = "governance_teacher") -> User:
     user = create_user(
         email=f"{suffix}@example.edu",
         username=suffix,
@@ -24,7 +24,7 @@ def create_governance_teacher(*, suffix: str = "governance-teacher") -> User:
     return user
 
 
-def create_governance_course(owner: User, *, code: str = "GOV-COURSE-001") -> Course:
+def create_governance_course(owner: User, *, code: str = "GOV_COURSE_001") -> Course:
     return create_course(
         actor=owner,
         code=code,

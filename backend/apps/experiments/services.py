@@ -814,7 +814,7 @@ def _create_task(
 ) -> ExperimentTask:
     template = publication.template_version
     snapshot = _runtime_snapshot(template)
-    # Publications created before T03 have no snapshot columns. Keep those
+    # Publications created before runtime snapshots have no snapshot columns. Keep those
     # historical rows assignable while every new task is fully frozen.
     if publication.runtime_adapter_id:
         snapshot = {
@@ -970,7 +970,7 @@ def publish_publication(
         "review_mode": publication.review_mode,
     })
     now = timezone.now()
-    async_assignment = len(enrollments) >= int(getattr(settings, "P06_PUBLICATION_SYNC_LIMIT", 100))
+    async_assignment = len(enrollments) >= int(getattr(settings, "PUBLICATION_SYNC_LIMIT", 100))
     next_status = (
         TaskPublication.Status.PUBLISHING if async_assignment else TaskPublication.Status.PUBLISHED
     )

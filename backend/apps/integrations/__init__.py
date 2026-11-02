@@ -1,1 +1,1 @@
-"""Integration domain; implemented in P13."""
+"""Integration domain."""

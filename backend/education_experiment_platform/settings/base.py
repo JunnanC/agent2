@@ -116,7 +116,7 @@ REST_FRAMEWORK: dict[str, object] = {
 
 SPECTACULAR_SETTINGS: dict[str, object] = {
     "TITLE": "Education Agent Platform API",
-    "DESCRIPTION": "P15 student experiment workbench and platform operations.",
+    "DESCRIPTION": "Student experiment workbench and platform operations.",
     "VERSION": OPENAPI_REVISION,
     "SERVE_INCLUDE_SCHEMA": False,
     "OAS_VERSION": "3.0.3",
@@ -233,39 +233,39 @@ CELERY_TASK_ROUTES = {
     "apps.reviews.purge_similarity_evidence": {"queue": "q_default"},
 }
 CELERY_BEAT_SCHEDULE = {
-    "p11-scan-task-deadlines": {
+    "scan-task-deadlines": {
         "task": "apps.archives.scan_due_tasks",
         "schedule": 60.0,
     },
-    "p11-reconcile-archives-and-runtime": {
+    "reconcile-archives-and-runtime": {
         "task": "apps.archives.reconcile",
         "schedule": 60.0,
     },
-    "p11-run-compensations": {
+    "run-compensations": {
         "task": "apps.core.run_compensations",
         "schedule": 30.0,
     },
-    "p14-purge-archive-retention": {
+    "purge-archive-retention": {
         "task": "apps.archives.purge_retention",
         "schedule": 3600.0,
     },
-    "p16-reconcile-workspace-storage": {
+    "reconcile-workspace-storage": {
         "task": "apps.workspaces.reconcile_workspace_storage_jobs",
         "schedule": 30.0,
     },
-    "p13-refresh-analytics": {
+    "refresh-analytics": {
         "task": "apps.analytics.refresh_projection",
         "schedule": 300.0,
     },
-    "p13-consume-notifications": {
+    "consume-notifications": {
         "task": "apps.notifications.consume_outbox",
         "schedule": 30.0,
     },
-    "p13-deliver-webhooks": {
+    "deliver-webhooks": {
         "task": "apps.integrations.deliver_due_webhooks",
         "schedule": 15.0,
     },
-    "p14-probe-runtime-adapters": {
+    "probe-runtime-adapters": {
         "task": "apps.governance.probe_runtime_adapters",
         "schedule": 30.0,
     },
@@ -275,7 +275,9 @@ SIMILARITY_ALGORITHM_VERSION = env(
 )
 SIMILARITY_THRESHOLD = env("SIMILARITY_THRESHOLD", "0.30")
 SIMILARITY_RETENTION_DAYS = int(env("SIMILARITY_RETENTION_DAYS", "180"))
-P10_AUTO_CHECK_MAX_ATTEMPTS = int(env("P10_AUTO_CHECK_MAX_ATTEMPTS", "3"))
+AUTO_CHECK_MAX_ATTEMPTS = int(
+    env("AUTO_CHECK_MAX_ATTEMPTS", env("P10_AUTO_CHECK_MAX_ATTEMPTS", "3"))
+)
 WORKSPACE_TOKEN_HMAC_KEY = env("WORKSPACE_TOKEN_HMAC_KEY", SECRET_KEY)
 WORKSPACE_SESSION_TTL_SECONDS = int(env("WORKSPACE_SESSION_TTL_SECONDS", "900"))
 WORKSPACE_COOKIE_NAME = env("WORKSPACE_COOKIE_NAME", "workspace_ticket")
@@ -304,8 +306,10 @@ WORKSPACE_SNAPSHOT_ALLOWED_MIME_TYPES = set(
     )
 )
 SSE_HEARTBEAT_SECONDS = int(env("SSE_HEARTBEAT_SECONDS", "20"))
-P06_PUBLICATION_SYNC_LIMIT = int(env("P06_PUBLICATION_SYNC_LIMIT", "100"))
-P06_PUBLICATION_CHUNK_SIZE = int(env("P06_PUBLICATION_CHUNK_SIZE", "50"))
+PUBLICATION_SYNC_LIMIT = int(
+    env("PUBLICATION_SYNC_LIMIT", env("P06_PUBLICATION_SYNC_LIMIT", "100"))
+)
+PUBLICATION_CHUNK_SIZE = int(env("PUBLICATION_CHUNK_SIZE", env("P06_PUBLICATION_CHUNK_SIZE", "50")))
 COURSE_INVITATION_HMAC_KEY = env("COURSE_INVITATION_HMAC_KEY", SECRET_KEY)
 GOVERNANCE_CACHE_TTL_SECONDS = int(env("GOVERNANCE_CACHE_TTL_SECONDS", "300"))
 GOVERNANCE_HEALTH_STALE_SECONDS = int(env("GOVERNANCE_HEALTH_STALE_SECONDS", "300"))
@@ -336,8 +340,8 @@ RUNTIME_MODE = env("RUNTIME_MODE", "local").strip().lower()
 if RUNTIME_MODE not in {"fake", "local", "swarm"}:
     raise RuntimeError("RUNTIME_MODE must be fake, local, or swarm")
 RUNTIME_ADAPTER_CODE = env("RUNTIME_ADAPTER_CODE", "runtime/local-docker")
-LOCAL_RUNTIME_IMAGE = env("LOCAL_RUNTIME_IMAGE", "edu-platform-algorithm-workspace:local")
-LOCAL_RUNTIME_NETWORK = env("LOCAL_RUNTIME_NETWORK", "edu-platform-p14_runtime")
+LOCAL_RUNTIME_IMAGE = env("LOCAL_RUNTIME_IMAGE", "experimental-platform-workspace:local")
+LOCAL_RUNTIME_NETWORK = env("LOCAL_RUNTIME_NETWORK", "experimental-platform-runtime")
 LOCAL_DOCKER_HOST = env("LOCAL_DOCKER_HOST", "unix:///var/run/docker.sock")
 LOCAL_RUNTIME_MODE = env("LOCAL_RUNTIME_MODE", "REAL").upper()
 if LOCAL_RUNTIME_MODE not in {"STUB", "REAL"}:
@@ -357,7 +361,7 @@ SWARM_DOCKER_KEY_PATH = env("SWARM_DOCKER_KEY_PATH", "/run/secrets/swarm_docker_
 SWARM_REQUEST_TIMEOUT_SECONDS = int(env("SWARM_REQUEST_TIMEOUT_SECONDS", "30"))
 SWARM_BOOT_TIMEOUT_SECONDS = int(env("SWARM_BOOT_TIMEOUT_SECONDS", "120"))
 SWARM_POLL_INTERVAL_SECONDS = float(env("SWARM_POLL_INTERVAL_SECONDS", "2"))
-SWARM_RUNTIME_NETWORK = env("SWARM_RUNTIME_NETWORK", "edu-runtime")
+SWARM_RUNTIME_NETWORK = env("SWARM_RUNTIME_NETWORK", "experimental-platform-swarm-runtime")
 if os.getenv("DJANGO_SETTINGS_MODULE", "").endswith(".prod"):
     if RUNTIME_MODE != "swarm" or not RUNTIME_ADAPTER_CODE.strip():
         raise RuntimeError("Production requires RUNTIME_MODE=swarm and RUNTIME_ADAPTER_CODE")

@@ -1,4 +1,4 @@
-name: EduTech CI
+name: Experimental Platform CI
 
 on:
   push:
@@ -72,18 +72,27 @@ jobs:
   docker-build:
     name: 构建镜像
     needs: [lock-check, lint, test]
-    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - image: backend
+            context: backend
+            dockerfile: backend/Dockerfile
+          - image: web
+            context: .
+            dockerfile: infrastructure/nginx/Dockerfile
+          - image: workspace
+            context: runtime/algorithm-workspace
+            dockerfile: runtime/algorithm-workspace/Dockerfile
+          - image: reference
+            context: runtime/reference-workspace
+            dockerfile: runtime/reference-workspace/Dockerfile
     steps:
       - uses: actions/checkout@v4
-      - name: 构建后端镜像
+      - name: 构建项目镜像
         run: |
           docker build \
-            -f backend/Dockerfile \
-            -t edutech/backend:latest \
-            -t edutech/backend:$(date +%Y%m%d)-${GITHUB_SHA:0:7} \
-            backend/
-      - name: 镜像构建完成
-        run: |
-          docker images edutech/backend
-          echo "镜像已构建"
+            -f "${{ matrix.dockerfile }}" \
+            -t "experimental-platform-${{ matrix.image }}:${GITHUB_SHA}" \
+            "${{ matrix.context }}"

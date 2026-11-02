@@ -1,4 +1,4 @@
-name: edu-platform-p14
+name: experimental-platform
 
 x-app-environment: &app-environment
   APP_ENV: local
@@ -7,7 +7,7 @@ x-app-environment: &app-environment
   SIMILARITY_ALGORITHM_VERSION: ${SIMILARITY_ALGORITHM_VERSION:-char-5gram-jaccard-v1}
   SIMILARITY_THRESHOLD: ${SIMILARITY_THRESHOLD:-0.30}
   SIMILARITY_RETENTION_DAYS: ${SIMILARITY_RETENTION_DAYS:-180}
-  P10_AUTO_CHECK_MAX_ATTEMPTS: ${P10_AUTO_CHECK_MAX_ATTEMPTS:-3}
+  AUTO_CHECK_MAX_ATTEMPTS: ${AUTO_CHECK_MAX_ATTEMPTS:-${P10_AUTO_CHECK_MAX_ATTEMPTS:-3}}
   ARCHIVE_RETENTION_DAYS: ${ARCHIVE_RETENTION_DAYS:-365}
   ARCHIVE_SAFE_RECYCLE_SECONDS: ${ARCHIVE_SAFE_RECYCLE_SECONDS:-900}
   ARCHIVE_EXPORT_TTL_SECONDS: ${ARCHIVE_EXPORT_TTL_SECONDS:-300}
@@ -55,20 +55,20 @@ x-app-environment: &app-environment
   OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
   LOG_LEVEL: INFO
   SWARM_DOCKER_HOST: ${SWARM_DOCKER_HOST:-unix:///var/run/docker.sock}
-  SWARM_RUNTIME_NETWORK: ${SWARM_RUNTIME_NETWORK:-edu-runtime}
+  SWARM_RUNTIME_NETWORK: ${SWARM_RUNTIME_NETWORK:-experimental-platform-swarm-runtime}
   RUNTIME_MODE: ${RUNTIME_MODE:-local}
   RUNTIME_ADAPTER_CODE: ${RUNTIME_ADAPTER_CODE:-runtime/local-docker}
-  LOCAL_RUNTIME_IMAGE: ${LOCAL_RUNTIME_IMAGE:-edu-platform-algorithm-workspace:local}
-  LOCAL_RUNTIME_NETWORK: ${LOCAL_RUNTIME_NETWORK:-edu-platform-p14_runtime}
+  LOCAL_RUNTIME_IMAGE: ${LOCAL_RUNTIME_IMAGE:-experimental-platform-workspace:local}
+  LOCAL_RUNTIME_NETWORK: ${LOCAL_RUNTIME_NETWORK:-${COMPOSE_PROJECT_NAME}-runtime}
   LOCAL_DOCKER_HOST: ${LOCAL_DOCKER_HOST:-unix:///var/run/docker.sock}
   LOCAL_RUNTIME_MODE: ${LOCAL_RUNTIME_MODE:-REAL}
   AUTO_PROVISION_ON_ASSIGNMENT: ${AUTO_PROVISION_ON_ASSIGNMENT:-true}
-  RUNTIME_ADAPTER_CONFIGS: '${RUNTIME_ADAPTER_CONFIGS:-{"runtime/local-docker":{"runtime_network":"edu-platform-p14_runtime","pids_limit":128}}}'
+  RUNTIME_ADAPTER_CONFIGS: '${RUNTIME_ADAPTER_CONFIGS:-{"runtime/local-docker":{"pids_limit":128}}}'
 
 x-backend-build: &backend-build
   context: backend
   args:
-    PYTHON_BASE_IMAGE: ${PYTHON_BASE_IMAGE:-m.daocloud.io/docker.io/library/python:3.14-slim}
+    PYTHON_BASE_IMAGE: ${PYTHON_BASE_IMAGE:-public.ecr.aws/docker/library/python:3.14-slim}
     DEBIAN_MIRROR: ${DEBIAN_MIRROR:-https://mirrors.aliyun.com/debian}
     DEBIAN_SECURITY_MIRROR: ${DEBIAN_SECURITY_MIRROR:-https://mirrors.aliyun.com/debian-security}
 
@@ -81,6 +81,7 @@ x-fluentd-logging: &fluentd-logging
 
 services:
   mysql:
+    container_name: ${COMPOSE_PROJECT_NAME}-mysql
     image: ${MYSQL_IMAGE:-public.ecr.aws/docker/library/mysql:8.4}
     command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_0900_ai_ci", "--binlog-format=ROW"]
     environment:
@@ -103,6 +104,7 @@ services:
         limits: { memory: 1G }
 
   mysql-users:
+    container_name: ${COMPOSE_PROJECT_NAME}-mysql-users
     image: ${MYSQL_IMAGE:-public.ecr.aws/docker/library/mysql:8.4}
     command: ["bash", "/scripts/configure-users.sh", "prepare"]
     environment:
@@ -120,6 +122,7 @@ services:
     restart: "no"
 
   redis:
+    container_name: ${COMPOSE_PROJECT_NAME}-redis
     image: redis:7.4-alpine
     command: ["redis-server", "--appendonly", "yes", "--maxmemory-policy", "noeviction"]
     volumes: [redis-data:/data]
@@ -135,6 +138,7 @@ services:
         limits: { memory: 512M }
 
   mongo-keyfile:
+    container_name: ${COMPOSE_PROJECT_NAME}-mongo-keyfile
     image: mongo:8.0
     user: root
     environment:
@@ -144,6 +148,7 @@ services:
     restart: "no"
 
   mongodb:
+    container_name: ${COMPOSE_PROJECT_NAME}-mongodb
     image: mongo:8.0
     command: ["mongod", "--replSet", "rs0", "--keyFile", "/keyfile/keyfile", "--bind_ip_all"]
     environment:
@@ -166,6 +171,7 @@ services:
         limits: { memory: 768M }
 
   mongo-init:
+    container_name: ${COMPOSE_PROJECT_NAME}-mongo-init
     image: mongo:8.0
     environment:
       MONGO_USER: ${MONGO_INITDB_ROOT_USERNAME:-runtime_logger}
@@ -183,6 +189,7 @@ services:
     restart: "no"
 
   minio:
+    container_name: ${COMPOSE_PROJECT_NAME}-minio
     image: ${MINIO_IMAGE:-bitnamilegacy/minio:latest}
     command: server /data --console-address :9001
     environment:
@@ -204,6 +211,7 @@ services:
         limits: { memory: 768M }
 
   minio-init:
+    container_name: ${COMPOSE_PROJECT_NAME}-minio-init
     image: ${MINIO_CLIENT_IMAGE:-bitnamilegacy/minio-client:latest}
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-edu-platform}
@@ -229,6 +237,7 @@ services:
     restart: "no"
 
   clamav:
+    container_name: ${COMPOSE_PROJECT_NAME}-clamav
     image: clamav/clamav:1.4
     volumes: [clamav-data:/var/lib/clamav]
     networks: [data]
@@ -244,6 +253,8 @@ services:
         limits: { memory: 2G }
 
   migrate:
+    container_name: ${COMPOSE_PROJECT_NAME}-migrate
+    image: experimental-platform-backend:local
     build: *backend-build
     command: ["python", "manage.py", "migrate", "--noinput"]
     environment:
@@ -256,6 +267,7 @@ services:
     restart: "no"
 
   mysql-grants:
+    container_name: ${COMPOSE_PROJECT_NAME}-mysql-grants
     image: ${MYSQL_IMAGE:-public.ecr.aws/docker/library/mysql:8.4}
     command: ["bash", "/scripts/configure-users.sh", "restrict"]
     environment:
@@ -273,12 +285,16 @@ services:
     restart: "no"
 
   core-check:
+    container_name: ${COMPOSE_PROJECT_NAME}-core-check
+    image: experimental-platform-backend:local
     profiles: ["tools"]
     build: *backend-build
     environment: *app-environment
     networks: [data]
 
   django:
+    container_name: ${COMPOSE_PROJECT_NAME}-django
+    image: experimental-platform-backend:local
     build: *backend-build
     environment:
       <<: *app-environment
@@ -297,13 +313,15 @@ services:
       retries: 20
     logging: *fluentd-logging
     deploy:
-      replicas: 2
+      replicas: 1
       resources:
         reservations: { cpus: "0.25", memory: 256M }
         limits: { cpus: "1.00", memory: 768M }
       update_config: { parallelism: 1, order: start-first, failure_action: rollback }
 
   celery:
+    container_name: ${COMPOSE_PROJECT_NAME}-celery
+    image: experimental-platform-backend:local
     build: *backend-build
     command: ["celery", "-A", "education_experiment_platform", "worker", "--loglevel=INFO", "--concurrency=${CELERY_CONCURRENCY:-4}", "--queues=q_default,q_relay,q_agent,q_content,q_analytics,q_integrations"]
     environment: *app-environment
@@ -320,7 +338,9 @@ services:
       update_config: { parallelism: 1, order: stop-first, failure_action: rollback }
 
   runtime-worker:
-    profiles: ["p14"]
+    container_name: ${COMPOSE_PROJECT_NAME}-runtime-worker
+    image: experimental-platform-backend:local
+    profiles: ["runtime"]
     build: *backend-build
     command: ["celery", "-A", "education_experiment_platform", "worker", "--loglevel=INFO", "--concurrency=${RUNTIME_WORKER_CONCURRENCY:-2}", "--queues=q_provision,q_archive,q_compensate,q_workspace_storage"]
     environment: *app-environment
@@ -340,6 +360,8 @@ services:
       update_config: { parallelism: 1, order: stop-first, failure_action: rollback }
 
   workspace-gateway:
+    container_name: ${COMPOSE_PROJECT_NAME}-workspace-gateway
+    image: experimental-platform-backend:local
     build: *backend-build
     command: ["uvicorn", "education_experiment_platform.workspace_gateway:application", "--host", "0.0.0.0", "--port", "8080", "--no-proxy-headers"]
     environment: *app-environment
@@ -353,14 +375,16 @@ services:
       retries: 20
     logging: *fluentd-logging
     deploy:
-      replicas: 2
+      replicas: 1
       resources:
         reservations: { cpus: "0.10", memory: 128M }
         limits: { cpus: "0.50", memory: 384M }
       update_config: { parallelism: 1, order: start-first, failure_action: rollback }
 
   runtime-reference:
-    profiles: ["p14"]
+    container_name: ${COMPOSE_PROJECT_NAME}-runtime-reference
+    image: experimental-platform-reference:local
+    profiles: ["runtime"]
     build: ./runtime/reference-workspace
     networks:
       runtime:
@@ -374,14 +398,15 @@ services:
         limits: { cpus: "0.50", memory: 512M }
 
   runtime-algorithm-workspace:
-    profiles: ["p14"]
+    container_name: ${COMPOSE_PROJECT_NAME}-runtime-algorithm-workspace
+    profiles: ["runtime"]
     platform: linux/amd64
     build:
       context: ./runtime/algorithm-workspace
       args:
-        GO_BUILDER_IMAGE: m.daocloud.io/docker.io/library/golang:1.25.1-alpine3.22@sha256:546671046d6f9f786c24b83111ba1801b736ee4b01b23db33e4f3eb41d4f8883
-        PYTHON_BASE_IMAGE: m.daocloud.io/docker.io/library/python:3.14.0-slim-bookworm@sha256:9bbb8720ae0a24a6ca8dd678bfdf57818fe70caf54c52a53ec01d8db43405056
-    image: ${LOCAL_RUNTIME_IMAGE:-edu-platform-algorithm-workspace:local}
+        GO_BUILDER_IMAGE: public.ecr.aws/docker/library/golang:1.25.1-alpine3.22@sha256:546671046d6f9f786c24b83111ba1801b736ee4b01b23db33e4f3eb41d4f8883
+        PYTHON_BASE_IMAGE: public.ecr.aws/docker/library/python:3.14.0-slim-bookworm@sha256:9bbb8720ae0a24a6ca8dd678bfdf57818fe70caf54c52a53ec01d8db43405056
+    image: ${LOCAL_RUNTIME_IMAGE:-experimental-platform-workspace:local}
     networks: [runtime]
     secrets:
       - workspace_upstream_token
@@ -393,6 +418,8 @@ services:
         limits: { cpus: "1.00", memory: 768M }
 
   celery-beat:
+    container_name: ${COMPOSE_PROJECT_NAME}-celery-beat
+    image: experimental-platform-backend:local
     build: *backend-build
     command: ["celery", "-A", "education_experiment_platform", "beat", "--loglevel=INFO"]
     environment: *app-environment
@@ -409,6 +436,8 @@ services:
       update_config: { parallelism: 1, order: stop-first, failure_action: rollback }
 
   log-ingest:
+    container_name: ${COMPOSE_PROJECT_NAME}-log-ingest
+    image: experimental-platform-backend:local
     build: *backend-build
     command: ["python", "-m", "education_experiment_platform.log_ingest"]
     environment: *app-environment
@@ -425,6 +454,7 @@ services:
         limits: { memory: 256M }
 
   fluent-bit:
+    container_name: ${COMPOSE_PROJECT_NAME}-fluent-bit
     image: cr.fluentbit.io/fluent/fluent-bit:4.0.9
     volumes:
       - ./infrastructure/fluent-bit/fluent-bit.conf:/fluent-bit/etc/fluent-bit.conf:ro
@@ -440,6 +470,7 @@ services:
         limits: { memory: 256M }
 
   otel-collector:
+    container_name: ${COMPOSE_PROJECT_NAME}-otel-collector
     image: otel/opentelemetry-collector-contrib:0.136.0
     command: ["--config=/etc/otelcol/config.yml"]
     volumes: [./infrastructure/otel/collector.yml:/etc/otelcol/config.yml:ro]
@@ -450,6 +481,7 @@ services:
         limits: { memory: 384M }
 
   prometheus:
+    container_name: ${COMPOSE_PROJECT_NAME}-prometheus
     image: prom/prometheus:v3.5.0
     command: ["--config.file=/etc/prometheus/prometheus.yml", "--storage.tsdb.path=/prometheus"]
     volumes:
@@ -462,6 +494,7 @@ services:
         limits: { memory: 512M }
 
   kong:
+    container_name: ${COMPOSE_PROJECT_NAME}-kong
     image: kong:3.9
     environment:
       KONG_DATABASE: "off"
@@ -486,13 +519,15 @@ services:
       retries: 20
     logging: *fluentd-logging
     deploy:
-      replicas: 2
+      replicas: 1
       resources:
         reservations: { cpus: "0.25", memory: 256M }
         limits: { cpus: "1.00", memory: 768M }
       update_config: { parallelism: 1, order: start-first, failure_action: rollback }
 
   nginx:
+    container_name: ${COMPOSE_PROJECT_NAME}-nginx
+    image: experimental-platform-web:local
     build:
       context: .
       dockerfile: infrastructure/nginx/Dockerfile
@@ -524,31 +559,47 @@ services:
       update_config: { parallelism: 1, order: start-first, failure_action: rollback }
 
 networks:
-  edge: {}
-  minio-host-access: {}
+  default:
+    name: ${COMPOSE_PROJECT_NAME}-default
+  edge:
+    name: ${COMPOSE_PROJECT_NAME}-edge
+  minio-host-access:
+    name: ${COMPOSE_PROJECT_NAME}-minio-host-access
   app:
+    name: ${COMPOSE_PROJECT_NAME}-app
     internal: true
     ipam:
       config:
         - subnet: ${APP_NETWORK_SUBNET:-172.29.20.0/24}
   runtime:
+    name: ${COMPOSE_PROJECT_NAME}-runtime
     internal: true
-  data: { internal: true }
-  observability: { internal: true }
-  log-driver: {}
+  data:
+    name: ${COMPOSE_PROJECT_NAME}-data
+    internal: true
+  observability:
+    name: ${COMPOSE_PROJECT_NAME}-observability
+    internal: true
+  log-driver:
+    name: ${COMPOSE_PROJECT_NAME}-log-driver
 
 volumes:
-  mysql-data: {}
-  redis-data: {}
-  mongo-data: {}
-  mongo-keyfile: {}
-  minio-data: {}
-  clamav-data: {}
-  fluent-bit-buffer: {}
-  prometheus-data: {}
-
-
-
+  mysql-data:
+    name: ${COMPOSE_PROJECT_NAME}-mysql-data
+  redis-data:
+    name: ${COMPOSE_PROJECT_NAME}-redis-data
+  mongo-data:
+    name: ${COMPOSE_PROJECT_NAME}-mongo-data
+  mongo-keyfile:
+    name: ${COMPOSE_PROJECT_NAME}-mongo-keyfile
+  minio-data:
+    name: ${COMPOSE_PROJECT_NAME}-minio-data
+  clamav-data:
+    name: ${COMPOSE_PROJECT_NAME}-clamav-data
+  fluent-bit-buffer:
+    name: ${COMPOSE_PROJECT_NAME}-fluent-bit-buffer
+  prometheus-data:
+    name: ${COMPOSE_PROJECT_NAME}-prometheus-data
 secrets:
   workspace_upstream_token:
     file: ./secrets/workspace_upstream_token

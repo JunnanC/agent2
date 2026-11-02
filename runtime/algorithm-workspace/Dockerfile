@@ -1,7 +1,5 @@
-# syntax=m.daocloud.io/docker.io/docker/dockerfile:1.7@sha256:a57df69d0ea827fb7266491f2813635de6f17269be881f696fbfdf2d83dda33e
-
-ARG GO_BUILDER_IMAGE=m.daocloud.io/docker.io/library/golang:1.25.1-alpine3.22@sha256:546671046d6f9f786c24b83111ba1801b736ee4b01b23db33e4f3eb41d4f8883
-ARG PYTHON_BASE_IMAGE=m.daocloud.io/docker.io/library/python:3.14.0-slim-bookworm@sha256:9bbb8720ae0a24a6ca8dd678bfdf57818fe70caf54c52a53ec01d8db43405056
+ARG GO_BUILDER_IMAGE=public.ecr.aws/docker/library/golang:1.25.1-alpine3.22@sha256:546671046d6f9f786c24b83111ba1801b736ee4b01b23db33e4f3eb41d4f8883
+ARG PYTHON_BASE_IMAGE=public.ecr.aws/docker/library/python:3.14.0-slim-bookworm@sha256:9bbb8720ae0a24a6ca8dd678bfdf57818fe70caf54c52a53ec01d8db43405056
 
 # ttyd is statically linked and its digest is pinned against the official
 # SHA256SUMS asset of the 1.7.7 release (release-asset cross-verified).

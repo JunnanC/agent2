@@ -1,1 +1,1 @@
-"""Courses domain; implemented in P03."""
+"""Courses domain."""

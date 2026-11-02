@@ -1,1 +1,1 @@
-"""Accounts domain; implemented in P02."""
+"""Accounts domain."""

@@ -82,7 +82,7 @@ def build_templates(
 ) -> dict[str, TemplateVersion]:
     """Create one demo template version per course and hard-publish it.
 
-    Publishing uses the seed_p07 idiom (``.update(status=PUBLISHED, spec_digest=…)``)
+    Publishing updates the status and digest directly (``.update(status=PUBLISHED, spec_digest=…)``)
     so the dataset never depends on a real Docker registry or runtime.
     """
 

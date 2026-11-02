@@ -17,11 +17,11 @@ def context(actor: User, trace: str = "p") -> ActorContext:
 
 
 def create_resources(
-    owner: User, *, suffix: str = "p05"
+    owner: User, *, suffix: str = "templates"
 ) -> tuple[RuntimeAdapter, ImageAsset, ResourceProfile]:
     adapter = RuntimeAdapter.objects.create(
         code=f"runtime-{suffix}",
-        name="P05 Runtime",
+        name="templates Runtime",
         runtime_type=RuntimeAdapter.RuntimeType.CONTAINER,
         driver=RuntimeAdapter.Driver.DOCKER_SWARM,
         status=RuntimeAdapter.Status.ENABLED,
@@ -41,7 +41,7 @@ def create_resources(
     )
     profile = ResourceProfile.objects.create(
         code=f"profile-{suffix}",
-        name="P05 Profile",
+        name="templates Profile",
         runtime_type=RuntimeAdapter.RuntimeType.CONTAINER,
         status=ResourceProfile.Status.ACTIVE,
         cpu_millicores=2000,
@@ -59,7 +59,7 @@ def create_resources(
 
 
 def create_template_version(
-    *, suffix: str = "p05"
+    *, suffix: str = "templates"
 ) -> tuple[User, Course, Template, TemplateVersion]:
     owner = create_teacher(suffix=f"{suffix}-owner")
     course = create_draft_course(owner, code=f"COURSE-{suffix.upper()}")
@@ -69,7 +69,7 @@ def create_template_version(
         actor=owner,
         name="Container Lab",
         category="systems",
-        description="P05 test template",
+        description="templates test template",
         context=context(owner),
     )
     version = create_version(

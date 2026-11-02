@@ -1,1 +1,1 @@
-"""Provisioning domain; implemented in P07 and P14."""
+"""Provisioning domain."""

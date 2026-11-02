@@ -95,7 +95,7 @@ class WarmupServiceTests(TestCase):
 
     def test_local_registry_warmup_only_inspects_the_digest_reference(self) -> None:
         TaskPublication.objects.filter(pk=self.published.pk).update(
-            image_registry="local", image_repository="edu-platform-algorithm-workspace"
+            image_registry="local", image_repository="experimental-platform-workspace"
         )
         self.published.refresh_from_db()
 
@@ -108,7 +108,7 @@ class WarmupServiceTests(TestCase):
         self.assertEqual(spec.image_digest, self.published.image_digest)
         self.assertEqual(
             spec.image_ref,
-            f"local/edu-platform-algorithm-workspace@{self.published.image_digest}",
+            f"local/experimental-platform-workspace@{self.published.image_digest}",
         )
         self.assertEqual(self.adapter.resolve_calls, [])
         self.assertEqual(self.adapter.validate_calls, [])
@@ -156,7 +156,7 @@ class WarmupServiceTests(TestCase):
     def test_unexpected_failure_is_silent(self) -> None:
         self.adapter.failures["prepare_image"] = ValueError("docker engine offline")
         TaskPublication.objects.filter(pk=self.published.pk).update(
-            image_registry="local", image_repository="edu-platform-algorithm-workspace"
+            image_registry="local", image_repository="experimental-platform-workspace"
         )
 
         result = self._warmup()

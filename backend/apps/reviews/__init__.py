@@ -1,1 +1,1 @@
-"""Reviews domain; implemented in P10."""
+"""Reviews domain."""

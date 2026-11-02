@@ -22,7 +22,9 @@ def context(actor: User, portal: str = "TEACHING") -> ActorContext:
     return ActorContext(actor.public_id, portal, "6" * 32)
 
 
-def create_domain(*, suffix: str = "p06") -> tuple[User, Course, TemplateVersion, RubricVersion]:
+def create_domain(
+    *, suffix: str = "publications"
+) -> tuple[User, Course, TemplateVersion, RubricVersion]:
     owner, course, template, template_version = create_template_version(suffix=suffix)
     now = timezone.now()
     Course.objects.filter(pk=course.pk).update(
@@ -131,7 +133,7 @@ def create_draft_publication(
             "template_version_id": template_version.public_id,
             "rubric_version_id": rubric_version.public_id,
             "title": f"Experiment {suffix}".strip(),
-            "description": "P06 test publication",
+            "description": "publications test publication",
             "audience_mode": audience_mode,
             "late_enrollment_policy": TaskPublication.LateEnrollmentPolicy.ASSIGN_UNTIL_DEADLINE,
             "window_start": now - timezone.timedelta(minutes=5),

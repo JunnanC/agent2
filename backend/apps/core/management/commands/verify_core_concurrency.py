@@ -13,12 +13,12 @@ from apps.core.models import ObjectAsset
 
 
 class Command(BaseCommand):
-    help = "Run the P01 CAS and idempotency probes using independent database connections."
+    help = "Verify optimistic concurrency and idempotency across database connections."
 
     def handle(self, *args: object, **options: object) -> None:
         self._verify_cas()
         self._verify_idempotency()
-        self.stdout.write(self.style.SUCCESS("P01 MySQL concurrency verification passed."))
+        self.stdout.write(self.style.SUCCESS("MySQL concurrency verification passed."))
 
     @staticmethod
     def _verify_cas() -> None:

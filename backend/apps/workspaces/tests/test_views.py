@@ -63,14 +63,14 @@ class WorkbenchApiBase(TestCase):
     def setUp(self) -> None:
         reset_fake_runtime()
         self.teacher, self.course, template_version, rubric_version = create_domain(
-            suffix="p15-workbench"
+            suffix="workbench-workbench"
         )
         RuntimeAdapter.objects.filter(pk=template_version.runtime_adapter_id).update(
             driver=RuntimeAdapter.Driver.FAKE,
             status=RuntimeAdapter.Status.ENABLED,
             health_status=RuntimeAdapter.HealthStatus.HEALTHY,
         )
-        enrollment = create_enrollment(self.course, suffix="p15-workbench-student")
+        enrollment = create_enrollment(self.course, suffix="workbench-workbench-student")
         self.student = enrollment.student
         quota_values = {
             "max_concurrent_instances": 10,
@@ -99,7 +99,7 @@ class WorkbenchApiBase(TestCase):
             course=self.course,
             template_version=template_version,
             rubric_version=rubric_version,
-            suffix="p15-workbench",
+            suffix="workbench-workbench",
         )
         published, _ = publish_publication(
             course_id=self.course.public_id,
@@ -107,7 +107,7 @@ class WorkbenchApiBase(TestCase):
             actor=self.teacher,
             expected_version=publication.row_version,
             selected_ids=[],
-            context=ActorContext(self.teacher.public_id, "TEACHING", "p15" * 8),
+            context=ActorContext(self.teacher.public_id, "TEACHING", "workbench".ljust(32, "0")),
         )
         self.task = published.tasks.get(student=self.student)
         _, job = start_provisioning(
@@ -229,8 +229,8 @@ class WorkbenchReadOnlyApiTests(WorkbenchApiBase):
 
     def test_other_student_and_non_user_portal_cannot_read_workbench(self) -> None:
         stranger = create_user(
-            email="p15-workbench-stranger@example.edu",
-            username="p15-workbench-stranger",
+            email="workbench-workbench-stranger@example.edu",
+            username="workbench-workbench-stranger",
             password=self.password,
         )
         response = self._client(stranger).get(

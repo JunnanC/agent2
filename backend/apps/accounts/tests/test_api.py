@@ -241,7 +241,7 @@ class AccountApiTests(TestCase):
         self.user.refresh_from_db()
         self.assertEqual(self.user.security_version, initial_security_version + 1)
 
-    def test_openapi_exposes_p02_paths_tags_and_portals(self) -> None:
+    def test_openapi_exposes_accounts_paths_tags_and_portals(self) -> None:
         response = Client().get(
             "/api/v2/schema",
             HTTP_X_PORTAL="USER",

@@ -33,6 +33,34 @@ EXPECTED_DOMAIN_APPS = {
 
 
 class SettingsTests(SimpleTestCase):
+    def test_functional_setting_names_preserve_legacy_env_fallbacks(self) -> None:
+        aliases = {
+            "AUTO_CHECK_MAX_ATTEMPTS": "P10_AUTO_CHECK_MAX_ATTEMPTS",
+            "PUBLICATION_SYNC_LIMIT": "P06_PUBLICATION_SYNC_LIMIT",
+            "PUBLICATION_CHUNK_SIZE": "P06_PUBLICATION_CHUNK_SIZE",
+        }
+        environment = os.environ.copy()
+        environment["DJANGO_SETTINGS_MODULE"] = "education_experiment_platform.settings.test"
+        for current, legacy in aliases.items():
+            environment.pop(current, None)
+            environment[legacy] = "7"
+        probe = (
+            "import education_experiment_platform.settings.base as config; "
+            f"print([getattr(config, key) for key in {list(aliases)!r}])"
+        )
+        for use_current_name, expected in ((False, "[7, 7, 7]"), (True, "[11, 11, 11]")):
+            if use_current_name:
+                environment.update(dict.fromkeys(aliases, "11"))
+            result = subprocess.run(
+                [sys.executable, "-c", probe],
+                cwd=ROOT / "backend",
+                env=environment,
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            assert result.stdout.strip() == expected
+
     def test_unit_test_settings_use_the_local_protocol_stub(self) -> None:
         assert settings.LOCAL_RUNTIME_MODE == "STUB"
 

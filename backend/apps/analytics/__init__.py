@@ -1,1 +1,1 @@
-"""Analytics domain; implemented in P13."""
+"""Analytics domain."""

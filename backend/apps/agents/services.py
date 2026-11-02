@@ -306,7 +306,7 @@ def _ensure_platform_eval_suite() -> EvalSuite:
     if suite is not None:
         return suite
     suite = EvalSuite.objects.create(
-        name="P12 platform safety baseline",
+        name="平台安全基线",
         platform_managed=True,
         threshold={"mandatory": 1.0, "minimum_score": 1.0},
     )

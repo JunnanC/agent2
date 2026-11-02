@@ -30,7 +30,7 @@ from .selectors import (
     user_risk_signals,
 )
 from .serializers import (
-    P13AnalyticsResponseSerializer,
+    AnalyticsResponseSerializer,
     RiskResolveSerializer,
     cost_data,
     daily_data,
@@ -44,8 +44,8 @@ IF_MATCH = OpenApiParameter("If-Match", str, OpenApiParameter.HEADER, required=T
 IDEMPOTENCY_KEY = OpenApiParameter("Idempotency-Key", str, OpenApiParameter.HEADER, required=True)
 
 
-class P13APIView(APIView):
-    serializer_class = P13AnalyticsResponseSerializer
+class AnalyticsAPIView(APIView):
+    serializer_class = AnalyticsResponseSerializer
 
 
 def _body(request: HttpRequest, data: Any) -> dict[str, Any]:
@@ -69,7 +69,7 @@ def _ctx(request: HttpRequest) -> ActorContext:
     )
 
 
-class UserAnalyticsRecommendationView(P13APIView):
+class UserAnalyticsRecommendationView(AnalyticsAPIView):
     permission_classes = [IsUserPortal]
 
     @extend_schema(tags=["notifications"], extensions={"x-portals": ["USER"]})
@@ -80,7 +80,7 @@ class UserAnalyticsRecommendationView(P13APIView):
         )
 
 
-class UserAnalyticsRiskSignalView(P13APIView):
+class UserAnalyticsRiskSignalView(AnalyticsAPIView):
     permission_classes = [IsUserPortal]
 
     @extend_schema(tags=["notifications"], extensions={"x-portals": ["USER"]})
@@ -90,7 +90,7 @@ class UserAnalyticsRiskSignalView(P13APIView):
         )
 
 
-class TeachingAnalyticsOverviewView(P13APIView):
+class TeachingAnalyticsOverviewView(AnalyticsAPIView):
     permission_classes = [IsTeachingPortal]
 
     @extend_schema(tags=["teaching-analytics"], extensions={"x-portals": ["TEACHING"]})
@@ -102,7 +102,7 @@ class TeachingAnalyticsOverviewView(P13APIView):
         )
 
 
-class TeachingAnalyticsSeriesView(P13APIView):
+class TeachingAnalyticsSeriesView(AnalyticsAPIView):
     permission_classes = [IsTeachingPortal]
 
     @extend_schema(
@@ -130,7 +130,7 @@ class TeachingAnalyticsSeriesView(P13APIView):
         return _response(request, {"course_id": course.public_id, "series": series})
 
 
-class TeachingAnalyticsRiskSignalView(P13APIView):
+class TeachingAnalyticsRiskSignalView(AnalyticsAPIView):
     permission_classes = [IsTeachingPortal]
 
     @extend_schema(tags=["teaching-analytics"], extensions={"x-portals": ["TEACHING"]})
@@ -139,7 +139,7 @@ class TeachingAnalyticsRiskSignalView(P13APIView):
         return _response(request, [risk_data(item) for item in course_risk_signals(course=course)])
 
 
-class TeachingAnalyticsRiskSignalDetailView(P13APIView):
+class TeachingAnalyticsRiskSignalDetailView(AnalyticsAPIView):
     permission_classes = [IsTeachingPortal]
 
     @extend_schema(
@@ -186,7 +186,7 @@ class TeachingAnalyticsRiskSignalDetailView(P13APIView):
         return response
 
 
-class TeachingAnalyticsQualityView(P13APIView):
+class TeachingAnalyticsQualityView(AnalyticsAPIView):
     permission_classes = [IsTeachingPortal]
 
     @extend_schema(tags=["teaching-analytics"], extensions={"x-portals": ["TEACHING"]})
@@ -202,7 +202,7 @@ class TeachingAnalyticsQualityView(P13APIView):
         )
 
 
-class TeachingAnalyticsResourceCostView(P13APIView):
+class TeachingAnalyticsResourceCostView(AnalyticsAPIView):
     permission_classes = [IsTeachingPortal]
 
     @extend_schema(tags=["teaching-analytics"], extensions={"x-portals": ["TEACHING"]})
@@ -218,7 +218,7 @@ class TeachingAnalyticsResourceCostView(P13APIView):
         )
 
 
-class PlatformAnalyticsQualityView(P13APIView):
+class PlatformAnalyticsQualityView(AnalyticsAPIView):
     permission_classes = [IsPlatformPortal]
 
     @extend_schema(tags=["platform-analytics"], extensions={"x-portals": ["PLATFORM"]})
@@ -229,7 +229,7 @@ class PlatformAnalyticsQualityView(P13APIView):
         return _response(request, list(rows))
 
 
-class PlatformAnalyticsResourceCostView(P13APIView):
+class PlatformAnalyticsResourceCostView(AnalyticsAPIView):
     permission_classes = [IsPlatformPortal]
 
     @extend_schema(tags=["platform-analytics"], extensions={"x-portals": ["PLATFORM"]})
@@ -242,7 +242,7 @@ class PlatformAnalyticsResourceCostView(P13APIView):
         return _response(request, list(rows))
 
 
-class PlatformAnalyticsProjectionView(P13APIView):
+class PlatformAnalyticsProjectionView(AnalyticsAPIView):
     permission_classes = [IsPlatformPortal]
 
     @extend_schema(tags=["platform-analytics"], extensions={"x-portals": ["PLATFORM"]})
@@ -265,7 +265,7 @@ class PlatformAnalyticsProjectionView(P13APIView):
         return _response(request, rows)
 
 
-class PlatformOperationsView(P13APIView):
+class PlatformOperationsView(AnalyticsAPIView):
     permission_classes = [IsPlatformPortal]
 
     @extend_schema(tags=["platform-analytics"], extensions={"x-portals": ["PLATFORM"]})
@@ -276,7 +276,7 @@ class PlatformOperationsView(P13APIView):
         )
 
 
-class PlatformRuntimeLogsView(P13APIView):
+class PlatformRuntimeLogsView(AnalyticsAPIView):
     permission_classes = [IsPlatformPortal]
 
     @extend_schema(tags=["platform-analytics"], extensions={"x-portals": ["PLATFORM"]})

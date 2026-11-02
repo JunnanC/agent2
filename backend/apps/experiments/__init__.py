@@ -1,1 +1,1 @@
-"""Experiment publication domain; implemented in P06."""
+"""Experiment publication domain."""

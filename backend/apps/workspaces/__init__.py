@@ -1,1 +1,1 @@
-"""Workspace domain; implemented in P08."""
+"""Workspace domain."""

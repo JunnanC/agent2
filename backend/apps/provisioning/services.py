@@ -1412,7 +1412,7 @@ def enabled_runtime_inventory(
 
 
 def enabled_runtime_resources() -> list[RuntimeInventoryItem]:
-    """Return managed transient (judge/volume) resources for P11 reconciliation."""
+    """Return managed judge containers and volumes for archive reconciliation."""
 
     result: list[RuntimeInventoryItem] = []
     adapters = RuntimeAdapterConfig.objects.filter(status=RuntimeAdapterConfig.Status.ENABLED)

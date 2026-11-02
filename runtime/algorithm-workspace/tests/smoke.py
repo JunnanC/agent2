@@ -1,6 +1,6 @@
-"""Image-level checks for the P16-B workspace contract.
+"""Image-level checks for the authenticated workspace contract.
 
-This file is mounted into the running image by verify-p16-b-docker.ps1. It uses
+This file is mounted into the running image by scripts/verify/workspace-image.ps1. It uses
 only the Python standard library shipped in the workspace image.
 """
 
@@ -18,7 +18,6 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-
 HOST = "127.0.0.1"
 PORT = 8080
 TOKEN_HEADER = "X-Workspace-Upstream-Token"
@@ -33,10 +32,19 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 def fetch(path: str, token: str | None = None, *, follow_redirects: bool = True):
     headers = {TOKEN_HEADER: token} if token is not None else {}
     request = urllib.request.Request(f"http://{HOST}:{PORT}{path}", headers=headers)
-    opener = urllib.request.build_opener() if follow_redirects else urllib.request.build_opener(NoRedirect)
+    opener = (
+        urllib.request.build_opener()
+        if follow_redirects
+        else urllib.request.build_opener(NoRedirect)
+    )
     try:
         with opener.open(request, timeout=10) as response:
-            return response.status, dict(response.headers.items()), response.read(), response.geturl()
+            return (
+                response.status,
+                dict(response.headers.items()),
+                response.read(),
+                response.geturl(),
+            )
     except urllib.error.HTTPError as error:
         return error.code, dict(error.headers.items()), error.read(), error.geturl()
 
@@ -154,7 +162,7 @@ def main() -> None:
     assert_listener(7681, "0100007F:1E01")
 
     with open("/workspace/main.py", "w", encoding="utf-8") as handle:
-        handle.write("print('p16-b')\n")
+        handle.write("print('workspace-ready')\n")
 
     for forbidden_path in ("/rootfs-write-test", "/opt/workspace-extensions/write-test"):
         try:
@@ -168,7 +176,12 @@ def main() -> None:
     print(
         json.dumps(
             {
-                "capabilities": {"webide": True, "notebook": False, "terminal": True, "preview": False},
+                "capabilities": {
+                    "webide": True,
+                    "notebook": False,
+                    "terminal": True,
+                    "preview": False,
+                },
                 "health": "passed",
                 "http": "passed",
                 "non_root_uid": os.geteuid(),

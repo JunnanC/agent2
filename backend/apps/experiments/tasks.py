@@ -81,7 +81,7 @@ def assign_publication_tasks(self: Any, publication_id: str, trace_id: str = "")
         if publication.status != TaskPublication.Status.PUBLISHING:
             return publication.public_id
         enrollment_ids = publication_audience_enrollment_ids(publication)
-        chunk_size = max(int(getattr(settings, "P06_PUBLICATION_CHUNK_SIZE", 50)), 1)
+        chunk_size = max(int(getattr(settings, "PUBLICATION_CHUNK_SIZE", 50)), 1)
         if not enrollment_ids:
             execute_publication_assignment(
                 publication_id=publication_id,

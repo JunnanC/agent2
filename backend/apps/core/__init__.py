@@ -1,1 +1,1 @@
-"""Shared infrastructure; implemented in P01."""
+"""Shared infrastructure."""

@@ -16,9 +16,9 @@ class TemplateApiTests(TestCase):
     password = "ValidPassword!234"
 
     def setUp(self) -> None:
-        self.owner = create_teacher(suffix="p05-api-owner")
-        self.course = create_draft_course(self.owner, code="P05-API-1")
-        self.other_course = create_draft_course(self.owner, code="P05-API-2")
+        self.owner = create_teacher(suffix="templates-api-owner")
+        self.course = create_draft_course(self.owner, code="templates-API-1")
+        self.other_course = create_draft_course(self.owner, code="templates-API-2")
         self.client = Client(enforce_csrf_checks=True)
         self.client.get("/api/v2/auth/csrf", HTTP_X_PORTAL="TEACHING", **PROXY_HEADERS)
         self.csrf = str(self.client.cookies["csrftoken"].value)
@@ -43,7 +43,7 @@ class TemplateApiTests(TestCase):
             **PROXY_HEADERS,
         }
 
-    def _version(self, suffix: str = "api-image") -> TemplateVersion:
+    def _version(self, suffix: str = "api_image") -> TemplateVersion:
         adapter, image, profile = create_resources(self.owner, suffix=suffix)
         template = create_template(
             course_id=self.course.public_id,

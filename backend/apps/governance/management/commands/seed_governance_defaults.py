@@ -4,7 +4,7 @@ from apps.governance.models import ResourceProfile, SecurityPolicy
 
 
 class Command(BaseCommand):
-    help = "Create idempotent system-required P04 governance defaults."
+    help = "Create idempotent system-required governance defaults."
 
     def handle(self, *args: object, **options: object) -> None:
         profile, _ = ResourceProfile.objects.get_or_create(

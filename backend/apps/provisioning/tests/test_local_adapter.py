@@ -155,6 +155,24 @@ class FakeLocalDockerClient:
 
 
 class DockerLocalAdapterTests(SimpleTestCase):
+    def test_resource_names_are_readable_stable_and_distinct_after_truncation(self) -> None:
+        adapter = self._adapter(FakeLocalDockerClient())
+        spec = runtime_spec(task_id="01TASKLOCAL-LONG-TASK-IDENTIFIER")
+        name = adapter._safe_name(spec.task_id)
+        workspace = adapter._volume_name(spec, "provisioning:first")
+        secret = adapter._secret_volume_name(spec, "provisioning:first")
+
+        self.assertTrue(name.startswith("experimental-platform-lab-01tasklo-"))
+        self.assertTrue(workspace.startswith("experimental-platform-workspace-01tasklo-"))
+        self.assertTrue(secret.startswith("experimental-platform-secret-01tasklo-"))
+        self.assertEqual(workspace, adapter._volume_name(spec, "provisioning:first"))
+        self.assertNotEqual(workspace, adapter._volume_name(spec, "provisioning:second"))
+        self.assertNotEqual(name, adapter._safe_name(spec.task_id + "-other"))
+        for resource_name in (name, workspace, secret):
+            self.assertLessEqual(len(resource_name), 63)
+            self.assertRegex(resource_name, r"^[a-z0-9][a-z0-9-]+$")
+            self.assertNotIn("provisionin", resource_name)
+
     def _adapter(self, client: FakeLocalDockerClient) -> DockerLocalAdapter:
         return DockerLocalAdapter(
             client=client,
@@ -167,14 +185,14 @@ class DockerLocalAdapterTests(SimpleTestCase):
         adapter = self._adapter(client)
         spec = runtime_spec(
             image_registry="local",
-            image_repository="edu-platform-algorithm-workspace",
+            image_repository="experimental-platform-workspace",
         )
 
         adapter.prepare_image(spec)
 
         self.assertEqual(
             client.calls[-1],
-            ("inspect_image", {"image": "edu-platform-algorithm-workspace@" + spec.image_digest}),
+            ("inspect_image", {"image": "experimental-platform-workspace@" + spec.image_digest}),
         )
 
     @override_settings(WORKSPACE_VOLUME_RETENTION_SECONDS=600)
@@ -190,7 +208,8 @@ class DockerLocalAdapterTests(SimpleTestCase):
         workspace_creates = [
             kwargs
             for name, kwargs in client.calls
-            if name == "create_container" and str(kwargs["name"]).startswith("edu-local-")
+            if name == "create_container"
+            and str(kwargs["name"]).startswith("experimental-platform-lab-")
         ]
         self.assertEqual(len(workspace_creates), 1)
         self.assertEqual(workspace_creates[0]["image"], spec.image_ref)

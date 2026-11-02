@@ -481,7 +481,7 @@ class FakeRuntimeAdapter:
         network_mode: str,
         tests: bytes = b"",
     ) -> RuntimeExecutionResult:
-        """Return the deterministic compatibility result used by P07/P08.
+        """Return deterministic execution results for legacy simulated workspaces.
 
         FakeRuntime intentionally does not interpret student source.  The execution
         service still records the same immutable run shape used by Docker adapters.
@@ -643,7 +643,7 @@ class DockerLocalProtocolStub(FakeRuntimeAdapter):
         network_mode: str,
         judge_id: str,
     ) -> RuntimeExecutionResult:
-        """Exercise the T07 judge port without creating a Docker container."""
+        """Exercise the judge protocol without creating a Docker container."""
 
         del tests
         self.judge_instances[judge_id] = RuntimeResult(
@@ -690,7 +690,7 @@ class DockerLocalProtocolStub(FakeRuntimeAdapter):
 
 
 class DockerLocalAdapter(DockerLocalProtocolStub):
-    """Single-host Docker Engine adapter used by the local P14 runtime.
+    """Single-host Docker Engine adapter for local experiment workspaces.
 
     The protocol stub above remains intentionally in-memory for unit tests.  This
     adapter uses only the runtime worker's Docker socket and creates ordinary
@@ -747,10 +747,10 @@ class DockerLocalAdapter(DockerLocalProtocolStub):
             raise RuntimeAdapterFailure(code) from exc
 
     @staticmethod
-    def _safe_name(value: str, *, prefix: str = "edu-local") -> str:
+    def _safe_name(value: str, *, prefix: str = "experimental-platform-lab") -> str:
         normalized = NAME_PATTERN.sub("-", value.casefold()).strip("-") or "runtime"
         digest = hashlib.sha256(value.encode()).hexdigest()[:12]
-        return f"{prefix}-{normalized[:38]}-{digest}"
+        return f"{prefix}-{normalized[:8]}-{digest}"
 
     @staticmethod
     def _idempotency_digest(value: str) -> str:
@@ -1047,10 +1047,14 @@ class DockerLocalAdapter(DockerLocalProtocolStub):
         )
 
     def _volume_name(self, spec: RuntimeSpec, idempotency_key: str) -> str:
-        return self._safe_name(f"{spec.task_id}:{idempotency_key}", prefix="edu-volume")
+        return self._safe_name(
+            f"{spec.task_id}:{idempotency_key}", prefix="experimental-platform-workspace"
+        )
 
     def _secret_volume_name(self, spec: RuntimeSpec, idempotency_key: str) -> str:
-        return self._safe_name(f"{spec.task_id}:{idempotency_key}", prefix="edu-secret")
+        return self._safe_name(
+            f"{spec.task_id}:{idempotency_key}", prefix="experimental-platform-secret"
+        )
 
     def _stage_workspace_secret(
         self,
@@ -1086,7 +1090,8 @@ class DockerLocalAdapter(DockerLocalProtocolStub):
                 lambda: self.client.create_container(
                     image=self._image_ref(spec),
                     name=self._safe_name(
-                        f"{spec.task_id}:{idempotency_key}", prefix="edu-secret-stage"
+                        f"{spec.task_id}:{idempotency_key}",
+                        prefix="experimental-platform-secret-stage",
                     ),
                     command=["python", "-c", "import time; time.sleep(30)"],
                     labels={**labels, "edu.platform.secret_stage": "true"},
@@ -1686,7 +1691,7 @@ print(
     ) -> str:
         """Populate a private volume without making the judge rootfs writable."""
 
-        volume_name = self._safe_name(resource_id, prefix="edu-judge-volume")
+        volume_name = self._safe_name(resource_id, prefix="experimental-platform-judge-data")
         volume_labels = self._labels(
             kind="volume",
             spec=spec,
@@ -1752,7 +1757,7 @@ print(
                 "RUNTIME_JUDGE_STAGE_CREATE_FAILED",
                 lambda: self.client.create_container(
                     image=self._image_ref(spec),
-                    name=self._safe_name(resource_id, prefix="edu-judge-stage"),
+                    name=self._safe_name(resource_id, prefix="experimental-platform-judge-stage"),
                     command=["python", "-c", "import time; time.sleep(30)"],
                     labels=stage_labels,
                     host_config=stage_host_config,
@@ -1806,7 +1811,7 @@ print(
             external_id=resource_id,
             expires_at=expires_at,
         )
-        name = self._safe_name(resource_id, prefix="edu-judge")
+        name = self._safe_name(resource_id, prefix="experimental-platform-judge")
         test_cases = self._test_cases(tests)
         volume_name = self._stage_judge_files(
             spec=spec,
@@ -2150,10 +2155,10 @@ class DockerSwarmAdapter:
         }
 
     @staticmethod
-    def _safe_name(task_id: str, *, prefix: str = "edu-lab") -> str:
+    def _safe_name(task_id: str, *, prefix: str = "experimental-platform-lab") -> str:
         normalized = NAME_PATTERN.sub("-", task_id.casefold()).strip("-")
         digest = hashlib.sha256(task_id.encode()).hexdigest()[:10]
-        return f"{prefix}-{normalized[:35]}-{digest}"
+        return f"{prefix}-{normalized[:8]}-{digest}"
 
     @staticmethod
     def _idempotency_digest(value: str) -> str:
@@ -2390,7 +2395,7 @@ class DockerSwarmAdapter:
             spec_digest=spec_digest,
         )
         secret_name = self._safe_name(
-            f"{spec.task_id}:{idempotency_key}", prefix="edu-workspace-secret"
+            f"{spec.task_id}:{idempotency_key}", prefix="experimental-platform-secret"
         )
         secret_ref: dict[str, object] | None = None
         if upstream_token and callable(getattr(self.client, "create_secret", None)):
@@ -2749,7 +2754,7 @@ class DockerSwarmAdapter:
                 external_id=str(service["ID"]),
                 metadata={"driver": "DOCKER_SWARM", "managed": True, "replicas": replicas},
             )
-        name = self._safe_name(idempotency_key, prefix="edu-warm")
+        name = self._safe_name(idempotency_key, prefix="experimental-platform-warmup")
         labels = {
             MANAGED_LABEL: "true",
             KIND_LABEL: CAPACITY_KIND,
@@ -2894,10 +2899,10 @@ class DockerSwarmAdapter:
         network_mode: str,
         tests: bytes = b"",
     ) -> RuntimeExecutionResult:
-        """P14-S supplies the one-shot judge implementation.
+        """One-shot judging is unavailable for this Swarm adapter.
 
-        Keeping the method on the shared adapter surface lets T05 queue and audit a
-        real-driver request without accidentally falling back to an unrestricted shell.
+        Keep this method explicit so queued execution fails safely instead of
+        falling back to an unrestricted shell.
         """
 
         del spec, command, source, timeout_seconds, memory_mb, cpu_millicores, network_mode, tests

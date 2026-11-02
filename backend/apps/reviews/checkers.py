@@ -117,7 +117,7 @@ def _record_judge_cleanup_failure(
 
 
 class FakeRuntimeAutoCheckExecutor:
-    """P07/P10 deterministic executor retained for local compatibility tests."""
+    """Deterministic executor retained for local compatibility tests."""
 
     def execute(self, run: AutoCheckRun) -> AutoCheckResult:
         forced_failure = bool(run.rule.input_schema.get("x_fake_failure", False))
@@ -233,10 +233,9 @@ def _runtime_spec(task: ExperimentTask, *, trace_id: str) -> RuntimeSpec:
 class DockerLocalAutoCheckExecutor:
     """Judge port backed by a runtime adapter.
 
-    The local protocol stub implements the same ``execute`` method today. T10
-    may add ``execute_judge`` to the adapter without changing review facts or
-    worker contracts; that method receives the student source and hidden tests
-    and is responsible for the one-shot container lifecycle.
+    Adapters with ``execute_judge`` receive student source and hidden tests and
+    manage the one-shot container lifecycle. Legacy protocol stubs fall back to
+    ``execute`` without hidden tests.
     """
 
     def __init__(
@@ -302,7 +301,7 @@ class DockerLocalAutoCheckExecutor:
                     judge_id=run.public_id,
                 )
             else:
-                # The T04/T05 protocol stub has no hidden-test parameter yet. It
+                # The legacy protocol stub has no hidden-test parameter. It
                 # still exercises driver selection and the stable one-shot port.
                 result = adapter.execute(
                     spec=spec,

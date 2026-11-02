@@ -1121,7 +1121,7 @@ def execute_auto_check(*, run_id: str) -> AutoCheckRun:
         retryable = (
             not timed_out
             and bool(getattr(exc, "retryable", True))
-            and run.attempt_count < int(getattr(settings, "P10_AUTO_CHECK_MAX_ATTEMPTS", 3))
+            and run.attempt_count < int(getattr(settings, "AUTO_CHECK_MAX_ATTEMPTS", 3))
         )
         error_code = str(
             "AUTO_CHECK_TIMEOUT"
