@@ -21,6 +21,7 @@ function dateLabel(date: string): string {
 export interface CalendarItem {
   date: string;
   title: string;
+  context?: string;
   subtitle?: string;
   statusLabel?: string;
   statusTone?: "good" | "warn" | "blue" | "bad" | "neutral";
@@ -30,14 +31,18 @@ export interface CalendarItem {
 export interface DateCalendarProps {
   items: CalendarItem[];
   title?: string;
+  selectedDate?: string | null;
+  onDateSelect?: (date: string | null) => void;
+  showPopover?: boolean;
 }
 
-export function DateCalendar({ items, title = "日历" }: DateCalendarProps) {
+export function DateCalendar({ items, title = "日历", selectedDate: controlledDate, onDateSelect, showPopover = true }: DateCalendarProps) {
   const [cursor, setCursor] = useState(() => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), 1);
   });
-  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [internalSelectedDate, setInternalSelectedDate] = useState<string | null>(null);
+  const selectedDate = controlledDate === undefined ? internalSelectedDate : controlledDate;
 
   const groups = new Map<string, CalendarItem[]>();
   for (const item of items) {
@@ -66,8 +71,12 @@ export function DateCalendar({ items, title = "日历" }: DateCalendarProps) {
       <button key={key} type="button"
         className={`calendar-day${isSelected ? " selected" : ""}${key === todayKey ? " today" : ""}`}
         aria-pressed={isSelected}
-        aria-label={`${dateLabel(key)}，${count ? `${count} 项任务到期` : "无任务到期"}`}
-        onClick={() => setSelectedDate(isSelected ? null : key)}>
+        aria-label={`${dateLabel(key)}，${count ? `${count} 项待办任务` : "无待办任务"}`}
+        onClick={() => {
+          const nextDate = isSelected ? null : key;
+          setInternalSelectedDate(nextDate);
+          onDateSelect?.(nextDate);
+        }}>
         <span className="calendar-day-number">{day}</span>
         {count ? <span className="calendar-count">{count}</span> : null}
       </button>,
@@ -89,7 +98,7 @@ export function DateCalendar({ items, title = "日历" }: DateCalendarProps) {
         <div className="calendar-weekdays">{WEEKDAYS.map((label) => <span key={label}>{label}</span>)}</div>
         <div className="calendar-grid" role="grid" aria-label={title}>{cells}</div>
       </div>
-      <div className="calendar-popover" hidden={!selectedDate || !selectedItems.length} aria-live="polite">
+      {showPopover ? <div className="calendar-popover" hidden={!selectedDate || !selectedItems.length} aria-live="polite">
         {selectedDate ? (
           <>
             <div className="calendar-popover-head">
@@ -98,7 +107,10 @@ export function DateCalendar({ items, title = "日历" }: DateCalendarProps) {
                 <strong style={{ display: "block" }}>{selectedItems.length} 项任务</strong>
               </div>
               <button type="button" className="icon-btn sm" aria-label="关闭任务浮层"
-                onClick={() => setSelectedDate(null)}>
+                onClick={() => {
+                  setInternalSelectedDate(null);
+                  onDateSelect?.(null);
+                }}>
                 <Icon name="x" size={14} />
               </button>
             </div>
@@ -118,7 +130,7 @@ export function DateCalendar({ items, title = "日历" }: DateCalendarProps) {
             </div>
           </>
         ) : null}
-      </div>
+      </div> : null}
     </div>
   );
 }

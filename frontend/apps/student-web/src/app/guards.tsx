@@ -8,8 +8,6 @@ import { usePortalEvents } from "./providers";
 const STUDENT_NAV: Array<NavEntry> = [
   { label: "概览", path: "/" },
   { label: "我的课程", path: "/courses" },
-  { label: "加入课程", path: "/courses/join" },
-  { label: "实验任务", path: "/experiments" },
   { label: "通知", path: "/notifications" },
 ];
 
@@ -72,6 +70,7 @@ export function AuthGuard({ fullscreen }: { fullscreen?: boolean }) {
           { label: "个人设置", icon: "settings", onClick: () => navigate("/profile") },
           { label: "退出登录", icon: "log-out", onClick: () => { void logout().then(() => navigate("/login", { replace: true })); } },
         ]}
+        navigationPosition="side"
       >
         <Outlet />
       </AppShell>

@@ -1,21 +1,25 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { reportApi, studentApi, taskApi } from "@edu/api-client";
 import { keys } from "@edu/query-keys";
-import { Breadcrumbs, DateCalendar, LineChart, Metric, Panel, RequestStateView, StatusBadge } from "@edu/ui";
-import type { CalendarItem, ChartSeries } from "@edu/ui";
+import { Breadcrumbs, DateCalendar, Metric, Panel, RequestStateView, StatusBadge } from "@edu/ui";
+import type { CalendarItem } from "@edu/ui";
 import { isTaskActionable, taskStatusLabel, taskStatusTone, formatDate } from "@/lib/task-format";
 const TERMINAL_STATUSES = new Set(["COMPLETED", "WITHDRAWN"]);
-const WEEKDAY_LABELS = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"];
 
 export function Home() {
   const navigate = useNavigate();
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
   const tasksQuery = useQuery({ queryKey: keys.tasks({ scope: "my" }), queryFn: () => taskApi.list({ page_size: 50 }) });
-  const enrollments = useQuery({ queryKey: keys.enrollments({ status: "ACTIVE" }), queryFn: () => studentApi.myEnrollments({ status: "ACTIVE", page_size: 50 }) });
+  const enrollmentsQuery = useQuery({ queryKey: keys.enrollments({ status: "ACTIVE" }), queryFn: () => studentApi.myEnrollments({ status: "ACTIVE", page_size: 100 }) });
 
   const tasks = useMemo(() => tasksQuery.data?.rows ?? [], [tasksQuery.data]);
+  const courseNames = useMemo(() => new Map((enrollmentsQuery.data?.rows ?? []).map((enrollment) => [
+    enrollment.course_id,
+    enrollment.course_title || enrollment.course_code || enrollment.course_id,
+  ])), [enrollmentsQuery.data]);
   const activeTasks = useMemo(() => tasks.filter((task) => !TERMINAL_STATUSES.has(task.status)), [tasks]);
   const draftCount = tasks.filter((task) => task.status === "REPORT_DRAFT").length;
   const inProgressCount = tasks.filter((task) => ["PROVISIONING", "READY", "IN_PROGRESS", "REPORT_DRAFT"].includes(task.status)).length;
@@ -41,13 +45,6 @@ export function Home() {
   const dashboard = useQuery({ queryKey: keys.studentDashboard(), queryFn: () => studentApi.dashboard(), staleTime: 60_000 });
   const weeklyStudy = dashboard.data?.weekly_study;
 
-  const series: ChartSeries[] = [
-    {
-      name: "学习时长（分钟）",
-      color: "var(--teal)",
-      data: weeklyStudy?.minutes_by_day ?? WEEKDAY_LABELS.map(() => null),
-    },
-  ];
   const totalMinutes = weeklyStudy?.total_minutes ?? 0;
   const lastWeekMinutes = weeklyStudy?.last_week_minutes ?? 0;
   const weeklySub = dashboard.data == null
@@ -75,48 +72,40 @@ export function Home() {
       ? `最近一次评分 ${latestScore} 分`
       : `共 ${completedTasks.length} 个任务已完成评审`;
 
-  /** 我的课程：按课程聚合任务进度与最近活动 */
-  const courseRows = useMemo(() => {
-    const rows = enrollments.data?.rows ?? [];
-    return rows.map((enrollment) => {
-      const courseTasks = tasks.filter((task) => task.course_id === enrollment.course_id);
-      const completed = courseTasks.filter((task) => task.status === "COMPLETED").length;
-      const latestTask = courseTasks
-        .slice()
-        .sort((a, b) => String(b.effective_deadline ?? "").localeCompare(String(a.effective_deadline ?? "")))[0];
-      const progressText = courseTasks.length ? `${completed} / ${courseTasks.length} 个实验` : "暂无实验任务";
-      const activity = latestTask
-        ? `${taskStatusLabel(latestTask.status)} · 截止 ${formatDate(latestTask.effective_deadline)}`
-        : "暂无任务动态";
-      return {
-        key: enrollment.public_id,
-        courseId: enrollment.course_id,
-        title: enrollment.course_title ?? enrollment.course_code ?? enrollment.course_id,
-        progressText,
-        percent: courseTasks.length ? Math.round((completed / courseTasks.length) * 100) : 0,
-        activity,
-        status: enrollment.status,
-      };
-    });
-  }, [enrollments.data, tasks]);
-
   const calendarItems = useMemo<CalendarItem[]>(() => {
     const rows: CalendarItem[] = [];
     for (const task of tasks) {
-      if (!isTaskActionable(task) || !task.effective_deadline) continue;
-      rows.push({
-        date: task.effective_deadline,
-        title: task.title,
-        subtitle: `完成度 ${task.progress}%`,
-        statusLabel: taskStatusLabel(task.status),
-        statusTone: taskStatusTone(task.status),
-        onClick: () => navigate(task.allowed_actions.includes("enter") || task.allowed_actions.includes("view_workbench")
-          ? `/experiments/${task.public_id}/workbench`
-          : `/experiments/${task.public_id}`),
-      });
+      const deadline = task.effective_deadline || task.window_end;
+      if (!isTaskActionable(task) || !deadline) continue;
+      const dateKey = (value: string) => {
+        const parsed = new Date(value.length === 10 ? `${value}T12:00:00` : value);
+        return Number.isNaN(parsed.getTime()) ? "" : `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, "0")}-${String(parsed.getDate()).padStart(2, "0")}`;
+      };
+      const start = dateKey(task.window_start || deadline);
+      const end = dateKey(deadline);
+      if (!start || !end) continue;
+      const cursor = new Date(`${start}T12:00:00`);
+      const last = new Date(`${end}T12:00:00`);
+      for (let guard = 0; cursor <= last && guard < 366; guard += 1) {
+        const date = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, "0")}-${String(cursor.getDate()).padStart(2, "0")}`;
+        rows.push({
+          date,
+          title: task.title,
+          context: courseNames.get(task.course_id),
+          subtitle: `完成度 ${task.progress}% · 截止 ${formatDate(deadline)}`,
+          statusLabel: taskStatusLabel(task.status),
+          statusTone: taskStatusTone(task.status),
+          onClick: () => navigate(task.allowed_actions.includes("enter") || task.allowed_actions.includes("view_workbench")
+            ? `/experiments/${task.public_id}/workbench`
+            : `/experiments/${task.public_id}`),
+        });
+        cursor.setDate(cursor.getDate() + 1);
+      }
     }
     return rows;
-  }, [tasks, navigate]);
+  }, [tasks, courseNames, navigate]);
+
+  const focusedItems = selectedDate ? calendarItems.filter((item) => item.date === selectedDate) : [];
 
   const formatHours = (minutes: number) => (minutes >= 60 ? `${(minutes / 60).toFixed(1)} h` : `${minutes} min`);
 
@@ -127,8 +116,8 @@ export function Home() {
       {/* 四个数据卡片：条带式单块，列间分隔线，内容等距 */}
       <Panel className="section">
         <RequestStateView loading={tasksQuery.isLoading && !tasks.length}
-          error={tasksQuery.error ?? enrollments.error}
-          onRetry={() => { void tasksQuery.refetch(); void enrollments.refetch(); }}
+          error={tasksQuery.error}
+          onRetry={() => { void tasksQuery.refetch(); }}
           empty={false} emptyState={null}>
           <div className="metric-strip">
             <Metric label="进行中的实验" value={String(inProgressCount)} icon="flask"
@@ -142,62 +131,29 @@ export function Home() {
       </Panel>
 
       <div className="grid two section">
-        <Panel title={<><h2>任务日历</h2><span className="subtle">按截止日期查看待完成任务</span></>}>
+        <Panel title={<><h2>任务日历</h2><span className="subtle">按实验开放区间查看每日待办</span></>}>
           <RequestStateView loading={tasksQuery.isLoading} error={tasksQuery.error}
             onRetry={() => void tasksQuery.refetch()} empty={!calendarItems.length}
-            emptyState={<div className="state-block"><strong>暂无截止任务</strong><p>实验发布后任务会出现在日历上。</p></div>}>
-            <DateCalendar items={calendarItems} />
+            emptyState={<div className="state-block"><strong>暂无待办任务</strong><p>实验发布后，开放区间内每天都会显示对应待办。</p></div>}>
+            <DateCalendar items={calendarItems} selectedDate={selectedDate} onDateSelect={setSelectedDate} showPopover={false} />
           </RequestStateView>
         </Panel>
-        <Panel title={<><h2>本周学习节奏</h2><span className="subtle">{`${WEEKDAY_LABELS[0]} — ${WEEKDAY_LABELS[6]}`}</span></>}>
-          <RequestStateView loading={dashboard.isLoading && !dashboard.data}
-            error={dashboard.error}
-            onRetry={() => void dashboard.refetch()}
-            empty={false} emptyState={null}>
-            <LineChart labels={WEEKDAY_LABELS} series={series} unit="min" emptyHint="本周还没有实验执行记录。" />
-          </RequestStateView>
+        <Panel title={<><h2>待完成任务</h2><span className="subtle">点击左侧日期查看当天待办</span></>}>
+          {selectedDate ? (
+            focusedItems.length ? (
+              <div className="calendar-focus-list" aria-live="polite">
+                <div className="eyebrow">{formatDate(selectedDate)} · {focusedItems.length} 项待办</div>
+                {focusedItems.map((item, index) => (
+                  <button key={`${item.title}-${index}`} type="button" className="calendar-focus-task" onClick={item.onClick}>
+                    <span><small className="calendar-focus-course">{item.context || "未归属课程"}</small><strong>{item.title}</strong><small>{item.subtitle}</small></span>
+                    <StatusBadge tone={item.statusTone ?? "neutral"}>{item.statusLabel}</StatusBadge>
+                  </button>
+                ))}
+              </div>
+            ) : <div className="state-block"><strong>当天没有待办</strong><p>请选择日历中的其他日期。</p></div>
+          ) : <div className="state-block"><strong>选择一个日期</strong><p>日期内的任务会在这里放大显示。</p></div>}
         </Panel>
       </div>
-
-      <Panel className="section" title={<h2>我的课程</h2>} actions={<Link className="btn sm" to="/courses">全部课程</Link>}>
-        <RequestStateView
-          loading={enrollments.isLoading}
-          error={enrollments.error}
-          onRetry={() => void enrollments.refetch()}
-          empty={!courseRows.length}
-          emptyState={(
-            <div className="state-block">
-              <strong>还没有加入课程</strong>
-              <p>可以在「加入课程」页面查看本学期开放课程并提交申请。</p>
-              <Link className="btn primary" to="/courses/join">加入课程</Link>
-            </div>
-          )}
-        >
-          <div className="table-wrap">
-            <table className="table">
-              <thead><tr><th>课程名</th><th>进度</th><th>最近活动</th><th>状态</th><th /></tr></thead>
-              <tbody>
-                {courseRows.map((row) => (
-                  <tr key={row.key}>
-                    <td style={{ minWidth: 150 }}><strong>{row.title}</strong></td>
-                    <td style={{ minWidth: 150 }}>
-                      <div className="progress"><span style={{ width: `${row.percent}%` }} /></div>
-                      <small style={{ display: "block", marginTop: 3 }}>{row.progressText}</small>
-                    </td>
-                    <td data-wrap style={{ maxWidth: 260 }}>{row.activity}</td>
-                    <td><StatusBadge tone={row.status === "ACTIVE" ? "good" : "warn"}>
-                      {row.status === "ACTIVE" ? "进行中" : taskStatusLabel(row.status)}
-                    </StatusBadge></td>
-                    <td className="table-actions">
-                      <Link className="btn sm primary" to={`/courses/${row.courseId}`}>进入课程</Link>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </RequestStateView>
-      </Panel>
     </>
   );
 }

@@ -25,11 +25,13 @@ export interface AppShellProps {
   actions?: ReactNode;
   children: ReactNode;
   maxWidth?: CSSProperties["maxWidth"];
+  navigationPosition?: "top" | "side";
 }
 
 export function AppShell({
   brand = "Edu Agent Platform", domainLabel, nav, activePath, onNavigate,
   avatar, avatarItems = [], actions, children, maxWidth,
+  navigationPosition = "top",
 }: AppShellProps) {
   const [openGroup, setOpenGroup] = useState<string | null>(null);
   const [avatarOpen, setAvatarOpen] = useState(false);
@@ -43,7 +45,7 @@ export function AppShell({
   const groupActive = (group: NavGroupEntry) => group.items.some((item) => item.path === activePath);
 
   return (
-    <>
+    <div className={`shell-layout${navigationPosition === "side" ? " side-nav-shell" : ""}`}>
       <header className="topbar">
         <div className="brand-lockup">
           <span className="brand-mark" aria-hidden="true"><Icon name="layers" size={16} /></span>
@@ -120,7 +122,7 @@ export function AppShell({
       <main className="main-content" style={maxWidth ? { maxWidth } : undefined}>
         {children}
       </main>
-    </>
+    </div>
   );
 }
 
