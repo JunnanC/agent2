@@ -23,7 +23,7 @@ $env:OPENAPI_REVISION = 'v2-p15'
 $openApiFile = Join-Path ([IO.Path]::GetTempPath()) "edu-platform-openapi-p15-c-$PID.json"
 
 try {
-    Push-Location "$root\backend\education_experiment_platform"
+    Push-Location "$root\backend"
     try {
         $env:DJANGO_SETTINGS_MODULE = 'education_experiment_platform.settings.test'
         & $python @pythonArgs manage.py check
@@ -43,9 +43,9 @@ try {
 
     Push-Location "$root\backend"
     try {
-        & $python @pythonArgs -m ruff check education_experiment_platform
+        & $python @pythonArgs -m ruff check apps education_experiment_platform
         if ($LASTEXITCODE -ne 0) { throw 'P13-C backend Ruff failed.' }
-        & $python @pythonArgs -m mypy education_experiment_platform
+        & $python @pythonArgs -m mypy apps education_experiment_platform
         if ($LASTEXITCODE -ne 0) { throw 'P13-C backend mypy failed.' }
     } finally { Pop-Location }
 

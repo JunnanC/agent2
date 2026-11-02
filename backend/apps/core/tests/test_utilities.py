@@ -1,7 +1,7 @@
 from django.test import SimpleTestCase
-from education_experiment_platform.middleware import IDEMPOTENCY_EXEMPT_POST_PATHS
 
 from apps.core.pagination import PageSpec, PaginationError, decode_cursor, encode_cursor
+from education_experiment_platform.middleware import IDEMPOTENCY_EXEMPT_POST_PATHS
 
 
 class CoreUtilityTests(SimpleTestCase):

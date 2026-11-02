@@ -1,11 +1,12 @@
 import logging
 from typing import Any
 
-from apps.core.errors import CoreError
 from django.http import HttpRequest, JsonResponse
 from rest_framework.exceptions import AuthenticationFailed, NotAuthenticated, PermissionDenied
 from rest_framework.response import Response
 from rest_framework.views import exception_handler as drf_exception_handler
+
+from apps.core.errors import CoreError
 
 logger = logging.getLogger(__name__)
 

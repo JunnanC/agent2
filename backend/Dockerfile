@@ -21,7 +21,9 @@ ARG REQUIREMENTS_FILE=base.txt
 COPY requirements/${REQUIREMENTS_FILE} /tmp/requirements.txt
 RUN python -m pip install -r /tmp/requirements.txt
 
-COPY education_experiment_platform /app
+COPY manage.py /app/manage.py
+COPY apps /app/apps
+COPY education_experiment_platform /app/education_experiment_platform
 RUN addgroup --system app && adduser --system --ingroup app app \
     && chown -R app:app /app
 USER app

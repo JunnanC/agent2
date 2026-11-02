@@ -1,7 +1,7 @@
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 $backend = Join-Path $root 'backend'
-$djangoProject = Join-Path $backend 'education_experiment_platform'
+$djangoProject = $backend
 $backendPython = Join-Path $backend '.venv\Scripts\python.exe'
 $python = $null
 $pythonArgs = @()
@@ -33,7 +33,7 @@ $previousLocation = (Get-Location).Path
 $previousEnvironment = @{}
 Get-ChildItem Env: | ForEach-Object { $previousEnvironment[$_.Name] = $_.Value }
 $openApiFile = Join-Path ([IO.Path]::GetTempPath()) "edu-platform-openapi-backend-$PID.json"
-$deselectNode = 'education_experiment_platform/education_experiment_platform/tests/test_infrastructure_contract.py::test_frontends_are_independent_build_entries'
+$deselectNode = 'education_experiment_platform/tests/test_infrastructure_contract.py::test_frontends_are_independent_build_entries'
 
 function Invoke-Checked {
     param(
@@ -67,10 +67,10 @@ try {
     }
     Set-Location -LiteralPath $backend
     Invoke-Checked -Description 'Backend Ruff' -Command {
-        & $python @pythonArgs -m ruff check education_experiment_platform --exclude 'migrations' --force-exclude
+        & $python @pythonArgs -m ruff check apps education_experiment_platform --exclude 'migrations' --force-exclude
     }
     Invoke-Checked -Description 'Backend mypy' -Command {
-        & $python @pythonArgs -m mypy education_experiment_platform
+        & $python @pythonArgs -m mypy apps education_experiment_platform
     }
     Set-Location -LiteralPath $root
     Invoke-Checked -Description 'Compose configuration validation' -Command {

@@ -4,12 +4,12 @@ from unittest.mock import patch
 
 from django.test import TestCase
 from django.utils import timezone
-from education_experiment_platform.events import _event_id, _event_stream, _visible
 
 from apps.accounts.tests.helpers import create_user
 from apps.core.models import OutboxEvent
 from apps.courses.models import CourseStaff, CourseStaffGrant, Enrollment
 from apps.courses.tests.helpers import create_draft_course, create_teacher
+from education_experiment_platform.events import _event_id, _event_stream, _visible
 
 
 class WorkspaceEventScopeTests(TestCase):

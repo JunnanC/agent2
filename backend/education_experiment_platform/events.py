@@ -4,13 +4,6 @@ from collections.abc import Iterator
 from datetime import datetime
 from typing import Any, cast
 
-from apps.accounts.authentication import PortalSessionAuthentication
-from apps.accounts.models import User
-from apps.accounts.permissions import IsAuthenticatedAccount
-from apps.core.models import OutboxEvent
-from apps.courses.models import Course, CourseStaffGrant, Enrollment
-from apps.courses.selectors import has_course_capability
-from apps.experiments.models import ExperimentTask
 from django.conf import settings
 from django.http import HttpResponseBase, StreamingHttpResponse
 from django.utils.dateparse import parse_datetime
@@ -20,6 +13,14 @@ from rest_framework.renderers import BaseRenderer, JSONRenderer
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
+
+from apps.accounts.authentication import PortalSessionAuthentication
+from apps.accounts.models import User
+from apps.accounts.permissions import IsAuthenticatedAccount
+from apps.core.models import OutboxEvent
+from apps.courses.models import Course, CourseStaffGrant, Enrollment
+from apps.courses.selectors import has_course_capability
+from apps.experiments.models import ExperimentTask
 
 
 def _event_id(item: OutboxEvent) -> str:

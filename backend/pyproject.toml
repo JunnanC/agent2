@@ -36,12 +36,13 @@ dev = [
 ]
 
 [tool.setuptools.packages.find]
-where = ["education_experiment_platform"]
+where = ["."]
+include = ["apps*", "education_experiment_platform*"]
 
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "education_experiment_platform.settings.test"
-pythonpath = ["education_experiment_platform"]
-testpaths = ["education_experiment_platform"]
+pythonpath = ["."]
+testpaths = ["apps", "education_experiment_platform"]
 
 [tool.ruff]
 target-version = "py314"

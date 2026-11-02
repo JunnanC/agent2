@@ -1,6 +1,7 @@
-from apps.core.models import CompensationTask, OutboxDelivery
 from django.http import HttpRequest, HttpResponse
 from prometheus_client import CONTENT_TYPE_LATEST, Gauge, generate_latest
+
+from apps.core.models import CompensationTask, OutboxDelivery
 
 OUTBOX_DELIVERIES = Gauge("outbox_deliveries", "Outbox deliveries by state", ("status",))
 COMPENSATION_TASKS = Gauge("compensation_tasks", "Compensation tasks by state", ("status",))

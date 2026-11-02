@@ -26,7 +26,7 @@ $env:APP_VERSION = '0.15.0-p15'
 $env:OPENAPI_REVISION = 'v2-p15'
 
 try {
-    Push-Location "$root\backend\education_experiment_platform"
+    Push-Location "$root\backend"
     try {
         $env:DJANGO_SETTINGS_MODULE = 'education_experiment_platform.settings.test'
         & $python @pythonArgs manage.py check
@@ -44,9 +44,9 @@ try {
 
     Push-Location "$root\backend"
     try {
-        & $python @pythonArgs -m ruff check education_experiment_platform
+        & $python @pythonArgs -m ruff check apps education_experiment_platform
         if ($LASTEXITCODE -ne 0) { throw 'P15 backend Ruff failed.' }
-        & $python @pythonArgs -m mypy education_experiment_platform
+        & $python @pythonArgs -m mypy apps education_experiment_platform
         if ($LASTEXITCODE -ne 0) { throw 'P15 backend mypy failed.' }
     } finally { Pop-Location }
 

@@ -1,5 +1,6 @@
-from apps.core.files import FileDownloadView
 from django.urls import include, path, re_path
+
+from apps.core.files import FileDownloadView
 
 from .api import api_not_found
 from .metrics import metrics

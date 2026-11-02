@@ -6,7 +6,7 @@ $npm = (Get-Command npm.cmd -ErrorAction Stop).Source
 $env:APP_VERSION = '0.12.0-p12'
 $env:OPENAPI_REVISION = 'v2-p12'
 
-Push-Location "$root\backend\education_experiment_platform"
+Push-Location "$root\backend"
 try {
     $env:DJANGO_SETTINGS_MODULE = 'education_experiment_platform.settings.test'
     & $python @pythonArgs manage.py check
@@ -21,7 +21,7 @@ try {
 
 Push-Location "$root\backend"
 try {
-    & $python @pythonArgs -m ruff check education_experiment_platform
+    & $python @pythonArgs -m ruff check apps education_experiment_platform
     if ($LASTEXITCODE -ne 0) { throw 'P12 backend static verification failed.' }
 } finally { Pop-Location }
 

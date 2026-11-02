@@ -3,7 +3,7 @@ $root = Split-Path -Parent $PSScriptRoot
 $python = if (Test-Path "$root\.venv\Scripts\python.exe") { "$root\.venv\Scripts\python.exe" } else { 'python' }
 $npm = (Get-Command npm.cmd -ErrorAction Stop).Source
 
-Push-Location "$root\backend\education_experiment_platform"
+Push-Location "$root\backend"
 try {
     $env:DJANGO_SETTINGS_MODULE = 'education_experiment_platform.settings.test'
     & $python manage.py check
@@ -14,9 +14,9 @@ try {
 
 Push-Location "$root\backend"
 try {
-    & $python -m ruff check education_experiment_platform
+    & $python -m ruff check apps education_experiment_platform
     if ($LASTEXITCODE -ne 0) { throw 'Backend lint failed.' }
-    & $python -m mypy education_experiment_platform
+    & $python -m mypy apps education_experiment_platform
     if ($LASTEXITCODE -ne 0) { throw 'Backend typecheck failed.' }
 } finally { Pop-Location }
 

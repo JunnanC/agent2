@@ -6,8 +6,9 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
-from apps.core.redaction import redact
 from pymongo import ASCENDING, MongoClient
+
+from apps.core.redaction import redact
 
 
 class LogHandler(BaseHTTPRequestHandler):

@@ -7,7 +7,7 @@ import yaml
 ROOT = (
     Path(os.environ["PROJECT_ROOT"])
     if os.environ.get("PROJECT_ROOT")
-    else Path(__file__).resolve().parents[4]
+    else Path(__file__).resolve().parents[3]
 )
 
 
@@ -387,7 +387,7 @@ def test_p08_minio_policy_scopes_versioned_workspace_objects() -> None:
 def test_p01_declares_architecture_queue_names() -> None:
     settings = (
         ROOT
-        / "backend/education_experiment_platform/education_experiment_platform/settings/base.py"
+        / "backend/education_experiment_platform/settings/base.py"
     ).read_text(encoding="utf-8")
     queues = {
         "q_default",
@@ -412,7 +412,7 @@ def test_django_preserves_gateway_peer_address_for_proxy_trust() -> None:
 
 
 def test_greenfield_backend_has_target_apps_and_no_teams_package() -> None:
-    app_root = ROOT / "backend/education_experiment_platform/apps"
+    app_root = ROOT / "backend/apps"
     expected = {
         "core",
         "accounts",
@@ -435,14 +435,15 @@ def test_greenfield_backend_has_target_apps_and_no_teams_package() -> None:
 
 
 def test_backend_has_single_canonical_django_project() -> None:
-    canonical = ROOT / "backend/education_experiment_platform"
+    canonical = ROOT / "backend"
 
     assert (canonical / "manage.py").is_file()
+    assert (canonical / "apps").is_dir()
     assert (canonical / "education_experiment_platform/settings/base.py").is_file()
     for legacy_path in (
-        ROOT / "backend/apps",
+        canonical / "education_experiment_platform/manage.py",
+        canonical / "education_experiment_platform/apps",
         ROOT / "backend/config",
-        ROOT / "backend/manage.py",
         ROOT / "backend/Dockerfile.prod",
     ):
         assert not legacy_path.exists()

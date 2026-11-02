@@ -5,7 +5,7 @@ $pythonArgs = if ($python -eq 'py') { @('-3.14') } else { @() }
 $env:APP_VERSION = '0.13.0-p13'
 $env:OPENAPI_REVISION = 'v2-p13'
 
-Push-Location "$root\backend\education_experiment_platform"
+Push-Location "$root\backend"
 try {
     $env:DJANGO_SETTINGS_MODULE = 'education_experiment_platform.settings.test'
     & $python @pythonArgs manage.py check
@@ -16,7 +16,7 @@ try {
 } finally { Pop-Location }
 
 Push-Location "$root\backend"
-try { & $python @pythonArgs -m ruff check education_experiment_platform/apps/integrations; if ($LASTEXITCODE -ne 0) { throw 'P13-B Ruff failed.' } } finally { Pop-Location }
+try { & $python @pythonArgs -m ruff check apps/integrations; if ($LASTEXITCODE -ne 0) { throw 'P13-B Ruff failed.' } } finally { Pop-Location }
 
 Push-Location "$root\frontend"
 try {

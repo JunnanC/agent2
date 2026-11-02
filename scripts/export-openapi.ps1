@@ -3,7 +3,7 @@ $root = Split-Path -Parent $PSScriptRoot
 $python = if (Test-Path "$root\.venv\Scripts\python.exe") { "$root\.venv\Scripts\python.exe" } else { 'python' }
 $npm = (Get-Command npm.cmd -ErrorAction Stop).Source
 
-Push-Location "$root\backend\education_experiment_platform"
+Push-Location "$root\backend"
 try {
     $env:DJANGO_SETTINGS_MODULE = 'education_experiment_platform.settings.test'
     & $python manage.py spectacular --format openapi-json --file "$root\frontend\openapi.json"

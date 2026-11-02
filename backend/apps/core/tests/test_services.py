@@ -2,7 +2,6 @@ from typing import Any
 
 from django.db import transaction
 from django.test import TestCase
-from education_experiment_platform.logging import trace_id_var
 
 from apps.core.audit import append_audit, append_failure
 from apps.core.compensation import (
@@ -30,6 +29,7 @@ from apps.core.outbox import (
 )
 from apps.core.redaction import REDACTED, redact
 from apps.core.tasks import TraceTask
+from education_experiment_platform.logging import trace_id_var
 
 
 class FakeRedis:

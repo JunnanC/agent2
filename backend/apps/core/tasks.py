@@ -2,6 +2,7 @@ import logging
 from typing import Any
 
 from celery import Task, shared_task
+
 from education_experiment_platform.logging import portal_var, trace_id_var
 
 from .compensation import claim_compensations, run_compensation

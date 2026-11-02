@@ -10,7 +10,7 @@ from django.test import SimpleTestCase
 ROOT = (
     Path(os.environ["PROJECT_ROOT"])
     if os.environ.get("PROJECT_ROOT")
-    else Path(__file__).resolve().parents[4]
+    else Path(__file__).resolve().parents[3]
 )
 
 EXPECTED_DOMAIN_APPS = {
@@ -54,7 +54,7 @@ class SettingsTests(SimpleTestCase):
         )
         result = subprocess.run(
             [sys.executable, "-c", "import education_experiment_platform.settings.prod"],
-            cwd=ROOT / "backend" / "education_experiment_platform",
+            cwd=ROOT / "backend",
             env=environment,
             capture_output=True,
             text=True,

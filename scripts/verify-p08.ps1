@@ -4,7 +4,7 @@ $python = if (Test-Path "$root\.venv\Scripts\python.exe") { "$root\.venv\Scripts
 $pythonArgs = if ($python -eq 'py') { @('-3.14') } else { @() }
 $npm = (Get-Command npm.cmd -ErrorAction Stop).Source
 
-Push-Location "$root\backend\education_experiment_platform"
+Push-Location "$root\backend"
 try {
     $env:DJANGO_SETTINGS_MODULE = 'education_experiment_platform.settings.test'
     $env:APP_VERSION = '0.8.0-p08'
@@ -18,7 +18,7 @@ try {
 
 Push-Location "$root\backend"
 try {
-    & $python @pythonArgs -m ruff check education_experiment_platform
+    & $python @pythonArgs -m ruff check apps education_experiment_platform
     if ($LASTEXITCODE -ne 0) { throw 'P08 backend static verification failed.' }
 } finally { Pop-Location }
 

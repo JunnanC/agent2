@@ -22,7 +22,7 @@ def main() -> int:
     if not args.digest.startswith("sha256:"):
         parser.error("--digest must be a sha256 digest")
 
-    backend = os.path.join(os.path.dirname(__file__), "..", "backend", "education_experiment_platform")
+    backend = os.path.join(os.path.dirname(__file__), "..", "backend")
     sys.path.insert(0, os.path.abspath(backend))
     os.environ.setdefault("DJANGO_SETTINGS_MODULE", "education_experiment_platform.settings.test")
     import django
