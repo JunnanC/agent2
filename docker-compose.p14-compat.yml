@@ -1,0 +1,53 @@
+# Reuse the pre-existing edu-platform-p14 networks and volumes after the
+# upstream Compose file switched resource names from underscores to hyphens.
+networks:
+  default:
+    external: true
+    name: edu-platform-p14_default
+  edge:
+    external: true
+    name: edu-platform-p14_edge
+  minio-host-access:
+    external: true
+    name: edu-platform-p14_minio-host-access
+  app:
+    external: true
+    name: edu-platform-p14_app
+  runtime:
+    external: true
+    name: edu-platform-p14_runtime
+  data:
+    external: true
+    name: edu-platform-p14_data
+  observability:
+    external: true
+    name: edu-platform-p14_observability
+  log-driver:
+    external: true
+    name: edu-platform-p14_log-driver
+
+volumes:
+  mysql-data:
+    external: true
+    name: edu-platform-p14_mysql-data
+  redis-data:
+    external: true
+    name: edu-platform-p14_redis-data
+  mongo-data:
+    external: true
+    name: edu-platform-p14_mongo-data
+  mongo-keyfile:
+    external: true
+    name: edu-platform-p14_mongo-keyfile
+  minio-data:
+    external: true
+    name: edu-platform-p14_minio-data
+  clamav-data:
+    external: true
+    name: edu-platform-p14_clamav-data
+  fluent-bit-buffer:
+    external: true
+    name: edu-platform-p14_fluent-bit-buffer
+  prometheus-data:
+    external: true
+    name: edu-platform-p14_prometheus-data

@@ -3,6 +3,7 @@ import react from "@vitejs/plugin-react";
 import path from "node:path";
 
 const devApiTarget = process.env.VITE_DEV_API_TARGET ?? "http://127.0.0.1:8080";
+const devHost = process.env.VITE_DEV_HOST ?? "127.0.0.1";
 // 网关按 Host 注入门户上下文，代理必须转发 teacher.localhost（不允许伪造 X-Portal）
 const portalHost = "teacher.localhost";
 
@@ -20,11 +21,12 @@ export default defineConfig({
     ],
   },
   server: {
-    host: "127.0.0.1",
+    host: devHost,
+    watch: { usePolling: process.env.CHOKIDAR_USEPOLLING === "true" },
     proxy: {
-      "/api": { target: devApiTarget, changeOrigin: true, headers: { host: portalHost } },
-      "/files": { target: devApiTarget, changeOrigin: true, headers: { host: portalHost } },
-      "/workspace": { target: devApiTarget, changeOrigin: true, headers: { host: portalHost }, ws: true },
+      "/api": { target: devApiTarget, headers: { host: portalHost, origin: `http://${portalHost}:8080` } },
+      "/files": { target: devApiTarget, headers: { host: portalHost, origin: `http://${portalHost}:8080` } },
+      "/workspace": { target: devApiTarget, headers: { host: portalHost, origin: `http://${portalHost}:8080` }, ws: true },
     },
   },
   build: {

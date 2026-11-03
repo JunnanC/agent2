@@ -1,0 +1,92 @@
+/**
+ * TanStack Query 键工厂。
+ * 约定：数组第一段为域，第二段为资源/视图，第三段为筛选或 id。
+ * SSE 事件只触发对应域的失效；logout / SESSION_EXPIRED 时清空整个缓存。
+ */
+const stable = (filter = {}) => {
+    const entries = Object.entries(filter)
+        .filter(([, value]) => value != null && value !== "")
+        .sort(([a], [b]) => a.localeCompare(b));
+    return entries.map(([key, value]) => `_${key}=${String(value)}`);
+};
+export const keys = {
+    /* 通用 */
+    me: () => ["me"],
+    context: () => ["context"],
+    notifications: (filter) => ["notifications", ...stable(filter)],
+    notificationPreferences: () => ["notification-preferences"],
+    /* 学生端 */
+    studentDashboard: () => ["student", "dashboard", stable()],
+    courses: (filter = {}) => ["courses", ...stable(filter)],
+    enrollments: (filter = {}) => ["student-enrollments", ...stable(filter)],
+    enrollment: (id) => ["student-enrollments", id],
+    course: (courseId) => ["courses", courseId],
+    courseResource: (courseId, resource, filter = {}) => ["courses", courseId, resource, ...stable(filter)],
+    tasks: (filter = {}) => ["tasks", ...stable(filter)],
+    task: (taskId) => ["tasks", taskId],
+    taskTransitions: (taskId) => ["tasks", taskId, "transitions"],
+    taskExtension: (taskId) => ["tasks", taskId, "extensions"],
+    provisioningJob: (taskId) => ["tasks", taskId, "provisioning-job"],
+    workbench: (taskId) => ["tasks", taskId, "workbench"],
+    workspaceSessions: (taskId) => ["tasks", taskId, "workspace-sessions"],
+    checkpoints: (taskId) => ["tasks", taskId, "checkpoints"],
+    executionRuns: (taskId, filter = {}) => ["tasks", taskId, "execution-runs", ...stable(filter)],
+    executionRun: (taskId, runId) => ["tasks", taskId, "execution-runs", runId],
+    reportDraft: (taskId) => ["tasks", taskId, "report-draft"],
+    reportAttachments: (taskId) => ["tasks", taskId, "attachments"],
+    reportVersions: (taskId) => ["tasks", taskId, "report-versions"],
+    reviewResult: (taskId) => ["tasks", taskId, "review-result"],
+    riskSignals: (filter = {}) => ["analytics", "risk-signals", ...stable(filter)],
+    recommendations: (filter = {}) => ["analytics", "recommendations", ...stable(filter)],
+    /* 教师端 */
+    teachingCourses: (filter = {}) => ["teaching-courses", ...stable(filter)],
+    teachingCourse: (courseId) => ["teaching-courses", courseId],
+    teachingCourseResource: (courseId, resource, filter = {}) => ["teaching-courses", courseId, resource, ...stable(filter)],
+    teachingEnrollments: (courseId, filter = {}) => ["teaching-courses", courseId, "enrollments", ...stable(filter)],
+    teachingEnrollment: (courseId, enrollmentId) => ["teaching-courses", courseId, "enrollments", enrollmentId],
+    teachingStaff: (courseId) => ["teaching-courses", courseId, "staff"],
+    invitations: (courseId) => ["teaching-courses", courseId, "invitations"],
+    importJob: (courseId, jobId) => ["teaching-courses", courseId, "enrollment-imports", jobId],
+    templates: (courseId, filter = {}) => ["teaching-templates", courseId, ...stable(filter)],
+    template: (courseId, templateId) => ["teaching-templates", courseId, templateId],
+    templateOptions: (courseId) => ["teaching-templates", courseId, "options"],
+    templateVersions: (courseId, templateId) => ["teaching-templates", courseId, templateId, "versions"],
+    templateVersion: (_courseId, versionId) => ["teaching-template-versions", versionId],
+    templateChapters: (versionId) => ["teaching-template-versions", versionId, "chapters"],
+    templateChapterTasks: (chapterId) => ["teaching-template-chapters", chapterId, "tasks"],
+    autoCheckRules: (versionId) => ["teaching-template-versions", versionId, "auto-check-rules"],
+    precheckRuns: (versionId, filter = {}) => ["teaching-template-versions", versionId, "precheck-runs", ...stable(filter)],
+    experimentImages: (courseId, filter = {}) => ["teaching-experiment-images", courseId, ...stable(filter)],
+    publications: (courseId, filter = {}) => ["teaching-publications", courseId, ...stable(filter)],
+    publication: (courseId, publicationId) => ["teaching-publications", courseId, publicationId],
+    publicationTasks: (courseId, publicationId, filter = {}) => ["teaching-publications", courseId, publicationId, "tasks", ...stable(filter)],
+    rubrics: (courseId) => ["teaching-rubrics", courseId],
+    reviews: (courseId, filter = {}) => ["teaching-reviews", courseId, ...stable(filter)],
+    review: (courseId, reviewId) => ["teaching-reviews", courseId, reviewId],
+    reviewScores: (courseId, reviewId) => ["teaching-reviews", courseId, reviewId, "criterion-scores"],
+    reviewAnnotations: (courseId, reviewId) => ["teaching-reviews", courseId, reviewId, "annotations"],
+    similarityRun: (_courseId, runId) => ["teaching-similarity-runs", runId],
+    teachingAnalytics: (courseId, section, filter = {}) => ["teaching-analytics", courseId, section, ...stable(filter)],
+    teachingProgress: (courseId, filter = {}) => ["teaching-analytics", courseId, "progress", ...stable(filter)],
+    /* 平台端 */
+    platformUsers: (filter = {}) => ["platform", "users", ...stable(filter)],
+    verifications: (filter = {}) => ["platform", "verifications", ...stable(filter)],
+    governanceAlerts: (filter = {}) => ["platform", "governance", "alerts", ...stable(filter)],
+    governanceUsage: (filter = {}) => ["platform", "governance", "usage", ...stable(filter)],
+    precheckSummary: (filter = {}) => ["platform", "template-prechecks", "summary", ...stable(filter)],
+    images: (filter = {}) => ["platform", "images", ...stable(filter)],
+    image: (imageId) => ["platform", "images", imageId],
+    resourceProfiles: (filter = {}) => ["platform", "resource-profiles", ...stable(filter)],
+    runtimeAdapters: (filter = {}) => ["platform", "runtime-adapters", ...stable(filter)],
+    quotas: (filter = {}) => ["platform", "quotas", ...stable(filter)],
+    instances: (filter = {}) => ["platform", "instances", ...stable(filter)],
+    platformWorkspaceSessions: (filter = {}) => ["platform", "workspaces", "sessions", ...stable(filter)],
+    anomalies: (filter = {}) => ["platform", "anomalies", "tasks", ...stable(filter)],
+    scanAnomalies: (filter = {}) => ["platform", "anomalies", "reports", ...stable(filter)],
+    operationsOverview: () => ["platform", "operations", "overview"],
+    operationLogs: (filter = {}) => ["platform", "operations", "logs", ...stable(filter)],
+    agentModelRoutes: () => ["platform", "agent", "model-routes"],
+    agentToolPolicies: () => ["platform", "agent", "tool-policies"],
+    agentUsageCosts: (filter = {}) => ["platform", "agent", "usage-costs", ...stable(filter)],
+    agentEvalSuites: () => ["platform", "agent", "eval-suites"],
+};

@@ -4,7 +4,12 @@ from apps.accounts.tests.helpers import create_user
 from apps.core.models import OutboxDelivery, OutboxEvent
 from apps.courses.services import ActorContext
 from apps.notifications.models import Notification, Preference
-from apps.notifications.services import consume_notification_event, mark_read, update_preference
+from apps.notifications.services import (
+    backfill_notification_content,
+    consume_notification_event,
+    mark_read,
+    update_preference,
+)
 
 
 class NotificationDeliveryTests(TestCase):
@@ -61,3 +66,25 @@ class NotificationDeliveryTests(TestCase):
         )
         self.assertTrue(updated.digest_enabled)
         self.assertEqual(Preference.objects.get(account=self.user).row_version, 2)
+
+    def test_system_events_have_specific_body_and_historical_messages_are_repaired(self) -> None:
+        for kind, expected in [
+            ("account.created", "你的平台账号已创建"),
+            ("teacher.qualification.changed", "你的教师资格信息已更新"),
+            ("governance.quota.reserved", "平台已为实验预留所需资源配额"),
+        ]:
+            with self.subTest(kind=kind):
+                event = OutboxEvent.objects.create(
+                    event_type=kind,
+                    aggregate_type="account",
+                    aggregate_ref=self.user.public_id,
+                    payload={"user_id": self.user.public_id},
+                    trace_id="system-notice",
+                )
+                consume_notification_event(event_id=event.pk)
+                notice = Notification.objects.get(source_event_id=str(event.pk))
+                self.assertIn(expected, notice.body_masked)
+                Notification.objects.filter(pk=notice.pk).update(body_masked="有新的平台动态")
+                self.assertEqual(backfill_notification_content(), 1)
+                notice.refresh_from_db()
+                self.assertIn(expected, notice.body_masked)

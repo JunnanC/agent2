@@ -81,6 +81,10 @@ def _data(item: Any) -> dict[str, object]:
             "title": item.title,
             "kind": item.kind,
             "current_version_id": current.public_id if current else None,
+            "link_url": current.link_url if current else "",
+            "text_content": current.text_content if current else "",
+            "object_asset_id": current.object_asset.public_id if current and current.object_asset else None,
+            "version_status": current.status if current else None,
             "row_version": item.row_version,
         }
     if isinstance(item, MaterialVersion):

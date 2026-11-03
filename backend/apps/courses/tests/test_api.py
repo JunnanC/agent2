@@ -123,7 +123,7 @@ class CourseApiTests(TestCase):
             **PROXY_HEADERS,
         )
         self.assertEqual(apply.status_code, 201, apply.content)
-        self.assertEqual(apply.json()["data"]["status"], Enrollment.Status.ACTIVE)
+        self.assertEqual(apply.json()["data"]["status"], Enrollment.Status.PENDING)
         replay = student_client.post(
             f"/api/v2/courses/{course['public_id']}/enrollments",
             {"application_message": "join"},
@@ -136,6 +136,66 @@ class CourseApiTests(TestCase):
         self.assertEqual(replay.status_code, 201)
         self.assertEqual(replay["X-Idempotent-Replayed"], "true")
         self.assertEqual(Enrollment.objects.count(), 1)
+
+    def test_student_withdraw_reapply_approval_and_exit_enforce_course_access(self) -> None:
+        teacher_client = Client(enforce_csrf_checks=True)
+        teacher_csrf = self._login(teacher_client, portal="TEACHING", identifier=self.teacher.email)
+        course = self._create_and_publish(teacher_client, teacher_csrf)
+        course_id = course["public_id"]
+        student_client = Client(enforce_csrf_checks=True)
+        student_csrf = self._login(student_client, portal="USER", identifier=self.student.email)
+
+        def post(client, portal, csrf, path, payload, key, version=None):
+            headers = {
+                "HTTP_X_CSRFTOKEN": csrf, "HTTP_X_PORTAL": portal,
+                "HTTP_IDEMPOTENCY_KEY": key, **PROXY_HEADERS,
+            }
+            if version is not None:
+                headers["HTTP_IF_MATCH"] = f'"{version}"'
+            return client.post(path, payload, content_type="application/json", **headers)
+
+        def assert_access(allowed):
+            for suffix in ("", "/chapters", "/materials", "/announcements", "/calendar", "/questions"):
+                response = student_client.get(f"/api/v2/courses/{course_id}{suffix}", HTTP_X_PORTAL="USER", **PROXY_HEADERS)
+                self.assertEqual(response.status_code, 200 if allowed else 403, response.content)
+
+        apply_path = f"/api/v2/courses/{course_id}/enrollments"
+        application = post(student_client, "USER", student_csrf, apply_path, {}, "lifecycle-apply")
+        self.assertEqual(application.status_code, 201, application.content)
+        pending = application.json()["data"]
+        self.assertEqual(pending["status"], "PENDING")
+        assert_access(False)
+
+        withdrawn = post(student_client, "USER", student_csrf,
+                         f"/api/v2/me/enrollments/{pending['public_id']}/withdraw", {}, "lifecycle-withdraw", pending["row_version"])
+        self.assertEqual(withdrawn.status_code, 200, withdrawn.content)
+        self.assertEqual(withdrawn.json()["data"]["status"], "WITHDRAWN")
+        assert_access(False)
+
+        reapplied = post(student_client, "USER", student_csrf, apply_path, {}, "lifecycle-reapply")
+        self.assertEqual(reapplied.status_code, 201, reapplied.content)
+        new_pending = reapplied.json()["data"]
+        self.assertEqual(new_pending["cycle_no"], 2)
+        assert_access(False)
+        approved = post(teacher_client, "TEACHING", teacher_csrf,
+                        f"/api/v2/teaching/courses/{course_id}/enrollments/{new_pending['public_id']}/review",
+                        {"decision": "APPROVE", "note": "同意选课"}, "lifecycle-approve", new_pending["row_version"])
+        self.assertEqual(approved.status_code, 200, approved.content)
+        active = approved.json()["data"]
+        self.assertEqual(active["status"], "ACTIVE")
+        assert_access(True)
+
+        check = student_client.get(f"/api/v2/me/enrollments/{active['public_id']}/drop-check", HTTP_X_PORTAL="USER", **PROXY_HEADERS)
+        self.assertEqual(check.status_code, 200, check.content)
+        self.assertTrue(check.json()["data"]["allowed"])
+        dropped = post(student_client, "USER", student_csrf,
+                       f"/api/v2/me/enrollments/{active['public_id']}/drop", {"reason": "选课调整"}, "lifecycle-drop", active["row_version"])
+        self.assertEqual(dropped.status_code, 200, dropped.content)
+        self.assertEqual(dropped.json()["data"]["status"], "DROPPED")
+        assert_access(False)
+        active_list = student_client.get("/api/v2/me/enrollments?status=ACTIVE", HTTP_X_PORTAL="USER", **PROXY_HEADERS)
+        self.assertEqual(active_list.status_code, 200, active_list.content)
+        self.assertEqual(active_list.json()["data"], [])
 
     def test_context_returns_current_term_and_role_aware_courses(self) -> None:
         teacher_client = Client(enforce_csrf_checks=True)

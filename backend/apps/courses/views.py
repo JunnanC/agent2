@@ -4,6 +4,7 @@ from typing import Any
 
 from django.conf import settings
 from django.http import HttpRequest
+from django.utils import timezone
 from drf_spectacular.utils import extend_schema
 from rest_framework.permissions import BasePermission
 from rest_framework.response import Response
@@ -18,8 +19,8 @@ from apps.core.concurrency import etag_for_version, parse_if_match
 from apps.core.idempotency import PrincipalScope, StoredResponse, execute_idempotent
 from apps.core.pagination import PageSpec
 
-from .errors import FeatureNotAvailable
-from .models import CourseStaff, CourseStaffGrant, Enrollment
+from .errors import ActiveEnrollmentRequired, FeatureNotAvailable, InvitationInvalid
+from .models import CourseStaff, CourseStaffGrant, Enrollment, Invitation
 from .selectors import (
     active_enrollment,
     active_staff,
@@ -66,6 +67,7 @@ from .services import (
     drop_enrollment,
     enrollment_exit_check,
     grant_course_capability,
+    invitation_digest,
     publish_course,
     remove_enrollment,
     review_enrollment,
@@ -265,7 +267,41 @@ class PublicCourseDetailView(APIView):
     )
     def get(self, request: HttpRequest, course_id: str) -> Response:
         course = visible_course(actor=request.user, portal="USER", course_id=course_id)
+        if active_enrollment(course=course, student=request.user) is None:
+            raise ActiveEnrollmentRequired(detail={"course_id": course.public_id})
         return _response(request, course_data(course), etag=etag_for_version(course.row_version))
+
+
+class CourseInvitationResolveView(APIView):
+    """Resolve an invitation before consuming it, so students can apply directly."""
+
+    permission_classes = [IsUserPortal]
+
+    @extend_schema(
+        operation_id="courses_invitation_resolve",
+        responses={200: CourseResponseSerializer},
+        tags=["courses"],
+        extensions={"x-portals": ["USER"]},
+    )
+    def get(self, request: HttpRequest) -> Response:
+        code = str(request.GET.get("code", "")).strip()
+        if not code:
+            raise InvitationInvalid()
+        invitation = (
+            Invitation.objects.select_related("course")
+            .filter(code_digest=invitation_digest(code), status="ACTIVE")
+            .first()
+        )
+        if invitation is None or invitation.expires_at <= timezone.now() or invitation.used_count >= invitation.max_uses:
+            raise InvitationInvalid()
+        course = invitation.course
+        if course.status != Course.Status.PUBLISHED:
+            raise InvitationInvalid()
+        if course.enrollment_start and course.enrollment_start > timezone.now():
+            raise InvitationInvalid()
+        if course.enrollment_end and course.enrollment_end < timezone.now():
+            raise InvitationInvalid()
+        return _response(request, course_data(course))
 
 
 class CourseEnrollmentApplyView(APIView):

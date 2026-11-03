@@ -4,6 +4,9 @@ import { studentApi } from "@edu/api-client";
 import { keys } from "@edu/query-keys";
 import { Breadcrumbs, Button, EmptyState, Panel, RequestStateView, StatusBadge } from "@edu/ui";
 import { formatDate } from "@/lib/task-format";
+import { StudentTimetable } from "@/components/student-timetable";
+import { LearningHistory } from "@/components/learning-history";
+import { EnrollmentExit } from "@/components/enrollment-exit";
 
 function enrollmentStatus(status: string): { label: string; tone: "good" | "warn" | "blue" | "bad" | "neutral" } {
   if (status === "ACTIVE" || status === "APPROVED") return { label: "进行中", tone: "good" };
@@ -15,7 +18,8 @@ function enrollmentStatus(status: string): { label: string; tone: "good" | "warn
 }
 
 export function Courses() {
-  const enrollments = useQuery({ queryKey: keys.enrollments({}), queryFn: () => studentApi.myEnrollments({ page_size: 100 }) });
+  const enrollments = useQuery({ queryKey: keys.enrollments({ status: "ACTIVE" }), queryFn: () => studentApi.myEnrollments({ page_size: 100, status: "ACTIVE" }) });
+  const applications = useQuery({ queryKey: keys.enrollments({ status: "PENDING" }), queryFn: () => studentApi.myEnrollments({ page_size: 100, status: "PENDING" }) });
 
   return (
     <>
@@ -62,20 +66,32 @@ export function Courses() {
                 </>
               );
 
-              return active ? (
-                <Link className="course-card" key={enrollment.public_id} to={`/courses/${enrollment.course_id}`} aria-label={`进入课程 ${enrollment.course_title || enrollment.course_code || "未命名课程"}`}>
-                  {content}
-                </Link>
-              ) : (
-                <article className="course-card is-disabled" key={enrollment.public_id}>
-                  {content}
-                  {enrollment.status === "PENDING" ? <Button size="sm" onClick={() => void enrollments.refetch()}>查看最新状态</Button> : null}
-                </article>
-              );
+              return <div key={enrollment.public_id}>
+                {active ? <Link className="course-card" to={`/courses/${enrollment.course_id}`} aria-label={`进入课程 ${enrollment.course_title || enrollment.course_code || "未命名课程"}`}>{content}</Link> :
+                  <article className="course-card is-disabled">{content}
+                    {enrollment.status === "PENDING" ? <Button size="sm" onClick={() => void enrollments.refetch()}>查看最新状态</Button> : null}
+                  </article>}
+                <div className="page-actions" style={{ marginTop: 8 }}><EnrollmentExit enrollment={enrollment} /></div>
+              </div>;
             })}
           </div>
         </RequestStateView>
       </Panel>
+      <Panel title={<h2>申请中的课程</h2>}>
+        <RequestStateView loading={applications.isLoading} error={applications.error}
+          onRetry={() => void applications.refetch()} empty={!applications.data?.rows.length}
+          emptyState={<EmptyState title="暂无待审核申请" hint="提交课程申请后，可在这里查看进度或撤回。" />}>
+          {(applications.data?.rows ?? []).filter((enrollment) => enrollment.status === "PENDING").map((enrollment) => (
+            <div className="item" key={enrollment.public_id}>
+              <div><strong>{enrollment.course_title || enrollment.course_code}</strong>
+                <small>申请于 {formatDate(enrollment.applied_at)} · 教师同意后才能进入课程</small></div>
+              <div className="page-actions"><StatusBadge tone="warn">审核中</StatusBadge><EnrollmentExit enrollment={enrollment} /></div>
+            </div>
+          ))}
+        </RequestStateView>
+      </Panel>
+      <StudentTimetable />
+      <LearningHistory />
     </>
   );
 }

@@ -516,6 +516,8 @@ decision, submission
 | 课程资源摘要 | GET /api/v2/me/courses/{course_id}/resource-summary |
 | 学生仪表盘 | GET /api/v2/me/dashboard |
 
+选课申请规则：`POST /api/v2/courses/{course_id}/enrollments` 携带有效 `invitation_code` 时返回 `ACTIVE`，学生端刷新选课缓存后直接进入对应课程；省略或留空邀请码时返回 `PENDING`，必须由教师审核通过后才能进入课程，课程的 `enrollment_mode` 不再用于学生端判断是否免审核。无效、过期、次数用尽或不属于目标课程的邀请码会使请求失败，不创建申请。有效邀请码加入仍需通过课程开放窗口、账号和容量校验。
+
 课程内容使用通用资源路径：
 
 | resource | API | 说明 |
@@ -847,6 +849,12 @@ GET /api/v2/analytics/risk-signals
 GET /api/v2/analytics/recommendations
 ~~~
 
+学生点击通知“查看详情”时，先显示正文，再调用已读接口（携带该通知的 `row_version` 作为 `If-Match`，并传 `Idempotency-Key`）；成功后刷新未读数，保留详情弹窗。标记失败可在详情内重试。
+
+实验分配通知 `experiment.task_assigned` 的 `body` 包含实验名称、课程名称和截止时间，`task_id`、`course_id` 和 `link_url` 指向对应实验。截止提醒 `experiment.deadline_reminder` 由 Celery Beat 每60秒扫描，默认截止前24小时触发，同一任务的同一有效截止时间只发送一次；延期优先使用 `effective_deadline`。已提交待评审、已完成、退出课程、关闭实验及静音用户不催交。阈值由后端 `NOTIFICATION_DEADLINE_REMINDER_HOURS` 配置。
+
+升级已有环境后执行 `python manage.py backfill_notification_content`，补全历史实验和选课通知的空泛正文，同时保留已读状态。
+
 ### 11.3 外部集成
 
 机器 API 使用 api.localhost 或服务器对应的 API 域名，由网关注入 INTEGRATION 上下文：
@@ -1083,3 +1091,28 @@ data: {"...":"...", "trace_id":"..."}
 3. 对新命令声明幂等和并发要求。
 4. 对异步作业提供可查询状态或事件。
 5. 同步更新本文档的业务分组和端到端流程。
+
+## 18. 学生端新增接口接入
+
+学生端 API 客户端已覆盖课程资源、日历、学习历史、选课退出、通知及通知偏好、课程问答、课表导入、Agent 会话、学习建议、文件下载授权和报告附件。调用统一位于 `packages/api-client/src/index.ts`：
+
+- 日历使用 `/courses/{course_id}/calendar`，后端字段 `starts_at`/`ends_at` 会映射为页面的 `start_at`/`end_at`。
+- 通知已读、选课退出、密码修改、身份验证和下载授权撤销必须传 `If-Match` 与 `Idempotency-Key`；通知偏好首次创建时后端允许 `If-Match` 为空，已有记录仍需版本号。
+- 课表上传只接受不超过 10 MB 的 `.xlsx`，请求保持 `multipart/form-data`；上传后按 `MAPPING_REQUIRED → READY → RUNNING → COMPLETED/FAILED` 查询导入任务，导入不会自动加入课程。
+- Agent 消息发送和课表确认可能返回异步状态，页面应轮询对应资源并在完成后刷新缓存。OIDC 入口、回调和已绑定身份也已提供 `oidcApi`/`meApi` 方法。
+
+### 18.1 用户端页面入口（2026-11-03）
+
+| 页面位置 | 接入能力 | 关键行为 |
+| --- | --- | --- |
+| 我的课程 → 我的课表 | `timetableApi` 上传、映射、确认、查询 | 文件保留 multipart；映射修改后必须保存；RUNNING 持续查询，完成后刷新课表，错误显示行号 |
+| 我的课程 → 学习历史 | `meApi.learningHistory` | 按学年、学期、选课周期展示实验及成绩 |
+| 我的课程、我的申请 → 撤回申请/退出课程 | `studentApi.enrollment/dropCheck/withdrawEnrollment/dropEnrollment` | 待审核申请可撤回；已加入课程可退出；读取最新 row_version，退出检查不允许时禁用提交；成功刷新选课、课表、历史、任务及上下文 |
+| 课程详情 → 权限校验与退出课程 | `studentApi.courseDetail/myEnrollments/dropCheck/dropEnrollment` | 先确认有效选课再加载章节、材料和实验；待审核、已撤回、已退出禁止访问；在详情退出成功后返回我的课程 |
+| 课程详情 → 课程助手、任务详情 → 实验助手 | `agentApi` 配置、会话、消息、反馈、工具确认 | 只开放后端声明的 modes；任务对话携带任务范围；工具确认使用工具 state.row_version |
+| 任务详情 → 评审结果 | `reportApi.reviewResult` | 将 decimal 字符串转数值；退回后的 REPORT_DRAFT/IN_PROGRESS 状态仍可查看已发布意见，并按 allowed_actions 提供重新提交入口 |
+| 助手引用 → 下载引用 | `fileApi.createDownloadGrant` | 仅可访问的引用允许申请临时下载路径，不持久化下载 token |
+
+Agent 消息 POST 返回 202 时，返回体是状态为 COMPLETE 的 USER 消息，不代表助手已经回复。页面继续查询消息，直到后续 ASSISTANT 消息为 COMPLETE/FAILED；工具状态 QUEUED/RUNNING 也持续查询。`taskApi.stopRuntime` 使用任务的版本号作为 If-Match。
+
+教师 AI 评分批次、AI 建议采纳位于 `/teaching/...`，属于教师操作。学生端使用 `/tasks/{task_id}/review-result` 获取后端已公开的评审意见；不读取教师未采纳的评分建议。

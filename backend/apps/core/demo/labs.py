@@ -363,7 +363,10 @@ def build_publications(
     total = len(courses)
     for index, course in enumerate(courses):
         course.refresh_from_db()
-        if demo_course_status(index, total, ctx) != Course.Status.PUBLISHED:
+        if (
+            demo_course_status(index, total, ctx) != Course.Status.PUBLISHED
+            or course.status != Course.Status.PUBLISHED
+        ):
             continue
         owner = course.owner
         teaching = _teaching(ctx, owner)

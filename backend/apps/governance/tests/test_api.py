@@ -4,7 +4,7 @@ from unittest.mock import patch
 from django.test import Client, TestCase
 
 from apps.accounts.tests.helpers import create_user
-from apps.courses.services import ActorContext, apply_for_course, publish_course
+from apps.courses.services import ActorContext, apply_for_course, publish_course, review_enrollment
 
 from ..models import RuntimeAdapter
 from ..services import create_quota
@@ -99,11 +99,17 @@ class GovernanceApiTests(TestCase):
             expected_version=course.row_version,
             context=ActorContext(self.teacher.public_id, "TEACHING", "a" * 32),
         )
-        apply_for_course(
+        enrollment = apply_for_course(
             course_id=course.public_id,
             student=self.student,
             application_message="api enrollment",
             context=ActorContext(self.student.public_id, "USER", "b" * 32),
+        )
+        review_enrollment(
+            course_id=course.public_id, enrollment_id=enrollment.public_id,
+            decision="APPROVE", note="api enrollment", actor=self.teacher,
+            expected_version=enrollment.row_version,
+            context=ActorContext(self.teacher.public_id, "TEACHING", "b" * 32),
         )
         admin_context = ActorContext(self.admin.public_id, "PLATFORM", "c" * 32)
         create_quota(

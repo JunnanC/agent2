@@ -21,6 +21,39 @@ docker compose --profile runtime up -d --build
 
 默认项目名为 `experimental-platform`。`.env.example` 中的 `COMPOSE_FILE` 选择 `docker-compose.dev.yml`；本机额外覆盖文件应只放环境差异。例如 Windows 的 `.env` 可以设置 `COMPOSE_FILE=docker-compose.dev.yml;docker-compose.override.local`。Linux/macOS 多文件分隔符为 `:`。显式 `-f` 会覆盖文件选择，使用前确认加载范围。
 
+## Frontend hot-reload development
+
+The `:8080` portals are built into the Nginx image. Use the separate Vite development
+entry when editing frontend source files; it mounts `frontend/` read-only and polls for
+changes, so saving a source file updates the browser without rebuilding Nginx.
+
+```powershell
+.\scripts\frontend-dev-up.ps1
+```
+
+Development portal URLs:
+
+- `http://student.localhost:5173`
+- `http://teacher.localhost:5174`
+- `http://admin.localhost:5176`
+
+To start only the frontend services when the backend stack is already running:
+
+```powershell
+.\scripts\frontend-dev-up.ps1 -SkipBackend
+```
+
+View or stop the frontend development services:
+
+```powershell
+docker compose --project-name edu-platform-frontend-dev -f docker-compose.frontend-dev.yml logs -f
+.\scripts\frontend-dev-down.ps1
+```
+
+Keep using `http://*.localhost:8080` for the static, deployment-style Nginx build.
+
+The edge entry point listens on port `8080`. Use the hostnames below so portal cookies and trusted host mapping remain isolated:
+
 | 门户 | 地址 |
 | --- | --- |
 | 学生 | http://student.localhost:8080 |

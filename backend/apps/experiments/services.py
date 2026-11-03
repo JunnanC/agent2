@@ -872,6 +872,10 @@ def _create_task(
             "task_id": task.public_id,
             "publication_id": publication.public_id,
             "student_id": enrollment.student.public_id,
+            "course_id": publication.course.public_id,
+            "course_name": publication.course.title,
+            "experiment_title": publication.title,
+            "deadline": publication.window_end.isoformat(),
         },
         context=context,
     )

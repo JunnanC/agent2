@@ -54,7 +54,7 @@ describe("TaskDetail 渲染", () => {
     sessionStorage.clear();
     (taskApi.detail as unknown as Mock).mockReset();
     (taskApi.detail as unknown as Mock).mockResolvedValue(taskFixture);
-    (reportApi.reviewResult as unknown as Mock).mockReset();
+    (reportApi.reviewResult as unknown as Mock).mockReset().mockResolvedValue({ rounds: [], allowed_actions: [] });
   });
 
   it("正常渲染任务标题、进度与操作区", async () => {
@@ -77,6 +77,17 @@ describe("TaskDetail 渲染", () => {
     expect(screen.getByText("60 / 60")).toBeInTheDocument();
     expect(screen.getByText("请补充边界条件说明")).toBeInTheDocument();
     expect(screen.getByText("完成得很好")).toBeInTheDocument();
+  });
+
+  it("报告被退回到草稿状态后仍展示评审意见和修改入口", async () => {
+    (taskApi.detail as unknown as Mock).mockResolvedValue({ ...taskFixture, status: "REPORT_DRAFT" });
+    (reportApi.reviewResult as unknown as Mock).mockResolvedValue({
+      score: 42.5, allowed_actions: ["REVISE_AND_RESUBMIT"],
+      rounds: [{ review_id: "review-1", round_no: 1, status: "DECIDED", decision: { decision: "REJECT", score: 42.5, feedback: "请补充实验分析" }, scores: null, annotations: [] }],
+    });
+    renderTaskDetail();
+    expect(await screen.findByText("请补充实验分析")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "修改报告并重新提交" })).toHaveAttribute("href", "/experiments/task-1/workbench");
   });
 
   it("服务端 blockers 时展示阻塞说明且不显示进入工作台按钮", async () => {

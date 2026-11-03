@@ -1,4 +1,5 @@
-import { reportApi, taskApi, workspaceApi } from "./index";
+// @ts-expect-error Test the TypeScript source even when a stale emitted index.js exists.
+import { reportApi, taskApi, workspaceApi } from "./index.ts";
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 
 function jsonResponse(status: number, body: unknown, headers?: Record<string, string>): Response {

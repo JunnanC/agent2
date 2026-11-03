@@ -203,6 +203,7 @@ export async function request<T>(
   const method = options.method ?? "GET";
   const url = absoluteUrl(path, options.query);
   const isMutation = method !== "GET";
+  const isFormData = typeof FormData !== "undefined" && options.body instanceof FormData;
   const headers: Record<string, string> = {
     Accept: options.accept ?? "application/json",
     ...(options.headers ?? {}),
@@ -212,7 +213,8 @@ export async function request<T>(
     for (const name of Object.keys(headers)) {
       if (name.toLowerCase() === "content-type") delete headers[name];
     }
-    headers["Content-Type"] = "application/json";
+    // FormData 的 multipart boundary 由浏览器设置。
+    if (!isFormData) headers["Content-Type"] = "application/json";
   }
   if (isMutation) {
     // 请求层统一补充 CSRF；相对路径由同源代理/网关决定门户
@@ -236,7 +238,7 @@ export async function request<T>(
         method,
         credentials: "include",
         headers,
-        body: options.body != null ? JSON.stringify(options.body) : undefined,
+        body: isFormData ? options.body as FormData : options.body != null ? JSON.stringify(options.body) : undefined,
         signal: options.signal,
       });
     } catch (error) {

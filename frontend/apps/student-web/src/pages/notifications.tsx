@@ -1,8 +1,8 @@
-import { useState } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useRef, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { meApi } from "@edu/api-client";
 import { keys } from "@edu/query-keys";
-import { Button, EmptyState, Panel, RequestStateView, StatusBadge, useToast } from "@edu/ui";
+import { Button, EmptyState, Modal, Panel, RequestStateView, StatusBadge, useToast } from "@edu/ui";
 import { formatDateTime } from "@/lib/task-format";
 
 interface NotificationRow {
@@ -11,6 +11,7 @@ interface NotificationRow {
   title: string;
   body?: string | null;
   read: boolean;
+  row_version?: number;
   created_at?: string | null;
   links?: Array<{ label?: string; task_id?: string; course_id?: string; url?: string }> | null;
 }
@@ -25,7 +26,10 @@ const KIND_ICON: Record<string, string> = {
 
 export function Notifications() {
   const toast = useToast();
+  const queryClient = useQueryClient();
+  const pendingReads = useRef(new Set<string>());
   const [readFilter, setReadFilter] = useState<"all" | "unread">("all");
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const notifications = useQuery({
     queryKey: keys.notifications({}),
@@ -33,14 +37,39 @@ export function Notifications() {
   });
 
   const markRead = useMutation({
-    mutationFn: (id: string) => meApi.markNotificationRead(id),
-    onSuccess: () => void notifications.refetch(),
-    onError: () => toast.notify("标记失败，请重试", "error"),
+    mutationFn: (row: NotificationRow) => {
+      if (row.row_version == null) throw new Error("通知版本缺失，请刷新后重试");
+      return meApi.markNotificationRead(row.id, row.row_version);
+    },
+    onSuccess: (_result, row) => {
+      queryClient.setQueryData<Awaited<ReturnType<typeof meApi.notifications>>>(keys.notifications({}), (current) => current && ({
+        ...current, rows: current.rows.map((item) => item.id === row.id
+          ? { ...item, read: true, row_version: (row.row_version ?? 0) + 1 } : item),
+      }));
+      void queryClient.invalidateQueries({ queryKey: ["notifications"] });
+    },
+    onError: () => {
+      toast.notify("自动标记已读失败，请点击标记已读重试", "error");
+      void notifications.refetch();
+    },
+    onSettled: (_result, _error, row) => { pendingReads.current.delete(row.id); },
   });
+
+  function markAsRead(row: NotificationRow) {
+    if (row.read || pendingReads.current.has(row.id)) return;
+    pendingReads.current.add(row.id);
+    markRead.mutate(row);
+  }
+
+  function viewNotification(row: NotificationRow) {
+    setSelectedId(row.id);
+    markAsRead(row);
+  }
 
   const rows = (notifications.data?.rows ?? []) as NotificationRow[];
   const unread = rows.filter((row) => !row.read).length;
   const visible = readFilter === "all" ? rows : rows.filter((row) => !row.read);
+  const selected = rows.find((row) => row.id === selectedId);
 
   return (
     <>
@@ -70,14 +99,10 @@ export function Notifications() {
                   </div>
                   <p style={{ margin: "4px 0 0" }}>{row.body}</p>
                   <div className="notification-actions">
-                    {(row.links ?? []).filter((link) => link.task_id || link.course_id || link.url).slice(0, 1).map((link, index) => (
-                      <a key={index} className="btn sm" href={link.url ?? (link.task_id ? `/experiments/${link.task_id}` : `/courses/${link.course_id}`)}>
-                        {link.label ?? "查看详情"}
-                      </a>
-                    ))}
+                    <Button size="sm" onClick={() => viewNotification(row)}>查看详情</Button>
                     {!row.read
-                      ? <Button size="sm" disabled={markRead.isPending} onClick={() => markRead.mutate(row.id)}>
-                        {markRead.isPending && markRead.variables === row.id ? "标记中…" : "标记已读"}
+                      ? <Button size="sm" disabled={markRead.isPending} onClick={() => markAsRead(row)}>
+                        {markRead.isPending && markRead.variables?.id === row.id ? "标记中…" : "标记已读"}
                       </Button> : null}
                   </div>
                 </div>
@@ -87,6 +112,24 @@ export function Notifications() {
           </div>
         </RequestStateView>
       </Panel>
+      <Modal open={selected != null} title={selected?.title ?? "通知详情"} onClose={() => setSelectedId(null)}
+        actions={<Button onClick={() => setSelectedId(null)}>关闭</Button>}>
+        {selected && <>
+          <p className="subtle">{formatDateTime(selected.created_at)} · {selected.read ? "已读" : "未读"}</p>
+          <p style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{selected.body || "此通知暂无补充内容。"}</p>
+          <div className="notification-actions">
+            {!selected.read && <Button size="sm" disabled={markRead.isPending} onClick={() => markAsRead(selected)}>
+              {markRead.isPending ? "标记中…" : "标记已读"}
+            </Button>}
+            {(selected.links ?? []).filter((link) => link.task_id || link.course_id || link.url).map((link, index) => {
+              const href = link.url || (link.task_id ? `/experiments/${link.task_id}` : `/courses/${link.course_id}`);
+              const label = href.startsWith("/experiments/") ? "查看实验任务"
+                : href.startsWith("/courses/") ? "查看课程" : link.label && link.label !== "查看详情" ? link.label : "打开相关页面";
+              return <a key={index} className="btn sm" href={href}>{label}</a>;
+            })}
+          </div>
+        </>}
+      </Modal>
     </>
   );
 }

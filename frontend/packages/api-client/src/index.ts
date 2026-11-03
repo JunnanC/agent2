@@ -1,5 +1,6 @@
 import { newIdempotencyKey, request } from "@edu/auth-client";
 import type { EnvelopeSuccess } from "@edu/auth-client";
+import type { components } from "./generated/schema";
 import type {
   Anomaly, Announcement, CalendarEvent, Checkpoint, CheckpointList, Chapter, Compensation, Course,
   Enrollment, ExecutionRun, ImageCreateInput, ImageScanReportInput, ImportJob, Instance as InstanceData, Invitation, Material, Me,
@@ -7,7 +8,12 @@ import type {
   PortalContext, PrecheckRun, Publication, Quota, ReportDraft, ResourceProfile, ReviewDetail,
   ReviewResult, ReviewSummary, Rubric, RuntimeAdapter, StudentDashboard, Task, TeachingCourseList, Template,
   TemplateChapter, TemplateTask, ToolPolicy, TemplateVersion, UsageCost, Verification,
-  WorkspaceSession, WorkspaceStorageJob,
+  WorkspaceSession, WorkspaceStorageJob, AgentMessage, AgentMode, CourseResourceSummary,
+  LearningHistoryData, NotificationPreferences, TimetableData, TimetableImport, AgentProfile, AgentSession,
+  AgentToolCall, ToolRequest, ToolDecision, AgentFeedback, VerificationUpdate, NotificationPreferenceUpdate,
+  EnrollmentExitCheck, CourseQuestion, CourseAnswer, DownloadGrant, DownloadGrantRevoke,
+  ReportAttachmentData, ReportAttachmentUpload, ReportAttachmentCreate, LearningRecommendation, LearningRiskSignal,
+  OIDCIdentity, OIDCStart,
 } from "./types";
 
 export * from "./types";
@@ -151,9 +157,32 @@ export const meApi = {
   updateProfile: (payload: { display_name?: string }, ifMatch?: string) =>
     request<Me>("/me", { method: "PATCH", body: payload, ifMatch }).then((r) => r.data),
   notifications: (query?: { page?: number; page_size?: number; unread?: boolean }) =>
-    request<NotificationItem[]>("/notifications", { query }).then(toList),
-  markNotificationRead: (id: string) =>
-    request(`/notifications/${id}/read`, { method: "POST", body: {} }).then((r) => r.data),
+    request<Array<NotificationItem & { link_url?: string; task_id?: string; course_id?: string }>>("/notifications", { query }).then((response) => {
+      const list = toList(response);
+      return { ...list, rows: list.rows.map((item) => ({
+        ...item, id: item.public_id ?? item.id, read: item.read_at != null || item.read === true,
+        links: item.links ?? (item.link_url || item.task_id || item.course_id
+          ? [{ url: item.link_url || undefined, task_id: item.task_id, course_id: item.course_id }] : []),
+      })) };
+    }),
+  markNotificationRead: (id: string, ifMatch: string | number, reuseKey?: string) =>
+    request(`/notifications/${id}/read`, { method: "POST", body: {}, ifMatch, idempotencyKey: reuseKey ?? newIdempotencyKey() }).then((r) => r.data),
+  learningHistory: () => request<LearningHistoryData>("/me/learning-history").then((r) => r.data),
+  timetable: (query?: { term_id?: string }) => request<TimetableData>("/me/timetable", { query }).then((r) => r.data),
+  resourceSummary: (courseId: string) => request<CourseResourceSummary>(`/me/courses/${courseId}/resource-summary`).then((r) => r.data),
+  notificationPreferences: () => request<NotificationPreferences>("/notification-preferences").then((r) => r.data),
+  updateNotificationPreferences: (payload: NotificationPreferenceUpdate, ifMatch: string | number | null, reuseKey?: string) =>
+    request<NotificationPreferences>("/notification-preferences", { method: "PATCH", body: payload, ifMatch, idempotencyKey: reuseKey ?? newIdempotencyKey() }).then((r) => r.data),
+  changePassword: (payload: { current_password: string; new_password: string }, ifMatch: string | number, reuseKey?: string) =>
+    request<Me>("/me/password", { method: "POST", body: payload, ifMatch, idempotencyKey: reuseKey ?? newIdempotencyKey() }).then((r) => r.data),
+  verification: () => request<Verification>("/me/verification").then((r) => r.data),
+  updateVerification: (payload: VerificationUpdate, ifMatch: string | number, reuseKey?: string) =>
+    request<Verification>("/me/verification", { method: "PUT", body: payload, ifMatch, idempotencyKey: reuseKey ?? newIdempotencyKey() }).then((r) => r.data),
+  oidcIdentities: () => request<OIDCIdentity[]>("/me/oidc-identities").then(toList),
+  unlinkOidcIdentity: (identityId: string, ifMatch: string | number, reuseKey?: string) =>
+    request<OIDCIdentity>(`/me/oidc-identities/${identityId}/unlink`, {
+      method: "POST", body: {}, ifMatch, idempotencyKey: reuseKey ?? newIdempotencyKey(),
+    }).then((r) => r.data),
 
   /* 平台端敏感写操作要求"近期认证"：提交密码刷新会话认证时间 */
   stepUpSession: (password: string, reuseKey?: string) =>
@@ -164,6 +193,12 @@ export const meApi = {
     }).then((r) => r.data),
 };
 
+export const oidcApi = {
+  start: (providerKey: string) => request<OIDCStart>(`/auth/oidc/${providerKey}/start`).then((r) => r.data),
+  callback: (providerKey: string, query: { state: string; nonce: string; iss: string; code?: string; code_verifier?: string; subject?: string }) =>
+    request<OIDCIdentity>(`/auth/oidc/${providerKey}/callback`, { query }).then((r) => r.data),
+};
+
 /* ══════════ 学生端 ══════════ */
 
 export const studentApi = {
@@ -171,26 +206,47 @@ export const studentApi = {
 
   courses: (query?: { page?: number; page_size?: number; search?: string }) =>
     request<Course[]>("/courses", { query }).then(toList),
+  resolveInvitation: (code: string) => request<Course>("/courses/invitations/resolve", { query: { code } }).then((r) => r.data),
 
   myEnrollments: (query?: { page?: number; page_size?: number; status?: string }) =>
     request<Enrollment[]>("/me/enrollments", { query }).then(toList),
+  enrollment: (enrollmentId: string) => request<Enrollment>(`/me/enrollments/${enrollmentId}`).then((r) => r.data),
+  dropCheck: (enrollmentId: string) => request<EnrollmentExitCheck>(`/me/enrollments/${enrollmentId}/drop-check`).then((r) => r.data),
+  dropEnrollment: (enrollmentId: string, payload: { reason: string }, ifMatch: string | number, reuseKey?: string) =>
+    request<Enrollment>(`/me/enrollments/${enrollmentId}/drop`, { method: "POST", body: payload, ifMatch, idempotencyKey: reuseKey ?? newIdempotencyKey() }).then((r) => r.data),
 
-  coursesResource: <T>(courseId: string, resource: "chapters" | "materials" | "announcements" | "calendar-events" | "questions", query?: { page?: number; page_size?: number }) =>
+  coursesResource: <T>(courseId: string, resource: "chapters" | "materials" | "announcements" | "calendar" | "questions", query?: { page?: number; page_size?: number }) =>
     request<T[]>(`/courses/${courseId}/${resource}`, { query }).then(toList),
 
   courseDetail: (courseId: string) => request<Course>(`/courses/${courseId}`).then((r) => r.data),
 
   courseChapters: (courseId: string) =>
-    request<Chapter[]>(`/courses/${courseId}/chapters`).then(toList),
+    request<Array<Chapter & { summary?: string; position?: number }>>(`/courses/${courseId}/chapters`).then((r) => {
+      const list = toList(r);
+      return { ...list, rows: list.rows.map((chapter) => ({ ...chapter, description: chapter.summary ?? chapter.description, sort_order: chapter.position ?? chapter.sort_order })) };
+    }),
 
   courseMaterials: (courseId: string) =>
-    request<Material[]>(`/courses/${courseId}/materials`).then(toList),
+    request<Array<Material & { kind?: string }>>(`/courses/${courseId}/materials`).then((r) => {
+      const list = toList(r);
+      return { ...list, rows: list.rows.map((item) => ({ ...item, type: item.kind ?? item.type })) };
+    }),
 
   courseAnnouncements: (courseId: string) =>
-    request<Announcement[]>(`/courses/${courseId}/announcements`).then(toList),
+    request<Array<Announcement & { publish_at?: string }>>(`/courses/${courseId}/announcements`).then((r) => {
+      const list = toList(r);
+      return { ...list, rows: list.rows.map((item) => ({ ...item, published_at: item.publish_at ?? item.published_at })) };
+    }),
 
   courseCalendarEvents: (courseId: string, query?: { start?: string; end?: string }) =>
-    request<CalendarEvent[]>(`/courses/${courseId}/calendar-events`, { query }).then(toList),
+    request<Array<CalendarEvent & { starts_at: string; ends_at?: string | null }>>(`/courses/${courseId}/calendar`, { query }).then((r) => {
+      const list = toList(r);
+      return { ...list, rows: list.rows.map((item) => ({
+        ...item,
+        start_at: item.starts_at !== undefined ? item.starts_at : item.start_at,
+        end_at: item.ends_at !== undefined ? item.ends_at : item.end_at,
+      })) };
+    }),
 
   /** 加入课程（需要幂等键；APPROVAL 课程提交申请，OPEN 课程直接加入） */
   joinCourse: (courseId: string, payload: { invitation_code?: string; application_message?: string }, reuseKey?: string) =>
@@ -199,10 +255,54 @@ export const studentApi = {
       { method: "POST", body: payload, idempotencyKey: reuseKey ?? newIdempotencyKey() },
     ).then((r) => r.data),
 
-  dropEnrollment: (enrollmentId: string, ifMatch: string, reuseKey: string) =>
-    request<unknown>(`/me/enrollments/${enrollmentId}/withdraw`, {
-      method: "POST", body: {}, idempotencyKey: reuseKey, ifMatch,
+  withdrawEnrollment: (enrollmentId: string, ifMatch: string | number, reuseKey?: string) =>
+    request<Enrollment>(`/me/enrollments/${enrollmentId}/withdraw`, {
+      method: "POST", body: {}, idempotencyKey: reuseKey ?? newIdempotencyKey(), ifMatch,
     }).then((r) => r.data),
+};
+
+/* ══════════ 学生 Agent、课程问答与文件 ══════════ */
+
+export const agentApi = {
+  courseProfile: (courseId: string) => request<AgentProfile>(`/courses/${courseId}/agent-profile`).then((r) => r.data),
+  createCourseSession: (courseId: string, mode: AgentMode, reuseKey?: string) => request<AgentSession>(`/courses/${courseId}/agent-sessions`, { method: "POST", body: { mode }, idempotencyKey: reuseKey ?? newIdempotencyKey() }).then((r) => r.data),
+  createTaskSession: (taskId: string, mode: AgentMode, reuseKey?: string) => request<AgentSession>(`/tasks/${taskId}/agent-sessions`, { method: "POST", body: { mode }, idempotencyKey: reuseKey ?? newIdempotencyKey() }).then((r) => r.data),
+  session: (sessionId: string) => request<AgentSession>(`/agent-sessions/${sessionId}`).then((r) => r.data),
+  messages: (sessionId: string) => request<AgentMessage[]>(`/agent-sessions/${sessionId}/messages`).then(toList),
+  sendMessage: (sessionId: string, body: string, reuseKey?: string) => request<AgentMessage>(`/agent-sessions/${sessionId}/messages`, { method: "POST", body: { body }, idempotencyKey: reuseKey ?? newIdempotencyKey() }).then((r) => r.data),
+  requestToolCall: (sessionId: string, payload: ToolRequest, reuseKey?: string) => request<AgentToolCall>(`/agent-sessions/${sessionId}/tool-calls`, { method: "POST", body: payload, idempotencyKey: reuseKey ?? newIdempotencyKey() }).then((r) => r.data),
+  decideToolCall: (callId: string, payload: ToolDecision, ifMatch: string | number, reuseKey?: string) => request<{ public_id: string; status: string; row_version: number }>(`/agent-tool-calls/${callId}/decide`, { method: "POST", body: payload, ifMatch, idempotencyKey: reuseKey ?? newIdempotencyKey() }).then((r) => r.data),
+  feedback: (messageId: string, payload: AgentFeedback, reuseKey?: string) => request<{ public_id: string; status: string }>(`/agent-messages/${messageId}/feedback`, { method: "POST", body: payload, idempotencyKey: reuseKey ?? newIdempotencyKey() }).then((r) => r.data),
+};
+
+export const courseDiscussionApi = {
+  questions: (courseId: string) => request<CourseQuestion[]>(`/courses/${courseId}/questions`).then(toList),
+  createQuestion: (courseId: string, payload: { title: string; body: string }, reuseKey?: string) => request<CourseQuestion>(`/courses/${courseId}/questions/create`, { method: "POST", body: payload, idempotencyKey: reuseKey ?? newIdempotencyKey() }).then((r) => r.data),
+  answerQuestion: (questionId: string, body: string, reuseKey?: string) => request<CourseAnswer>(`/questions/${questionId}/answers`, { method: "POST", body: { body }, idempotencyKey: reuseKey ?? newIdempotencyKey() }).then((r) => r.data),
+};
+
+export const fileApi = {
+  createDownloadGrant: (assetId: string, reuseKey?: string) => request<DownloadGrant>(`/files/${assetId}/download-grants`, { method: "POST", body: {}, idempotencyKey: reuseKey ?? newIdempotencyKey() }).then((r) => r.data),
+  revokeDownloadGrant: (grantId: string, ifMatch: string | number, reuseKey?: string) => request<DownloadGrantRevoke>(`/files/download-grants/${grantId}/revoke`, { method: "POST", body: {}, ifMatch, idempotencyKey: reuseKey ?? newIdempotencyKey() }).then((r) => r.data),
+};
+
+export const timetableApi = {
+  retrieve: meApi.timetable,
+  imports: () => request<TimetableImport[]>("/me/timetable-imports").then(toList),
+  importJob: (jobId: string) => request<TimetableImport>(`/me/timetable-imports/${jobId}`).then((r) => r.data),
+  upload: (file: File, termId?: string) => {
+    const body = new FormData();
+    body.append("file", file);
+    if (termId) body.append("term_id", termId);
+    return request<TimetableImport>("/me/timetable-imports", { method: "POST", body }).then((r) => r.data);
+  },
+  updateMapping: (jobId: string, mapping: Record<string, string>) => request<TimetableImport>(`/me/timetable-imports/${jobId}/mapping`, { method: "PUT", body: { mapping } }).then((r) => r.data),
+  confirm: (jobId: string) => request<TimetableImport>(`/me/timetable-imports/${jobId}/confirm`, { method: "POST", body: {} }).then((r) => r.data),
+};
+
+export const studentAnalyticsApi = {
+  recommendations: () => request<LearningRecommendation[]>("/analytics/recommendations").then(toList),
+  riskSignals: () => request<LearningRiskSignal[]>("/analytics/risk-signals").then(toList),
 };
 
 /* ══════════ 学生任务 ══════════ */
@@ -256,6 +356,13 @@ export const taskApi = {
     request<Partial<Task>>(`/tasks/${taskId}/complete`, {
       method: "POST", body: {}, idempotencyKey: reuseKey ?? newIdempotencyKey(), ifMatch,
     }).then(taskEnvelope).then((r) => r.data),
+
+  archive: (taskId: string) => request<Record<string, unknown>>(`/tasks/${taskId}/archive`).then((r) => r.data),
+  stopRuntime: (runtimeId: string, taskVersion: string | number, reuseKey?: string) =>
+    request<{ runtime_id: string; task_id: string; status: string }>(`/student/task-runtimes/${runtimeId}/stop`, {
+      method: "POST", body: {}, ifMatch: taskVersion, idempotencyKey: reuseKey ?? newIdempotencyKey(),
+    }).then((r) => r.data),
+  operationReplay: (taskId: string) => request<Array<Record<string, unknown>>>(`/tasks/${taskId}/operation-replay`).then(toList),
 };
 
 /* ══════════ 工作区 ══════════ */
@@ -406,15 +513,21 @@ export const reportApi = {
     request<Array<Record<string, unknown>>>(`/tasks/${taskId}/report-versions`).then(toList),
 
   attachments: (taskId: string) =>
-    request<ReportDraft["attachments"]>(`/tasks/${taskId}/attachments`).then((r) => r.data),
+    request<ReportDraft>(`/tasks/${taskId}/report-draft`).then((r) => r.data.attachments),
 
-  uploadAttachment: (taskId: string, reuseKey?: string) =>
-    request(`/tasks/${taskId}/attachments`, {
-      method: "POST", body: {}, idempotencyKey: reuseKey ?? newIdempotencyKey(),
+  uploadAttachment: (taskId: string, payload: ReportAttachmentCreate, reuseKey?: string) =>
+    request<ReportAttachmentUpload>(`/tasks/${taskId}/attachments`, {
+      method: "POST", body: payload, idempotencyKey: reuseKey ?? newIdempotencyKey(),
+    }).then((r) => r.data),
+
+  attachmentStatus: (taskId: string, assetId: string) => request<ReportAttachmentData>(`/tasks/${taskId}/attachments/${assetId}`).then((r) => r.data),
+  completeAttachment: (taskId: string, assetId: string, ifMatch: string | number, reuseKey?: string) =>
+    request<ReportAttachmentData>(`/tasks/${taskId}/attachments/${assetId}/complete`, {
+      method: "POST", body: {}, ifMatch, idempotencyKey: reuseKey ?? newIdempotencyKey(),
     }).then((r) => r.data),
 
   createDownloadGrant: (assetId: string, reuseKey?: string) =>
-    request<{ token: string; expires_at?: string }>(`/files/${assetId}/download-grants`, {
+    request<DownloadGrant>(`/files/${assetId}/download-grants`, {
       method: "POST", body: {}, idempotencyKey: reuseKey ?? newIdempotencyKey(),
     }).then((r) => r.data),
 
@@ -424,10 +537,16 @@ export const reportApi = {
     }).then((r) => r.data),
 
   reviewResult: (taskId: string) =>
-    request<Omit<ReviewResult, "score">>(`/tasks/${taskId}/review-result`).then(({ data }) => ({
-      ...data,
-      score: data.rounds.find(round => round.decision)?.decision?.score ?? null,
-    })),
+    request<components["schemas"]["ReviewResultData"]>(`/tasks/${taskId}/review-result`).then(({ data }): ReviewResult => {
+      const rounds = data.rounds.map((round) => ({
+        ...round,
+        scores: round.scores ? { ...round.scores, criteria: round.scores.criteria.map((criterion) => ({
+          ...criterion, score: criterion.score == null ? null : Number(criterion.score), max_score: Number(criterion.max_score),
+        })) } : null,
+        decision: round.decision ? { ...round.decision, score: Number(round.decision.score) } : null,
+      }));
+      return { ...data, rounds, score: rounds.find((round) => round.decision)?.decision?.score ?? null };
+    }),
 };
 
 /* ══════════ 教师端 ══════════ */
@@ -720,8 +839,8 @@ export const teachingApi = {
       idempotencyKey: reuseKey ?? newIdempotencyKey(), ifMatch,
     }).then((r) => r.data),
 
-  revokeAnnotation: (courseId: string, annotationId: string, ifMatch: string, reuseKey?: string) =>
-    request(`/teaching/courses/${courseId}/annotations/${annotationId}/revoke`, {
+  revokeAnnotation: (courseId: string, reviewId: string, annotationId: string, ifMatch: string, reuseKey?: string) =>
+    request(`/teaching/courses/${courseId}/reviews/${reviewId}/annotations/${annotationId}/revoke`, {
       method: "POST", body: {}, idempotencyKey: reuseKey ?? newIdempotencyKey(), ifMatch,
     }).then((r) => r.data),
 

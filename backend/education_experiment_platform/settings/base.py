@@ -239,7 +239,12 @@ CELERY_TASK_ROUTES = {
     "apps.reviews.run_similarity_check": {"queue": "q_analytics"},
     "apps.reviews.purge_similarity_evidence": {"queue": "q_default"},
 }
+NOTIFICATION_DEADLINE_REMINDER_HOURS = int(env("NOTIFICATION_DEADLINE_REMINDER_HOURS", "24"))
 CELERY_BEAT_SCHEDULE = {
+    "remind-unfinished-experiments": {
+        "task": "apps.notifications.remind_unfinished_experiments",
+        "schedule": 60.0,
+    },
     "scan-task-deadlines": {
         "task": "apps.archives.scan_due_tasks",
         "schedule": 60.0,

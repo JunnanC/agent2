@@ -1,3 +1,5 @@
+import hashlib
+import hmac
 from dataclasses import dataclass
 from typing import Any
 
@@ -40,6 +42,13 @@ from .ports import (
     run_enrollment_activation_handlers,
 )
 from .selectors import require_course_capability, require_owner
+
+
+def invitation_digest(code: str) -> str:
+    """Return the stable digest used by course invitation lookup endpoints."""
+    return hmac.new(
+        str(settings.COURSE_INVITATION_HMAC_KEY).encode(), code.encode(), hashlib.sha256
+    ).hexdigest()
 
 
 def current_academic_term() -> AcademicTerm:
@@ -865,7 +874,9 @@ def apply_for_course(
         from .errors import PrerequisiteNotSatisfied
 
         raise PrerequisiteNotSatisfied(detail={"blockers": blockers})
-    if invitation_code:
+    invitation_code = invitation_code.strip()
+    has_invitation = bool(invitation_code)
+    if has_invitation:
         from .content_services import consume_invitation
 
         consume_invitation(course=course, code=invitation_code)
@@ -886,11 +897,10 @@ def apply_for_course(
         ]
         or 0
     ) + 1
-    status = (
-        Enrollment.Status.ACTIVE
-        if course.enrollment_mode == Course.EnrollmentMode.OPEN
-        else Enrollment.Status.PENDING
-    )
+    # An invitation is the explicit teacher-approved path. Without one every
+    # student application must wait for the teacher, regardless of the course's
+    # public enrollment mode.
+    status = Enrollment.Status.ACTIVE if has_invitation else Enrollment.Status.PENDING
     if status == Enrollment.Status.ACTIVE:
         _ensure_capacity(course)
     now = timezone.now()
@@ -906,7 +916,7 @@ def apply_for_course(
         )
     except IntegrityError as exc:
         raise EnrollmentAlreadyLive() from exc
-    reason = "OPEN_ENROLLMENT" if status == Enrollment.Status.ACTIVE else "APPLICATION_SUBMITTED"
+    reason = "INVITATION_ENROLLMENT" if has_invitation else "APPLICATION_SUBMITTED"
     _enrollment_event(
         enrollment=enrollment,
         from_status="",

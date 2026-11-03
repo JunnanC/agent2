@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ApiError, newIdempotencyKey, request } from "./index";
+// @ts-expect-error Exercise the source rather than a stale emitted sibling index.js.
+import { ApiError, newIdempotencyKey, request } from "./index.ts";
 
 function jsonResponse(status: number, body: unknown, headers?: Record<string, string>): Response {
   return new Response(JSON.stringify(body), {
@@ -41,6 +42,7 @@ describe("auth-client request", () => {
   });
 
   afterEach(() => {
+    document.cookie = "csrftoken=; Max-Age=0; Path=/";
     vi.unstubAllGlobals();
   });
 
@@ -62,6 +64,28 @@ describe("auth-client request", () => {
   it("POST 缺少幂等键时抛出 428 业务错误", async () => {
     await expect(request("/tasks", { method: "POST", body: { a: 1 } }))
       .rejects.toMatchObject({ payload: { code: "IDEMPOTENCY_KEY_REQUIRED" }, status: 428 });
+  });
+
+  it("retains the workbook and multipart boundary handling when retrying CSRF", async () => {
+    const body = new FormData();
+    body.append("file", new File(["xlsx-content"], "schedule.xlsx"));
+    let posts = 0;
+    vi.mocked(fetch).mockImplementation(async (input) => {
+      if (String(input).endsWith("/auth/csrf")) {
+        document.cookie = "csrftoken=refreshed; Path=/";
+        return jsonResponse(200, okEnvelope);
+      }
+      posts += 1;
+      return posts === 1 ? jsonResponse(403, { error: { code: "CSRF_FAILED", message: "retry" } }) : jsonResponse(200, okEnvelope);
+    });
+    await request("/me/timetable-imports", { method: "POST", body, headers: { "Content-Type": "application/json" }, idempotencyKey: "upload-once" });
+    const requests = vi.mocked(fetch).mock.calls.filter(([, init]) => init?.method === "POST");
+    expect(requests).toHaveLength(2);
+    for (const [, init] of requests) {
+      expect(init?.body).toBe(body);
+      expect(new Headers(init?.headers).get("Content-Type")).toBeNull();
+      expect(new Headers(init?.headers).get("Idempotency-Key")).toBe("upload-once");
+    }
   });
 
   it("412 归一为冲突类型", async () => {

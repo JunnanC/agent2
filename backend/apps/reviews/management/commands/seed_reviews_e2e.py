@@ -10,7 +10,7 @@ from django.db.models import Max
 from apps.accounts.models import User
 from apps.core.seed_names import rename_seed_labels
 from apps.courses.models import Course, Enrollment
-from apps.courses.services import ActorContext, apply_for_course
+from apps.courses.services import ActorContext, apply_for_course, review_enrollment
 from apps.experiments.models import ExperimentTask, TaskPublication
 from apps.experiments.services import assign_late_enrollment_task
 from apps.provisioning.models import ProvisioningJob
@@ -54,11 +54,18 @@ class Command(BaseCommand):
             course=course, student=peer, status=Enrollment.Status.ACTIVE
         ).first()
         if enrollment is None:
-            enrollment = apply_for_course(
+            enrollment = Enrollment.objects.filter(course=course, student=peer, status="PENDING").first()
+            enrollment = enrollment or apply_for_course(
                 course_id=course.public_id,
                 student=peer,
                 application_message="report similarity candidate",
                 context=ActorContext(peer.public_id, "USER", trace_id),
+            )
+            enrollment = review_enrollment(
+                course_id=course.public_id, enrollment_id=enrollment.public_id,
+                decision="APPROVE", note="Review E2E seed", actor=course.owner,
+                expected_version=enrollment.row_version,
+                context=ActorContext(course.owner.public_id, "TEACHING", trace_id),
             )
         # Reuse an existing task before asking the assignment service to create one.
         # This keeps the disposable seed idempotent even when a previous run already

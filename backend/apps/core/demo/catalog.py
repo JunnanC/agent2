@@ -11,6 +11,7 @@ from django.conf import settings
 from django.utils import timezone
 
 from apps.accounts.models import User
+from apps.core.concurrency import compare_and_swap
 from apps.courses import content_services
 from apps.courses.models import AcademicTerm, Course, Enrollment
 from apps.courses.services import (
@@ -31,7 +32,6 @@ from apps.governance.models import (
     RuntimeAdapter,
     SecurityPolicy,
 )
-
 from .banks import (
     ANNOUNCEMENTS,
     CALENDAR_EVENTS,
@@ -269,6 +269,16 @@ def build_demo_courses(
                 teaching_start=None,
                 teaching_end=None,
                 context=context,
+            )
+            counts["courses.Course"] += 1
+        elif (course.capacity or 0) < expected + 5:
+            # A later, larger demo scale must be able to reuse courses created by
+            # an earlier small run without failing enrollment capacity checks.
+            course = compare_and_swap(
+                Course,
+                pk=course.pk,
+                expected_version=course.row_version,
+                changes={"capacity": expected + 5},
             )
             counts["courses.Course"] += 1
         if status == Course.Status.PUBLISHED and course.status == Course.Status.DRAFT:
@@ -539,6 +549,13 @@ def build_roster(
             made += 1
             if course.enrollment_mode == Course.EnrollmentMode.APPROVAL:
                 pending.append(enrollment)
+            else:
+                review_enrollment(
+                    course_id=course.public_id, enrollment_id=enrollment.public_id,
+                    decision="APPROVE", note="演示数据集教师同意选课", actor=owner,
+                    expected_version=enrollment.row_version, context=teaching,
+                )
+                counts["courses.EnrollmentDecision"] += 1
         if pending:
             _review_applications(ctx, course, owner, pending, teaching, counts)
 

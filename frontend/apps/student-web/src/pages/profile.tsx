@@ -3,6 +3,7 @@ import { useMutation } from "@tanstack/react-query";
 import { meApi } from "@edu/api-client";
 import { Button, Panel,  useToast } from "@edu/ui";
 import { useSession } from "@/app/session";
+import { NotificationPreferencesPanel } from "@/components/notification-preferences";
 
 export function Profile() {
   const toast = useToast();
@@ -49,13 +50,7 @@ export function Profile() {
             </Button>
           </div>
         </Panel>
-        <Panel title={<h2>通知偏好</h2>}>
-          <div>
-            <div className="item"><div><strong>实验截止提醒</strong><small>截止前 24 小时提醒</small></div><span className="status good">已开启</span></div>
-            <div className="item"><div><strong>报告评审结果</strong><small>教师完成评审后通知</small></div><span className="status good">已开启</span></div>
-            <div className="item"><div><strong>平台公告</strong><small>服务维护和平台通知</small></div><span className="status neutral">已关闭</span></div>
-          </div>
-        </Panel>
+        <NotificationPreferencesPanel />
       </div>
     </>
   );

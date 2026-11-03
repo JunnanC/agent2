@@ -48,6 +48,7 @@ from .views import (
     PlatformCourseListView,
     PlatformCourseUnfreezeShellView,
     PublicCourseDetailView,
+    CourseInvitationResolveView,
     PublicCourseListView,
     TeachingCourseArchiveCheckView,
     TeachingCourseArchiveView,
@@ -131,6 +132,7 @@ urlpatterns = [
         name="administrative-class-member-end",
     ),
     path("courses", PublicCourseListView.as_view(), name="course-list"),
+    path("courses/invitations/resolve", CourseInvitationResolveView.as_view(), name="course-invitation-resolve"),
     path("courses/<str:course_id>", PublicCourseDetailView.as_view(), name="course-detail"),
     path(
         "courses/<str:course_id>/enrollments",

@@ -3,6 +3,8 @@
  * 生成类型可用后（npm run generate:api），这里以本地宽松结构承载，最终以 schema 为准校验。
  */
 
+import type { components } from "./generated/schema";
+
 export type Portal = "USER" | "TEACHING" | "PLATFORM";
 export type Iso8601 = string;
 
@@ -60,6 +62,141 @@ export interface Enrollment {
   reviewed_at?: Iso8601 | null;
   decision_note?: string | null;
   row_version: string;
+  activated_at?: Iso8601 | null;
+  ended_at?: Iso8601 | null;
+  end_reason?: string | null;
+  events?: Array<Record<string, unknown>>;
+}
+
+export interface CourseResourceSummary {
+  course_id?: string;
+  course_code?: string;
+  limits: Record<string, number | null>;
+  used: Record<string, number>;
+  available: Record<string, number | null>;
+  scaling_policy?: Record<string, unknown> | null;
+  prewarm_active?: number;
+}
+
+export interface TimetableData {
+  term: { public_id: string; code: string; name: string };
+  schedules: TimetableSchedule[];
+}
+
+export interface TimetableSchedule {
+  source: "IMPORTED" | "PLATFORM";
+  class_type: "TEACHING" | "EXTERNAL";
+  course_id: string | null;
+  course_code: string;
+  course_title: string;
+  term_id: string;
+  weekday: number;
+  start_period: number;
+  end_period: number;
+  week_start: number | null;
+  week_end: number | null;
+  classroom: string;
+  instructor_name: string;
+}
+
+export interface TimetableImport {
+  public_id: string;
+  kind: "STUDENT" | "TEACHER";
+  status: "MAPPING_REQUIRED" | "READY" | "RUNNING" | "COMPLETED" | "FAILED";
+  filename: string;
+  term_id: string;
+  headers: string[];
+  fields: Array<{ key: string; label: string }>;
+  mapping: Record<string, string>;
+  summary: Record<string, unknown>;
+  row_errors: Array<{ row_no: number; code: string }>;
+  row_version: number;
+}
+
+export interface LearningHistoryData {
+  years: Array<{
+    university_year: number;
+    academic_year: string;
+    terms: Array<{
+      term_id: string; code: string; name: string;
+      courses: Array<{
+        course_id: string; course_code: string; course_title: string; class_type: "TEACHING";
+        enrollment: { public_id: string; cycle_no: number; status: string; activated_at: Iso8601 | null; ended_at: Iso8601 | null };
+        experiments: Array<{ task_id: string; publication_id: string; title: string; status: string; progress: number; completed_at: Iso8601 | null; decision: string | null; score: string | null }>;
+      }>;
+    }>;
+  }>;
+}
+
+export interface NotificationPreferences {
+  portal: Portal;
+  channels: Record<string, boolean>;
+  muted_kinds: string[];
+  digest_enabled: boolean;
+  row_version: number | null;
+}
+
+export interface OIDCIdentity {
+  public_id: string;
+  provider_id: string;
+  account_id: string;
+  subject_hint: string;
+  status: "ACTIVE" | "UNLINKED" | string;
+  last_authenticated_at?: Iso8601 | null;
+  row_version: number;
+}
+
+export interface OIDCStart {
+  authorization_url: string;
+  state: string;
+}
+
+export type AgentMode = components["schemas"]["AgentModeEnum"];
+export type ToolRequest = components["schemas"]["ToolWrite"];
+export type ToolDecision = components["schemas"]["ToolDecision"];
+export type AgentFeedback = components["schemas"]["FeedbackWrite"];
+export type VerificationUpdate = components["schemas"]["IdentityVerificationUpdate"];
+export type NotificationPreferenceUpdate = components["schemas"]["PatchedPreference"];
+export type EnrollmentExitCheck = components["schemas"]["CheckData"];
+export type DownloadGrant = components["schemas"]["DownloadGrantData"];
+export type DownloadGrantRevoke = components["schemas"]["DownloadGrantRevokeData"];
+export type ReportAttachmentData = components["schemas"]["ReportAttachmentData"];
+export type ReportAttachmentUpload = components["schemas"]["ReportAttachmentUploadData"];
+export type ReportAttachmentCreate = components["schemas"]["ReportAttachmentCreate"];
+
+export interface AgentProfile {
+  course_id: string;
+  enrollment_id: string;
+  profile: { public_id: string; modes: AgentMode[]; status: string; version_no: number; row_version: number };
+  capabilities: { modes: AgentMode[]; tool_risk: string | null };
+}
+export interface AgentSession {
+  public_id: string; course_id: string; enrollment_id: string; task_id: string | null;
+  mode: AgentMode; status: string; profile_id: string; profile_version: number; row_version: number;
+}
+export interface AgentToolCall {
+  public_id: string; session_id: string; tool_name: string; risk: string;
+  state: { public_id: string; status: string; output: unknown; error_code: string; row_version: number } | null;
+}
+export interface AgentMessage {
+  public_id: string; role: string; body: string; status: string; created_at: Iso8601;
+  citations: Array<{ public_id: string; title: string; snippet: string; accessible: boolean; asset_id: string | null }>;
+  tool_calls: AgentToolCall[];
+}
+export interface CourseAnswer {
+  public_id: string; question_id: string; author_id: string; author_name: string; body: string; status: string; row_version: number;
+}
+export interface CourseQuestion {
+  public_id: string; course_id: string; author_id: string; author_name: string; title: string; body: string;
+  status: string; pinned: boolean; row_version: number; answers: CourseAnswer[];
+}
+export interface LearningRecommendation {
+  public_id: string; course_id: string; task_id: string | null; kind: string; title: string;
+  explanation: string; valid_until: Iso8601 | null;
+}
+export interface LearningRiskSignal {
+  public_id: string; course_id: string; student_id: string; task_id: string | null;
+  kind: string; severity: string; status: string; explanation: string; row_version: number;
 }
 
 export interface Chapter {
@@ -76,8 +213,14 @@ export interface Material {
   public_id: string;
   title: string;
   type?: string;
+  kind?: "FILE" | "LINK" | "TEXT" | string;
   status?: string;
   chapter_id?: string | null;
+  current_version_id?: string | null;
+  link_url?: string;
+  text_content?: string;
+  object_asset_id?: string | null;
+  version_status?: string | null;
   asset_name?: string;
   row_version?: string;
 }
@@ -231,6 +374,7 @@ export interface ReviewResult {
   task_id: string;
   task_status: string;
   score: number | null;
+  allowed_actions?: string[];
   rounds: Array<{
     review_id: string;
     round_no: number;
@@ -570,6 +714,9 @@ export interface UsageCost {
 }
 
 export interface NotificationItem {
+  public_id?: string;
+  row_version?: number;
+  read_at?: Iso8601 | null;
   id: string;
   kind?: string;
   title: string;

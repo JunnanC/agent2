@@ -13,7 +13,7 @@ from apps.courses.content_services import (
     create_material,
 )
 from apps.courses.models import Course
-from apps.courses.services import ActorContext, apply_for_course, publish_course
+from apps.courses.services import ActorContext, apply_for_course, publish_course, review_enrollment
 
 
 class Command(BaseCommand):
@@ -90,10 +90,16 @@ class Command(BaseCommand):
                 context=context,
             )
         if not course.enrollments.filter(student=student, status="ACTIVE").exists():
-            apply_for_course(
+            enrollment = course.enrollments.filter(student=student, status="PENDING").first()
+            enrollment = enrollment or apply_for_course(
                 course_id=course.public_id,
                 student=student,
                 application_message="Course E2E seed",
                 context=ActorContext(student.public_id, "USER", trace),
+            )
+            review_enrollment(
+                course_id=course.public_id, enrollment_id=enrollment.public_id,
+                decision="APPROVE", note="Course E2E seed", actor=teacher,
+                expected_version=enrollment.row_version, context=context,
             )
         self.stdout.write(self.style.SUCCESS(f"course E2E course ready: {course.public_id}"))

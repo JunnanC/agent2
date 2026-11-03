@@ -1,24 +1,60 @@
-import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { Link, useParams } from "react-router-dom";
-import { studentApi, taskApi } from "@edu/api-client";
+import { useState } from "react";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import { fileApi, studentApi, taskApi } from "@edu/api-client";
+import type { Material } from "@edu/api-client";
 import { keys } from "@edu/query-keys";
-import { Breadcrumbs, EmptyState, Panel, RequestStateView, StatusBadge } from "@edu/ui";
+import { Breadcrumbs, Button, EmptyState, Panel, RequestStateView, StatusBadge, useToast } from "@edu/ui";
 import { formatDate, formatDateTime, taskStatusLabel, taskStatusTone } from "@/lib/task-format";
+import { CourseDiscussion } from "@/components/course-discussion";
+import { CourseAgent } from "@/components/course-agent";
+import { EnrollmentExit } from "@/components/enrollment-exit";
+import { ApiError } from "@edu/auth-client";
 
 export function CourseDetail() {
   const { courseId = "" } = useParams();
-  const [selectedChapterId, setSelectedChapterId] = useState<string | null>(null);
-  const detail = useQuery({ queryKey: keys.course(courseId), queryFn: () => studentApi.courseDetail(courseId) });
-  const chapters = useQuery({ queryKey: keys.courseResource(courseId, "chapters"), queryFn: () => studentApi.courseChapters(courseId) });
-  const materials = useQuery({ queryKey: keys.courseResource(courseId, "materials"), queryFn: () => studentApi.courseMaterials(courseId) });
-  const announcements = useQuery({ queryKey: keys.courseResource(courseId, "announcements"), queryFn: () => studentApi.courseAnnouncements(courseId) });
-  const events = useQuery({ queryKey: keys.courseResource(courseId, "calendar-events"), queryFn: () => studentApi.courseCalendarEvents(courseId) });
-  const tasks = useQuery({ queryKey: keys.tasks({ course_id: courseId }), queryFn: () => taskApi.list({ course_id: courseId }) });
-  const selectedChapter = useMemo(() => {
-    const rows = chapters.data?.rows ?? [];
-    return rows.find((chapter) => chapter.public_id === selectedChapterId) ?? rows[0] ?? null;
-  }, [chapters.data, selectedChapterId]);
+  const toast = useToast();
+  const navigate = useNavigate();
+  const [activeChapterId, setActiveChapterId] = useState<string | null>(null);
+  const [openTextMaterialId, setOpenTextMaterialId] = useState<string | null>(null);
+  const detail = useQuery({ queryKey: keys.course(courseId), queryFn: () => studentApi.courseDetail(courseId),
+    staleTime: 0, refetchOnMount: "always", retry: false });
+  const canRead = detail.isSuccess && !detail.isFetching;
+  const enrollments = useQuery({ queryKey: keys.enrollments({ status: "ACTIVE" }),
+    queryFn: () => studentApi.myEnrollments({ page_size: 100, status: "ACTIVE" }), enabled: canRead });
+  const enrollment = enrollments.data?.rows.find((row) => row.course_id === courseId && row.status === "ACTIVE");
+  const chapters = useQuery({ queryKey: keys.courseResource(courseId, "chapters"), queryFn: () => studentApi.courseChapters(courseId), enabled: canRead });
+  const materials = useQuery({ queryKey: keys.courseResource(courseId, "materials"), queryFn: () => studentApi.courseMaterials(courseId), enabled: canRead });
+  const announcements = useQuery({ queryKey: keys.courseResource(courseId, "announcements"), queryFn: () => studentApi.courseAnnouncements(courseId), enabled: canRead });
+  const events = useQuery({ queryKey: keys.courseResource(courseId, "calendar-events"), queryFn: () => studentApi.courseCalendarEvents(courseId), enabled: canRead });
+  const tasks = useQuery({ queryKey: keys.tasks({ course_id: courseId }), queryFn: () => taskApi.list({ course_id: courseId }), enabled: canRead });
+  const openFile = useMutation({
+    mutationFn: (material: Material) => {
+      if (!material.object_asset_id) throw new Error("该材料暂时没有可打开的文件");
+      return fileApi.createDownloadGrant(material.object_asset_id);
+    },
+    onSuccess: (grant) => {
+      if (grant.download_path.startsWith("/files/") && !grant.download_path.includes("\\")) {
+        window.location.assign(grant.download_path);
+      } else toast.notify("文件打开地址无效", "error");
+    },
+    onError: (error) => toast.notify(error.message, "error"),
+  });
+  const chapterRows = chapters.data?.rows ?? [];
+  const currentChapterId = activeChapterId ?? chapterRows[0]?.public_id ?? null;
+  const scrollToChapter = (chapterId: string) => {
+    setActiveChapterId(chapterId);
+    document.getElementById(`course-chapter-${chapterId}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  if (detail.error instanceof ApiError && ["ACTIVE_ENROLLMENT_REQUIRED", "RESOURCE_NOT_FOUND"].includes(detail.error.payload?.code ?? "")) {
+    return <EmptyState title="暂时无法进入课程" hint="课程申请需要教师同意后才能进入；撤回或退出后也无法访问课程内容。"
+      action={<Link className="btn primary" to="/courses">返回我的课程</Link>} />;
+  }
+  if (detail.isPending || detail.isFetching || detail.error || !detail.data) {
+    return <RequestStateView loading={detail.isPending || detail.isFetching} error={detail.error} empty={!detail.data}
+      onRetry={() => void detail.refetch()} emptyState={<EmptyState title="无法进入课程" hint="请先等待教师审核通过，课程才会加入我的课程。" />} />;
+  }
 
   return (
     <>
@@ -30,18 +66,18 @@ export function CourseDetail() {
         <aside className="panel course-chapter-nav">
           <div className="panel-title">
             <h2 style={{ fontSize: 15 }}>课程章节</h2>
-            {detail.data ? <StatusBadge tone={detail.data!.status === "ACTIVE" ? "good" : "neutral"}>{detail.data!.status === "ACTIVE" ? "已加入" : detail.data!.status}</StatusBadge> : null}
+            <StatusBadge tone="good">已加入</StatusBadge>
           </div>
           <RequestStateView loading={chapters.isLoading} error={chapters.error}
             onRetry={() => void chapters.refetch()}
             empty={!chapters.data?.rows.length}
             emptyState={<div className="state-block"><strong>暂无章节</strong><p>教师尚未发布课程章节。</p></div>}>
             <div>
-              {(chapters.data?.rows ?? []).map((chapter, index) => (
+              {chapterRows.map((chapter, index) => (
                 <button type="button" key={chapter.public_id}
-                  className={`course-chapter-row${chapter.public_id === selectedChapter?.public_id ? " active" : ""}`}
-                  aria-pressed={chapter.public_id === selectedChapter?.public_id}
-                  onClick={() => setSelectedChapterId(chapter.public_id)}>
+                  className={`course-chapter-row${chapter.public_id === currentChapterId ? " active" : ""}`}
+                  aria-current={chapter.public_id === currentChapterId ? "location" : undefined}
+                  onClick={() => scrollToChapter(chapter.public_id)}>
                   <span>{index + 1}</span>
                   <strong>{chapter.title}</strong>
                   {chapter.description ? <small>章节说明</small> : null}
@@ -52,7 +88,7 @@ export function CourseDetail() {
         </aside>
 
         <section className="course-learning-main">
-          <Panel title={<><h2>课程信息</h2></>}>
+          <Panel title={<><h2>课程信息</h2></>} actions={enrollment ? <EnrollmentExit enrollment={enrollment} onExited={() => navigate("/courses", { replace: true })} /> : undefined}>
             <div className="grid equal section" style={{ marginTop: 0 }}>
               <div>
                 <span className="eyebrow">课程代码</span>
@@ -63,25 +99,24 @@ export function CourseDetail() {
                 <strong style={{ display: "block" }}>{formatDate(detail.data?.teaching_start)} — {formatDate(detail.data?.teaching_end)}</strong>
               </div>
               <div>
-                <span className="eyebrow">申请状态</span>
+                <span className="eyebrow">课程状态</span>
                 <div style={{ margin: "4px 0 10px" }}>
-                  <StatusBadge tone={detail.data?.enrollment_mode === "OPEN" ? "blue" : "warn"}>
-                    {detail.data?.enrollment_mode === "OPEN" ? "直接加入" : "需要审核"}
-                  </StatusBadge>
+                  <StatusBadge tone="good">已加入</StatusBadge>
                 </div>
-                <span className="eyebrow">申请截止</span>
-                <strong style={{ display: "block" }}>{formatDate(detail.data?.enrollment_end)}</strong>
+                <span className="eyebrow">课程截止</span>
+                <strong style={{ display: "block" }}>{formatDate(detail.data?.teaching_end)}</strong>
               </div>
             </div>
           </Panel>
 
-          {selectedChapter ? (
-            <Panel title={<><h2>{selectedChapter.title}</h2><span className="subtle">课程章节</span></>}>
+          {chapterRows.map((chapter, index) => (
+            <Panel id={`course-chapter-${chapter.public_id}`} key={chapter.public_id}
+              title={<><h2>{chapter.title}</h2><span className="subtle">章节 {index + 1}</span></>}>
               <p className="course-chapter-description">
-                {selectedChapter.description || "本章节暂未提供说明。"}
+                {chapter.description || "本章节暂未提供说明。"}
               </p>
             </Panel>
-          ) : null}
+          ))}
 
           <Panel id="course-tasks" title={<><h2>本课程实验任务</h2><span className="subtle">按截止时间处理</span></>}>
             <RequestStateView loading={tasks.isLoading} error={tasks.error}
@@ -116,8 +151,18 @@ export function CourseDetail() {
                 <div>
                   {(materials.data?.rows ?? []).map((material) => (
                     <div className="item" key={material.public_id}>
-                      <div><strong>{material.title}</strong><small>{material.type ?? "材料"}</small></div>
-                      <span className="status neutral">{material.status === "PUBLISHED" ? "已发布" : material.status ?? ""}</span>
+                      <div>
+                        {material.kind === "LINK" && material.link_url ? (
+                          <a className="task-title" href={material.link_url} target="_blank" rel="noreferrer">{material.title}</a>
+                        ) : material.kind === "TEXT" ? (
+                          <Button size="sm" onClick={() => setOpenTextMaterialId((current) => current === material.public_id ? null : material.public_id)}>{material.title}</Button>
+                        ) : (
+                          <Button size="sm" disabled={openFile.isPending || !material.object_asset_id} onClick={() => openFile.mutate(material)}>{material.title}</Button>
+                        )}
+                        <small>{material.kind === "FILE" ? "讲义 / 实验指导书" : material.kind === "LINK" ? "外部链接" : "在线阅读"}</small>
+                        {material.kind === "TEXT" && openTextMaterialId === material.public_id ? <p className="course-chapter-description">{material.text_content || "暂无正文"}</p> : null}
+                      </div>
+                      <span className="status neutral">{material.version_status === "PUBLISHED" ? "已发布" : material.status ?? ""}</span>
                     </div>
                   ))}
                 </div>
@@ -155,13 +200,9 @@ export function CourseDetail() {
                 </div>
               </RequestStateView>
             </Panel>
-            <Panel title={<h2>课程问答</h2>} actions={<span className="status blue">Agent 助教</span>}>
-              <div className="section" style={{ marginTop: 4 }}>
-                <p className="subtle">在任务进行中遇到问题时，可进入实验任务详情向课程 Agent 提问；Agent 工具调用仅在获得确认后执行。</p>
-                <Link className="btn" to={`/experiments/${(tasks.data?.rows ?? [])[0]?.public_id ?? ""}`}>进入最近实验提问</Link>
-              </div>
-            </Panel>
+            <CourseDiscussion key={courseId} courseId={courseId} />
           </div>
+          <CourseAgent key={courseId} courseId={courseId} />
         </section>
       </div>
     </>

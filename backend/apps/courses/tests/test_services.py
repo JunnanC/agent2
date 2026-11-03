@@ -14,6 +14,7 @@ from ..errors import (
     EnrollmentAlreadyLive,
     EnrollmentBlocked,
     EnrollmentCapacityFull,
+    InvitationInvalid,
     OwnerTransferRequired,
 )
 from ..models import Course, CourseStaff, CourseStaffGrant, Enrollment, EnrollmentEvent
@@ -34,6 +35,7 @@ from ..services import (
     review_enrollment,
     transfer_course_ownership,
 )
+from ..content_services import create_invitation
 from .helpers import create_draft_course, create_teacher
 
 
@@ -161,14 +163,22 @@ class CourseServiceTests(TestCase):
                 capability=CourseStaffGrant.Capability.MODERATE_QA,
             )
 
-    def test_open_enrollment_locks_capacity_and_rejects_duplicate_live_cycle(self) -> None:
+    def test_invitation_enrollment_activates_and_locks_capacity(self) -> None:
         self._publish()
         first = create_user(email="first@example.edu", username="first")
         second = create_user(email="second-student@example.edu", username="second-student")
+        _, invitation_code = create_invitation(
+            course_id=self.course.public_id,
+            actor=self.owner,
+            max_uses=10,
+            expires_at=timezone.now() + timedelta(days=1),
+            context=self.context,
+        )
         first_enrollment = apply_for_course(
             course_id=self.course.public_id,
             student=first,
             application_message="",
+            invitation_code=invitation_code,
             context=ActorContext(first.public_id, "USER", "d" * 32),
         )
         self.assertEqual(first_enrollment.status, Enrollment.Status.ACTIVE)
@@ -184,8 +194,47 @@ class CourseServiceTests(TestCase):
                 course_id=self.course.public_id,
                 student=second,
                 application_message="",
+                invitation_code=invitation_code,
                 context=ActorContext(second.public_id, "USER", "f" * 32),
             )
+
+    def test_course_without_invitation_always_waits_for_teacher(self) -> None:
+        self._publish()
+        student = create_user(email="approval-student@example.edu", username="approval-student")
+        enrollment = apply_for_course(
+            course_id=self.course.public_id,
+            student=student,
+            application_message="",
+            context=ActorContext(student.public_id, "USER", "a" * 32),
+        )
+        self.assertEqual(enrollment.status, Enrollment.Status.PENDING)
+
+    def test_approval_course_accepts_valid_invitation_without_teacher_review(self) -> None:
+        self._publish()
+        Course.objects.filter(pk=self.course.pk).update(enrollment_mode=Course.EnrollmentMode.APPROVAL)
+        student = create_user(email="invited@example.edu", username="invited")
+        invitation, code = create_invitation(
+            course_id=self.course.public_id, actor=self.owner, max_uses=1,
+            expires_at=timezone.now() + timedelta(days=1), context=self.context,
+        )
+        enrollment = apply_for_course(
+            course_id=self.course.public_id, student=student, application_message="",
+            invitation_code=f"  {code}  ", context=ActorContext(student.public_id, "USER", "a" * 32),
+        )
+        invitation.refresh_from_db()
+        self.assertEqual(enrollment.status, Enrollment.Status.ACTIVE)
+        self.assertIsNotNone(enrollment.activated_at)
+        self.assertEqual(invitation.used_count, 1)
+
+    def test_invalid_invitation_does_not_create_pending_application(self) -> None:
+        self._publish()
+        student = create_user(email="invalid-code@example.edu", username="invalid-code")
+        with self.assertRaises(InvitationInvalid):
+            apply_for_course(
+                course_id=self.course.public_id, student=student, application_message="",
+                invitation_code="wrong-code", context=ActorContext(student.public_id, "USER", "a" * 32),
+            )
+        self.assertFalse(Enrollment.objects.filter(course=self.course, student=student).exists())
 
     def test_approval_rechecks_capacity_and_appends_event(self) -> None:
         Course.objects.filter(pk=self.course.pk).update(
@@ -234,6 +283,11 @@ class CourseServiceTests(TestCase):
             student=student,
             application_message="",
             context=ActorContext(student.public_id, "USER", "2" * 32),
+        )
+        enrollment = review_enrollment(
+            course_id=self.course.public_id, enrollment_id=enrollment.public_id,
+            decision="APPROVE", note="ok", actor=self.owner,
+            expected_version=enrollment.row_version, context=self.context,
         )
         register_enrollment_blocker(
             lambda _enrollment: [Blocker("UNFINISHED_TASK", 1, ("EXP-1",), "未完成")]

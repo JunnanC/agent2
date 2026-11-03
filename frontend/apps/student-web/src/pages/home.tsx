@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { reportApi, studentApi, taskApi } from "@edu/api-client";
@@ -96,6 +96,15 @@ export function Home() {
     }
     return rows;
   }, [tasks, courseNames, navigate]);
+
+  const firstTaskDate = useMemo(
+    () => calendarItems.map((item) => item.date).sort()[0] ?? null,
+    [calendarItems],
+  );
+
+  useEffect(() => {
+    if (!selectedDate && firstTaskDate) setSelectedDate(firstTaskDate);
+  }, [firstTaskDate, selectedDate]);
 
   const focusedItems = selectedDate ? calendarItems.filter((item) => item.date === selectedDate) : [];
 

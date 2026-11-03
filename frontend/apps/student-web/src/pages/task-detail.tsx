@@ -3,11 +3,13 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { reportApi, taskApi } from "@edu/api-client";
 import type { Task, WorkspaceSession } from "@edu/api-client";
+import { ApiError } from "@edu/auth-client";
 import { keys } from "@edu/query-keys";
 import { AsyncJobProgress, Button, ErrorState, Modal, Panel, RequestStateView, StatusBadge, useToast } from "@edu/ui";
 import type { JobStage } from "@edu/ui";
 import { storeWorkspaceSession } from "@/lib/workspace-session";
 import { actionLabel, formatDateTime, taskStatusLabel, taskStatusTone } from "@/lib/task-format";
+import { CourseAgent } from "@/components/course-agent";
 
 const WORKFLOW_STATUS_ORDER = ["ASSIGNED", "PROVISIONING", "READY", "IN_PROGRESS", "REPORT_DRAFT", "SUBMITTED", "UNDER_REVIEW", "COMPLETED"];
 
@@ -35,9 +37,9 @@ export function TaskDetail() {
     queryKey: keys.task(taskId), queryFn: () => taskApi.detail(taskId),
     refetchInterval: (query) => query.state.data?.status === "PROVISIONING" ? 2000 : false,
   });
-  const hasReview = ["UNDER_REVIEW", "APPROVED", "REJECTED", "ARCHIVING", "DESTROYING", "COMPLETED"].includes(task.data?.status ?? "");
+  const hasReview = ["SUBMITTED", "UNDER_REVIEW", "APPROVED", "REJECTED", "REPORT_DRAFT", "IN_PROGRESS", "ARCHIVING", "DESTROYING", "COMPLETED"].includes(task.data?.status ?? "");
   const reviewResult = useQuery({
-    queryKey: keys.reviewResult(taskId), queryFn: () => reportApi.reviewResult(taskId), enabled: hasReview,
+    queryKey: keys.reviewResult(taskId), queryFn: () => reportApi.reviewResult(taskId), enabled: hasReview, retry: false,
   });
   const reviewedRound = reviewResult.data?.rounds.find(round => round.decision);
   const provisioning = useQuery({
@@ -296,7 +298,7 @@ export function TaskDetail() {
 
       {hasReview ? (
         <Panel className="section" title={<h2>评审结果</h2>}>
-          <RequestStateView loading={reviewResult.isLoading} error={reviewResult.error}
+          <RequestStateView loading={reviewResult.isLoading} error={reviewResult.error instanceof ApiError && reviewResult.error.status === 404 ? null : reviewResult.error}
             onRetry={() => void reviewResult.refetch()} empty={!reviewedRound}
             emptyState={<p className="subtle">教师正在评审，评分与批注将在评审完成后显示。</p>}>
             <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
@@ -315,9 +317,13 @@ export function TaskDetail() {
             {reviewedRound?.decision?.feedback ? <p>{reviewedRound.decision.feedback}</p> : null}
             {reviewedRound?.annotations.length ? <h3>教师批注</h3> : null}
             {reviewedRound?.annotations.map(annotation => <p key={annotation.public_id}>{annotation.body}</p>)}
+            {reviewResult.data?.allowed_actions?.includes("REVISE_AND_RESUBMIT") && current.allowed_actions.includes("enter") &&
+              <Link className="btn primary" to={`/experiments/${taskId}/workbench`}>修改报告并重新提交</Link>}
           </RequestStateView>
         </Panel>
       ) : null}
+
+      {current.course_id && <CourseAgent key={taskId} courseId={current.course_id} taskId={taskId} />}
 
       <Modal open={extensionOpen} onClose={() => setExtensionOpen(false)} eyebrow="申请延期"
         title="申请任务延期"

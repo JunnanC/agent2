@@ -1,0 +1,70 @@
+name: edu-platform-frontend-dev
+
+x-frontend-dev: &frontend-dev
+  image: node:24-alpine
+  working_dir: /workspace
+  volumes:
+    - ./frontend:/workspace:ro
+  extra_hosts:
+    - "host.docker.internal:host-gateway"
+  environment:
+    VITE_DEV_HOST: 0.0.0.0
+    VITE_DEV_API_TARGET: http://host.docker.internal:8080
+    NODE_OPTIONS: --dns-result-order=ipv4first
+    CHOKIDAR_USEPOLLING: "true"
+    CHOKIDAR_INTERVAL: "200"
+  restart: unless-stopped
+
+services:
+  student-web:
+    <<: *frontend-dev
+    command: >-
+      sh -lc "if [ ! -x node_modules/.bin/vite ]; then npm ci --ignore-scripts; fi && npm --workspace @edu/student-web run dev"
+    ports:
+      - "127.0.0.1:${FRONTEND_STUDENT_PORT:-5173}:5173"
+    volumes:
+      - ./frontend:/workspace:ro
+      - student-web-node-modules:/workspace/node_modules
+      - student-web-app-node-modules:/workspace/apps/student-web/node_modules
+      - student-web-admin-node-modules:/workspace/apps/admin-web/node_modules
+      - student-web-teacher-node-modules:/workspace/apps/teacher-web/node_modules
+
+  teacher-web:
+    <<: *frontend-dev
+    command: >-
+      sh -lc "if [ ! -x node_modules/.bin/vite ]; then npm ci --ignore-scripts; fi && npm --workspace @edu/teacher-web run dev"
+    ports:
+      - "127.0.0.1:${FRONTEND_TEACHER_PORT:-5174}:5174"
+    volumes:
+      - ./frontend:/workspace:ro
+      - teacher-web-node-modules:/workspace/node_modules
+      - teacher-web-app-node-modules:/workspace/apps/student-web/node_modules
+      - teacher-web-admin-node-modules:/workspace/apps/admin-web/node_modules
+      - teacher-web-teacher-node-modules:/workspace/apps/teacher-web/node_modules
+
+  admin-web:
+    <<: *frontend-dev
+    command: >-
+      sh -lc "if [ ! -x node_modules/.bin/vite ]; then npm ci --ignore-scripts; fi && npm --workspace @edu/admin-web run dev"
+    ports:
+      - "127.0.0.1:${FRONTEND_ADMIN_PORT:-5176}:5175"
+    volumes:
+      - ./frontend:/workspace:ro
+      - admin-web-node-modules:/workspace/node_modules
+      - admin-web-app-node-modules:/workspace/apps/student-web/node_modules
+      - admin-web-admin-node-modules:/workspace/apps/admin-web/node_modules
+      - admin-web-teacher-node-modules:/workspace/apps/teacher-web/node_modules
+
+volumes:
+  student-web-node-modules: {}
+  teacher-web-node-modules: {}
+  admin-web-node-modules: {}
+  student-web-app-node-modules: {}
+  student-web-admin-node-modules: {}
+  student-web-teacher-node-modules: {}
+  teacher-web-app-node-modules: {}
+  teacher-web-admin-node-modules: {}
+  teacher-web-teacher-node-modules: {}
+  admin-web-app-node-modules: {}
+  admin-web-admin-node-modules: {}
+  admin-web-teacher-node-modules: {}
