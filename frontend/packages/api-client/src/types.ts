@@ -287,6 +287,7 @@ export interface Task {
   window_end?: Iso8601 | null;
   effective_deadline?: Iso8601 | null;
   allowed_actions: string[];
+  allowed_operations?: string[];
   blockers: Blocker[];
   current_failure?: { code?: string; message?: string } | null;
   provisioning?: Record<string, unknown> | null;
@@ -311,8 +312,20 @@ export interface WorkspaceSession {
 export interface WorkspaceStorageJob {
   public_id: string;
   status: "QUEUED" | "RUNNING" | "PASSED" | "FAILED" | "CANCELLED";
+  kind?: "CAPTURE" | "RESTORE" | "SWITCH" | "RESET";
+  target_language?: string;
   result_snapshot_id: string | null;
   failure?: { code: string; message: string } | null;
+}
+
+export interface WorkspaceOperationEvent {
+  public_id: string;
+  event_type: string;
+  phase: string;
+  payload?: Record<string, unknown>;
+  result_summary?: string;
+  execution_run_id?: string | null;
+  execution_status?: string | null;
 }
 
 export interface Checkpoint {

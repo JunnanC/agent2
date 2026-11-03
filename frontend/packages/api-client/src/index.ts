@@ -8,7 +8,7 @@ import type {
   PortalContext, PrecheckRun, Publication, Quota, ReportDraft, ResourceProfile, ReviewDetail,
   ReviewResult, ReviewSummary, Rubric, RuntimeAdapter, StudentDashboard, Task, TeachingCourseList, Template,
   TemplateChapter, TemplateTask, ToolPolicy, TemplateVersion, UsageCost, Verification,
-  WorkspaceSession, WorkspaceStorageJob, AgentMessage, AgentMode, CourseResourceSummary,
+  WorkspaceOperationEvent, WorkspaceSession, WorkspaceStorageJob, AgentMessage, AgentMode, CourseResourceSummary,
   LearningHistoryData, NotificationPreferences, TimetableData, TimetableImport, AgentProfile, AgentSession,
   AgentToolCall, ToolRequest, ToolDecision, AgentFeedback, VerificationUpdate, NotificationPreferenceUpdate,
   EnrollmentExitCheck, CourseQuestion, CourseAnswer, DownloadGrant, DownloadGrantRevoke,
@@ -378,6 +378,18 @@ export interface WorkbenchAggregate {
   capabilities?: string[];
   /** 模板锁定的工作区能力声明(布尔开关,后端 template.workspace_capabilities) */
   template_caps?: Record<string, boolean> | null;
+  workspace?: {
+    mode?: string;
+    language?: string;
+    language_policy?: {
+      mode?: string;
+      language?: string | null;
+      allowed_languages?: string[];
+      default_versions?: Record<string, string>;
+    };
+    toolchain_version?: string | null;
+    active_storage_job?: WorkspaceStorageJob | null;
+  };
 }
 
 async function waitForStorageJob(job: WorkspaceStorageJob): Promise<WorkspaceStorageJob> {
@@ -439,6 +451,23 @@ export const workspaceApi = {
     return waitForStorageJob(job);
   },
 
+  storageJob: async (
+    taskId: string,
+    payload: { kind: "SWITCH" | "RESET"; language?: string },
+    sessionRowVersion: number,
+    workspaceToken: string,
+    reuseKey?: string,
+  ) => {
+    const job = await request<WorkspaceStorageJob>(`/tasks/${taskId}/workspace-storage-jobs`, {
+      method: "POST",
+      body: payload,
+      ifMatch: sessionRowVersion,
+      idempotencyKey: reuseKey ?? newIdempotencyKey(),
+      headers: { "X-Workspace-Token": workspaceToken },
+    }).then((r) => r.data);
+    return waitForStorageJob(job);
+  },
+
   checkpoints: (taskId: string, workspaceToken?: string) =>
     request<{ items?: unknown[]; current_version?: number; row_version?: number }>(
       `/tasks/${taskId}/checkpoints`,
@@ -497,6 +526,20 @@ export const workspaceApi = {
     request(`/student/task-runtimes/${runtimeId}/stop`, {
       method: "POST", body: {}, ifMatch, idempotencyKey: reuseKey ?? newIdempotencyKey(),
     }).then((r) => r.data),
+
+  operation: (
+    sessionId: string,
+    operation: string,
+    arguments_: Record<string, unknown>,
+    workspaceToken: string,
+    reuseKey?: string,
+  ) => request<WorkspaceOperationEvent>(`/workspace/${sessionId}/operations`, {
+    prefix: "",
+    method: "POST",
+    body: { operation, arguments: arguments_ },
+    idempotencyKey: reuseKey ?? newIdempotencyKey(),
+    headers: { "X-Workspace-Token": workspaceToken },
+  }).then((r) => r.data),
 };
 
 /* ══════════ 报告 ══════════ */

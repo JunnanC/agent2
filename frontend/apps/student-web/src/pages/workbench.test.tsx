@@ -9,7 +9,7 @@ import { Workbench } from "./workbench";
 vi.mock("@edu/api-client", () => ({
   reportApi: { draft: vi.fn(), saveDraft: vi.fn(), submitReport: vi.fn() },
   taskApi: { detail: vi.fn() },
-  workspaceApi: { workbench: vi.fn(), checkpoints: vi.fn(), executionRuns: vi.fn(), captureSnapshot: vi.fn(), createExecutionRun: vi.fn(), createCheckpoint: vi.fn() },
+  workspaceApi: { workbench: vi.fn(), checkpoints: vi.fn(), executionRuns: vi.fn(), captureSnapshot: vi.fn(), createExecutionRun: vi.fn(), createCheckpoint: vi.fn(), storageJob: vi.fn(), operation: vi.fn() },
 }));
 
 const draft = { public_id: "draft-1", task_id: "task-1", body_markdown: "original", row_version: "1" };
@@ -30,6 +30,7 @@ describe("workbench regression", () => {
     vi.mocked(workspaceApi.workbench).mockResolvedValue({ chapters: [], tests: [], template_caps: { webide: true } } as never);
     vi.mocked(workspaceApi.checkpoints).mockResolvedValue({ rows: [] } as never);
     vi.mocked(workspaceApi.executionRuns).mockResolvedValue({ rows: [] } as never);
+    vi.mocked(workspaceApi.storageJob).mockResolvedValue({ status: "PASSED", result_snapshot_id: "snapshot-switch" } as never);
     vi.mocked(reportApi.draft).mockResolvedValue(draft as never);
     vi.mocked(reportApi.saveDraft).mockResolvedValue({ data: { ...draft, row_version: "2" } } as never);
   });
@@ -110,6 +111,34 @@ describe("workbench regression", () => {
     await waitFor(() => expect(workspaceApi.captureSnapshot).toHaveBeenCalled());
     await waitFor(() => expect(workspaceApi.createCheckpoint).toHaveBeenCalled());
     expect(vi.mocked(workspaceApi.captureSnapshot).mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(workspaceApi.createCheckpoint).mock.invocationCallOrder[0]!);
+    client.clear();
+  });
+
+  it("shows a fixed language as read-only", async () => {
+    vi.mocked(workspaceApi.workbench).mockResolvedValue({
+      chapters: [], tests: [], workspace: {
+        language: "python", language_policy: { mode: "FIXED", language: "python", allowed_languages: ["python"] }, toolchain_version: "3.14.0",
+      },
+    } as never);
+    const client = mount();
+    expect(await screen.findByLabelText("当前编程语言")).toHaveTextContent("Python · 3.14.0");
+    expect(screen.queryByRole("combobox", { name: "编程语言" })).not.toBeInTheDocument();
+    client.clear();
+  });
+
+  it("switches a student-selected language after capturing the current project", async () => {
+    vi.mocked(workspaceApi.workbench).mockResolvedValue({
+      chapters: [], tests: [], workspace: {
+        language: "python", language_policy: { mode: "STUDENT_SELECT", allowed_languages: ["python", "c"], default_versions: { python: "3.14.0", c: "12.2.0" } }, toolchain_version: "3.14.0",
+      },
+    } as never);
+    vi.mocked(workspaceApi.captureSnapshot).mockResolvedValue({ status: "PASSED", result_snapshot_id: "snapshot-current" } as never);
+    vi.mocked(workspaceApi.checkpoints).mockResolvedValue({ rows: [], sessionRowVersion: 7 } as never);
+    const client = mount();
+    const select = await screen.findByRole("combobox", { name: "编程语言" });
+    fireEvent.change(select, { target: { value: "c" } });
+    await waitFor(() => expect(workspaceApi.storageJob).toHaveBeenCalledWith("task-1", { kind: "SWITCH", language: "c" }, 7, "token"));
+    expect(vi.mocked(workspaceApi.captureSnapshot).mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(workspaceApi.storageJob).mock.invocationCallOrder[0]!);
     client.clear();
   });
 

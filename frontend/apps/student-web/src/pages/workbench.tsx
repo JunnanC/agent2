@@ -70,6 +70,7 @@ export function Workbench() {
   const [checkpointOpen, setCheckpointOpen] = useState(false);
   const [checkpointName, setCheckpointName] = useState("");
   const [submitOpen, setSubmitOpen] = useState(false);
+  const [selfTestInput, setSelfTestInput] = useState("");
   const draftBaseRef = useRef<ReportDraft | null>(null);
   const saveQueue = useRef<Promise<boolean>>(Promise.resolve(true));
   const draftRef = useRef(draftHtml);
@@ -228,6 +229,39 @@ export function Workbench() {
     onError: (error) => toast.notify(serializeError(error), "error"),
   });
 
+  const selfTest = useMutation({
+    mutationFn: async () => {
+      const snapshot = await workspaceApi.captureSnapshot(taskId, workspaceToken);
+      return workspaceApi.operation(
+        storedSession?.session_id ?? "",
+        "SELF_TEST",
+        { input: selfTestInput, snapshot_id: snapshot.result_snapshot_id },
+        workspaceToken,
+      );
+    },
+    onSuccess: (event) => {
+      currentRunId.current = event.execution_run_id ?? null;
+      void queryClient.invalidateQueries({ queryKey: keys.executionRuns(taskId) });
+      void workbench.refetch();
+    },
+    onError: (error) => toast.notify(serializeError(error), "error"),
+  });
+
+  const switchLanguage = useMutation({
+    mutationFn: async (language: string) => {
+      await workspaceApi.captureSnapshot(taskId, workspaceToken);
+      const latest = await workspaceApi.checkpoints(taskId, workspaceToken);
+      return workspaceApi.storageJob(taskId, { kind: "SWITCH", language }, latest.sessionRowVersion ?? 0, workspaceToken);
+    },
+    onSuccess: () => {
+      toast.notify("语言工作区已切换");
+      void queryClient.invalidateQueries({ queryKey: keys.workbench(taskId) });
+      void queryClient.invalidateQueries({ queryKey: keys.checkpoints(taskId) });
+      void queryClient.invalidateQueries({ queryKey: keys.executionRuns(taskId) });
+    },
+    onError: (error) => toast.notify(serializeError(error), "error"),
+  });
+
   const currentRunId = useRef<string | null>(null);
   const lastRun: ExecutionRun | undefined = useMemo(() => {
     const rows = executionRuns.data?.rows ?? [];
@@ -308,6 +342,11 @@ export function Workbench() {
   const testsAvailable = aggregate?.tests_available ?? tests.length > 0;
   const blockers = task?.blockers ?? [];
   const allowed = task?.allowed_actions ?? [];
+  const workspace = aggregate?.workspace;
+  const languagePolicy = workspace?.language_policy;
+  const allowedLanguages = languagePolicy?.allowed_languages ?? [];
+  const languageSelectable = languagePolicy?.mode === "STUDENT_SELECT" && allowedLanguages.length > 0;
+  const currentLanguage = workspace?.language ?? languagePolicy?.language ?? "python";
 
   /* 判题资源可能不公开分项用例，由服务端声明是否需要测试。 */
   const submitChecks = [
@@ -452,6 +491,22 @@ export function Workbench() {
                   onClick={() => setWorkspaceTab(tab)}>{label}</button>
               ))}
             </div>
+            <div className="workspace-language-control">
+              <label htmlFor="workspace-language">编程语言</label>
+              {languageSelectable ? (
+                <select id="workspace-language" value={currentLanguage}
+                  disabled={!sessionActive || switchLanguage.isPending || Boolean(workspace?.active_storage_job)}
+                  onChange={(event) => {
+                    const next = event.target.value;
+                    if (next !== currentLanguage) switchLanguage.mutate(next);
+                  }}>
+                  {allowedLanguages.map((language) => <option key={language} value={language}>{languageLabel(language)}</option>)}
+                </select>
+              ) : (
+                <span aria-label="当前编程语言">{languageLabel(currentLanguage)}{workspace?.toolchain_version ? ` · ${workspace.toolchain_version}` : ""}</span>
+              )}
+              {switchLanguage.isPending ? <small aria-live="polite">切换中…</small> : null}
+            </div>
             <Button size="sm" className="workspace-exit" onClick={() => setExitOpen(true)}>
               <Icon name="log-out" size={13} /> 退出实验
             </Button>
@@ -540,6 +595,18 @@ export function Workbench() {
                 )}
               </div>
               <div className="test-panel-actions">
+                {workbench.data?.task?.allowed_operations?.includes("SELF_TEST") ? (
+                  <div className="self-test-box">
+                    <label htmlFor="self-test-input">自测输入</label>
+                    <textarea id="self-test-input" value={selfTestInput}
+                      onChange={(event) => setSelfTestInput(event.target.value)}
+                      placeholder="输入本次自测数据，可换行" rows={3} maxLength={65536} />
+                    <Button size="sm" disabled={!sessionActive || !selfTestInput.trim() || selfTest.isPending || runIsRunning(lastRun?.status)}
+                      onClick={() => selfTest.mutate()}>
+                      <Icon name="play" size={13} /> {selfTest.isPending ? "自测中…" : "自测运行"}
+                    </Button>
+                  </div>
+                ) : null}
                 <Button size="sm" onClick={() => setCheckpointOpen(true)}>
                   <Icon name="bookmark-plus" size={13} /> 保存检查点
                 </Button>
@@ -663,4 +730,8 @@ function serializeError(error: unknown): string {
   if (error instanceof ApiError) return error.payload?.message ?? "操作失败，请稍后重试";
   if (error instanceof Error) return error.message;
   return "操作失败，请稍后重试";
+}
+
+function languageLabel(language: string): string {
+  return ({ c: "C", cpp: "C++", java: "Java", python: "Python", go: "Go" } as Record<string, string>)[language] ?? language;
 }
