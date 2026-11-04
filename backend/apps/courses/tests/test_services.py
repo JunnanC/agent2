@@ -9,6 +9,7 @@ from apps.accounts.services import change_teacher_qualification
 from apps.accounts.tests.helpers import create_user
 from apps.core.models import AuditLog, OutboxEvent
 
+from ..content_services import create_invitation
 from ..errors import (
     CourseGrantRequired,
     EnrollmentAlreadyLive,
@@ -30,12 +31,12 @@ from ..services import (
     appoint_course_assistant,
     current_academic_term,
     drop_enrollment,
+    enrollment_exit_check,
     grant_course_capability,
     publish_course,
     review_enrollment,
     transfer_course_ownership,
 )
-from ..content_services import create_invitation
 from .helpers import create_draft_course, create_teacher
 
 
@@ -219,7 +220,8 @@ class CourseServiceTests(TestCase):
         )
         enrollment = apply_for_course(
             course_id=self.course.public_id, student=student, application_message="",
-            invitation_code=f"  {code}  ", context=ActorContext(student.public_id, "USER", "a" * 32),
+            invitation_code=f"  {code}  ",
+            context=ActorContext(student.public_id, "USER", "a" * 32),
         )
         invitation.refresh_from_db()
         self.assertEqual(enrollment.status, Enrollment.Status.ACTIVE)
@@ -232,7 +234,8 @@ class CourseServiceTests(TestCase):
         with self.assertRaises(InvitationInvalid):
             apply_for_course(
                 course_id=self.course.public_id, student=student, application_message="",
-                invitation_code="wrong-code", context=ActorContext(student.public_id, "USER", "a" * 32),
+                invitation_code="wrong-code",
+                context=ActorContext(student.public_id, "USER", "a" * 32),
             )
         self.assertFalse(Enrollment.objects.filter(course=self.course, student=student).exists())
 
@@ -275,7 +278,7 @@ class CourseServiceTests(TestCase):
             )
         self.assertEqual(EnrollmentEvent.objects.filter(enrollment=approved).count(), 2)
 
-    def test_drop_rechecks_blockers_and_records_audit_outbox(self) -> None:
+    def test_student_drop_allows_unfinished_tasks_but_rechecks_other_blockers(self) -> None:
         self._publish()
         student = create_user(email="student@example.edu", username="student")
         enrollment = apply_for_course(
@@ -292,6 +295,13 @@ class CourseServiceTests(TestCase):
         register_enrollment_blocker(
             lambda _enrollment: [Blocker("UNFINISHED_TASK", 1, ("EXP-1",), "未完成")]
         )
+        self.assertEqual(enrollment_exit_check(enrollment=enrollment)[0].type, "UNFINISHED_TASK")
+        self.assertEqual(
+            enrollment_exit_check(enrollment=enrollment, allow_unfinished_tasks=True), []
+        )
+        register_enrollment_blocker(
+            lambda _enrollment: [Blocker("RUNTIME_BUSY", 1, ("runtime-1",), "其他阻塞")]
+        )
         with self.assertRaises(EnrollmentBlocked):
             drop_enrollment(
                 enrollment_id=enrollment.public_id,
@@ -301,6 +311,9 @@ class CourseServiceTests(TestCase):
                 context=ActorContext(student.public_id, "USER", "3" * 32),
             )
         clear_blocker_providers()
+        register_enrollment_blocker(
+            lambda _enrollment: [Blocker("UNFINISHED_TASK", 1, ("EXP-1",), "未完成")]
+        )
         changed = drop_enrollment(
             enrollment_id=enrollment.public_id,
             student=student,
@@ -309,5 +322,16 @@ class CourseServiceTests(TestCase):
             context=ActorContext(student.public_id, "USER", "4" * 32),
         )
         self.assertEqual(changed.status, Enrollment.Status.DROPPED)
+        self.assertEqual(changed.end_reason, "leave")
+        self.assertEqual(
+            enrollment_exit_check(enrollment=changed, allow_unfinished_tasks=True)[0].type,
+            "ENROLLMENT_NOT_ACTIVE",
+        )
+        with self.assertRaises(EnrollmentBlocked):
+            drop_enrollment(
+                enrollment_id=changed.public_id, student=student,
+                expected_version=changed.row_version, reason="again",
+                context=ActorContext(student.public_id, "USER", "5" * 32),
+            )
         self.assertTrue(AuditLog.objects.filter(target_ref=enrollment.public_id).exists())
         self.assertTrue(OutboxEvent.objects.filter(aggregate_ref=enrollment.public_id).exists())

@@ -1091,7 +1091,9 @@ def review_enrollment(
     return changed  # type: ignore[return-value]
 
 
-def enrollment_exit_check(*, enrollment: Enrollment) -> list[Blocker]:
+def enrollment_exit_check(
+    *, enrollment: Enrollment, allow_unfinished_tasks: bool = False
+) -> list[Blocker]:
     if enrollment.status != Enrollment.Status.ACTIVE:
         return [
             Blocker(
@@ -1101,7 +1103,10 @@ def enrollment_exit_check(*, enrollment: Enrollment) -> list[Blocker]:
                 message="选课周期不是有效状态",
             )
         ]
-    return enrollment_blockers(enrollment)
+    return [
+        blocker for blocker in enrollment_blockers(enrollment)
+        if not (allow_unfinished_tasks and blocker.type == "UNFINISHED_TASK")
+    ]
 
 
 def _record_enrollment_end(
@@ -1151,7 +1156,7 @@ def drop_enrollment(
         )
     except Enrollment.DoesNotExist as exc:
         raise ResourceNotFound() from exc
-    blockers = enrollment_exit_check(enrollment=enrollment)
+    blockers = enrollment_exit_check(enrollment=enrollment, allow_unfinished_tasks=True)
     if blockers:
         raise EnrollmentBlocked(detail={"blockers": [item.as_dict() for item in blockers]})
     changed = compare_and_swap(

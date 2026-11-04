@@ -44,7 +44,7 @@ describe("学生课程接口入口", () => {
     expect(studentApi.dropEnrollment).not.toHaveBeenCalled();
   });
 
-  it("使用弹窗读取的最新选课版本退出并刷新课表", async () => {
+  it("说明有未完成任务也可退出，使用最新选课版本提交并刷新待办", async () => {
     vi.mocked(studentApi.enrollment).mockResolvedValue({ ...enrollment, row_version: "9" });
     vi.mocked(studentApi.dropCheck).mockResolvedValue({ allowed: true, blockers: [] });
     vi.mocked(studentApi.dropEnrollment).mockResolvedValue({ ...enrollment, status: "DROPPED" });
@@ -52,11 +52,13 @@ describe("学生课程接口入口", () => {
     const invalidate = vi.spyOn(client, "invalidateQueries");
     fireEvent.click(screen.getByRole("button", { name: "退出课程" }));
     await screen.findByLabelText("退出原因");
+    expect(screen.getByText(/有未完成任务也可以退出课程/)).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("退出原因"), { target: { value: "  选课调整  " } });
     await waitFor(() => expect(screen.getByRole("button", { name: "确认退出" })).toBeEnabled());
     fireEvent.click(screen.getByRole("button", { name: "确认退出" }));
     await waitFor(() => expect(studentApi.dropEnrollment).toHaveBeenCalledWith("en-1", { reason: "选课调整" }, "9"));
     await waitFor(() => expect(invalidate).toHaveBeenCalledWith({ queryKey: ["student"] }));
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["tasks"] });
     expect(await screen.findByText("已退出课程")).toBeInTheDocument();
   });
 

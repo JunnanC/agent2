@@ -8,6 +8,8 @@ from django.utils import timezone
 
 from apps.accounts.tests.helpers import create_user
 from apps.core.models import IdempotencyRecord
+from apps.courses.ports import register_enrollment_blocker
+from apps.courses.services import enrollment_exit_check
 from apps.governance.models import Quota, RuntimeAdapter
 from apps.labtemplates.models import ExperimentImage
 from apps.provisioning.adapters import reset_fake_runtime
@@ -22,7 +24,7 @@ from ..models import (
 )
 from ..selectors import publication_for_course
 from ..serializers import publication_data
-from ..services import publish_publication
+from ..services import enrollment_task_blockers, publish_publication
 from .helpers import context, create_domain, create_draft_publication, create_enrollment
 
 PROXY_HEADERS = {"HTTP_X_PROXY_CONTEXT": "ingress-v1", "REMOTE_ADDR": "127.0.0.1"}
@@ -121,6 +123,81 @@ class ExperimentApiTests(TestCase):
             HTTP_X_PORTAL="TEACHING", **PROXY_HEADERS,
         )
         self.assertIn("task_counts", aggregate.json()["data"])
+
+    def test_student_can_drop_with_pending_task_and_keeps_learning_history(self) -> None:
+        register_enrollment_blocker(enrollment_task_blockers)
+        published, _ = publish_publication(
+            course_id=self.course.public_id, publication_id=self.publication.public_id,
+            actor=self.owner, expected_version=self.publication.row_version,
+            selected_ids=[], context=context(self.owner),
+        )
+        task = ExperimentTask.objects.get(publication=published, student=self.enrollment.student)
+        self.assertEqual(
+            enrollment_exit_check(enrollment=self.enrollment)[0].type, "UNFINISHED_TASK"
+        )
+        client, csrf = self._client(portal="USER", identifier=self.enrollment.student.email)
+        path = f"/api/v2/me/enrollments/{self.enrollment.public_id}"
+        before = client.get("/api/v2/tasks", HTTP_X_PORTAL="USER", **PROXY_HEADERS)
+        self.assertEqual(before.status_code, 200, before.content)
+        self.assertEqual([row["public_id"] for row in before.json()["data"]], [task.public_id])
+        for status in (
+            ExperimentTask.Status.ASSIGNED, ExperimentTask.Status.PROVISIONING,
+            ExperimentTask.Status.IN_PROGRESS, ExperimentTask.Status.UNDER_REVIEW,
+        ):
+            with self.subTest(status=status):
+                ExperimentTask.objects.filter(pk=task.pk).update(status=status)
+                check = client.get(f"{path}/drop-check", HTTP_X_PORTAL="USER", **PROXY_HEADERS)
+                self.assertEqual(check.status_code, 200, check.content)
+                self.assertEqual(check.json()["data"], {"allowed": True, "blockers": []})
+        headers = {
+            "HTTP_X_PORTAL": "USER", "HTTP_X_CSRFTOKEN": csrf,
+            "HTTP_IDEMPOTENCY_KEY": "drop-with-pending",
+            "HTTP_IF_MATCH": f'"{self.enrollment.row_version}"', **PROXY_HEADERS,
+        }
+        stale_headers = {
+            **headers, "HTTP_IDEMPOTENCY_KEY": "drop-with-stale-version",
+            "HTTP_IF_MATCH": f'"{self.enrollment.row_version + 1}"',
+        }
+        stale = client.post(
+            f"{path}/drop", {"reason": "选课调整"},
+            content_type="application/json", **stale_headers,
+        )
+        self.assertEqual(stale.status_code, 412, stale.content)
+        self.assertEqual(stale.json()["error"]["code"], "ROW_VERSION_CONFLICT")
+        self.enrollment.refresh_from_db()
+        self.assertEqual(self.enrollment.status, "ACTIVE")
+        dropped = client.post(
+            f"{path}/drop", {"reason": "选课调整"}, content_type="application/json", **headers,
+        )
+        self.assertEqual(dropped.status_code, 200, dropped.content)
+        self.assertEqual(dropped.json()["data"]["status"], "DROPPED")
+        replay = client.post(
+            f"{path}/drop", {"reason": "选课调整"}, content_type="application/json", **headers,
+        )
+        self.assertEqual(replay.status_code, 200, replay.content)
+        self.assertEqual(replay["X-Idempotent-Replayed"], "true")
+        after = client.get("/api/v2/tasks", HTTP_X_PORTAL="USER", **PROXY_HEADERS)
+        self.assertEqual(after.status_code, 200, after.content)
+        self.assertEqual(after.json()["data"], [])
+        detail = client.get(
+            f"/api/v2/tasks/{task.public_id}", HTTP_X_PORTAL="USER", **PROXY_HEADERS,
+        )
+        self.assertEqual(detail.status_code, 200, detail.content)
+        self.assertEqual(detail.json()["data"]["allowed_actions"], [])
+        course = client.get(
+            f"/api/v2/courses/{self.course.public_id}", HTTP_X_PORTAL="USER", **PROXY_HEADERS,
+        )
+        self.assertEqual(course.status_code, 403, course.content)
+        history = client.get("/api/v2/me/learning-history", HTTP_X_PORTAL="USER", **PROXY_HEADERS)
+        self.assertEqual(history.status_code, 200, history.content)
+        experiments = [
+            experiment for year in history.json()["data"]["years"]
+            for term in year["terms"] for row in term["courses"]
+            for experiment in row["experiments"]
+        ]
+        self.assertEqual([row["task_id"] for row in experiments], [task.public_id])
+        task.refresh_from_db()
+        self.assertEqual(task.status, ExperimentTask.Status.UNDER_REVIEW)
 
     def test_selected_publish_validates_then_freezes_chosen_students(self) -> None:
         publication = create_draft_publication(
