@@ -7,7 +7,7 @@ import { Breadcrumbs, Button, DateCalendar, Metric, Panel, RequestStateView, Sta
 import type { CalendarItem } from "@edu/ui";
 import { isTaskActionable, taskStatusLabel, taskStatusTone, formatDate } from "@/lib/task-format";
 const TERMINAL_STATUSES = new Set(["COMPLETED", "WITHDRAWN"]);
-const FOCUSED_TASKS_PAGE_SIZE = 4;
+const FOCUSED_TASKS_PAGE_SIZE = 3;
 
 export function Home() {
   const navigate = useNavigate();

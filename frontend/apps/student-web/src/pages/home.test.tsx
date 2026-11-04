@@ -45,14 +45,14 @@ function show(rows: Task[]) {
 
 const taskButtons = () => screen.getAllByRole("button", { name: /10日任务/ });
 
-it("9 项任务分为 4、4、1 项，保留总数并禁用首尾翻页", async () => {
-  show(tasks(9));
+it("7 项任务分为 3、3、1 项，保留总数并禁用首尾翻页", async () => {
+  show(tasks(7));
   await screen.findByRole("navigation", { name: "待完成任务分页" });
-  expect(taskButtons()).toHaveLength(4);
-  expect(screen.getByText(/9 项待办$/)).toBeInTheDocument();
+  expect(taskButtons()).toHaveLength(3);
+  expect(screen.getByText(/7 项待办$/)).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "上一页" })).toBeDisabled();
   fireEvent.click(screen.getByRole("button", { name: "下一页" }));
-  expect(taskButtons()).toHaveLength(4);
+  expect(taskButtons()).toHaveLength(3);
   expect(screen.getByRole("button", { name: /10日任务5/ })).toBeInTheDocument();
   expect(screen.queryByRole("button", { name: /10日任务1\D/ })).not.toBeInTheDocument();
   expect(screen.getByText("第 2 / 3 页")).toBeInTheDocument();
@@ -93,16 +93,16 @@ it("刷新后任务减少时回落到有效末页", async () => {
   const next = await screen.findByRole("button", { name: "下一页" });
   fireEvent.click(next);
   fireEvent.click(next);
-  act(() => { client.setQueryData(keys.tasks({ scope: "my" }), list(tasks(5))); });
+  act(() => { client.setQueryData(keys.tasks({ scope: "my" }), list(tasks(4))); });
   await waitFor(() => expect(screen.getByText("第 2 / 2 页")).toBeInTheDocument());
   expect(taskButtons()).toHaveLength(1);
-  expect(screen.getByRole("button", { name: /10日任务5/ })).toBeInTheDocument();
-  act(() => { client.setQueryData(keys.tasks({ scope: "my" }), list(tasks(4))); });
-  await waitFor(() => expect(taskButtons()).toHaveLength(4));
+  expect(screen.getByRole("button", { name: /10日任务4/ })).toBeInTheDocument();
+  act(() => { client.setQueryData(keys.tasks({ scope: "my" }), list(tasks(3))); });
+  await waitFor(() => expect(taskButtons()).toHaveLength(3));
   expect(screen.queryByRole("navigation", { name: "待完成任务分页" })).not.toBeInTheDocument();
 });
 
-it.each([0, 1, 4])("%i 项任务不显示分页导航", async (count) => {
+it.each([0, 1, 3])("%i 项任务不显示分页导航", async (count) => {
   show(tasks(count));
   if (count) await screen.findByRole("button", { name: /10日任务1/ });
   else await screen.findByText("暂无待办任务");
