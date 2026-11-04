@@ -49,7 +49,7 @@ export function Login() {
           <span className="context-label">admin.localhost · 平台管理</span>
         </div>
         <h1 style={{ fontSize: 22, margin: "4px 0 2px" }}>登录平台管理</h1>
-        <p className="subtle" style={{ margin: 0 }}>平台管理员围绕治理、运行、安全与审计组织工作。</p>
+        <p className="subtle" style={{ margin: 0 }}>管理教学账号、课程与镜像，查看平台服务及资源状态。</p>
         <label className="form-label" htmlFor="a-identifier">账号 / 邮箱</label>
         <input id="a-identifier" className="field" autoComplete="username"
           value={identifier} onChange={(event) => setIdentifier(event.target.value)} />
