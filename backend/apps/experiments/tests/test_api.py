@@ -7,11 +7,14 @@ from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
 from apps.accounts.tests.helpers import create_user
-from apps.core.models import IdempotencyRecord
+from apps.core.models import IdempotencyRecord, OutboxEvent
+from apps.courses.events import ENROLLMENT_STUDENT_DROPPED
 from apps.courses.ports import register_enrollment_blocker
 from apps.courses.services import enrollment_exit_check
 from apps.governance.models import Quota, RuntimeAdapter
 from apps.labtemplates.models import ExperimentImage
+from apps.notifications.models import Notification
+from apps.notifications.services import consume_notification_event
 from apps.provisioning.adapters import reset_fake_runtime
 from apps.provisioning.services import execute_provisioning_job, start_provisioning
 
@@ -176,6 +179,21 @@ class ExperimentApiTests(TestCase):
         )
         self.assertEqual(replay.status_code, 200, replay.content)
         self.assertEqual(replay["X-Idempotent-Replayed"], "true")
+        event = OutboxEvent.objects.get(
+            event_type=ENROLLMENT_STUDENT_DROPPED, aggregate_ref=self.enrollment.public_id,
+        )
+        self.enrollment.refresh_from_db()
+        self.assertEqual(self.enrollment.status, "DROPPED")
+        self.assertFalse(Notification.objects.filter(kind=ENROLLMENT_STUDENT_DROPPED).exists())
+        self.assertTrue(consume_notification_event(event_id=event.pk))
+        notice = Notification.objects.get(kind=ENROLLMENT_STUDENT_DROPPED)
+        self.assertEqual(notice.account, self.owner)
+        self.assertEqual(notice.portal, "TEACHING")
+        self.assertIn("退课已生效，无需教师审批", notice.body_masked)
+        teacher, _ = self._client(portal="TEACHING", identifier=self.owner.email)
+        inbox = teacher.get("/api/v2/notifications", HTTP_X_PORTAL="TEACHING", **PROXY_HEADERS)
+        self.assertEqual(inbox.status_code, 200, inbox.content)
+        self.assertEqual([row["public_id"] for row in inbox.json()["data"]], [notice.public_id])
         after = client.get("/api/v2/tasks", HTTP_X_PORTAL="USER", **PROXY_HEADERS)
         self.assertEqual(after.status_code, 200, after.content)
         self.assertEqual(after.json()["data"], [])

@@ -41,7 +41,7 @@ from .ports import (
     run_course_closed_handlers,
     run_enrollment_activation_handlers,
 )
-from .selectors import require_course_capability, require_owner
+from .selectors import has_course_capability, require_course_capability, require_owner
 
 
 def invitation_digest(code: str) -> str:
@@ -1178,6 +1178,34 @@ def drop_enrollment(
         context=context,
     )
     _record_enrollment_end(enrollment, changed, student, "enrollment.drop", context)
+    teacher_ids = [
+        staff.user.public_id
+        for staff in CourseStaff.objects.select_related("user").filter(
+            course=enrollment.course, status=CourseStaff.Status.ACTIVE,
+        )
+        if has_course_capability(
+            course=enrollment.course, actor=staff.user,
+            capability=CourseStaffGrant.Capability.MANAGE_ENROLLMENT,
+        )
+    ]
+    _event(
+        context,
+        event_type=events.ENROLLMENT_STUDENT_DROPPED,
+        aggregate_type="enrollment",
+        aggregate_ref=changed.public_id,
+        payload={
+            "enrollment_id": changed.public_id,
+            "course_id": enrollment.course.public_id,
+            "course_name": enrollment.course.title,
+            "student_id": student.public_id,
+            "student_name": student.display_name or student.username,
+            "student_username": student.username,
+            "teacher_ids": teacher_ids,
+            "reason": changed.end_reason,
+            "ended_at": changed.ended_at.isoformat(),
+            "portal": "TEACHING",
+        },
+    )
     return changed  # type: ignore[return-value]
 
 

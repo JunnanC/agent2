@@ -53,6 +53,7 @@ describe("学生课程接口入口", () => {
     fireEvent.click(screen.getByRole("button", { name: "退出课程" }));
     await screen.findByLabelText("退出原因");
     expect(screen.getByText(/有未完成任务也可以退出课程/)).toBeInTheDocument();
+    expect(screen.getByText(/退课立即生效.*通知课程老师.*无需老师同意/)).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("退出原因"), { target: { value: "  选课调整  " } });
     await waitFor(() => expect(screen.getByRole("button", { name: "确认退出" })).toBeEnabled());
     fireEvent.click(screen.getByRole("button", { name: "确认退出" }));

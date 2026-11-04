@@ -14,6 +14,7 @@ from apps.accounts.models import User
 from apps.core.concurrency import compare_and_swap
 from apps.core.models import OutboxEvent
 from apps.core.outbox import consume_once
+from apps.courses.events import ENROLLMENT_STUDENT_DROPPED
 from apps.courses.models import Course, Enrollment
 from apps.courses.services import ActorContext
 from apps.experiments.models import ExperimentTask, TaskPublication
@@ -34,6 +35,19 @@ def _deadline_text(deadline: datetime) -> str:
 
 def _notification_content(kind: str, payload: dict[str, Any]) -> dict[str, str]:
     """Use event snapshots; resolve older events that predate descriptive payloads."""
+    if kind == ENROLLMENT_STUDENT_DROPPED:
+        ended_at = parse_datetime(payload["ended_at"])
+        return {
+            "title": "学生退课通知",
+            "body_masked": (
+                f"学生：{payload['student_name']}（{payload['student_username']}）。\n"
+                f"已退出课程：《{payload['course_name']}》。\n"
+                f"退课原因：{payload['reason']}。\n"
+                f"退课时间：{_deadline_text(ended_at) if ended_at else payload['ended_at']}。\n"
+                "退课已生效，无需教师审批。"
+            ),
+            "link_url": f"/courses/{payload['course_id']}/enrollments",
+        }
     system_messages = {
         "account.created": (
             "账号创建成功",
@@ -105,6 +119,11 @@ def _accepts_notification(account: User, portal: str, kind: str) -> bool:
 
 def _targets(event: OutboxEvent) -> list[tuple[User, str]]:
     payload = event.payload or {}
+    if event.event_type == ENROLLMENT_STUDENT_DROPPED:
+        return [
+            (user, "TEACHING")
+            for user in User.objects.filter(public_id__in=payload.get("teacher_ids", []))
+        ]
     portal = str(payload.get("portal", "USER"))
     values = [payload.get("user_id"), payload.get("student_id"), payload.get("actor_id")]
     result: list[tuple[User, str]] = []

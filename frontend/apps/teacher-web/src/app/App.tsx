@@ -17,6 +17,7 @@ import { Publishing } from "@/pages/publishing";
 import { Students } from "@/pages/students";
 import { Reviews } from "@/pages/reviews";
 import { Analytics } from "@/pages/analytics";
+import { Notifications } from "@/pages/notifications";
 
 export function App(): JSX.Element {
   return (
@@ -29,6 +30,7 @@ export function App(): JSX.Element {
           <Route element={<AuthGuard />}>
             <Route path="/" element={<Home />} />
             <Route path="/courses" element={<Courses />} />
+            <Route path="/notifications" element={<Notifications />} />
             <Route path="/courses/:courseId/enrollments" element={<Enrollments />} />
             <Route path="/courses/:courseId/templates" element={<Templates />} />
             <Route path="/courses/:courseId/templates/:templateId/edit" element={<TemplateEditor />} />
