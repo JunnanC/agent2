@@ -3,14 +3,16 @@ import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { reportApi, studentApi, taskApi } from "@edu/api-client";
 import { keys } from "@edu/query-keys";
-import { Breadcrumbs, DateCalendar, Metric, Panel, RequestStateView, StatusBadge } from "@edu/ui";
+import { Breadcrumbs, Button, DateCalendar, Metric, Panel, RequestStateView, StatusBadge } from "@edu/ui";
 import type { CalendarItem } from "@edu/ui";
 import { isTaskActionable, taskStatusLabel, taskStatusTone, formatDate } from "@/lib/task-format";
 const TERMINAL_STATUSES = new Set(["COMPLETED", "WITHDRAWN"]);
+const FOCUSED_TASKS_PAGE_SIZE = 4;
 
 export function Home() {
   const navigate = useNavigate();
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [taskPagination, setTaskPagination] = useState({ date: selectedDate, page: 1 });
 
   const tasksQuery = useQuery({ queryKey: keys.tasks({ scope: "my" }), queryFn: () => taskApi.list({ page_size: 50 }) });
   const enrollmentsQuery = useQuery({ queryKey: keys.enrollments({ status: "ACTIVE" }), queryFn: () => studentApi.myEnrollments({ status: "ACTIVE", page_size: 100 }) });
@@ -107,6 +109,9 @@ export function Home() {
   }, [firstTaskDate, selectedDate]);
 
   const focusedItems = selectedDate ? calendarItems.filter((item) => item.date === selectedDate) : [];
+  const taskPageCount = Math.max(1, Math.ceil(focusedItems.length / FOCUSED_TASKS_PAGE_SIZE));
+  const taskPage = taskPagination.date === selectedDate ? Math.min(taskPagination.page, taskPageCount) : 1;
+  const visibleItems = focusedItems.slice((taskPage - 1) * FOCUSED_TASKS_PAGE_SIZE, taskPage * FOCUSED_TASKS_PAGE_SIZE);
 
   const formatHours = (minutes: number) => (minutes >= 60 ? `${(minutes / 60).toFixed(1)} h` : `${minutes} min`);
 
@@ -136,7 +141,10 @@ export function Home() {
           <RequestStateView loading={tasksQuery.isLoading} error={tasksQuery.error}
             onRetry={() => void tasksQuery.refetch()} empty={!calendarItems.length}
             emptyState={<div className="state-block"><strong>暂无待办任务</strong><p>实验发布后，开放区间内每天都会显示对应待办。</p></div>}>
-            <DateCalendar items={calendarItems} selectedDate={selectedDate} onDateSelect={setSelectedDate} showPopover={false} />
+            <DateCalendar items={calendarItems} selectedDate={selectedDate} onDateSelect={(date) => {
+              setSelectedDate(date);
+              setTaskPagination({ date, page: 1 });
+            }} showPopover={false} />
           </RequestStateView>
         </Panel>
         <Panel title={<><h2>待完成任务</h2><span className="subtle">点击左侧日期查看当天待办</span></>}>
@@ -144,12 +152,21 @@ export function Home() {
             focusedItems.length ? (
               <div className="calendar-focus-list" aria-live="polite">
                 <div className="eyebrow">{formatDate(selectedDate)} · {focusedItems.length} 项待办</div>
-                {focusedItems.map((item, index) => (
+                {visibleItems.map((item, index) => (
                   <button key={`${item.title}-${index}`} type="button" className="calendar-focus-task" onClick={item.onClick}>
                     <span><small className="calendar-focus-course">{item.context || "未归属课程"}</small><strong>{item.title}</strong><small>{item.subtitle}</small></span>
                     <StatusBadge tone={item.statusTone ?? "neutral"}>{item.statusLabel}</StatusBadge>
                   </button>
                 ))}
+                {taskPageCount > 1 && (
+                  <nav aria-label="待完成任务分页" style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", flexWrap: "wrap", gap: 8 }}>
+                    <Button size="sm" disabled={taskPage === 1}
+                      onClick={() => setTaskPagination({ date: selectedDate, page: taskPage - 1 })}>上一页</Button>
+                    <span className="subtle">第 {taskPage} / {taskPageCount} 页</span>
+                    <Button size="sm" disabled={taskPage === taskPageCount}
+                      onClick={() => setTaskPagination({ date: selectedDate, page: taskPage + 1 })}>下一页</Button>
+                  </nav>
+                )}
               </div>
             ) : <div className="state-block"><strong>当天没有待办</strong><p>请选择日历中的其他日期。</p></div>
           ) : <div className="state-block"><strong>选择一个日期</strong><p>日期内的任务会在这里放大显示。</p></div>}
