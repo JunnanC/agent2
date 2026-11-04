@@ -119,6 +119,10 @@ export function Home() {
     <>
       <Breadcrumbs items={[{ label: "学生门户" }]} current="概览" />
 
+      <header className="student-overview-heading">
+        <div><h1>学习概览</h1><p>查看实验安排，继续待完成的任务</p></div>
+        <time dateTime={new Date().toLocaleDateString("sv-SE")}>{new Date().toLocaleDateString("zh-CN", { year: "numeric", month: "long", day: "numeric", weekday: "long" })}</time>
+      </header>
       {/* 四个数据卡片：条带式单块，列间分隔线，内容等距 */}
       <Panel className="section">
         <RequestStateView loading={tasksQuery.isLoading && !tasks.length}
@@ -126,17 +130,17 @@ export function Home() {
           onRetry={() => { void tasksQuery.refetch(); }}
           empty={false} emptyState={null}>
           <div className="metric-strip">
-            <Metric label="进行中的实验" value={String(inProgressCount)} icon="flask"
+            <Metric label="进行中的实验" value={String(inProgressCount)}
               sub={draftCount > 0 ? `其中 ${draftCount} 个待提交` : "暂无待提交"} />
-            <Metric label="本周学习时长" value={formatHours(totalMinutes)} icon="clock" sub={weeklySub} />
-            <Metric label="待完成任务" value={String(activeTasks.length)} icon="calendar-clock"
+            <Metric label="本周学习时长" value={formatHours(totalMinutes)} sub={weeklySub} />
+            <Metric label="待完成任务" value={String(activeTasks.length)}
               sub={earliestDeadline ? `最近截止 ${formatDate(earliestDeadline)}` : "暂无截止日期"} />
-            <Metric label="已获评审" value={String(completedTasks.length)} icon="file-check" sub={reviewedSub} />
+            <Metric label="已获评审" value={String(completedTasks.length)} sub={reviewedSub} />
           </div>
         </RequestStateView>
       </Panel>
 
-      <div className="grid two section">
+      <div className="grid two section student-overview-grid">
         <Panel title={<><h2>任务日历</h2><span className="subtle">按实验开放区间查看每日待办</span></>}>
           <RequestStateView loading={tasksQuery.isLoading} error={tasksQuery.error}
             onRetry={() => void tasksQuery.refetch()} empty={!calendarItems.length}

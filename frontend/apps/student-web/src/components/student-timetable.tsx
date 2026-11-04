@@ -58,7 +58,7 @@ export function StudentTimetable() {
   const editable = job.data?.status === "MAPPING_REQUIRED" || job.data?.status === "READY";
   const currentMapping = mapping ?? job.data?.mapping ?? {};
 
-  return <Panel title={<><h2>我的课表</h2><span className="subtle">{timetable.data?.term.name ?? "当前学期"}</span></>}>
+  return <Panel className="section student-timetable" title={<><h2>我的课表</h2><span className="subtle">{timetable.data?.term.name ?? "当前学期"}</span></>}>
     <RequestStateView loading={timetable.isLoading} error={timetable.error} onRetry={() => void timetable.refetch()}
       empty={!timetable.data?.schedules.length} emptyState={<EmptyState title="暂无课表" hint="加入课程或导入个人课表后查看上课安排。" />}>
       {[...(timetable.data?.schedules ?? [])].sort((a, b) => a.weekday - b.weekday || a.start_period - b.start_period).map((schedule, index) =>

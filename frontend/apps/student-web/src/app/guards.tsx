@@ -6,9 +6,9 @@ import { useSession } from "./session";
 import { usePortalEvents } from "./providers";
 
 const STUDENT_NAV: Array<NavEntry> = [
-  { label: "概览", path: "/" },
-  { label: "我的课程", path: "/courses" },
-  { label: "通知", path: "/notifications" },
+  { label: "概览", path: "/", icon: "layers" },
+  { label: "我的课程", path: "/courses", icon: "book" },
+  { label: "通知", path: "/notifications", icon: "bell" },
 ];
 
 /** 全站 SSE 桥：会话就绪后连接，事件只做提示并触发 REST 失效 */
@@ -71,6 +71,8 @@ export function AuthGuard({ fullscreen }: { fullscreen?: boolean }) {
           { label: "退出登录", icon: "log-out", onClick: () => { void logout().then(() => navigate("/login", { replace: true })); } },
         ]}
         navigationPosition="side"
+        collapsible
+        collapseStorageKey="edu.student.sidebar-collapsed"
       >
         <Outlet />
       </AppShell>
