@@ -1,6 +1,9 @@
 import hashlib
+import json
 import os
 from decimal import Decimal
+from io import BytesIO
+from types import SimpleNamespace
 from unittest import skipUnless
 from unittest.mock import Mock, patch
 
@@ -9,8 +12,9 @@ from django.test import Client, TestCase
 from django.utils import timezone
 
 from apps.accounts.tests.helpers import create_user, grant_admin, grant_teacher
-from apps.core.errors import ImmutableRecordError, RowVersionConflict
-from apps.core.models import FailureRecord, ObjectAsset, OutboxEvent
+from apps.core.errors import ImmutableRecordError, ResourceNotFound, RowVersionConflict
+from apps.core.models import AuditLog, FailureRecord, ObjectAsset, OutboxEvent
+from apps.core.project_archive import bundle
 from apps.courses.models import Course, CourseStaff
 from apps.courses.services import ActorContext
 from apps.experiments.models import ExperimentTask, TaskPublication
@@ -21,14 +25,15 @@ from apps.experiments.tests.helpers import (
     create_enrollment,
 )
 from apps.labtemplates.models import AutoCheckRule
+from apps.labtemplates.services import _normalize_execution_spec
 from apps.provisioning.adapters import DockerLocalAdapter
 from apps.provisioning.models import ProvisioningInstance
 from apps.provisioning.ports import RuntimeExecutionResult
-from apps.reports.models import ReportDraft, ReportVersion
+from apps.reports.models import ReportDraft, ReportVersion, SystemArtifact
 from apps.reports.services import submit_report, update_report_draft
 from apps.workspaces.models import WorkspaceSession, WorkspaceSnapshot
 
-from ..checkers import AutoCheckResult, DockerLocalAutoCheckExecutor
+from ..checkers import AutoCheckRejected, AutoCheckResult, DockerLocalAutoCheckExecutor
 from ..errors import AutoCheckPending, ReviewStateConflict
 from ..models import (
     AIScoreBatch,
@@ -45,6 +50,7 @@ from ..models import (
 from ..serializers import review_result_data
 from ..services import (
     accept_ai_score_batch,
+    accept_ai_score_suggestion,
     add_review_annotation,
     create_review_for_submission,
     decide_review,
@@ -130,8 +136,10 @@ class ReviewServiceTests(TestCase):
         self.assertEqual(response.status_code, 200, response.content)
         return client, csrf
 
-    def _snapshot(self, task: ExperimentTask, body: str) -> WorkspaceSnapshot:
-        payload = body.encode()
+    def _snapshot(
+        self, task: ExperimentTask, body: str | bytes, *, language: str = "python",
+    ) -> WorkspaceSnapshot:
+        payload = body.encode() if isinstance(body, str) else body
         digest = hashlib.sha256(payload).hexdigest()
         asset = ObjectAsset.objects.create(
             bucket="edu-platform",
@@ -178,10 +186,14 @@ class ReviewServiceTests(TestCase):
             media_type="text/plain",
             saved_at=timezone.now(),
             trace_id="s" * 32,
+            language=language,
         )
 
-    def _submitted_review(self, task: ExperimentTask, body: str) -> Review:
-        snapshot = self._snapshot(task, body)
+    def _submitted_review(
+        self, task: ExperimentTask, body: str, *, source: bytes | None = None,
+        language: str = "python",
+    ) -> Review:
+        snapshot = self._snapshot(task, source if source is not None else body, language=language)
         ExperimentTask.objects.filter(pk=task.pk).update(status=ExperimentTask.Status.UNDER_REVIEW)
         task.refresh_from_db()
         draft = ReportDraft.objects.create(
@@ -381,6 +393,135 @@ class ReviewServiceTests(TestCase):
         self.assertEqual(completed.attempt_count, 2)
         self.assertFalse(ReviewDecision.objects.filter(review=review).exists())
 
+    def _v2_auto_review(
+        self, language: str, source: bytes, *, system_artifact: bool = False,
+        student_select: bool = False,
+    ) -> AutoCheckRun:
+        TaskPublication.objects.filter(pk=self.publication.pk).update(
+            review_mode="MANUAL_WITH_AUTO_CHECK"
+        )
+        self.publication.refresh_from_db()
+        if not self.template_version.auto_check_rules.exists():
+            AutoCheckRule.objects.create(
+                template_version=self.template_version, position=1, position_key="v2-review",
+                checker_type="PYTHON_IO", input_schema={}, output_schema={},
+                timeout_seconds=30, resource_limit={}, network_policy={"mode": "DENY_ALL"},
+                failure_semantics={"on_failure": "FAIL_CHECK"}, rule_digest="v" * 64,
+            )
+        enrollment = create_enrollment(
+            self.course, suffix=f"v2-{language}-{system_artifact}-{student_select}"
+        )
+        entrypoint = {"c": "src/main.c", "cpp": "src/main.cpp", "java": "src/Main.java",
+                      "python": "src/main.py", "go": "src/main.go"}[language]
+        spec = _normalize_execution_spec({
+            "schema_version": 2, "language": None if student_select else language,
+            "entrypoint": None if student_select else entrypoint,
+            "timeout_seconds": 20, "memory_mb": 768, "cpu_millicores": 1000,
+            "comparator": "numeric", "absolute_tolerance": 0, "relative_tolerance": 0,
+            "tests_asset": self.template_version.execution_spec["tests_asset"],
+            "network_mode": "DENY_ALL",
+        })
+        task = self.publication.tasks.create(
+            course=self.course, enrollment=enrollment, student=enrollment.student,
+            template_version=self.template_version, runtime_type="CONTAINER",
+            runtime_adapter=self.template_version.runtime_adapter,
+            runtime_adapter_driver="DOCKER_LOCAL",
+            runtime_adapter_config_ref="runtime/local-docker",
+            image=self.template_version.image,
+            resource_profile=self.template_version.resource_profile,
+            resource_profile_snapshot={"cpu_millicores": 1000, "memory_mb": 768, "disk_gb": 1},
+            execution_spec=spec, template_spec_digest="a" * 64, status="UNDER_REVIEW",
+        )
+        if system_artifact:
+            snapshot = self._snapshot(task, source, language=language)
+            artifact = SystemArtifact.objects.create(
+                task=task, student=task.student, workspace_snapshot=snapshot, asset=snapshot.asset,
+                kind="WORKSPACE_SNAPSHOT", digest_sha256=snapshot.digest_sha256, trace_id="s" * 32,
+            )
+            review = create_review_for_submission(
+                task=task, system_artifact=artifact, context=self.context(task.student, "USER"),
+            )
+        else:
+            review = self._submitted_review(
+                task, "Submitted report", source=source, language=language
+            )
+        return review.auto_check_runs.get()
+
+    def test_v2_review_freezes_submission_language_plan_and_numeric_rules(self) -> None:
+        source = bundle({"main.py": b"print(42)"}, max_bytes=1024)
+        for language in ("c", "cpp", "java", "python", "go"):
+            with self.subTest(language=language):
+                run = self._v2_auto_review(language, source)
+                summary = run.execution_rule_summary
+                self.assertEqual(summary["language"], language)
+                self.assertTrue(summary["execution_plan"]["run"])
+                self.assertEqual(summary["absolute_tolerance"], 0)
+                captured = {}
+                adapter = SimpleNamespace(
+                    execute_judge=lambda captured=captured, **kwargs: (
+                        captured.update(kwargs) or RuntimeExecutionResult(status="PASSED")
+                    ), destroy_judge=lambda *_args: None,
+                )
+                tests = b'{"comparator":"token","absolute_tolerance":99,"cases":[]}'
+                with patch("apps.reviews.checkers._read_asset", side_effect=[source, tests]):
+                    result = DockerLocalAutoCheckExecutor(
+                        runtime_factory=Mock(return_value=adapter)
+                    ).execute(run)
+                self.assertTrue(result.passed)
+                self.assertEqual(captured["execution_plan"], summary["execution_plan"])
+                self.assertEqual(captured["source"], source)
+                actual_tests = json.loads(captured["tests"])
+                self.assertEqual(actual_tests["comparator"], "numeric")
+                self.assertEqual(actual_tests["absolute_tolerance"], 0)
+                self.assertEqual(actual_tests["relative_tolerance"], 0)
+
+    def test_v2_system_artifact_review_uses_frozen_snapshot_not_live_session_language(self) -> None:
+        run = self._v2_auto_review("java", b"source", system_artifact=True, student_select=True)
+        WorkspaceSession.objects.filter(task=run.review.task).update(language="python")
+        self.assertEqual(run.execution_rule_summary["language"], "java")
+        adapter = SimpleNamespace(execute_judge=Mock(return_value=RuntimeExecutionResult(
+            status="PASSED"
+        )), destroy_judge=Mock())
+        with patch("apps.reviews.checkers._read_asset", side_effect=[b"source", b'{"cases":[]}']):
+            result = DockerLocalAutoCheckExecutor(
+                runtime_factory=lambda *_args, **_kwargs: adapter
+            ).execute(run)
+        self.assertTrue(result.passed)
+        self.assertEqual(
+            adapter.execute_judge.call_args.kwargs["command"], ["python", "Main.java"]
+        )
+
+    def test_v2_review_rejects_changed_plan_digest_and_submission(self) -> None:
+        run = self._v2_auto_review("c", b"source")
+        executor = DockerLocalAutoCheckExecutor(runtime_factory=Mock())
+        for field, value in (
+            ("execution_rule_summary", {**run.execution_rule_summary, "execution_plan": {
+                "compile": [], "run": ["sh", "-c", "id"],
+            }}),
+            ("execution_rule_digest", "0" * 64),
+            ("input_asset_id", self.peer_review.report_version.workspace_snapshot.asset_id),
+            ("artifact_digest", "0" * 64),
+        ):
+            with self.subTest(field=field):
+                original = getattr(run, field)
+                setattr(run, field, value)
+                with patch("apps.reviews.checkers._read_asset") as read, self.assertRaises(
+                    AutoCheckRejected
+                ):
+                    executor.execute(run)
+                read.assert_not_called()
+                setattr(run, field, original)
+        legacy_adapter = SimpleNamespace(execute=Mock())
+        with (
+            patch("apps.reviews.checkers._read_asset", side_effect=[b"source", b'{"cases":[]}']),
+            self.assertRaises(AutoCheckRejected) as rejected,
+        ):
+            DockerLocalAutoCheckExecutor(
+                runtime_factory=Mock(return_value=legacy_adapter)
+            ).execute(run)
+        self.assertEqual(rejected.exception.code, "AUTO_CHECK_EXECUTION_PLAN_UNSUPPORTED")
+        legacy_adapter.execute.assert_not_called()
+
     def test_docker_local_judge_uses_frozen_contract_and_hidden_tests(self) -> None:
         rule = AutoCheckRule.objects.create(
             template_version=self.template_version,
@@ -453,6 +594,100 @@ class ReviewServiceTests(TestCase):
         self.assertEqual(captured["memory_mb"], 128)
         self.assertEqual(captured["cpu_millicores"], 250)
         self.assertEqual(destroyed, [(run.public_id, f"judge-destroy:{run.public_id}")])
+
+    @skipUnless(os.environ.get("LOCAL_DOCKER_INTEGRATION") == "1", "requires local Docker")
+    def test_v2_real_docker_reviews_compile_five_languages(self) -> None:
+        import docker
+
+        projects = {
+            "c": {
+                "src/main.c": '#include <stdio.h>\n#include "answer.h"\n'
+                'int main(void){printf("%d\\n",answer());}\n',
+                "src/answer.h": "static int answer(void){return 42;}\n",
+            },
+            "cpp": {
+                "src/main.cpp": '#include <iostream>\n#include "answer.hpp"\n'
+                'int main(){std::cout<<answer()<<"\\n";}\n',
+                "src/answer.hpp": "inline int answer(){return 42;}\n",
+            },
+            "java": {
+                "src/Main.java": "import helper.Answer;\npublic class Main{"
+                "public static void main(String[]args){System.out.println(Answer.value());}}\n",
+                "helper/Answer.java": "package helper;\npublic class Answer{"
+                "public static int value(){return 42;}}\n",
+            },
+            "python": {
+                "src/main.py": "from helper import answer\nprint(answer())\n",
+                "src/helper.py": "def answer(): return 42\n",
+            },
+            "go": {
+                "src/main.go": 'package main\nimport("fmt";"example.local/review/helper")\n'
+                "func main(){fmt.Println(helper.Answer())}\n",
+                "go.mod": "module example.local/review\n\ngo 1.25\n",
+                "helper/answer.go": "package helper\nfunc Answer()int{return 42}\n",
+            },
+        }
+        tests = json.dumps({
+            "comparator": "token", "absolute_tolerance": 99,
+            "cases": [{"input": "", "expected": "42.0"} for _ in range(4)],
+        }).encode()
+        tests_asset = ObjectAsset.objects.get(
+            public_id=self.template_version.execution_spec["tests_asset"]
+        )
+        ObjectAsset.objects.filter(pk=tests_asset.pk).update(
+            digest_sha256=hashlib.sha256(tests).hexdigest(), size_bytes=len(tests)
+        )
+        client = docker.from_env()
+        image = client.images.get("experimental-platform-workspace:local")
+        adapter = DockerLocalAdapter(
+            client=client.api, config={"image": image.id}, config_ref="runtime/review-v2-test"
+        )
+        executor = DockerLocalAutoCheckExecutor(runtime_factory=Mock(return_value=adapter))
+        try:
+            for language, files in projects.items():
+                with self.subTest(language=language):
+                    source = bundle(
+                        {path: value.encode() for path, value in files.items()}, max_bytes=65536
+                    )
+                    run = self._v2_auto_review(language, source, system_artifact=language == "go")
+                    with (
+                        patch("apps.reviews.checkers.object_storage") as storage,
+                        patch("apps.reviews.services.auto_check_executor", return_value=executor),
+                    ):
+                        storage.return_value.open_object.side_effect = [
+                            SimpleNamespace(body=BytesIO(source)),
+                            SimpleNamespace(body=BytesIO(tests)),
+                        ]
+                        completed = execute_auto_check(run_id=run.public_id)
+                    self.assertEqual(completed.status, "PASSED", completed.error_code)
+                    self.assertFalse(ReviewDecision.objects.filter(review=run.review).exists())
+                    changed = self._score(run.review)
+                    decision, _review, _task = decide_review(
+                        course_id=self.course.public_id, review_id=run.review.public_id,
+                        actor=self.teacher, expected_version=changed.row_version,
+                        decision="APPROVE", requested_score=Decimal("90"),
+                        feedback="Reviewed after real multi-language auto-check",
+                        context=self.context(self.teacher),
+                    )
+                    self.assertEqual(decision.score, Decimal("90"))
+                    self.assertEqual(adapter.inventory_resources(), [])
+            source = bundle({"main.py": b"print(42.1)\n"}, max_bytes=1024)
+            run = self._v2_auto_review(
+                "python", source, system_artifact=True, student_select=True
+            )
+            with (
+                patch("apps.reviews.checkers.object_storage") as storage,
+                patch("apps.reviews.services.auto_check_executor", return_value=executor),
+            ):
+                storage.return_value.open_object.side_effect = [
+                    SimpleNamespace(body=BytesIO(source)), SimpleNamespace(body=BytesIO(tests)),
+                ]
+                completed = execute_auto_check(run_id=run.public_id)
+            self.assertEqual(completed.status, "FAILED")
+            self.assertFalse(ReviewDecision.objects.filter(review=run.review).exists())
+            self.assertEqual(adapter.inventory_resources(), [])
+        finally:
+            client.close()
 
     @skipUnless(
         os.environ.get(
@@ -756,6 +991,22 @@ class ReviewServiceTests(TestCase):
         )
         self.assertEqual(forbidden.status_code, 403, forbidden.content)
 
+        # Source preview must apply the same course/staff boundary before reading objects.
+        with patch("apps.reviews.checkers._read_asset") as read_asset:
+            for scoped_client, course, expected_status in (
+                (other_client, other_course, 404),
+                (assistant_client, self.course, 403),
+            ):
+                response = scoped_client.get(
+                    f"/api/v2/teaching/courses/{course.public_id}/reviews/"
+                    f"{self.review.public_id}?include_source=1",
+                    HTTP_X_PORTAL="TEACHING",
+                    HTTP_X_PROXY_CONTEXT="ingress-v1",
+                    REMOTE_ADDR="127.0.0.1",
+                )
+                self.assertEqual(response.status_code, expected_status, response.content)
+            read_asset.assert_not_called()
+
     def test_score_api_rejects_stale_etag(self) -> None:
         client, csrf = self._client(identifier=self.teacher.email, portal="TEACHING")
         url = (
@@ -875,7 +1126,10 @@ class ReviewServiceTests(TestCase):
                 ]
             )
 
-        with patch("apps.agents.rubric_agent.assess_submission", side_effect=assessment):
+        with (
+            patch("apps.agents.rubric_agent.assess_submission", side_effect=assessment),
+            patch("apps.reviews.checkers._read_asset", return_value=b"Submitted source"),
+        ):
             for item in batch.suggestions.order_by("id"):
                 execute_ai_score_suggestion(suggestion_id=item.public_id)
         batch.refresh_from_db()
@@ -885,6 +1139,7 @@ class ReviewServiceTests(TestCase):
         batch = self._ready_ai_score_batch()
         self.assertEqual(batch.status, AIScoreBatch.Status.REVIEW_REQUIRED)
         self.assertEqual(batch.suggestions.filter(status=AIScoreSuggestion.Status.READY).count(), 2)
+        self.assertEqual(AuditLog.objects.filter(action="review.ai_score.generate").count(), 2)
 
         changed = accept_ai_score_batch(
             course_id=self.course.public_id,
@@ -909,6 +1164,88 @@ class ReviewServiceTests(TestCase):
         )
         self.assertEqual(self.task.status, ExperimentTask.Status.UNDER_REVIEW)
         self.assertEqual(self.peer_task.status, ExperimentTask.Status.UNDER_REVIEW)
+
+    def test_ai_reads_frozen_multifile_source_with_bounded_masked_input(self) -> None:
+        from apps.agents.rubric_agent import CriterionAssessment, RubricAssessment
+        from apps.core.project_archive import bundle
+
+        batch = self._ready_ai_score_batch()
+        suggestion = batch.suggestions.get(review=self.review)
+        assessment = RubricAssessment(criteria=[
+            CriterionAssessment(**item) for item in suggestion.criteria
+        ])
+        AIScoreSuggestion.objects.filter(pk=suggestion.pk).update(status="QUEUED")
+        value = bundle({
+            "main.py": b"from helper import answer\nprint(answer())",
+            "helper.py": b"password=private-value\ndef answer(): return 42",
+        }, max_bytes=1024 * 1024)
+        asset = self.review.report_version.workspace_snapshot.asset
+        ObjectAsset.objects.filter(pk=asset.pk).update(
+            media_type="application/gzip", size_bytes=len(value),
+            digest_sha256=hashlib.sha256(value).hexdigest(),
+        )
+        stream = BytesIO(value)
+        storage = Mock()
+        storage.open_object.return_value = SimpleNamespace(body=stream)
+        with (
+            patch("apps.reviews.checkers.object_storage", return_value=storage),
+            patch("apps.agents.rubric_agent.assess_submission", return_value=assessment) as ai,
+        ):
+            result = execute_ai_score_suggestion(suggestion_id=suggestion.public_id)
+        self.assertEqual(result.status, "READY")
+        prompt = ai.call_args.kwargs["report"]
+        self.assertIn("FILE: helper.py", prompt)
+        self.assertIn("FILE: main.py", prompt)
+        self.assertIn("Shared report body", prompt)
+        self.assertIn("[REDACTED]", prompt)
+        self.assertNotIn("private-value", prompt)
+        self.assertLessEqual(len(prompt), 100_000)
+        self.assertTrue(stream.closed)
+        storage.open_object.assert_called_once_with(
+            bucket=asset.bucket, object_key=asset.object_key, version_id=asset.object_version,
+        )
+        from apps.reviews.serializers import review_detail_data
+
+        asset.refresh_from_db()
+        with (
+            patch("apps.reviews.checkers._read_asset", return_value=value),
+            patch("apps.workspaces.workbench._content_data", return_value={"manual": None}),
+        ):
+            preview = review_detail_data(self.review, include_source=True)["project"]
+        self.assertEqual(preview["snapshot_id"],
+                         self.review.report_version.workspace_snapshot.public_id)
+        self.assertEqual([item["path"] for item in preview["files"]], ["helper.py", "main.py"])
+        self.assertEqual(preview["error_code"], "")
+        self.assertFalse(CriterionScoreEvent.objects.filter(review=self.review).exists())
+
+    def test_ai_source_failure_keeps_manual_scoring_available(self) -> None:
+        batch = self._ready_ai_score_batch()
+        suggestion = batch.suggestions.get(review=self.review)
+        AIScoreSuggestion.objects.filter(pk=suggestion.pk).update(status="QUEUED")
+        asset = self.review.report_version.workspace_snapshot.asset
+        ObjectAsset.objects.filter(pk=asset.pk).update(size_bytes=21 * 1024 * 1024)
+        with (
+            patch("apps.reviews.checkers.object_storage") as storage,
+            patch("apps.agents.rubric_agent.assess_submission") as ai,
+        ):
+            result = execute_ai_score_suggestion(suggestion_id=suggestion.public_id)
+        self.assertEqual(result.status, "FAILED")
+        storage.assert_not_called()
+        ai.assert_not_called()
+        self._score()
+        self.assertEqual(CriterionScoreEvent.objects.filter(review=self.review).count(), 2)
+
+    def test_ai_suggestion_cannot_be_applied_to_another_submission(self) -> None:
+        batch = self._ready_ai_score_batch()
+        suggestion = batch.suggestions.get(review=self.review)
+        with self.assertRaises(ResourceNotFound):
+            accept_ai_score_suggestion(
+                course_id=self.course.public_id, review_id=self.peer_review.public_id,
+                suggestion_id=suggestion.public_id, actor=self.teacher,
+                expected_review_version=self.peer_review.row_version,
+                context=self.context(self.teacher),
+            )
+        self.assertFalse(CriterionScoreEvent.objects.exists())
 
     def test_ai_batch_acceptance_rolls_back_when_any_review_changed(self) -> None:
         batch = self._ready_ai_score_batch()
@@ -982,7 +1319,10 @@ class ReviewServiceTests(TestCase):
             )
 
         batch = AIScoreBatch.objects.get(public_id=batch_id)
-        with patch("apps.agents.rubric_agent.assess_submission", side_effect=assessment):
+        with (
+            patch("apps.agents.rubric_agent.assess_submission", side_effect=assessment),
+            patch("apps.reviews.checkers._read_asset", return_value=b"Submitted source"),
+        ):
             for suggestion in batch.suggestions.order_by("id"):
                 execute_ai_score_suggestion(suggestion_id=suggestion.public_id)
         batch.refresh_from_db()

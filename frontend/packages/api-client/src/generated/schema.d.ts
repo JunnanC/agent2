@@ -356,6 +356,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v2/courses/invitations/resolve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Resolve an invitation before consuming it, so students can apply directly. */
+        get: operations["courses_invitation_resolve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v2/events/stream": {
         parameters: {
             query?: never;
@@ -4367,7 +4384,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        get: operations["teaching_template_assets_list"];
         put?: never;
         post: operations["teaching_template_assets_create"];
         delete?: never;
@@ -5073,9 +5090,10 @@ export interface components {
         };
         /**
          * @description * `token` - token
+         *     * `numeric` - numeric
          * @enum {string}
          */
-        ComparatorEnum: "token";
+        ComparatorEnum: "token" | "numeric";
         CompensationData: {
             public_id: string;
             task_type: string;
@@ -5423,6 +5441,16 @@ export interface components {
                 [key: string]: unknown;
             };
         };
+        /**
+         * @description * `FORMAL` - FORMAL
+         *     * `SELF_TEST` - SELF_TEST
+         * @enum {string}
+         */
+        EvaluationModeEnum: "FORMAL" | "SELF_TEST";
+        ExecutionMaterial: {
+            asset_id: string;
+            role: components["schemas"]["RoleEnum"];
+        };
         /** @description Write contract for the student REST create-execution-run endpoint.
          *
          *     v1 evaluates the whole test asset for every run; ``test_keys`` and
@@ -5433,23 +5461,42 @@ export interface components {
             test_keys?: string[];
         };
         ExecutionSpec: {
-            language: components["schemas"]["LanguageEnum"];
-            entrypoint: string;
+            schema_version?: components["schemas"]["SchemaVersionEnum"];
+            language: (components["schemas"]["LanguageEnum"] | components["schemas"]["NullEnum"]) | null;
+            toolchain_version?: string | null;
+            language_standard?: string | null;
+            toolchain?: {
+                [key: string]: unknown;
+            };
+            materials?: components["schemas"]["ExecutionMaterial"][];
+            entrypoint: string | null;
             timeout_seconds: number;
             memory_mb: number;
             cpu_millicores: number;
             comparator: components["schemas"]["ComparatorEnum"];
+            /** Format: double */
+            absolute_tolerance?: number;
+            /** Format: double */
+            relative_tolerance?: number;
             tests_asset: string;
             network_mode: components["schemas"]["NetworkModeEc7Enum"];
         };
         ExecutionSpecSave: {
             tests_json: string;
-            language: components["schemas"]["LanguageEnum"];
-            entrypoint: string;
+            schema_version?: components["schemas"]["SchemaVersionEnum"];
+            language: (components["schemas"]["LanguageEnum"] | components["schemas"]["NullEnum"]) | null;
+            toolchain_version?: string | null;
+            language_standard?: string | null;
+            materials?: components["schemas"]["ExecutionMaterial"][];
+            entrypoint: string | null;
             timeout_seconds: number;
             memory_mb: number;
             cpu_millicores: number;
             comparator: components["schemas"]["ComparatorEnum"];
+            /** Format: double */
+            absolute_tolerance?: number;
+            /** Format: double */
+            relative_tolerance?: number;
             network_mode: components["schemas"]["NetworkModeEc7Enum"];
         };
         ExperimentImageCreate: {
@@ -5743,10 +5790,14 @@ export interface components {
             description?: string;
         };
         /**
-         * @description * `python` - python
+         * @description * `c` - c
+         *     * `cpp` - cpp
+         *     * `java` - java
+         *     * `python` - python
+         *     * `go` - go
          * @enum {string}
          */
-        LanguageEnum: "python";
+        LanguageEnum: "c" | "cpp" | "java" | "python" | "go";
         /**
          * @description * `ASSIGN_UNTIL_DEADLINE` - Assign Until Deadline
          *     * `DO_NOT_ASSIGN` - Do Not Assign
@@ -5809,6 +5860,8 @@ export interface components {
          * @enum {string}
          */
         NetworkModeEc7Enum: "DENY_ALL";
+        /** @enum {unknown} */
+        NullEnum: null;
         OperationEvent: {
             public_id: string;
             task_id: string;
@@ -6305,9 +6358,11 @@ export interface components {
          *     * `REPORT_TEMPLATE` - REPORT_TEMPLATE
          *     * `TESTS` - TESTS
          *     * `BUILD_CONTEXT` - BUILD_CONTEXT
+         *     * `HIDDEN_SOURCE` - HIDDEN_SOURCE
+         *     * `PUBLIC_DATA` - PUBLIC_DATA
          * @enum {string}
          */
-        PurposeEnum: "MANUAL" | "STARTER" | "REPORT_TEMPLATE" | "TESTS" | "BUILD_CONTEXT";
+        PurposeEnum: "MANUAL" | "STARTER" | "REPORT_TEMPLATE" | "TESTS" | "BUILD_CONTEXT" | "HIDDEN_SOURCE" | "PUBLIC_DATA";
         QualificationData: {
             public_id: string;
             user_id: string;
@@ -6645,6 +6700,9 @@ export interface components {
             /** Format: date-time */
             created_at: string;
             row_version: number;
+            project?: {
+                [key: string]: unknown;
+            };
             rubric_version_id: string;
             scores: components["schemas"]["CriterionScoresData"];
             annotations: components["schemas"]["AnnotationData"][];
@@ -6762,6 +6820,13 @@ export interface components {
          * @enum {string}
          */
         RiskResolveStatusEnum: "ACKNOWLEDGED" | "IGNORED" | "CLOSED";
+        /**
+         * @description * `STUDENT_FILES` - STUDENT_FILES
+         *     * `HIDDEN_SOURCE` - HIDDEN_SOURCE
+         *     * `PUBLIC_DATA` - PUBLIC_DATA
+         * @enum {string}
+         */
+        RoleEnum: "STUDENT_FILES" | "HIDDEN_SOURCE" | "PUBLIC_DATA";
         RubricCriterionData: {
             public_id: string;
             position: number;
@@ -6892,6 +6957,11 @@ export interface components {
          * @enum {string}
          */
         RuntimeTypeEnum: "CONTAINER" | "VM";
+        /**
+         * @description * `2` - 2
+         * @enum {integer}
+         */
+        SchemaVersionEnum: 2;
         SessionStepUpData: {
             recent: boolean;
             /** Format: date-time */
@@ -7030,6 +7100,10 @@ export interface components {
             kind: components["schemas"]["SystemArtifactDataKindEnum"];
             asset_id: string;
             digest_sha256: string;
+            execution_run_id: string | null;
+            execution_evidence: {
+                [key: string]: unknown;
+            };
             /** Format: date-time */
             created_at: string;
         };
@@ -7144,6 +7218,12 @@ export interface components {
             attached: boolean;
             row_version: number;
         };
+        TemplateAssetListResponse: {
+            data: components["schemas"]["TemplateAssetData"][];
+            meta: {
+                [key: string]: unknown;
+            };
+        };
         TemplateAssetResponse: {
             data: components["schemas"]["TemplateAssetData"];
             meta: {
@@ -7229,6 +7309,9 @@ export interface components {
                 [key: string]: unknown;
             }[];
             materials: {
+                [key: string]: unknown;
+            }[];
+            toolchains: {
                 [key: string]: unknown;
             }[];
         };
@@ -7568,6 +7651,9 @@ export interface components {
             materials: {
                 [key: string]: unknown;
             }[];
+            manual: {
+                [key: string]: unknown;
+            } | null;
         };
         WorkbenchProvisioning: {
             status: string;
@@ -7659,6 +7745,11 @@ export interface components {
         WorkbenchWorkspace: {
             mode: components["schemas"]["WorkbenchWorkspaceModeEnum"];
             entrypoint: string;
+            language: string;
+            language_policy: {
+                [key: string]: unknown;
+            };
+            toolchain_version: string | null;
             capture_supported: boolean;
             last_synchronized_version: number;
             last_synchronized_snapshot_id: string | null;
@@ -7720,6 +7811,10 @@ export interface components {
             finished_at: string | null;
             duration_ms: number | null;
             trace_id: string;
+            evaluation_mode: components["schemas"]["EvaluationModeEnum"];
+            test_cases?: {
+                [key: string]: unknown;
+            }[];
         };
         WorkspaceExecutionRunList: {
             items: components["schemas"]["WorkspaceExecutionRun"][];
@@ -7742,6 +7837,7 @@ export interface components {
             /** Format: date-time */
             revoked_at: string | null;
             current_version: number;
+            language: string;
             latest_client_seq: number;
             row_version: number;
             readonly workspace_token: string;
@@ -7765,6 +7861,8 @@ export interface components {
             media_type: string;
             /** Format: date-time */
             saved_at: string;
+            language: string;
+            initial: boolean;
         };
         WorkspaceStorageJob: {
             public_id: string;
@@ -7792,9 +7890,11 @@ export interface components {
          *     * `CAPTURE` - Capture
          *     * `RESTORE` - Restore
          *     * `FINALIZE` - Finalize
+         *     * `SWITCH` - Switch
+         *     * `RESET` - Reset
          * @enum {string}
          */
-        WorkspaceStorageJobKindEnum: "INITIALIZE" | "CAPTURE" | "RESTORE" | "FINALIZE";
+        WorkspaceStorageJobKindEnum: "INITIALIZE" | "CAPTURE" | "RESTORE" | "FINALIZE" | "SWITCH" | "RESET";
         /**
          * @description * `QUEUED` - Queued
          *     * `RUNNING` - Running
@@ -7809,13 +7909,16 @@ export interface components {
             client_seq?: number;
             base_version?: number;
             snapshot_id?: string;
+            language?: components["schemas"]["LanguageEnum"];
         };
         /**
          * @description * `CAPTURE` - CAPTURE
          *     * `RESTORE` - RESTORE
+         *     * `SWITCH` - SWITCH
+         *     * `RESET` - RESET
          * @enum {string}
          */
-        WorkspaceStorageJobWriteKindEnum: "CAPTURE" | "RESTORE";
+        WorkspaceStorageJobWriteKindEnum: "CAPTURE" | "RESTORE" | "SWITCH" | "RESET";
     };
     responses: never;
     parameters: never;
@@ -8374,6 +8477,25 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CourseContentResponse"];
+                };
+            };
+        };
+    };
+    courses_invitation_resolve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CourseResponse"];
                 };
             };
         };
@@ -13286,7 +13408,9 @@ export interface operations {
     };
     api_v2_teaching_courses_ai_score_batches_retrieve: {
         parameters: {
-            query?: never;
+            query?: {
+                publication_id?: string;
+            };
             header?: never;
             path: {
                 course_id: string;
@@ -14744,7 +14868,9 @@ export interface operations {
     };
     teaching_reviews_retrieve: {
         parameters: {
-            query?: never;
+            query?: {
+                include_source?: string;
+            };
             header?: never;
             path: {
                 course_id: string;
@@ -16128,6 +16254,30 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TemplateResponse"];
+                };
+            };
+        };
+    };
+    teaching_template_assets_list: {
+        parameters: {
+            query: {
+                version_id: string;
+            };
+            header?: never;
+            path: {
+                course_id: string;
+                template_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TemplateAssetListResponse"];
                 };
             };
         };

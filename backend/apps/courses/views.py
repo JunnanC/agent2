@@ -20,7 +20,7 @@ from apps.core.idempotency import PrincipalScope, StoredResponse, execute_idempo
 from apps.core.pagination import PageSpec
 
 from .errors import ActiveEnrollmentRequired, FeatureNotAvailable, InvitationInvalid
-from .models import CourseStaff, CourseStaffGrant, Enrollment, Invitation
+from .models import Course, CourseStaff, CourseStaffGrant, Enrollment, Invitation
 from .selectors import (
     active_enrollment,
     active_staff,
@@ -292,7 +292,11 @@ class CourseInvitationResolveView(APIView):
             .filter(code_digest=invitation_digest(code), status="ACTIVE")
             .first()
         )
-        if invitation is None or invitation.expires_at <= timezone.now() or invitation.used_count >= invitation.max_uses:
+        if (
+            invitation is None
+            or invitation.expires_at <= timezone.now()
+            or invitation.used_count >= invitation.max_uses
+        ):
             raise InvitationInvalid()
         course = invitation.course
         if course.status != Course.Status.PUBLISHED:

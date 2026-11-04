@@ -190,6 +190,7 @@ class UserWorkspaceStorageJobCreateView(APIView):
                 client_seq=values.get("client_seq"),
                 base_version=values.get("base_version"),
                 snapshot_id=values.get("snapshot_id"),
+                language=values.get("language"),
                 idempotency_key=key,
                 request_payload=values,
                 context=_context(request),
@@ -631,7 +632,7 @@ class UserExecutionRunDetailView(APIView):
         run = execution_run_for_user(
             actor=request.user, task_id=task_id, execution_id=execution_id
         )
-        return _response(request, execution_run_data(run))
+        return _response(request, execution_run_data(run, include_result=True))
 
 
 class TeachingWorkspaceView(APIView):

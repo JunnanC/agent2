@@ -1022,6 +1022,35 @@
                 }
             }
         },
+        "/api/v2/courses/invitations/resolve": {
+            "get": {
+                "operationId": "courses_invitation_resolve",
+                "description": "Resolve an invitation before consuming it, so students can apply directly.",
+                "tags": [
+                    "courses"
+                ],
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CourseResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                },
+                "x-portals": [
+                    "USER"
+                ]
+            }
+        },
         "/api/v2/events/stream": {
             "get": {
                 "operationId": "api_v2_events_stream_retrieve",
@@ -10268,6 +10297,13 @@
                             "type": "string"
                         },
                         "required": true
+                    },
+                    {
+                        "in": "query",
+                        "name": "publication_id",
+                        "schema": {
+                            "type": "string"
+                        }
                     }
                 ],
                 "tags": [
@@ -13287,6 +13323,13 @@
                             "type": "string"
                         },
                         "required": true
+                    },
+                    {
+                        "in": "query",
+                        "name": "include_source",
+                        "schema": {
+                            "type": "string"
+                        }
                     },
                     {
                         "in": "path",
@@ -16456,6 +16499,58 @@
             }
         },
         "/api/v2/teaching/courses/{course_id}/templates/{template_id}/assets": {
+            "get": {
+                "operationId": "teaching_template_assets_list",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "course_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "template_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "query",
+                        "name": "version_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "api"
+                ],
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/TemplateAssetListResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                },
+                "x-portals": [
+                    "TEACHING"
+                ]
+            },
             "post": {
                 "operationId": "teaching_template_assets_create",
                 "parameters": [
@@ -18683,10 +18778,11 @@
             },
             "ComparatorEnum": {
                 "enum": [
-                    "token"
+                    "token",
+                    "numeric"
                 ],
                 "type": "string",
-                "description": "* `token` - token"
+                "description": "* `token` - token\n* `numeric` - numeric"
             },
             "CompensationData": {
                 "type": "object",
@@ -19822,6 +19918,30 @@
                     "name"
                 ]
             },
+            "EvaluationModeEnum": {
+                "enum": [
+                    "FORMAL",
+                    "SELF_TEST"
+                ],
+                "type": "string",
+                "description": "* `FORMAL` - FORMAL\n* `SELF_TEST` - SELF_TEST"
+            },
+            "ExecutionMaterial": {
+                "type": "object",
+                "properties": {
+                    "asset_id": {
+                        "type": "string",
+                        "maxLength": 26
+                    },
+                    "role": {
+                        "$ref": "#/components/schemas/RoleEnum"
+                    }
+                },
+                "required": [
+                    "asset_id",
+                    "role"
+                ]
+            },
             "ExecutionRunCreate": {
                 "type": "object",
                 "description": "Write contract for the student REST create-execution-run endpoint.\n\nv1 evaluates the whole test asset for every run; ``test_keys`` and\n``snapshot_id`` are accepted for API compatibility, and ``snapshot_id``\nis forwarded to the execution service as the evaluated snapshot.",
@@ -19843,13 +19963,44 @@
             "ExecutionSpec": {
                 "type": "object",
                 "properties": {
+                    "schema_version": {
+                        "$ref": "#/components/schemas/SchemaVersionEnum"
+                    },
                     "language": {
-                        "$ref": "#/components/schemas/LanguageEnum"
+                        "nullable": true,
+                        "oneOf": [
+                            {
+                                "$ref": "#/components/schemas/LanguageEnum"
+                            },
+                            {
+                                "$ref": "#/components/schemas/NullEnum"
+                            }
+                        ]
+                    },
+                    "toolchain_version": {
+                        "type": "string",
+                        "nullable": true,
+                        "maxLength": 32
+                    },
+                    "language_standard": {
+                        "type": "string",
+                        "nullable": true,
+                        "maxLength": 16
+                    },
+                    "toolchain": {
+                        "type": "object",
+                        "additionalProperties": {}
+                    },
+                    "materials": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/ExecutionMaterial"
+                        }
                     },
                     "entrypoint": {
                         "type": "string",
-                        "maxLength": 128,
-                        "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,126}\\.py$"
+                        "nullable": true,
+                        "maxLength": 255
                     },
                     "timeout_seconds": {
                         "type": "integer",
@@ -19866,6 +20017,16 @@
                     },
                     "comparator": {
                         "$ref": "#/components/schemas/ComparatorEnum"
+                    },
+                    "absolute_tolerance": {
+                        "type": "number",
+                        "format": "double",
+                        "minimum": 0
+                    },
+                    "relative_tolerance": {
+                        "type": "number",
+                        "format": "double",
+                        "minimum": 0
                     },
                     "tests_asset": {
                         "type": "string",
@@ -19892,13 +20053,40 @@
                     "tests_json": {
                         "type": "string"
                     },
+                    "schema_version": {
+                        "$ref": "#/components/schemas/SchemaVersionEnum"
+                    },
                     "language": {
-                        "$ref": "#/components/schemas/LanguageEnum"
+                        "nullable": true,
+                        "oneOf": [
+                            {
+                                "$ref": "#/components/schemas/LanguageEnum"
+                            },
+                            {
+                                "$ref": "#/components/schemas/NullEnum"
+                            }
+                        ]
+                    },
+                    "toolchain_version": {
+                        "type": "string",
+                        "nullable": true,
+                        "maxLength": 32
+                    },
+                    "language_standard": {
+                        "type": "string",
+                        "nullable": true,
+                        "maxLength": 16
+                    },
+                    "materials": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/ExecutionMaterial"
+                        }
                     },
                     "entrypoint": {
                         "type": "string",
-                        "maxLength": 128,
-                        "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,126}\\.py$"
+                        "nullable": true,
+                        "maxLength": 255
                     },
                     "timeout_seconds": {
                         "type": "integer",
@@ -19915,6 +20103,16 @@
                     },
                     "comparator": {
                         "$ref": "#/components/schemas/ComparatorEnum"
+                    },
+                    "absolute_tolerance": {
+                        "type": "number",
+                        "format": "double",
+                        "minimum": 0
+                    },
+                    "relative_tolerance": {
+                        "type": "number",
+                        "format": "double",
+                        "minimum": 0
                     },
                     "network_mode": {
                         "$ref": "#/components/schemas/NetworkModeEc7Enum"
@@ -20830,10 +21028,14 @@
             },
             "LanguageEnum": {
                 "enum": [
-                    "python"
+                    "c",
+                    "cpp",
+                    "java",
+                    "python",
+                    "go"
                 ],
                 "type": "string",
-                "description": "* `python` - python"
+                "description": "* `c` - c\n* `cpp` - cpp\n* `java` - java\n* `python` - python\n* `go` - go"
             },
             "LateEnrollmentPolicyEnum": {
                 "enum": [
@@ -21031,6 +21233,11 @@
                 ],
                 "type": "string",
                 "description": "* `DENY_ALL` - DENY_ALL"
+            },
+            "NullEnum": {
+                "enum": [
+                    null
+                ]
             },
             "OperationEvent": {
                 "type": "object",
@@ -22544,10 +22751,12 @@
                     "STARTER",
                     "REPORT_TEMPLATE",
                     "TESTS",
-                    "BUILD_CONTEXT"
+                    "BUILD_CONTEXT",
+                    "HIDDEN_SOURCE",
+                    "PUBLIC_DATA"
                 ],
                 "type": "string",
-                "description": "* `MANUAL` - MANUAL\n* `STARTER` - STARTER\n* `REPORT_TEMPLATE` - REPORT_TEMPLATE\n* `TESTS` - TESTS\n* `BUILD_CONTEXT` - BUILD_CONTEXT"
+                "description": "* `MANUAL` - MANUAL\n* `STARTER` - STARTER\n* `REPORT_TEMPLATE` - REPORT_TEMPLATE\n* `TESTS` - TESTS\n* `BUILD_CONTEXT` - BUILD_CONTEXT\n* `HIDDEN_SOURCE` - HIDDEN_SOURCE\n* `PUBLIC_DATA` - PUBLIC_DATA"
             },
             "QualificationData": {
                 "type": "object",
@@ -23718,6 +23927,10 @@
                     "row_version": {
                         "type": "integer"
                     },
+                    "project": {
+                        "type": "object",
+                        "additionalProperties": {}
+                    },
                     "rubric_version_id": {
                         "type": "string"
                     },
@@ -24065,6 +24278,15 @@
                 ],
                 "type": "string",
                 "description": "* `ACKNOWLEDGED` - ACKNOWLEDGED\n* `IGNORED` - IGNORED\n* `CLOSED` - CLOSED"
+            },
+            "RoleEnum": {
+                "enum": [
+                    "STUDENT_FILES",
+                    "HIDDEN_SOURCE",
+                    "PUBLIC_DATA"
+                ],
+                "type": "string",
+                "description": "* `STUDENT_FILES` - STUDENT_FILES\n* `HIDDEN_SOURCE` - HIDDEN_SOURCE\n* `PUBLIC_DATA` - PUBLIC_DATA"
             },
             "RubricCriterionData": {
                 "type": "object",
@@ -24477,6 +24699,13 @@
                 ],
                 "type": "string",
                 "description": "* `CONTAINER` - Container\n* `VM` - Vm"
+            },
+            "SchemaVersionEnum": {
+                "enum": [
+                    2
+                ],
+                "type": "integer",
+                "description": "* `2` - 2"
             },
             "SessionStepUpData": {
                 "type": "object",
@@ -24915,6 +25144,14 @@
                     "digest_sha256": {
                         "type": "string"
                     },
+                    "execution_run_id": {
+                        "type": "string",
+                        "nullable": true
+                    },
+                    "execution_evidence": {
+                        "type": "object",
+                        "additionalProperties": {}
+                    },
                     "created_at": {
                         "type": "string",
                         "format": "date-time"
@@ -24924,6 +25161,8 @@
                     "asset_id",
                     "created_at",
                     "digest_sha256",
+                    "execution_evidence",
+                    "execution_run_id",
                     "kind",
                     "public_id",
                     "task_id"
@@ -25244,6 +25483,25 @@
                     "version_id"
                 ]
             },
+            "TemplateAssetListResponse": {
+                "type": "object",
+                "properties": {
+                    "data": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/TemplateAssetData"
+                        }
+                    },
+                    "meta": {
+                        "type": "object",
+                        "additionalProperties": {}
+                    }
+                },
+                "required": [
+                    "data",
+                    "meta"
+                ]
+            },
             "TemplateAssetResponse": {
                 "type": "object",
                 "properties": {
@@ -25511,13 +25769,21 @@
                             "type": "object",
                             "additionalProperties": {}
                         }
+                    },
+                    "toolchains": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "additionalProperties": {}
+                        }
                     }
                 },
                 "required": [
                     "images",
                     "materials",
                     "resource_profiles",
-                    "runtime_adapters"
+                    "runtime_adapters",
+                    "toolchains"
                 ]
             },
             "TemplateOptionsResponse": {
@@ -26525,12 +26791,18 @@
                             "type": "object",
                             "additionalProperties": {}
                         }
+                    },
+                    "manual": {
+                        "type": "object",
+                        "additionalProperties": {},
+                        "nullable": true
                     }
                 },
                 "required": [
                     "constraints",
                     "deliverables",
                     "description",
+                    "manual",
                     "materials",
                     "objectives",
                     "steps"
@@ -26862,6 +27134,17 @@
                     "entrypoint": {
                         "type": "string"
                     },
+                    "language": {
+                        "type": "string"
+                    },
+                    "language_policy": {
+                        "type": "object",
+                        "additionalProperties": {}
+                    },
+                    "toolchain_version": {
+                        "type": "string",
+                        "nullable": true
+                    },
                     "capture_supported": {
                         "type": "boolean"
                     },
@@ -26885,9 +27168,12 @@
                     "active_storage_job",
                     "capture_supported",
                     "entrypoint",
+                    "language",
+                    "language_policy",
                     "last_synchronized_snapshot_id",
                     "last_synchronized_version",
-                    "mode"
+                    "mode",
+                    "toolchain_version"
                 ]
             },
             "WorkbenchWorkspaceModeEnum": {
@@ -27040,11 +27326,22 @@
                     },
                     "trace_id": {
                         "type": "string"
+                    },
+                    "evaluation_mode": {
+                        "$ref": "#/components/schemas/EvaluationModeEnum"
+                    },
+                    "test_cases": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "additionalProperties": {}
+                        }
                     }
                 },
                 "required": [
                     "duration_ms",
                     "error_code",
+                    "evaluation_mode",
                     "finished_at",
                     "public_id",
                     "result_summary",
@@ -27113,6 +27410,9 @@
                     "current_version": {
                         "type": "integer"
                     },
+                    "language": {
+                        "type": "string"
+                    },
                     "latest_client_seq": {
                         "type": "integer"
                     },
@@ -27130,6 +27430,7 @@
                     "current_version",
                     "expires_at",
                     "instance_id",
+                    "language",
                     "latest_client_seq",
                     "portal",
                     "public_id",
@@ -27183,12 +27484,20 @@
                     "saved_at": {
                         "type": "string",
                         "format": "date-time"
+                    },
+                    "language": {
+                        "type": "string"
+                    },
+                    "initial": {
+                        "type": "boolean"
                     }
                 },
                 "required": [
                     "base_version",
                     "client_seq",
                     "digest_sha256",
+                    "initial",
+                    "language",
                     "media_type",
                     "public_id",
                     "saved_at",
@@ -27277,10 +27586,12 @@
                     "INITIALIZE",
                     "CAPTURE",
                     "RESTORE",
-                    "FINALIZE"
+                    "FINALIZE",
+                    "SWITCH",
+                    "RESET"
                 ],
                 "type": "string",
-                "description": "* `INITIALIZE` - Initialize\n* `CAPTURE` - Capture\n* `RESTORE` - Restore\n* `FINALIZE` - Finalize"
+                "description": "* `INITIALIZE` - Initialize\n* `CAPTURE` - Capture\n* `RESTORE` - Restore\n* `FINALIZE` - Finalize\n* `SWITCH` - Switch\n* `RESET` - Reset"
             },
             "WorkspaceStorageJobStatusEnum": {
                 "enum": [
@@ -27309,6 +27620,9 @@
                     },
                     "snapshot_id": {
                         "type": "string"
+                    },
+                    "language": {
+                        "$ref": "#/components/schemas/LanguageEnum"
                     }
                 },
                 "required": [
@@ -27318,10 +27632,12 @@
             "WorkspaceStorageJobWriteKindEnum": {
                 "enum": [
                     "CAPTURE",
-                    "RESTORE"
+                    "RESTORE",
+                    "SWITCH",
+                    "RESET"
                 ],
                 "type": "string",
-                "description": "* `CAPTURE` - CAPTURE\n* `RESTORE` - RESTORE"
+                "description": "* `CAPTURE` - CAPTURE\n* `RESTORE` - RESTORE\n* `SWITCH` - SWITCH\n* `RESET` - RESET"
             }
         },
         "securitySchemes": {

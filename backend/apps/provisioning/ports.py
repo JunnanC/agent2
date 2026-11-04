@@ -156,4 +156,5 @@ class RuntimeAdapter(Protocol):
         cpu_millicores: int,
         network_mode: str,
         tests: bytes = b"",
+        execution_plan: Mapping[str, list[str]] | None = None,
     ) -> RuntimeExecutionResult: ...

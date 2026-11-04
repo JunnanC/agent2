@@ -13,7 +13,7 @@ import io
 import tarfile
 import time
 import zipfile
-from contextlib import suppress
+from contextlib import closing, suppress
 from dataclasses import dataclass
 from datetime import timedelta
 from typing import Any
@@ -29,7 +29,9 @@ from apps.core.audit import append_failure
 from apps.core.concurrency import compare_and_swap
 from apps.core.models import ObjectAsset
 from apps.core.object_storage import iter_chunks, object_storage
+from apps.core.project_archive import MANIFEST, ProjectArchiveError, bundle, unpack
 from apps.courses.services import ActorContext
+from apps.labtemplates.toolchains import TOOLCHAINS_BY_LANGUAGE
 from apps.provisioning.adapters import RuntimeAdapterFailure, runtime_for_driver
 from apps.provisioning.models import ProvisioningInstance
 
@@ -37,6 +39,8 @@ from . import services
 from .models import WorkspaceAutosaveLog, WorkspaceSession, WorkspaceSnapshot, WorkspaceStorageJob
 
 WORKSPACE_PATH = "main.py"
+PROJECT_PATH = "."
+PROJECT_MANIFEST = MANIFEST
 _HEX_DIGEST_LENGTH = 64
 
 
@@ -104,6 +108,22 @@ def _safe_member(name: str) -> bool:
     return all(part not in {"", ".", ".."} for part in parts)
 
 
+def _project_archive(files: dict[str, bytes], *, include_manifest: bool = True) -> bytes:
+    try:
+        return bundle(files, max_bytes=_max_bytes(), manifest=include_manifest)
+    except ProjectArchiveError as exc:
+        raise WorkspaceStorageFailure(str(exc)) from exc
+
+
+def _project_files(value: bytes, media_type: str = "application/x-tar") -> dict[str, bytes]:
+    if media_type.startswith("text/"):
+        return {WORKSPACE_PATH: _validate_content(value).value}
+    try:
+        return unpack(value, max_bytes=_max_bytes())
+    except ProjectArchiveError as exc:
+        raise WorkspaceStorageFailure(str(exc)) from exc
+
+
 def _starter_main(value: bytes, media_type: str) -> bytes:
     """Extract only main.py from a starter archive with traversal checks."""
 
@@ -138,7 +158,7 @@ def _starter_main(value: bytes, media_type: str) -> bytes:
             raise WorkspaceStorageFailure("WORKSPACE_FILE_INVALID") from exc
     try:
         with tarfile.open(fileobj=io.BytesIO(value), mode="r:*") as archive:
-            tar_candidates: list[tarfile.TarInfo] = []
+            candidates: list[tarfile.TarInfo] = []
             for tar_info in archive.getmembers():
                 name = tar_info.name.replace("\\", "/")
                 safe_name = name.rstrip("/") if tar_info.isdir() else name
@@ -149,10 +169,10 @@ def _starter_main(value: bytes, media_type: str) -> bytes:
                 if not tar_info.isreg() or tar_info.issym() or tar_info.islnk():
                     raise WorkspaceStorageFailure("WORKSPACE_FILE_INVALID")
                 if name == WORKSPACE_PATH:
-                    tar_candidates.append(tar_info)
-            if len(tar_candidates) != 1:
+                    candidates.append(tar_info)
+            if len(candidates) != 1:
                 raise WorkspaceStorageFailure("WORKSPACE_FILE_MISSING")
-            tar_info = tar_candidates[0]
+            tar_info = candidates[0]
             if tar_info.size > _max_bytes():
                 raise WorkspaceStorageFailure("WORKSPACE_FILE_TOO_LARGE")
             handle = archive.extractfile(tar_info)
@@ -170,14 +190,14 @@ def _read_object(asset: ObjectAsset) -> bytes:
         stored = object_storage().open_object(
             bucket=asset.bucket, object_key=asset.object_key, version_id=asset.object_version
         )
-        body = stored.body
         chunks: list[bytes] = []
         total = 0
-        while chunk := body.read(64 * 1024):
-            total += len(chunk)
-            if total > _max_bytes():
-                raise WorkspaceStorageFailure("WORKSPACE_FILE_TOO_LARGE")
-            chunks.append(bytes(chunk))
+        with closing(stored.body) as body:
+            while chunk := body.read(64 * 1024):
+                total += len(chunk)
+                if total > _max_bytes():
+                    raise WorkspaceStorageFailure("WORKSPACE_FILE_TOO_LARGE")
+                chunks.append(bytes(chunk))
         value = b"".join(chunks)
     except WorkspaceStorageFailure:
         raise
@@ -201,11 +221,7 @@ def _runtime(
     allowed_statuses = {ProvisioningInstance.Status.READY}
     if allow_destroying:
         allowed_statuses.add(ProvisioningInstance.Status.DESTROYING)
-    if (
-        instance is None
-        or not instance.external_id
-        or instance.status not in allowed_statuses
-    ):
+    if instance is None or not instance.external_id or instance.status not in allowed_statuses:
         raise WorkspaceStorageFailure("WORKSPACE_VOLUME_UNAVAILABLE", retryable=True)
     adapter = runtime_for_driver(
         instance.runtime_adapter.driver, config_ref=instance.runtime_adapter.config_ref
@@ -213,24 +229,36 @@ def _runtime(
     return adapter, instance.external_id
 
 
-def _capture(adapter: Any, external_id: str) -> _Content:
+def _capture(adapter: Any, external_id: str, *, project: bool = False) -> _Content:
+    relative_path = PROJECT_PATH if project else WORKSPACE_PATH
     try:
         artifact = adapter.capture_workspace(
-            external_id=external_id, relative_path=WORKSPACE_PATH, max_bytes=_max_bytes()
+            external_id=external_id, relative_path=relative_path, max_bytes=_max_bytes()
         )
     except RuntimeAdapterFailure as exc:
         raise WorkspaceStorageFailure(exc.code, retryable=exc.retryable) from exc
     except Exception as exc:  # noqa: BLE001 - adapters normalize expected failures
         raise WorkspaceStorageFailure("WORKSPACE_CAPTURE_FAILED", retryable=True) from exc
-    if artifact.relative_path != WORKSPACE_PATH or artifact.size != len(artifact.content):
+    if artifact.relative_path != relative_path or artifact.size != len(artifact.content):
         raise WorkspaceStorageFailure("WORKSPACE_FILE_INVALID")
-    content = _validate_content(bytes(artifact.content), expected_digest=artifact.digest)
+    if project:
+        files = _project_files(bytes(artifact.content), "application/x-tar")
+        value = _project_archive(files)
+        content = _Content(value, _digest(value), "application/gzip")
+    else:
+        content = _validate_content(bytes(artifact.content), expected_digest=artifact.digest)
     _scan(content.value)
-    return _Content(content.value, content.digest, artifact.media_type or "text/plain")
+    return _Content(
+        content.value, content.digest, content.media_type or artifact.media_type or "text/plain"
+    )
 
 
 def _put_asset(*, job: WorkspaceStorageJob, content: _Content) -> ObjectAsset:
-    key = f"workspaces/{job.task.public_id}/{job.session.public_id}/storage/{job.public_id}/main.py"
+    filename = "project.tar.gz" if content.media_type == "application/gzip" else WORKSPACE_PATH
+    key = (
+        f"workspaces/{job.task.public_id}/{job.session.public_id}/storage/"
+        f"{job.public_id}/{content.digest}/{filename}"
+    )
     stream = io.BytesIO(content.value)
     try:
         stored = object_storage().put_stream(
@@ -249,7 +277,7 @@ def _put_asset(*, job: WorkspaceStorageJob, content: _Content) -> ObjectAsset:
             owner_ref=job.task.public_id,
             purpose="WORKSPACE_SNAPSHOT",
             media_type=content.media_type,
-            original_name=WORKSPACE_PATH,
+            original_name=filename,
         )
         asset = set_scan_result(
             asset_id=asset.pk,
@@ -270,10 +298,15 @@ def _put_asset(*, job: WorkspaceStorageJob, content: _Content) -> ObjectAsset:
 
 
 def _next_client_seq(task_id: int) -> int:
-    return int(
-        WorkspaceSnapshot.objects.filter(task_id=task_id).aggregate(value=Max("client_seq"))["value"]
-        or 0
-    ) + 1
+    return (
+        int(
+            WorkspaceAutosaveLog.objects.filter(task_id=task_id).aggregate(value=Max("client_seq"))[
+                "value"
+            ]
+            or 0
+        )
+        + 1
+    )
 
 
 def _commit_snapshot(
@@ -284,6 +317,8 @@ def _commit_snapshot(
     content: _Content,
     client_seq: int,
     base_version: int,
+    language: str | None = None,
+    finish: bool = True,
 ) -> WorkspaceSnapshot:
     """Commit one immutable snapshot and advance the owning Session."""
 
@@ -297,27 +332,51 @@ def _commit_snapshot(
             if job.result_snapshot_id:
                 return WorkspaceSnapshot.objects.get(pk=job.result_snapshot_id)
             raise WorkspaceStorageFailure("WORKSPACE_STORAGE_JOB_TERMINAL")
-        if (
-            job.status != WorkspaceStorageJob.Status.RUNNING
-            or job.row_version != claim_version
-        ):
+        if job.status != WorkspaceStorageJob.Status.RUNNING or job.row_version != claim_version:
             raise WorkspaceStorageFailure("WORKSPACE_STORAGE_CLAIM_LOST", retryable=True)
-        session = WorkspaceSession.objects.select_for_update().get(pk=job.session_id)
+        session = (
+            WorkspaceSession.objects.select_for_update(of=("self",))
+            .select_related("latest_snapshot")
+            .get(pk=job.session_id)
+        )
         if session.current_version != base_version:
             raise WorkspaceStorageFailure("WORKSPACE_CAPTURE_CONFLICT")
-        snapshot = WorkspaceSnapshot.objects.create(
-            task=job.task,
-            session=session,
-            asset=asset,
-            version_no=session.current_version + 1,
-            client_seq=client_seq,
-            base_version=base_version,
-            digest_sha256=content.digest,
-            size_bytes=content.size,
-            media_type=content.media_type,
-            saved_at=timezone.now(),
-            trace_id=job.trace_id,
+        selected = language or session.language
+        snapshot = session.latest_snapshot
+        project = (job.task.execution_spec or {}).get("schema_version") == 2
+        unchanged = (
+            (job.kind == WorkspaceStorageJob.Kind.CAPTURE or project)
+            and snapshot is not None
+            and snapshot.language == selected
+            and (snapshot.asset_id == asset.pk or project)
+            and snapshot.digest_sha256 == content.digest
+            and snapshot.size_bytes == content.size
+            and snapshot.media_type == content.media_type
+            and snapshot.asset.status == ObjectAsset.Status.ACTIVE
+            and snapshot.asset.scan_status == ObjectAsset.ScanStatus.CLEAN
+            and snapshot.asset.digest_sha256 == content.digest
+            and asset.status == ObjectAsset.Status.ACTIVE
+            and asset.scan_status == ObjectAsset.ScanStatus.CLEAN
+            and asset.digest_sha256 == content.digest
         )
+        if not unchanged:
+            snapshot = WorkspaceSnapshot.objects.create(
+                task=job.task,
+                session=session,
+                asset=asset,
+                version_no=session.current_version + 1,
+                client_seq=client_seq,
+                base_version=base_version,
+                digest_sha256=content.digest,
+                size_bytes=content.size,
+                media_type=content.media_type,
+                saved_at=timezone.now(),
+                trace_id=job.trace_id,
+                language=selected,
+                initial=not WorkspaceSnapshot.objects.filter(
+                    task=job.task, language=selected
+                ).exists(),
+            )
         WorkspaceAutosaveLog.objects.create(
             task=job.task,
             session=session,
@@ -335,23 +394,23 @@ def _commit_snapshot(
                 "current_version": snapshot.version_no,
                 "latest_snapshot": snapshot,
                 "last_seen_at": timezone.now(),
+                "language": selected,
             },
         )
-        current_job = WorkspaceStorageJob.objects.get(pk=job.pk)
-        services.transition_storage_job(
-            job_id=job.public_id,
-            expected_version=current_job.row_version,
-            to_status=WorkspaceStorageJob.Status.PASSED,
-            context=_context(job),
-            result_snapshot=snapshot,
-        )
+        if finish:
+            current_job = WorkspaceStorageJob.objects.get(pk=job.pk)
+            services.transition_storage_job(
+                job_id=job.public_id,
+                expected_version=current_job.row_version,
+                to_status=WorkspaceStorageJob.Status.PASSED,
+                context=_context(job),
+                result_snapshot=snapshot,
+            )
         del changed_session
         return snapshot
 
 
-def _claim(
-    job_id: str, trace_id: str = ""
-) -> tuple[WorkspaceStorageJob | None, bool]:
+def _claim(job_id: str, trace_id: str = "") -> tuple[WorkspaceStorageJob | None, bool]:
     with transaction.atomic():
         try:
             job = WorkspaceStorageJob.objects.select_for_update().get(public_id=job_id)
@@ -414,6 +473,8 @@ def _record_failure(
 
 
 def _execute_initialize(job: WorkspaceStorageJob, *, claim_version: int) -> WorkspaceSnapshot:
+    if (job.task.execution_spec or {}).get("schema_version") == 2:
+        return _execute_project_change(job, claim_version=claim_version)
     asset = job.task.template_version.starter_asset
     if asset is not None and (
         asset.owner_type != "TEMPLATE_VERSION"
@@ -423,10 +484,23 @@ def _execute_initialize(job: WorkspaceStorageJob, *, claim_version: int) -> Work
         or asset.scan_status != ObjectAsset.ScanStatus.CLEAN
     ):
         raise WorkspaceStorageFailure("WORKSPACE_STARTER_NOT_READY")
-    if asset is None:
-        value = b"# Write your solution here.\n"
+    session = WorkspaceSession.objects.select_related("latest_snapshot__asset").get(
+        pk=job.session_id
+    )
+    previous = session.latest_snapshot
+    if previous is not None:
+        if (
+            previous.asset.status != ObjectAsset.Status.ACTIVE
+            or previous.asset.scan_status != ObjectAsset.ScanStatus.CLEAN
+        ):
+            raise WorkspaceStorageFailure("WORKSPACE_SNAPSHOT_NOT_READY")
+        value = _read_object(previous.asset)
     else:
-        value = _starter_main(_read_object(asset), asset.media_type)
+        value = (
+            b"# Write your solution here.\n"
+            if asset is None
+            else _starter_main(_read_object(asset), asset.media_type)
+        )
     content = _validate_content(value)
     _scan(content.value)
     adapter, external_id = _runtime(job)
@@ -442,23 +516,167 @@ def _execute_initialize(job: WorkspaceStorageJob, *, claim_version: int) -> Work
     captured = _capture(adapter, external_id)
     if not hmac.compare_digest(captured.digest, content.digest):
         raise WorkspaceStorageFailure("WORKSPACE_RESTORE_FAILED")
-    # Initialization creates version 1 and uses client_seq 0, reserved for the
-    # starter fact so the first browser capture starts at sequence 1.
+    # Sequence zero is reserved for the first initialization of this task.
     snapshot_asset = _put_asset(job=job, content=captured)
     return _commit_snapshot(
         job_id=job.public_id,
         claim_version=claim_version,
         asset=snapshot_asset,
         content=captured,
-        client_seq=0,
-        base_version=0,
+        client_seq=_next_client_seq(job.task_id) if previous else 0,
+        base_version=session.current_version,
+    )
+
+
+def _initial_project(job: WorkspaceStorageJob, language: str) -> _Content:
+    spec = job.task.execution_spec or {}
+    frozen = spec.get("_runtime", {}).get("material_assets", [])
+    visible = [item for item in frozen if item["role"] in {"STUDENT_FILES", "PUBLIC_DATA"}]
+    if not frozen:
+        # Published v2 rows created before material freezing still validate role and ownership.
+        visible = [item for item in spec.get("materials", []) if item["role"] != "HIDDEN_SOURCE"]
+    files: dict[str, bytes] = {}
+    for item in visible:
+        asset = ObjectAsset.objects.filter(
+            public_id=item["asset_id"],
+            owner_type="TEMPLATE_VERSION",
+            owner_ref=job.task.template_version.public_id,
+            status=ObjectAsset.Status.ACTIVE,
+            scan_status=ObjectAsset.ScanStatus.CLEAN,
+            purpose="STARTER" if item["role"] == "STUDENT_FILES" else "PUBLIC_DATA",
+        ).first()
+        if asset is None or any(
+            item.get(key, getattr(asset, field)) != getattr(asset, field)
+            for key, field in {
+                "digest": "digest_sha256", "object_version": "object_version",
+                "bucket": "bucket", "object_key": "object_key",
+            }.items()
+        ):
+            raise WorkspaceStorageFailure("WORKSPACE_STARTER_NOT_READY")
+        raw = _read_object(asset)
+        if asset.media_type.startswith("text/") or asset.media_type == "application/json":
+            name = asset.original_name or TOOLCHAINS_BY_LANGUAGE[language]["entrypoint"]
+            material_files = {name: raw}
+        else:
+            material_files = _project_files(raw, asset.media_type)
+        if set(files) & set(material_files):
+            raise WorkspaceStorageFailure("WORKSPACE_FILE_INVALID")
+        files.update(material_files)
+    has_student_files = any(item["role"] == "STUDENT_FILES" for item in visible)
+    if not frozen and not spec.get("materials") and job.task.template_version.starter_asset_id:
+        asset = job.task.template_version.starter_asset
+        if (
+            asset.scan_status != ObjectAsset.ScanStatus.CLEAN
+            or asset.status != ObjectAsset.Status.ACTIVE
+            or asset.owner_type != "TEMPLATE_VERSION"
+            or asset.owner_ref != job.task.template_version.public_id
+            or asset.purpose != "STARTER"
+        ):
+            raise WorkspaceStorageFailure("WORKSPACE_STARTER_NOT_READY")
+        files = _project_files(_read_object(asset), asset.media_type)
+        has_student_files = True
+    if not has_student_files:
+        entrypoint = spec.get("entrypoint") or TOOLCHAINS_BY_LANGUAGE[language]["entrypoint"]
+        starters = {
+            "c": b"#include <stdio.h>\nint main(void) {\n    return 0;\n}\n",
+            "cpp": b"#include <iostream>\nint main() {\n    return 0;\n}\n",
+            "java": b"public class Main {\n"
+            b"    public static void main(String[] args) {\n    }\n}\n",
+            "python": b"# Write your solution here.\n",
+            "go": b"package main\n\nfunc main() {\n}\n",
+        }
+        files[entrypoint] = starters[language]
+    value = _project_archive(files)
+    return _Content(value, _digest(value), "application/gzip")
+
+
+def _execute_project_change(job: WorkspaceStorageJob, *, claim_version: int) -> WorkspaceSnapshot:
+    session = WorkspaceSession.objects.get(pk=job.session_id)
+    language = job.target_language or session.language
+    adapter, external_id = _runtime(job)
+    previous: _Content | None = None
+    if job.kind != WorkspaceStorageJob.Kind.INITIALIZE:
+        previous = _capture(adapter, external_id, project=True)
+        asset = _put_asset(job=job, content=previous)
+        _commit_snapshot(
+            job_id=job.public_id,
+            claim_version=claim_version,
+            asset=asset,
+            content=previous,
+            client_seq=_next_client_seq(job.task_id),
+            base_version=session.current_version,
+            finish=False,
+        )
+        session.refresh_from_db()
+    sources = WorkspaceSnapshot.objects.select_related("asset").filter(
+        task=job.task, language=language
+    )
+    source = (
+        sources.filter(initial=True).order_by("version_no").first()
+        if job.kind == WorkspaceStorageJob.Kind.RESET
+        else sources.order_by("-version_no").first()
+    )
+    if source is not None:
+        if (
+            source.asset.scan_status != ObjectAsset.ScanStatus.CLEAN
+            or source.asset.status != ObjectAsset.Status.ACTIVE
+        ):
+            raise WorkspaceStorageFailure("WORKSPACE_SNAPSHOT_NOT_READY")
+        value = _read_object(source.asset)
+        _project_files(value)
+        content = _Content(value, _digest(value), "application/gzip")
+        if content.digest != source.digest_sha256:
+            raise WorkspaceStorageFailure("WORKSPACE_DIGEST_MISMATCH")
+    else:
+        content = _initial_project(job, language)
+    _scan(content.value)
+    try:
+        adapter.restore_workspace(
+            external_id=external_id,
+            relative_path=PROJECT_PATH,
+            content=content.value,
+            expected_digest=content.digest,
+        )
+        captured = _capture(adapter, external_id, project=True)
+        if captured.digest != content.digest:
+            raise WorkspaceStorageFailure("WORKSPACE_RESTORE_FAILED")
+    except Exception:
+        if previous is not None:
+            adapter.restore_workspace(
+                external_id=external_id,
+                relative_path=PROJECT_PATH,
+                content=previous.value,
+                expected_digest=previous.digest,
+            )
+        raise
+    asset = source.asset if source is not None else _put_asset(job=job, content=content)
+    first = not WorkspaceSnapshot.objects.filter(task=job.task).exists()
+    return _commit_snapshot(
+        job_id=job.public_id,
+        claim_version=claim_version,
+        asset=asset,
+        content=content,
+        client_seq=0 if first else _next_client_seq(job.task_id),
+        base_version=session.current_version,
+        language=language,
     )
 
 
 def _execute_capture(job: WorkspaceStorageJob, *, claim_version: int) -> WorkspaceSnapshot:
     adapter, external_id = _runtime(job)
-    content = _capture(adapter, external_id)
-    asset = _put_asset(job=job, content=content)
+    project = int((job.task.execution_spec or {}).get("schema_version", 1)) >= 2
+    content = _capture(adapter, external_id, project=project)
+    previous = WorkspaceSnapshot.objects.select_related("asset").filter(
+        pk=WorkspaceSession.objects.get(pk=job.session_id).latest_snapshot_id,
+        language=job.session.language,
+        digest_sha256=content.digest,
+        size_bytes=content.size,
+        media_type=content.media_type,
+        asset__digest_sha256=content.digest,
+        asset__status=ObjectAsset.Status.ACTIVE,
+        asset__scan_status=ObjectAsset.ScanStatus.CLEAN,
+    ).first()
+    asset = previous.asset if previous is not None else _put_asset(job=job, content=content)
     return _commit_snapshot(
         job_id=job.public_id,
         claim_version=claim_version,
@@ -479,22 +697,31 @@ def _execute_restore(job: WorkspaceStorageJob, *, claim_version: int) -> Workspa
         source is None
         or source.asset.status != ObjectAsset.Status.ACTIVE
         or source.asset.scan_status != ObjectAsset.ScanStatus.CLEAN
+        or source.language != WorkspaceSession.objects.get(pk=job.session_id).language
     ):
         raise WorkspaceStorageFailure("WORKSPACE_SNAPSHOT_NOT_READY")
     if not hmac.compare_digest(source.digest_sha256, source.asset.digest_sha256):
         raise WorkspaceStorageFailure("WORKSPACE_SNAPSHOT_NOT_READY")
-    content = _validate_content(_read_object(source.asset), expected_digest=source.digest_sha256)
+    project = source.asset.media_type == "application/gzip"
+    value = _read_object(source.asset)
+    if project:
+        _project_files(value, "application/x-tar")
+        if not hmac.compare_digest(_digest(value), source.digest_sha256):
+            raise WorkspaceStorageFailure("WORKSPACE_DIGEST_MISMATCH")
+        content = _Content(value, source.digest_sha256, "application/gzip")
+    else:
+        content = _validate_content(value, expected_digest=source.digest_sha256)
     adapter, external_id = _runtime(job)
     try:
         adapter.restore_workspace(
             external_id=external_id,
-            relative_path=WORKSPACE_PATH,
+            relative_path=PROJECT_PATH if project else WORKSPACE_PATH,
             content=content.value,
             expected_digest=content.digest,
         )
     except RuntimeAdapterFailure as exc:
         raise WorkspaceStorageFailure(exc.code, retryable=exc.retryable) from exc
-    captured = _capture(adapter, external_id)
+    captured = _capture(adapter, external_id, project=project)
     if not hmac.compare_digest(captured.digest, content.digest):
         raise WorkspaceStorageFailure("WORKSPACE_RESTORE_FAILED")
     return _commit_snapshot(
@@ -511,7 +738,8 @@ def _execute_finalize(job: WorkspaceStorageJob, *, claim_version: int) -> Worksp
     # FINALIZE deliberately follows the same capture path, but does not require
     # an ACTIVE Session.  It is only scheduled by lifecycle cleanup.
     adapter, external_id = _runtime(job, allow_destroying=True)
-    content = _capture(adapter, external_id)
+    project = int((job.task.execution_spec or {}).get("schema_version", 1)) >= 2
+    content = _capture(adapter, external_id, project=project)
     asset = _put_asset(job=job, content=content)
     session = WorkspaceSession.objects.get(pk=job.session_id)
     return _commit_snapshot(
@@ -543,6 +771,8 @@ def execute_storage_job(*, storage_job_id: str, trace_id: str = "") -> str:
             _execute_restore(job, claim_version=claim_version)
         elif job.kind == WorkspaceStorageJob.Kind.FINALIZE:
             _execute_finalize(job, claim_version=claim_version)
+        elif job.kind in {WorkspaceStorageJob.Kind.SWITCH, WorkspaceStorageJob.Kind.RESET}:
+            _execute_project_change(job, claim_version=claim_version)
         else:
             raise WorkspaceStorageFailure("WORKSPACE_STORAGE_KIND_INVALID")
     except Exception as exc:  # noqa: BLE001 - convert every worker error to a stable fact
@@ -615,20 +845,27 @@ def create_initialization_job(
     )
     if not driver or driver == "FAKE":
         return None
-    existing = WorkspaceStorageJob.objects.filter(
-        session=session,
-        kind=WorkspaceStorageJob.Kind.INITIALIZE,
-        status__in=(
-            WorkspaceStorageJob.Status.QUEUED,
-            WorkspaceStorageJob.Status.RUNNING,
-            WorkspaceStorageJob.Status.PASSED,
-        ),
-    ).order_by("-created_at").first()
+    existing = (
+        WorkspaceStorageJob.objects.filter(
+            session=session,
+            kind=WorkspaceStorageJob.Kind.INITIALIZE,
+            status__in=(
+                WorkspaceStorageJob.Status.QUEUED,
+                WorkspaceStorageJob.Status.RUNNING,
+                WorkspaceStorageJob.Status.PASSED,
+            ),
+        )
+        .order_by("-created_at")
+        .first()
+    )
     if existing is not None:
         return existing
-    retry_no = WorkspaceStorageJob.objects.filter(
-        session=session, kind=WorkspaceStorageJob.Kind.INITIALIZE
-    ).count() + 1
+    retry_no = (
+        WorkspaceStorageJob.objects.filter(
+            session=session, kind=WorkspaceStorageJob.Kind.INITIALIZE
+        ).count()
+        + 1
+    )
     job = WorkspaceStorageJob.objects.create(
         kind=WorkspaceStorageJob.Kind.INITIALIZE,
         task=session.task,
@@ -656,20 +893,27 @@ def create_finalize_job(*, session: WorkspaceSession, context: Any) -> Workspace
         status=WorkspaceStorageJob.Status.PASSED,
     ).exists():
         return None
-    job = WorkspaceStorageJob.objects.filter(
-        session=session,
-        kind=WorkspaceStorageJob.Kind.FINALIZE,
-        status__in=(
-            WorkspaceStorageJob.Status.QUEUED,
-            WorkspaceStorageJob.Status.RUNNING,
-            WorkspaceStorageJob.Status.PASSED,
-        ),
-    ).order_by("-created_at").first()
+    job = (
+        WorkspaceStorageJob.objects.filter(
+            session=session,
+            kind=WorkspaceStorageJob.Kind.FINALIZE,
+            status__in=(
+                WorkspaceStorageJob.Status.QUEUED,
+                WorkspaceStorageJob.Status.RUNNING,
+                WorkspaceStorageJob.Status.PASSED,
+            ),
+        )
+        .order_by("-created_at")
+        .first()
+    )
     if job is not None:
         return job
-    retry_no = WorkspaceStorageJob.objects.filter(
-        session=session, kind=WorkspaceStorageJob.Kind.FINALIZE
-    ).count() + 1
+    retry_no = (
+        WorkspaceStorageJob.objects.filter(
+            session=session, kind=WorkspaceStorageJob.Kind.FINALIZE
+        ).count()
+        + 1
+    )
     job = WorkspaceStorageJob.objects.create(
         kind=WorkspaceStorageJob.Kind.FINALIZE,
         task=session.task,
@@ -706,7 +950,6 @@ def finalize_workspace_before_destroy(*, task_id: str, context: Any) -> Workspac
     deadline = time.monotonic() + timeout
     while WorkspaceStorageJob.objects.filter(
         session=session,
-        kind__in=(WorkspaceStorageJob.Kind.CAPTURE, WorkspaceStorageJob.Kind.RESTORE),
         status__in=(WorkspaceStorageJob.Status.QUEUED, WorkspaceStorageJob.Status.RUNNING),
     ).exists():
         if time.monotonic() >= deadline:

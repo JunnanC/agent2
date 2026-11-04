@@ -1,10 +1,13 @@
 import io
+import json
 import tarfile
 import time
 from typing import Any
 from unittest.mock import patch
 
 from django.test import SimpleTestCase, override_settings
+
+from apps.core.project_archive import bundle
 
 from ..adapters import (
     DockerLocalAdapter,
@@ -436,7 +439,7 @@ class DockerLocalAdapterTests(SimpleTestCase):
         host_config = next(kwargs for name, kwargs in client.calls if name == "create_host_config")
         self.assertEqual(host_config["mem_limit"], "256m")
         self.assertEqual(host_config["nano_cpus"], 500_000_000)
-        self.assertEqual(host_config["pids_limit"], 128)
+        self.assertEqual(host_config["pids_limit"], 256)
         self.assertTrue(host_config["read_only"])
         self.assertEqual(host_config["cap_drop"], ["ALL"])
         self.assertIn("no-new-privileges:true", host_config["security_opt"])
@@ -516,6 +519,14 @@ class DockerLocalAdapterTests(SimpleTestCase):
             )
         self.assertEqual(command_error.exception.code, "RUNTIME_COMMAND_NOT_ALLOWED")
 
+        for entrypoint in ("../main.py", "src/../../main.py", "/main.py", "src//main.py"):
+            with self.subTest(entrypoint=entrypoint), self.assertRaises(RuntimeAdapterFailure):
+                adapter.execute_judge(
+                    spec=spec, command=["python", entrypoint], source=b"print(42)",
+                    tests=b"{}", timeout_seconds=2, memory_mb=64, cpu_millicores=100,
+                    network_mode="DENY_ALL", judge_id="judge-invalid-path",
+                )
+
         with self.assertRaises(RuntimeAdapterFailure) as network_error:
             adapter.execute_judge(
                 spec=spec,
@@ -569,8 +580,20 @@ class DockerLocalAdapterTests(SimpleTestCase):
                 archive.extractfile(name).read()  # type: ignore[union-attr]
                 for name in names
             )
-        self.assertEqual(names, ["runner.py", "main.py"])
+        self.assertEqual(names, ["main.py", "runner.py"])
         self.assertNotIn(b"hidden-value", contents)
+
+    def test_project_archive_stages_all_files_and_keeps_hidden_tests_out(self) -> None:
+        client = FakeDockerEngine()
+        adapter = DockerLocalAdapter(client=client)
+        source = bundle({"src/main.py": b"print(42)", "lib.py": b"VALUE = 42"}, max_bytes=1024)
+        adapter.execute_judge(
+            spec=runtime_spec(), command=["python", "src/main.py"], source=source,
+            tests=b'{"cases":[{"input":"","expected":"42"}]}', timeout_seconds=2,
+            memory_mb=64, cpu_millicores=100, network_mode="DENY_ALL", judge_id="judge-project",
+        )
+        with tarfile.open(fileobj=io.BytesIO(client.archives[0]), mode="r") as archive:
+            self.assertCountEqual(archive.getnames(), ["lib.py", "runner.py", "src/main.py"])
 
     def test_generic_cleanup_removes_stale_judge_and_stager(self) -> None:
         client = FakeDockerEngine()
@@ -594,6 +617,46 @@ class DockerLocalAdapterTests(SimpleTestCase):
         adapter.destroy_resource("judge-stale", "cleanup:judge-stale")
 
         self.assertEqual(client.containers_state, {})
+
+    def test_judge_marks_each_output_mismatch_as_failed(self) -> None:
+        client = FakeDockerEngine()
+        client.judge_logs = json.dumps({"status": "PASSED", "results": [
+            {"status": "PASSED", "stdout": "0", "returncode": 0} for _ in range(4)
+        ]}) + "\n"
+        result = DockerLocalAdapter(client=client).execute_judge(
+            spec=runtime_spec(), command=["python", "main.py"], source=b"print(0)",
+            tests=json.dumps({"cases": [{"expected": value} for value in [5, 0, 1, 7]]}).encode(),
+            timeout_seconds=2, memory_mb=64, cpu_millicores=100,
+            network_mode="DENY_ALL", judge_id="judge-case-status",
+        )
+        self.assertEqual(result.status, "FAILED")
+        self.assertEqual(result.error_code, "RUNTIME_ALGORITHM_FAILED")
+        self.assertEqual([item["status"] for item in result.test_report["results"]],
+                         ["FAILED", "PASSED", "FAILED", "FAILED"])
+        self.assertEqual(client.containers_state, {})
+
+    def test_judge_distinguishes_compile_runtime_and_timeout_text(self) -> None:
+        cases = [
+            ({"status": "FAILED", "compile_stderr": "private helper error"},
+             "FAILED", "RUNTIME_COMPILE_FAILED"),
+            ({"status": "FAILED", "results": [{"status": "FAILED", "returncode": 7}]},
+             "FAILED", "RUNTIME_EXECUTION_FAILED"),
+            ({"status": "PASSED", "results": [
+                {"status": "PASSED", "stdout": "TIMEOUT", "returncode": 0}
+            ]}, "PASSED", ""),
+        ]
+        for report, status, error in cases:
+            with self.subTest(error=error):
+                client = FakeDockerEngine()
+                client.judge_logs = json.dumps(report) + "\n"
+                result = DockerLocalAdapter(client=client).execute_judge(
+                    spec=runtime_spec(), command=["python", "main.py"], source=b"print('ok')",
+                    tests=b"{}", timeout_seconds=2, memory_mb=64, cpu_millicores=100,
+                    network_mode="DENY_ALL", judge_id="judge-error-stage",
+                )
+                self.assertEqual(result.status, status)
+                self.assertEqual(result.error_code, error)
+                self.assertEqual(client.containers_state, {})
 
     def test_judge_timeout_and_oom_are_reported_and_container_is_removed(self) -> None:
         client = FakeDockerEngine()

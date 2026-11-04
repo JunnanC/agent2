@@ -379,6 +379,7 @@ class TeachingAIScoreBatchListView(APIView):
 
     @extend_schema(
         responses={200: AIScoreBatchResponseSerializer},
+        parameters=[OpenApiParameter("publication_id", str, OpenApiParameter.QUERY)],
         tags=["teaching-reviews"],
         extensions={"x-portals": ["TEACHING"]},
     )
@@ -388,6 +389,8 @@ class TeachingAIScoreBatchListView(APIView):
         queryset = AIScoreBatch.objects.filter(course=course).select_related(
             "course", "publication", "created_by"
         ).order_by("-created_at", "-id")
+        if request.GET.get("publication_id"):
+            queryset = queryset.filter(publication__public_id=request.GET["publication_id"])
         total = queryset.count()
         values = list(queryset[spec.offset : spec.offset + spec.page_size])
         return _response(
@@ -511,13 +514,18 @@ class TeachingReviewDetailView(APIView):
 
     @extend_schema(
         operation_id="teaching_reviews_retrieve",
+        parameters=[OpenApiParameter("include_source", str, OpenApiParameter.QUERY)],
         responses={200: ReviewDetailResponseSerializer},
         tags=["teaching-reviews"],
         extensions={"x-portals": ["TEACHING"]},
     )
     def get(self, request: HttpRequest, course_id: str, review_id: str) -> Response:
         item = review_for_course(actor=request.user, course_id=course_id, review_id=review_id)
-        return _response(request, review_detail_data(item), etag=item.row_version)
+        return _response(
+            request,
+            review_detail_data(item, include_source=request.GET.get("include_source") == "1"),
+            etag=item.row_version,
+        )
 
 
 class TeachingCriterionScoresView(APIView):

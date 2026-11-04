@@ -119,6 +119,7 @@ frontend/l[0-9]*.json
 
 # Generated deployment configuration and local evidence
 infrastructure/kong/kong.rendered.yml
+# Generated outputs stay local.
 outputs/
 .presentation-build/
 evidence/p16/*/
@@ -128,5 +129,3 @@ evidence/image-promotion/
 evidence/swarm/
 # Raw host output and personal/internal project material stay local.
 evidence/**/*.txt
-docs/项目评估材料/
-docs/项目离职交接与后续任务分配部署计划_*.md

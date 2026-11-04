@@ -31,7 +31,12 @@ from apps.reports.models import (
 )
 
 from . import events
-from .checkers import AUTO_CHECK_TERMINAL_STATUSES, AutoCheckRejected, auto_check_executor
+from .checkers import (
+    AUTO_CHECK_TERMINAL_STATUSES,
+    AutoCheckRejected,
+    auto_check_executor,
+    submitted_execution_contract,
+)
 from .errors import (
     AutoCheckPending,
     ReviewStateConflict,
@@ -589,9 +594,12 @@ def create_review_for_submission(
             if report_version is not None
             else system_artifact.digest_sha256  # type: ignore[union-attr]
         )
-        execution_summary, execution_digest = _frozen_execution_contract(
-            task=locked_task, report_version=report_version
-        )
+        if (locked_task.execution_spec or {}).get("schema_version") == 2:
+            execution_summary, execution_digest = submitted_execution_contract(locked_task, review)
+        else:
+            execution_summary, execution_digest = _frozen_execution_contract(
+                task=locked_task, report_version=report_version
+            )
         for rule in AutoCheckRule.objects.filter(
             template_version=locked_task.template_version, is_active=True
         ).order_by("position"):
@@ -824,6 +832,24 @@ def start_ai_score_batch(
     return batch
 
 
+def submitted_project_files(review: Review) -> dict[str, bytes]:
+    """Read only the immutable student submission, never private teacher assets."""
+    from apps.core.project_archive import unpack
+
+    from .checkers import _read_asset
+
+    asset = (
+        review.report_version.workspace_snapshot.asset
+        if review.report_version_id else review.system_artifact.asset
+    )
+    limit = min(settings.WORKSPACE_SNAPSHOT_MAX_BYTES, 20 * 1024 * 1024)
+    value = _read_asset(asset, limit=limit)
+    return (
+        {"main.py": value} if asset.media_type.startswith("text/")
+        else unpack(value, max_bytes=limit, require_manifest=True)
+    )
+
+
 def execute_ai_score_suggestion(*, suggestion_id: str) -> AIScoreSuggestion:
     with transaction.atomic():
         try:
@@ -851,17 +877,26 @@ def execute_ai_score_suggestion(*, suggestion_id: str) -> AIScoreSuggestion:
         )
 
         review = suggestion.review
-        if review.report_version_id:
-            submission = review.report_version.body_markdown
-        else:
-            from .checkers import _read_asset
+        from apps.core.redaction import redact
 
-            submission = _read_asset(review.system_artifact.asset).decode("utf-8", errors="replace")
+        files = submitted_project_files(review)
+        submission = (
+            review.report_version.body_markdown[:100_000] if review.report_version_id else ""
+        )
+        for name, content in sorted(files.items()):
+            if len(submission) >= 100_000:
+                break
+            submission += (f"\n\nFILE: {name}\n" + content.decode("utf-8"))[
+                :100_000 - len(submission)
+            ]
+        submission = redact(submission)[:100_000]
         criteria = list(
             RubricCriterion.objects.filter(
                 rubric_version=review.rubric_version, is_active=True
             ).order_by("position")
         )
+        if not criteria:
+            raise ReviewValidationError(detail={"rubric": "criteria_required"})
         rubric = [
             {
                 "criterion_id": item.public_id,
@@ -919,6 +954,24 @@ def execute_ai_score_suggestion(*, suggestion_id: str) -> AIScoreSuggestion:
             changes=changes,
         )  # type: ignore[assignment]
         _refresh_ai_score_batch_status(suggestion.batch_id)
+        append_audit(
+            actor_ref="SYSTEM", actor_portal="WORKER", actor_context={},
+            action="review.ai_score.generate", target_type="ai_score_suggestion",
+            target_ref=suggestion.public_id, course_ref=suggestion.review.course.public_id,
+            after={
+                "status": suggestion.status,
+                "review_id": suggestion.review.public_id,
+                "review_row_version": suggestion.review_row_version,
+                "rubric_version_id": suggestion.review.rubric_version.public_id,
+                "submission_id": (
+                    suggestion.review.report_version.public_id
+                    if suggestion.review.report_version_id
+                    else suggestion.review.system_artifact.public_id
+                ),
+            },
+            result="SUCCEEDED" if suggestion.status == AIScoreSuggestion.Status.READY else "FAILED",
+            error_code=suggestion.error_code, trace_id=suggestion.public_id,
+        )
     return suggestion
 
 

@@ -109,6 +109,8 @@ class SystemArtifactDataSerializer(serializers.Serializer):
     kind = serializers.ChoiceField(choices=SystemArtifact.Kind.choices)
     asset_id = serializers.CharField()
     digest_sha256 = serializers.CharField()
+    execution_run_id = serializers.CharField(allow_null=True)
+    execution_evidence = serializers.DictField()
     created_at = serializers.DateTimeField()
 
 
@@ -294,5 +296,7 @@ def system_artifact_data(artifact: SystemArtifact) -> dict[str, object]:
         "kind": artifact.kind,
         "asset_id": artifact.asset.public_id,
         "digest_sha256": artifact.digest_sha256,
+        "execution_run_id": artifact.execution_run.public_id if artifact.execution_run_id else None,
+        "execution_evidence": artifact.execution_evidence,
         "created_at": artifact.created_at,
     }

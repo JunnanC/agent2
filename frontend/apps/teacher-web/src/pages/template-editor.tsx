@@ -11,6 +11,22 @@ import { apiErrorMessage } from "@/lib/format";
 
 const STEPS = ["基础信息", "内容结构", "运行环境", "报告与评审", "预检与发布"] as const;
 
+function templateMediaType(fileName: string): string {
+  const name = fileName.toLowerCase();
+  if (name.endsWith(".tar.gz")) return "application/gzip";
+  const extension = name.slice(name.lastIndexOf("."));
+  return ({
+    ".pdf": "application/pdf", ".md": "text/markdown", ".txt": "text/plain",
+    ".zip": "application/zip", ".tar": "application/x-tar", ".gz": "application/gzip",
+    ".tgz": "application/gzip", ".csv": "text/csv", ".json": "application/json",
+  } as Record<string, string>)[extension] ?? "application/octet-stream";
+}
+
+async function fileDigest(file: File): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", await file.arrayBuffer());
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
 export function TemplateEditor() {
   const { courseId = "", templateId = "" } = useParams();
   const navigate = useNavigate();
@@ -28,6 +44,14 @@ export function TemplateEditor() {
   const [selectedProfileId, setSelectedProfileId] = useState<string>("");
   const [testsJson, setTestsJson] = useState('{"cases":[{"input":"hello\\n","expected":"HELLO"}]}');
   const [specEntrypoint, setSpecEntrypoint] = useState("main.py");
+  const [specLanguage, setSpecLanguage] = useState("");
+  const [specToolchainVersion, setSpecToolchainVersion] = useState("");
+  const [specLanguageStandard, setSpecLanguageStandard] = useState("");
+  const [specComparator, setSpecComparator] = useState("token");
+  const [specAbsoluteTolerance, setSpecAbsoluteTolerance] = useState("0.000001");
+  const [specRelativeTolerance, setSpecRelativeTolerance] = useState("0.000001");
+  const [assetPurpose, setAssetPurpose] = useState("STARTER");
+  const [selectedMaterials, setSelectedMaterials] = useState<Record<string, string>>({});
   const [specTimeout, setSpecTimeout] = useState("10");
   const [specMemory, setSpecMemory] = useState("256");
   const [specCpu, setSpecCpu] = useState("500");
@@ -37,6 +61,7 @@ export function TemplateEditor() {
     queryFn: () => teachingApi.templateVersions(courseId, templateId),
     refetchInterval: (query) => query.state.data?.rows.some((version) => version.status === "PRECHECKING") ? 2000 : false,
   });
+  const refetchVersions = versions.refetch;
 
   const currentVersion = versions.data?.rows
     .find((version) => version.public_id === selectedVersion || version.status === "DRAFT")
@@ -52,9 +77,35 @@ export function TemplateEditor() {
     queryKey: keys.templateOptions(courseId),
     queryFn: () => teachingApi.templateOptions(courseId),
   });
+  const templateAssets = useQuery({
+    queryKey: ["template-assets", courseId, templateId, versionId],
+    queryFn: () => teachingApi.templateAssets(courseId, templateId, versionId),
+    enabled: Boolean(versionId),
+    refetchInterval: (query) => query.state.data?.rows.some((asset) => asset["scan_status"] === "PENDING") ? 2000 : false,
+  });
+  const assetScanState = (templateAssets.data?.rows ?? [])
+    .map((asset) => `${String(asset["public_id"])}:${String(asset["scan_status"])}`)
+    .join(",");
   const governanceImages = options.data?.["images"] ?? [];
   const adapters = options.data?.["runtime_adapters"] ?? [];
   const profiles = options.data?.["resource_profiles"] ?? [];
+  const toolchains = options.data?.toolchains ?? [];
+  const selectedToolchain = toolchains.find((item) => item.language === specLanguage);
+  const studentLanguages = toolchains.filter((item) => item.available).map((item) => item.language);
+  const selectedMaterialNotReady = (templateAssets.data?.rows ?? []).some((asset) =>
+    Boolean(selectedMaterials[String(asset["public_id"])]) && asset["scan_status"] !== "CLEAN",
+  );
+
+  useEffect(() => {
+    const spec = (currentVersion as unknown as { execution_spec?: { materials?: Array<{ asset_id: string; role: string }> } })?.execution_spec;
+    if (Array.isArray(spec?.materials)) {
+      setSelectedMaterials(Object.fromEntries(spec.materials.map((item) => [item.asset_id, item.role])));
+    }
+  }, [versionId, currentVersion]);
+
+  useEffect(() => {
+    if (assetScanState && !assetScanState.includes(":PENDING")) void refetchVersions();
+  }, [assetScanState, refetchVersions]);
 
   const addChapter = useMutation({
     mutationFn: () => teachingApi.createTemplateChapter(
@@ -147,13 +198,21 @@ export function TemplateEditor() {
       versionId,
       {
         tests_json: testsJson,
-        language: "python",
-        entrypoint: specEntrypoint.trim(),
+        schema_version: 2,
+        language: specLanguage || null,
+        toolchain_version: specToolchainVersion || null,
+        language_standard: specLanguageStandard || null,
+        entrypoint: specLanguage
+          ? (specEntrypoint.trim() || selectedToolchain?.entrypoint || null)
+          : null,
         timeout_seconds: Number(specTimeout) || 10,
         memory_mb: Number(specMemory) || 256,
         cpu_millicores: Number(specCpu) || 500,
-        comparator: "token",
+        comparator: specComparator,
+        absolute_tolerance: Number(specAbsoluteTolerance),
+        relative_tolerance: Number(specRelativeTolerance),
         network_mode: "DENY_ALL",
+        materials: Object.entries(selectedMaterials).map(([asset_id, role]) => ({ asset_id, role })),
       },
       currentVersion?.row_version ?? "",
     ),
@@ -163,6 +222,70 @@ export function TemplateEditor() {
       runPrecheck.mutate(saved.row_version);
     },
     onError: (error) => toast.notify(apiErrorMessage(error), "error"),
+  });
+
+  const uploadMaterial = useMutation({
+    mutationFn: async (file: File) => {
+      const mediaType = templateMediaType(file.name);
+      if (mediaType === "application/octet-stream") throw new Error("不支持的文件类型");
+      const created = await teachingApi.createTemplateAsset(
+        courseId,
+        templateId,
+        {
+          version_id: versionId,
+          purpose: assetPurpose,
+          file_name: file.name,
+          media_type: mediaType,
+          size_bytes: file.size,
+          digest_sha256: await fileDigest(file),
+        },
+        currentVersion?.row_version ?? "",
+      );
+      const form = new FormData();
+      Object.entries(created.upload.fields).forEach(([key, value]) => form.append(key, value));
+      form.append("file", file);
+      const uploaded = await fetch(created.upload.url, { method: "POST", body: form });
+      if (!uploaded.ok) throw new Error("对象存储上传失败");
+      return teachingApi.completeTemplateAsset(
+        courseId,
+        templateId,
+        String(created.asset["public_id"]),
+        String(created.asset["row_version"] ?? ""),
+      );
+    },
+    onSuccess: (asset) => {
+      const id = String(asset["public_id"] ?? "");
+      const role = assetPurpose === "STARTER" ? "STUDENT_FILES"
+        : assetPurpose === "HIDDEN_SOURCE" ? "HIDDEN_SOURCE"
+          : assetPurpose === "PUBLIC_DATA" ? "PUBLIC_DATA" : "";
+      if (id && role) setSelectedMaterials((current) => ({ ...current, [id]: role }));
+      void queryClient.invalidateQueries({ queryKey: ["template-assets", courseId, templateId, versionId] });
+      toast.notify("材料已上传，正在进行安全扫描");
+    },
+    onError: (error) => toast.notify(`材料上传失败：${apiErrorMessage(error)}`, "error"),
+  });
+
+  const saveMaterials = useMutation({
+    mutationFn: () => {
+      const spec = (currentVersion as unknown as { execution_spec?: Record<string, unknown> })?.execution_spec;
+      if (!spec) throw new Error("请先保存执行规格");
+      return teachingApi.updateTemplateVersion(
+        courseId,
+        versionId,
+        {
+          execution_spec: {
+            ...spec,
+            materials: Object.entries(selectedMaterials).map(([asset_id, role]) => ({ asset_id, role })),
+          },
+        },
+        currentVersion?.row_version ?? "",
+      );
+    },
+    onSuccess: () => {
+      toast.notify("材料用途已保存");
+      void versions.refetch();
+    },
+    onError: (error) => toast.notify(`材料配置保存失败：${apiErrorMessage(error)}`, "error"),
   });
 
   const publishVersion = useMutation({
@@ -186,7 +309,10 @@ export function TemplateEditor() {
   );
 
   const hasSpec = Boolean(
-    currentVersion && (currentVersion as unknown as { execution_spec?: { entrypoint?: string } }).execution_spec?.entrypoint,
+    currentVersion && (() => {
+      const spec = (currentVersion as unknown as { execution_spec?: { schema_version?: number; entrypoint?: string } }).execution_spec;
+      return spec?.schema_version === 2 || Boolean(spec?.entrypoint);
+    })(),
   );
 
   const precheckRuns = useQuery({
@@ -456,6 +582,73 @@ export function TemplateEditor() {
                   <label className="form-label" htmlFor="spec-tests">tests.json（测试用例）</label>
                   <textarea id="spec-tests" className="field" rows={4} value={testsJson}
                     onChange={(event) => setTestsJson(event.target.value)} />
+                  <div className="section">
+                    <label className="form-label" htmlFor="spec-language">编程语言</label>
+                    <select id="spec-language" className="field" value={specLanguage}
+                      onChange={(event) => {
+                        const next = toolchains.find((item) => item.language === event.target.value);
+                        setSpecLanguage(event.target.value);
+                        setSpecToolchainVersion("");
+                        setSpecLanguageStandard("");
+                        setSpecEntrypoint(next?.entrypoint ?? "");
+                      }}>
+                      <option value="">学生自选（当前可用：{studentLanguages.join("、") || "无"}）</option>
+                      {toolchains.map((item) => (
+                        <option key={item.language} value={item.language}>
+                          {item.language}{item.available ? "" : "（环境尚未验收，暂不能发布）"}
+                        </option>
+                      ))}
+                    </select>
+                    <small className="subtle">
+                      {selectedToolchain
+                        ? `工具链：${selectedToolchain.toolchain_id} ${specToolchainVersion || selectedToolchain.versions.find((item) => item.default)?.version}；${specLanguageStandard || selectedToolchain.default_standard}${selectedToolchain.available ? "" : "；当前运行镜像未提供该工具链"}`
+                        : `学生仅可在已验收语言中选择：${studentLanguages.join("、") || "无"}；使用各语言系统默认版本`}
+                    </small>
+                    {selectedToolchain ? (
+                      <div style={{ display: "flex", gap: 8, marginTop: 6, flexWrap: "wrap" }}>
+                        <div>
+                          <label className="form-label" htmlFor="spec-toolchain-version">工具链版本</label>
+                          <select id="spec-toolchain-version" className="field" value={specToolchainVersion}
+                            onChange={(event) => setSpecToolchainVersion(event.target.value)}>
+                            <option value="">系统默认</option>
+                            {selectedToolchain.versions.map((item) => (
+                              <option key={item.version} value={item.version}>{item.version}{item.default ? "（默认）" : ""}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="form-label" htmlFor="spec-language-standard">语言标准</label>
+                          <select id="spec-language-standard" className="field" value={specLanguageStandard}
+                            onChange={(event) => setSpecLanguageStandard(event.target.value)}>
+                            <option value="">系统默认</option>
+                            {selectedToolchain.standards.map((item) => <option key={item} value={item}>{item}</option>)}
+                          </select>
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                  <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+                    <div>
+                      <label className="form-label" htmlFor="spec-comparator">输出比较方式</label>
+                      <select id="spec-comparator" className="field" value={specComparator}
+                        onChange={(event) => setSpecComparator(event.target.value)}>
+                        <option value="token">忽略空白后逐项比较</option>
+                        <option value="numeric">数值误差比较</option>
+                      </select>
+                    </div>
+                    {specComparator === "numeric" ? <>
+                      <div>
+                        <label className="form-label" htmlFor="spec-absolute-tolerance">绝对误差</label>
+                        <input id="spec-absolute-tolerance" className="field" type="number" min="0" step="any"
+                          value={specAbsoluteTolerance} onChange={(event) => setSpecAbsoluteTolerance(event.target.value)} />
+                      </div>
+                      <div>
+                        <label className="form-label" htmlFor="spec-relative-tolerance">相对误差</label>
+                        <input id="spec-relative-tolerance" className="field" type="number" min="0" step="any"
+                          value={specRelativeTolerance} onChange={(event) => setSpecRelativeTolerance(event.target.value)} />
+                      </div>
+                    </> : null}
+                  </div>
                   <div style={{ display: "flex", gap: 8, marginTop: 6, flexWrap: "wrap" }}>
                     <div>
                       <label className="form-label" htmlFor="spec-entry">入口文件</label>
@@ -485,6 +678,78 @@ export function TemplateEditor() {
                       {saveSpec.isPending ? "保存中…" : "保存执行规格并运行预检"}
                     </Button>
                   </div>
+                </div>
+              ) : null}
+              {canEditDraft && currentVersion ? (
+                <div className="section">
+                  <strong>实验材料</strong>
+                  <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap", alignItems: "end" }}>
+                    <div>
+                      <label className="form-label" htmlFor="asset-purpose">材料用途</label>
+                      <select id="asset-purpose" className="field" value={assetPurpose}
+                        onChange={(event) => setAssetPurpose(event.target.value)}>
+                        <option value="MANUAL">实验指导书（TXT / Markdown / PDF）</option>
+                        <option value="STARTER">学生文件（ZIP / TAR）</option>
+                        <option value="HIDDEN_SOURCE">后台辅助源码（ZIP / TAR）</option>
+                        <option value="PUBLIC_DATA">学生公开数据（CSV / JSON / ZIP）</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="form-label" htmlFor="asset-file">选择文件</label>
+                      <input id="asset-file" className="field" type="file"
+                        accept={assetPurpose === "MANUAL" ? ".txt,.md,.pdf"
+                          : assetPurpose === "PUBLIC_DATA" ? ".csv,.json,.txt,.zip,.tar,.gz,.tgz,.tar.gz"
+                            : ".zip,.tar,.gz,.tgz,.tar.gz"}
+                        disabled={uploadMaterial.isPending}
+                        onChange={(event) => {
+                          const file = event.target.files?.[0];
+                          if (file) uploadMaterial.mutate(file);
+                          event.target.value = "";
+                        }} />
+                    </div>
+                    {uploadMaterial.isPending ? <small>上传与扫描请求处理中…</small> : null}
+                  </div>
+                  {(templateAssets.data?.rows ?? []).length ? (
+                    <div style={{ marginTop: 8 }}>
+                      {(templateAssets.data?.rows ?? []).map((asset) => {
+                        const id = String(asset["public_id"] ?? "");
+                        const purpose = String(asset["purpose"] ?? "");
+                        const role = purpose === "STARTER" ? "STUDENT_FILES"
+                          : purpose === "HIDDEN_SOURCE" ? "HIDDEN_SOURCE"
+                            : purpose === "PUBLIC_DATA" ? "PUBLIC_DATA" : "";
+                        const scanStatus = String(asset["scan_status"] ?? "");
+                        return (
+                          <div className="item" key={id}>
+                            {role ? (
+                              <input type="checkbox" aria-label={`纳入材料 ${String(asset["file_name"] ?? "")}`}
+                                checked={selectedMaterials[id] === role}
+                                disabled={scanStatus !== "CLEAN"}
+                                onChange={(event) => setSelectedMaterials((current) => {
+                                  const next = { ...current };
+                                  if (event.target.checked) next[id] = role;
+                                  else delete next[id];
+                                  return next;
+                                })} />
+                            ) : null}
+                            <div style={{ flex: 1 }}>
+                              <strong>{String(asset["file_name"] ?? "")}</strong>
+                              <small>{purpose === "MANUAL" ? "实验指导书" : role || purpose}</small>
+                            </div>
+                            <StatusBadge tone={scanStatus === "CLEAN" ? "good" : scanStatus === "PENDING" ? "blue" : "bad"}>
+                              {scanStatus === "CLEAN" ? "扫描通过" : scanStatus === "PENDING" ? "扫描中" : "不可用"}
+                            </StatusBadge>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : <p className="subtle">尚未上传材料。</p>}
+                  {selectedMaterialNotReady ? <p className="subtle">所选材料需通过扫描后才能保存执行规格。</p> : null}
+                  {hasSpec ? (
+                    <Button size="sm" variant="primary" disabled={saveMaterials.isPending || selectedMaterialNotReady}
+                      onClick={() => saveMaterials.mutate()}>
+                      {saveMaterials.isPending ? "保存中…" : "保存材料用途"}
+                    </Button>
+                  ) : null}
                 </div>
               ) : null}
               {latestPrecheck ? (

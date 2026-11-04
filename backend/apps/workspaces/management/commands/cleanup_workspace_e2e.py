@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import secrets
+import time
 from typing import Any
 
 from django.core.management.base import BaseCommand, CommandError
@@ -13,6 +14,7 @@ from apps.provisioning.adapters import runtime_for_driver
 from apps.provisioning.models import ProvisioningInstance
 from apps.provisioning.services import destroy_task_instance
 
+from ...models import WorkspaceExecutionRun
 from ...services import revoke_task_sessions
 
 
@@ -20,15 +22,31 @@ class Command(BaseCommand):
     help = "Finalize workspace storage and destroy a disposable real workspace runtime."
 
     def add_arguments(self, parser: Any) -> None:
-        parser.add_argument("--title", required=True)
+        scope = parser.add_mutually_exclusive_group(required=True)
+        scope.add_argument("--title")
+        scope.add_argument("--task-id")
 
     def handle(self, *args: object, **options: object) -> None:
-        task = ExperimentTask.objects.filter(
-            publication__title=str(options["title"]),
-            student__email="student.integration@example.edu",
-        ).first()
+        if options.get("task_id"):
+            task = ExperimentTask.objects.filter(public_id=options["task_id"]).first()
+        else:
+            task = ExperimentTask.objects.filter(
+                publication__title=options["title"],
+                student__email="student.integration@example.edu",
+            ).first()
         if task is None:
             raise CommandError("real workspace task not found")
+        deadline = time.monotonic() + max(
+            60, int(task.execution_spec.get("timeout_seconds", 0)) + 10
+        )
+        while WorkspaceExecutionRun.objects.filter(
+            task=task, status__in=("QUEUED", "RUNNING")
+        ).exists():
+            if time.monotonic() >= deadline:
+                raise CommandError(
+                    "Execution is still active; retry scoped cleanup after it finishes"
+                )
+            time.sleep(0.25)
         existing_instance = (
             ProvisioningInstance.objects.select_related("runtime_adapter")
             .filter(task=task)

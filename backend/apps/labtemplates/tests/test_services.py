@@ -1,3 +1,4 @@
+import hashlib
 import inspect
 from typing import Any, cast
 from unittest.mock import patch
@@ -5,10 +6,12 @@ from unittest.mock import patch
 from django.test import TestCase, override_settings
 
 from apps.core.errors import RowVersionConflict
+from apps.core.identifiers import new_ulid
 from apps.core.models import ObjectAsset
-from apps.governance.models import ResourceProfile
+from apps.governance.models import ImageAsset, ResourceProfile
 from apps.provisioning.adapters import RuntimeAdapterFailure, fake_runtime, reset_fake_runtime
 
+from ..assets import _validate_declaration
 from ..errors import TemplateStateConflict, TemplateValidationError
 from ..image_services import (
     create_experiment_image,
@@ -23,9 +26,13 @@ from ..models import (
     TemplateTask,
     TemplateVersion,
 )
+from ..selectors import options_for_course
 from ..serializers import version_data
 from ..services import (
+    _execution_material_snapshots,
+    _normalize_execution_spec,
     build_execution_command,
+    build_execution_plan,
     clone_version,
     compute_spec_digest,
     create_chapter,
@@ -41,10 +48,330 @@ from ..services import (
     update_version,
 )
 from ..tasks import prepare_experiment_image_task
+from ..toolchains import TOOLCHAIN_CATALOG, TOOLCHAINS_BY_LANGUAGE
 from .helpers import add_valid_rule, context, create_template_version
 
 
 class TemplateServiceTests(TestCase):
+    def test_material_roles_validate_asset_purpose_and_snapshot_digest(self) -> None:
+        _owner, _course, _template, version = create_template_version(suffix="material-roles")
+        source = ObjectAsset.objects.create(
+            public_id=new_ulid(),
+            bucket="test-assets",
+            object_key=f"template-materials/{version.public_id}/hidden.zip",
+            object_version="hidden-v1",
+            digest_sha256="c" * 64,
+            size_bytes=128,
+            media_type="application/zip",
+            original_name="hidden.zip",
+            owner_type="TEMPLATE_VERSION",
+            owner_ref=version.public_id,
+            purpose="HIDDEN_SOURCE",
+            scan_status=ObjectAsset.ScanStatus.CLEAN,
+            status=ObjectAsset.Status.ACTIVE,
+        )
+        materials = _execution_material_snapshots(
+            version, [{"asset_id": source.public_id, "role": "HIDDEN_SOURCE"}]
+        )
+        self.assertEqual(materials[0]["role"], "HIDDEN_SOURCE")
+        self.assertEqual(materials[0]["asset"]["digest_sha256"], source.digest_sha256)
+        with self.assertRaises(TemplateValidationError):
+            _execution_material_snapshots(
+                version, [{"asset_id": source.public_id, "role": "PUBLIC_DATA"}]
+            )
+        self.assertEqual(
+            _validate_declaration(
+                purpose="PUBLIC_DATA",
+                file_name="records.csv",
+                media_type="text/csv",
+                size_bytes=32,
+                digest_sha256="d" * 64,
+            ),
+            "records.csv",
+        )
+
+    def test_v2_published_digest_covers_comparator_tolerances_and_material_roles(self) -> None:
+        _owner, _course, _template, version = create_template_version(suffix="v2-digest")
+        hidden = ObjectAsset.objects.create(
+            public_id=new_ulid(),
+            bucket="test-assets",
+            object_key=f"template-materials/{version.public_id}/hidden.zip",
+            object_version="hidden-v1",
+            digest_sha256="e" * 64,
+            size_bytes=128,
+            media_type="application/zip",
+            original_name="hidden.zip",
+            owner_type="TEMPLATE_VERSION",
+            owner_ref=version.public_id,
+            purpose="HIDDEN_SOURCE",
+            scan_status=ObjectAsset.ScanStatus.CLEAN,
+            status=ObjectAsset.Status.ACTIVE,
+        )
+        public_data = ObjectAsset.objects.create(
+            public_id=new_ulid(),
+            bucket="test-assets",
+            object_key=f"template-materials/{version.public_id}/records.csv",
+            object_version="data-v1",
+            digest_sha256="f" * 64,
+            size_bytes=32,
+            media_type="text/csv",
+            original_name="records.csv",
+            owner_type="TEMPLATE_VERSION",
+            owner_ref=version.public_id,
+            purpose="PUBLIC_DATA",
+            scan_status=ObjectAsset.ScanStatus.CLEAN,
+            status=ObjectAsset.Status.ACTIVE,
+        )
+        version.execution_spec = {
+            "schema_version": 2,
+            "language": "python",
+            "toolchain_version": "3.14.0",
+            "language_standard": "3",
+            "entrypoint": "main.py",
+            "timeout_seconds": 5,
+            "memory_mb": 256,
+            "cpu_millicores": 500,
+            "comparator": "token",
+            "absolute_tolerance": 1e-6,
+            "relative_tolerance": 1e-6,
+            "materials": [{"asset_id": hidden.public_id, "role": "HIDDEN_SOURCE"}],
+            "tests_asset": version.execution_spec["tests_asset"],
+            "network_mode": "DENY_ALL",
+        }
+        TemplateVersion.objects.filter(pk=version.pk).update(execution_spec=version.execution_spec)
+        version.refresh_from_db()
+        original = compute_spec_digest(version)
+        changed_tolerance = {**version.execution_spec, "absolute_tolerance": 0}
+        TemplateVersion.objects.filter(pk=version.pk).update(execution_spec=changed_tolerance)
+        version.refresh_from_db()
+        self.assertNotEqual(compute_spec_digest(version), original)
+        changed_role = {
+            **version.execution_spec,
+            "materials": [{"asset_id": public_data.public_id, "role": "PUBLIC_DATA"}],
+        }
+        TemplateVersion.objects.filter(pk=version.pk).update(execution_spec=changed_role)
+        version.refresh_from_db()
+        self.assertNotEqual(compute_spec_digest(version), original)
+
+    def test_teacher_options_return_language_catalog(self) -> None:
+        owner, course, _template, _version = create_template_version(suffix="toolchain-options")
+        options = options_for_course(actor=owner, course_id=course.public_id)
+        self.assertEqual(
+            [item["language"] for item in options["toolchains"]],
+            ["c", "cpp", "java", "python", "go"],
+        )
+
+    def test_toolchain_catalog_marks_all_verified_image_languages_available(self) -> None:
+        self.assertEqual(
+            [item["language"] for item in TOOLCHAIN_CATALOG],
+            ["c", "cpp", "java", "python", "go"],
+        )
+        available = [item for item in TOOLCHAIN_CATALOG if item["available"]]
+        self.assertEqual(
+            [item["language"] for item in available], ["c", "cpp", "java", "python", "go"]
+        )
+        self.assertTrue(all(
+            any(version["default"] for version in item["versions"]) for item in available
+        ))
+        self.assertTrue(all(len(item["versions"]) == 1 for item in TOOLCHAIN_CATALOG))
+
+    def test_versioned_execution_contract_resolves_teacher_selection_matrix(self) -> None:
+        base = {
+            "schema_version": 2,
+            "language": "python",
+            "toolchain_version": None,
+            "language_standard": None,
+            "entrypoint": "main.py",
+            "timeout_seconds": 5,
+            "memory_mb": 256,
+            "cpu_millicores": 500,
+            "comparator": "token",
+            "tests_asset": "A" * 26,
+            "network_mode": "DENY_ALL",
+        }
+        fixed = _normalize_execution_spec(base)
+        self.assertEqual(fixed["toolchain"]["mode"], "FIXED")
+        self.assertEqual(fixed["toolchain"]["toolchain_version"], "3.14.0")
+        self.assertEqual(_normalize_execution_spec(fixed), fixed)
+        with patch.dict(
+            TOOLCHAINS_BY_LANGUAGE["python"],
+            {
+                "versions": (
+                    {"version": "3.14.0", "default": False},
+                    {"version": "3.15.0", "default": True},
+                )
+            },
+        ):
+            self.assertEqual(_normalize_execution_spec(fixed), fixed)
+        self.assertEqual(build_execution_command(fixed), ["python", "main.py"])
+        explicit = _normalize_execution_spec({**base, "toolchain_version": "3.14.0"})
+        self.assertEqual(explicit["toolchain"]["toolchain_version"], "3.14.0")
+
+        student_select = _normalize_execution_spec({
+            **base,
+            "language": None,
+            "entrypoint": None,
+        })
+        self.assertEqual(student_select["toolchain"]["mode"], "STUDENT_SELECT")
+        self.assertEqual(
+            student_select["toolchain"]["allowed_languages"], ["c", "cpp", "java", "python", "go"]
+        )
+        with self.assertRaises(TemplateValidationError):
+            build_execution_command(student_select)
+
+        with self.assertRaises(TemplateValidationError):
+            _normalize_execution_spec({
+                **base,
+                "language": None,
+                "toolchain_version": "14.4.0",
+                "entrypoint": None,
+            })
+
+        for language, entrypoint in (
+            ("c", "main.c"),
+            ("cpp", "main.cpp"),
+            ("java", "Main.java"),
+            ("go", "main.go"),
+        ):
+            selected = _normalize_execution_spec({
+                **base,
+                "language": language,
+                "entrypoint": entrypoint,
+            })
+            self.assertEqual(selected["toolchain"]["mode"], "FIXED")
+            self.assertEqual(selected["toolchain"]["language"], language)
+            with self.assertRaises(TemplateValidationError):
+                build_execution_command(selected)
+
+    def test_versioned_execution_contract_validates_comparator_tolerance_and_runtime(self) -> None:
+        spec = {
+            "schema_version": 2,
+            "language": "python",
+            "toolchain_version": None,
+            "language_standard": None,
+            "entrypoint": "main.py",
+            "timeout_seconds": 5,
+            "memory_mb": 256,
+            "cpu_millicores": 500,
+            "comparator": "numeric",
+            "absolute_tolerance": 0,
+            "relative_tolerance": 1e-6,
+            "tests_asset": "A" * 26,
+            "network_mode": "DENY_ALL",
+        }
+        normalized = _normalize_execution_spec(spec)
+        self.assertEqual(normalized["absolute_tolerance"], 0.0)
+        self.assertEqual(normalized["relative_tolerance"], 1e-6)
+        with self.assertRaises(TemplateValidationError):
+            build_execution_command(normalized)
+        with self.assertRaises(TemplateValidationError):
+            _normalize_execution_spec({**spec, "absolute_tolerance": float("nan")})
+        with self.assertRaises(TemplateValidationError):
+            _normalize_execution_spec({**spec, "relative_tolerance": float("inf")})
+        with self.assertRaises(TemplateValidationError):
+            _normalize_execution_spec({**spec, "absolute_tolerance": -1})
+        with self.assertRaises(TemplateValidationError):
+            _normalize_execution_spec({**spec, "shell_command": "python main.py"})
+        with self.assertRaises(TemplateValidationError):
+            _normalize_execution_spec({**spec, "language": "go", "entrypoint": "../main.go"})
+
+    def test_execution_plan_is_fixed_argv_for_supported_languages(self) -> None:
+        base = {
+            "schema_version": 2, "timeout_seconds": 5, "memory_mb": 256,
+            "cpu_millicores": 500, "comparator": "token", "tests_asset": "A" * 26,
+            "network_mode": "DENY_ALL",
+        }
+        expected = {
+            "python": {"compile": [], "run": ["python", "main.py"]},
+            "c": {
+                "compile": ["gcc", "-std=c17", "-O2", "main.c", "-o", "/tmp/.cache/program"],
+                "run": ["/tmp/.cache/program"],
+            },
+            "cpp": {
+                "compile": ["g++", "-std=c++20", "-O2", "main.cpp", "-o", "/tmp/.cache/program"],
+                "run": ["/tmp/.cache/program"],
+            },
+            "java": {
+                "compile": ["javac", "-d", "/tmp/.cache/classes", "Main.java"],
+                "run": ["java", "-cp", "/tmp/.cache/classes", "Main"],
+            },
+            "go": {
+                "compile": ["go", "build", "-o", "/tmp/.cache/program", "main.go"],
+                "run": ["/tmp/.cache/program"],
+            },
+        }
+        for language, plan in expected.items():
+            entrypoint = (
+                "Main.java" if language == "java"
+                else f"main.{language if language != 'python' else 'py'}"
+            )
+            spec = {**base, "language": language, "entrypoint": entrypoint}
+            self.assertEqual(build_execution_plan(spec), plan)
+
+    def test_v2_precheck_and_publish_accept_verified_languages_and_numeric_zero(self) -> None:
+        for language in ("c", "cpp", "java", "python", "go", None):
+            with self.subTest(language=language):
+                owner, course, _template, version = create_template_version(
+                    suffix=f"v2-precheck-{language}"
+                )
+                ImageAsset.objects.filter(pk=version.image_id).update(
+                    digest="sha256:" + hashlib.sha256(str(language).encode()).hexdigest()
+                )
+                entrypoint = (
+                    TOOLCHAINS_BY_LANGUAGE[language]["entrypoint"] if language else None
+                )
+                spec = {
+                    **version.execution_spec, "schema_version": 2, "language": language,
+                    "entrypoint": entrypoint, "comparator": "numeric",
+                    "absolute_tolerance": 0, "relative_tolerance": 0,
+                }
+                TemplateVersion.objects.filter(pk=version.pk).update(execution_spec=spec)
+                TemplateChapter.objects.create(
+                    template_version=version, title="Language acceptance", sort_order=1,
+                )
+                run = request_precheck(
+                    course_id=course.public_id, version_id=version.public_id, actor=owner,
+                    expected_version=version.row_version, context=context(owner),
+                )
+                completed = execute_precheck(run_id=run.public_id)
+                self.assertEqual(completed.status, "PASSED", completed.error_detail_masked)
+                version.refresh_from_db()
+                published = publish_version(
+                    course_id=course.public_id, version_id=version.public_id, actor=owner,
+                    expected_version=version.row_version, context=context(owner),
+                )
+                self.assertEqual(published.status, "PUBLISHED")
+                self.assertEqual(published.execution_spec["absolute_tolerance"], 0)
+
+    def test_published_digest_survives_catalog_default_version_change(self) -> None:
+        _owner, _course, _template, version = create_template_version(suffix="toolchain-freeze")
+        version.execution_spec = {
+            "schema_version": 2,
+            "language": "python",
+            "toolchain_version": "3.14.0",
+            "language_standard": "3",
+            "entrypoint": "main.py",
+            "timeout_seconds": 5,
+            "memory_mb": 256,
+            "cpu_millicores": 500,
+            "comparator": "token",
+            "tests_asset": version.execution_spec["tests_asset"],
+            "network_mode": "DENY_ALL",
+        }
+        TemplateVersion.objects.filter(pk=version.pk).update(execution_spec=version.execution_spec)
+        version.refresh_from_db()
+        original_digest = compute_spec_digest(version)
+        with patch.dict(
+            TOOLCHAINS_BY_LANGUAGE["python"],
+            {
+                "versions": (
+                    {"version": "3.14.0", "default": False},
+                    {"version": "3.15.0", "default": True},
+                )
+            },
+        ):
+            self.assertEqual(compute_spec_digest(version), original_digest)
+
     def test_prepare_task_payload_contains_no_build_args(self) -> None:
         self.assertNotIn("build_args", str(inspect.signature(prepare_experiment_image_task.run)))
 

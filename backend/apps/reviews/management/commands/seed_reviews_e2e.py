@@ -54,7 +54,9 @@ class Command(BaseCommand):
             course=course, student=peer, status=Enrollment.Status.ACTIVE
         ).first()
         if enrollment is None:
-            enrollment = Enrollment.objects.filter(course=course, student=peer, status="PENDING").first()
+            enrollment = Enrollment.objects.filter(
+                course=course, student=peer, status="PENDING"
+            ).first()
             enrollment = enrollment or apply_for_course(
                 course_id=course.public_id,
                 student=peer,

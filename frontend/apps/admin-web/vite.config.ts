@@ -10,6 +10,7 @@ const portalHost = "admin.localhost";
 export default defineConfig({
   plugins: [react()],
   resolve: {
+    extensions: [".tsx", ".ts", ".mjs", ".js", ".mts", ".jsx", ".json"],
     alias: [
       { find: "@edu/ui/styles.css", replacement: path.resolve(__dirname, "../../packages/ui/src/styles.css") },
       { find: /^@edu\/ui$/, replacement: path.resolve(__dirname, "src/legacy/ui.tsx") },

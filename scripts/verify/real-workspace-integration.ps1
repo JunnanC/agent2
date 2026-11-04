@@ -2,7 +2,7 @@
 .SYNOPSIS
 真实工作区浏览器流程、令牌隔离、快照摘要与测试资源回收。
 .DESCRIPTION
-从仓库根目录调用。前置场景缺失：先恢复 scripts/README.md 所列测试文件或命令。
+从仓库根目录调用。可复用已运行服务，并用 ExistingTaskId 指定可回收的一次性验收任务。
 #>
 param(
     [string]$ProjectName = 'experimental-platform',
@@ -11,7 +11,11 @@ param(
     [string]$OutputDirectory = '',
     [string]$SeedPassword = 'Integration-Disposable-Seed-Only-2026!',
     [switch]$SkipRuntimeBuild,
-    [switch]$SeedPrerequisites
+    [switch]$SeedPrerequisites,
+    [switch]$UseRunningServices,
+    [string]$ExistingTaskId = '',
+    [string]$StudentIdentifier = 'student.integration@example.edu',
+    [int]$EgoTaskSpaceId = 0
 )
 
 $ErrorActionPreference = 'Stop'
@@ -25,17 +29,21 @@ $composeFile = Join-Path $root 'docker-compose.dev.yml'
 if ($ProjectName -notmatch '^[a-z0-9][a-z0-9_-]{2,62}$') { throw 'ProjectName must be a narrow Docker Compose project identifier.' }
 if ($EntryPort -lt 1 -or $EntryPort -gt 65535) { throw 'EntryPort must be a valid TCP port.' }
 if ($RuntimeImage -match ':latest$' -or $RuntimeImage -notmatch '^[A-Za-z0-9][A-Za-z0-9._/:@-]{0,254}$') { throw 'RuntimeImage must be a fixed OCI image reference, never :latest.' }
+if ($ExistingTaskId -and ($ExistingTaskId -notmatch '^[A-Za-z0-9]{26}$' -or -not $UseRunningServices)) { throw 'ExistingTaskId requires UseRunningServices and an exact task identifier.' }
+if ($UseRunningServices -and (-not $ExistingTaskId -or $SeedPrerequisites)) { throw 'UseRunningServices requires an explicit disposable task and does not run prerequisite seeds.' }
+if ($EgoTaskSpaceId -lt 0 -or ($EgoTaskSpaceId -gt 0 -and -not $UseRunningServices)) { throw 'EgoTaskSpaceId requires an authorized existing browser space and UseRunningServices.' }
 
 $stamp = [DateTimeOffset]::UtcNow.ToString('yyyyMMdd-HHmmss')
 $evidence = if ($OutputDirectory) { [IO.Path]::GetFullPath($OutputDirectory) } else { Join-Path $root "evidence/real-workspace/$stamp" }
 New-Item -ItemType Directory -Force -Path $evidence | Out-Null
 $compose = @('compose', '--profile', 'runtime', '-p', $ProjectName, '-f', $composeFile)
 $runId = [DateTimeOffset]::UtcNow.ToString('yyyyMMddHHmmss')
-$taskTitle = "真实工作区验收 $runId"
+$taskTitle = if ($ExistingTaskId) { "Task $ExistingTaskId" } else { "真实工作区验收 $runId" }
 $seeded = $false
 $result = 'failed'
 $journeyPassed = $false
-$taskId = ''
+$taskId = $ExistingTaskId
+$scopeArguments = if ($ExistingTaskId) { @('--task-id', $ExistingTaskId) } else { @('--title', $taskTitle) }
 $imageId = ''
 $imageDigest = ''
 $previous = @{}
@@ -55,7 +63,7 @@ function Invoke-Compose {
 }
 
 try {
-    if ($RuntimeImage -eq 'experimental-platform-workspace:local' -and -not $SkipRuntimeBuild) {
+    if ($RuntimeImage -eq 'experimental-platform-workspace:local' -and -not $SkipRuntimeBuild -and -not $UseRunningServices) {
         & docker buildx build --load --platform linux/amd64 --provenance=false --tag $RuntimeImage (Join-Path $root 'runtime/algorithm-workspace')
         if ($LASTEXITCODE -ne 0) { throw 'Real workspace runtime image build failed.' }
     } elseif (-not (docker image inspect $RuntimeImage 2>$null)) {
@@ -63,7 +71,7 @@ try {
     }
     $imageId = (& docker image inspect --format '{{.Id}}' $RuntimeImage).Trim()
     if ($LASTEXITCODE -ne 0 -or -not $imageId.StartsWith('sha256:')) { throw 'Real workspace runtime image inspect did not return an immutable image id.' }
-    $repoDigest = (& docker image inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' $RuntimeImage).Trim()
+    $repoDigest = ([string](& docker image inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' $RuntimeImage)).Trim()
     $imageDigest = $imageId
     if ($repoDigest.Contains('@')) { $imageDigest = [string](($repoDigest -split "`n")[0] -split '@', 2)[1] }
     $imageId | Out-File -LiteralPath (Join-Path $evidence 'runtime-image-id.txt') -Encoding utf8
@@ -82,21 +90,23 @@ try {
     $env:LOCAL_RUNTIME_IMAGE = $RuntimeImage
     $env:LOCAL_RUNTIME_MODE = 'REAL'
     $env:LOCAL_RUNTIME_NETWORK = "${ProjectName}-runtime"
-    $env:RUNTIME_ADAPTER_CONFIGS = ('{"runtime/local-docker":{"runtime_network":"' + $env:LOCAL_RUNTIME_NETWORK + '","image":"' + $RuntimeImage + '","pids_limit":128}}')
+    $env:RUNTIME_ADAPTER_CONFIGS = ('{"runtime/local-docker":{"runtime_network":"' + $env:LOCAL_RUNTIME_NETWORK + '","image":"' + $RuntimeImage + '","pids_limit":256}}')
 
+    if (-not $UseRunningServices) {
     $composeUpArgs = @('up')
     if ($SkipRuntimeBuild) {
         # Build every application service explicitly, but never rebuild the promoted digest.
-        $buildServices = @('core-check', 'migrate', 'django', 'celery', 'celery-beat', 'runtime-worker', 'workspace-gateway', 'log-ingest', 'nginx')
+        $buildServices = @('core-check', 'migrate', 'django', 'celery', 'celery-beat', 'runtime-worker', 'workspace-storage-worker', 'workspace-gateway', 'log-ingest', 'nginx')
         Invoke-Compose -StepArguments (@('build') + $buildServices) -FailureMessage 'Real workspace Compose application services failed to build.'
         $composeUpArgs += '--no-build'
     } else {
         $composeUpArgs += '--build'
     }
-    $composeUpArgs += @('--detach', 'migrate', 'django', 'celery', 'celery-beat', 'runtime-worker', 'workspace-gateway', 'nginx')
+    $composeUpArgs += @('--detach', 'migrate', 'django', 'celery', 'celery-beat', 'runtime-worker', 'workspace-storage-worker', 'workspace-gateway', 'nginx')
     Invoke-Compose -StepArguments $composeUpArgs -FailureMessage 'Real workspace Compose services failed to build or start.'
     # Long-running Kong replicas cache Compose DNS answers across Django recreation.
     Invoke-Compose -StepArguments @('restart', 'kong') -FailureMessage 'Real workspace Kong replicas failed to refresh upstream DNS.'
+    }
     Invoke-Compose -StepArguments @('exec', '-T', 'django', 'python', 'manage.py', 'spectacular', '--format', 'openapi-json', '--validate', '--file', '/tmp/openapi-real-workspace.json') -FailureMessage 'Real workspace container OpenAPI validation failed.'
 
     if ($SeedPrerequisites) {
@@ -124,7 +134,7 @@ try {
         try {
             $health = Invoke-WebRequest -Uri "$($env:STUDENT_WEB_URL)/api/v2/health" -TimeoutSec 5 -NoProxy
             $lastProbe = "status=$($health.StatusCode) body=$($health.Content)"
-            if ($health.StatusCode -eq 200 -and $health.Content -match 'v2-p16') {
+            if ($health.StatusCode -eq 200 -and ($UseRunningServices -or $health.Content -match 'v2-p16')) {
                 $consecutiveReady++
                 if ($consecutiveReady -ge 6) { $ready = $true; break }
             } else { $consecutiveReady = 0 }
@@ -136,6 +146,7 @@ try {
     }
     if (-not $ready) { throw "Real workspace edge did not become ready. Last probe: $lastProbe" }
 
+    if (-not $ExistingTaskId) {
     $seedOutput = & docker @compose exec -T -e "WORKSPACE_E2E_IMAGE_DIGEST=$imageDigest" django python manage.py seed_real_workspace_e2e --run-id $runId 2>&1
     $seedExit = $LASTEXITCODE
     $seedOutput | Out-File -LiteralPath (Join-Path $evidence 'seed.log') -Encoding utf8
@@ -144,29 +155,49 @@ try {
     $seedText = $seedOutput -join "`n"
     if ($seedText -match '\btask=([A-Za-z0-9_-]+)\b') { $taskId = $Matches[1] }
     if (-not $taskId) { throw 'Real workspace seed output did not return a task id for scoped cleanup.' }
+    } else {
+        $seeded = $true
+        "Existing disposable task: $ExistingTaskId" | Out-File -LiteralPath (Join-Path $evidence 'seed.log') -Encoding utf8
+    }
 
+    if ($EgoTaskSpaceId -gt 0) {
+        $scenarioUrl = ([Uri](Join-Path $root 'scripts/verify/real-workspace-journey.mjs')).AbsoluteUri | ConvertTo-Json -Compress
+        $browserResultPath = Join-Path $evidence 'browser-result.json'
+        $browserResultJson = $browserResultPath | ConvertTo-Json -Compress
+        $browserInput = @{ taskSpaceId = $EgoTaskSpaceId; taskId = $taskId; baseURL = $env:STUDENT_WEB_URL } | ConvertTo-Json -Compress
+        $entry = "const module = await import($scenarioUrl); const result = await module.run($browserInput); const fs = await import('node:fs/promises'); await fs.writeFile($browserResultJson, JSON.stringify(result)); console.log(result);"
+        $entryPath = Join-Path $evidence 'browser-run.mjs'
+        [IO.File]::WriteAllText($entryPath, $entry, [Text.UTF8Encoding]::new($false))
+        $entryUrl = ([Uri]$entryPath).AbsoluteUri
+        & ego-browser nodejs -e "await import('$entryUrl')" 2>&1 | Tee-Object -FilePath (Join-Path $evidence 'browser.log')
+        if ($LASTEXITCODE -ne 0) { throw 'Real workspace ego-browser journey failed.' }
+        $browserResult = Get-Content -Raw -LiteralPath $browserResultPath | ConvertFrom-Json
+        if ($browserResult.task_id -ne $taskId -or $browserResult.result -ne 'passed' -or -not $browserResult.submitted) { throw 'Browser result did not prove the requested task submission.' }
+    } else {
     $playwrightCommand = 'npm ci --ignore-scripts && npx playwright test e2e/real-workspace.spec.ts --project=student-web --workers=1'
     $playwrightArgs = @(
         'run', '--rm', '--network', 'host', '--volume', "$(Join-Path $root 'frontend'):/work/frontend",
         '--volume', '/work/frontend/node_modules',
-        '--workdir', '/work/frontend', '--env', "E2E_SEED_PASSWORD=$SeedPassword", '--env', "REAL_WORKSPACE_E2E_TASK_TITLE=$taskTitle",
+        '--workdir', '/work/frontend', '--env', "E2E_SEED_PASSWORD=$SeedPassword", '--env', "E2E_STUDENT_ID=$StudentIdentifier", '--env', "REAL_WORKSPACE_E2E_TASK_TITLE=$taskTitle", '--env', "REAL_WORKSPACE_E2E_TASK_ID=$taskId",
         '--env', "STUDENT_WEB_URL=http://student.localhost:$EntryPort", '--env', "TEACHER_WEB_URL=http://teacher.localhost:$EntryPort",
         '--env', "REAL_WORKSPACE_COMPOSE_PROJECT=$ProjectName", '--env', "REAL_WORKSPACE_COMPOSE_FILE=/work/compose.dev.yml",
         'mcr.microsoft.com/playwright:v1.55.1-noble', 'bash', '-lc', $playwrightCommand
     )
     # The Playwright image is the only Node/browser runtime used by this gate.
-    & docker @playwrightArgs 2>&1 | Tee-Object -FilePath (Join-Path $evidence 'playwright.log')
+    & docker @playwrightArgs 2>&1 | Tee-Object -FilePath (Join-Path $evidence 'browser.log')
     $playwrightExit = $LASTEXITCODE
     & docker run --rm --volume "$(Join-Path $root 'frontend/test-results'):/artifacts" --volume "$(Join-Path $root 'scripts'):/scripts:ro" python:3.14-slim python /scripts/verify/redact-browser-artifacts.py /artifacts
     if ($LASTEXITCODE -ne 0) { throw 'Real workspace Playwright artifact redaction failed.' }
     if ($playwrightExit -ne 0) { throw 'Real workspace Docker Playwright journey failed; retained artifacts were scrubbed.' }
+    }
 
-    $boundary = & docker @compose exec -T runtime-worker python manage.py verify_workspace_token_boundary --title $taskTitle 2>&1
+    $boundary = & docker @compose exec -T runtime-worker python manage.py verify_workspace_token_boundary @scopeArguments 2>&1
     $boundaryExit = $LASTEXITCODE
     $boundary | Out-File -LiteralPath (Join-Path $evidence 'runtime-boundary.json') -Encoding utf8
     if ($boundaryExit -ne 0) { throw 'Real workspace instance upstream-token boundary verification failed.' }
 
-    $before = & docker @compose exec -T runtime-worker python manage.py collect_workspace_evidence --title $taskTitle 2>&1
+    $before = & docker @compose exec -T runtime-worker python manage.py collect_workspace_evidence @scopeArguments 2>&1
+    $beforeExit = $LASTEXITCODE
     $before | Out-File -LiteralPath (Join-Path $evidence 'before-cleanup.json') -Encoding utf8
     $jsonLine = ($before | Where-Object { $_ -match '^\s*\{' } | Select-Object -Last 1)
     if ($jsonLine) {
@@ -174,20 +205,24 @@ try {
         $taskId = [string]$beforeObject.task_id
     }
     if (-not $taskId) { throw 'Real workspace evidence did not return a task id.' }
+    if ($beforeExit -ne 0 -or -not $beforeObject -or $beforeObject.latest_snapshot_digest -notmatch '^[0-9a-f]{64}$') {
+        throw 'Real workspace evidence is missing a valid snapshot digest.'
+    }
+    if ($beforeObject.image_digest -notin @($imageId, $imageDigest)) { throw 'Task image does not match the inspected runtime image.' }
     if ($beforeObject.latest_snapshot_digest -ne $beforeObject.runtime_file_digest -or $beforeObject.latest_snapshot_digest -ne $beforeObject.minio_object_digest) {
         throw 'Real workspace snapshot digest does not match both MinIO and the live workspace file.'
     }
     $journeyPassed = $true
 } finally {
     if ($seeded) {
-        & docker @compose exec -T runtime-worker python manage.py cleanup_workspace_e2e --title $taskTitle 2>&1 | Tee-Object -FilePath (Join-Path $evidence 'cleanup.log') | Out-Null
+        & docker @compose exec -T runtime-worker python manage.py cleanup_workspace_e2e @scopeArguments 2>&1 | Tee-Object -FilePath (Join-Path $evidence 'cleanup.log') | Out-Null
         $cleanupExit = $LASTEXITCODE
         $cleanupResources = [ordered]@{
             containers = @(& docker ps -a --filter "label=edu.platform.task=$taskId" --format '{{json .}}' 2>$null)
             volumes = @(& docker volume ls --filter "label=edu.platform.task=$taskId" --format '{{json .}}' 2>$null)
         }
         $cleanupResources | ConvertTo-Json -Depth 4 | Out-File -LiteralPath (Join-Path $evidence 'resources-after-cleanup.json') -Encoding utf8
-        $after = & docker @compose exec -T runtime-worker python manage.py collect_workspace_evidence --title $taskTitle 2>&1
+        $after = & docker @compose exec -T runtime-worker python manage.py collect_workspace_evidence @scopeArguments 2>&1
         $afterExit = $LASTEXITCODE
         $after | Out-File -LiteralPath (Join-Path $evidence 'after-cleanup.json') -Encoding utf8
         $afterJsonLine = ($after | Where-Object { $_ -match '^\s*\{' } | Select-Object -Last 1)
@@ -207,10 +242,11 @@ try {
         image_digest = $imageDigest
         task_title = $taskTitle
         task_id = $taskId
-        docker_playwright = $true
+        docker_playwright = ($EgoTaskSpaceId -eq 0)
+        browser_driver = $(if ($EgoTaskSpaceId -gt 0) { 'ego-browser' } else { 'docker-playwright' })
         evidence = [ordered]@{
             seed = 'seed.log'
-            journey = 'playwright.log'
+            journey = 'browser.log'
             boundary = 'runtime-boundary.json'
             before_cleanup = 'before-cleanup.json'
             cleanup = 'cleanup.log'

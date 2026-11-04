@@ -12,6 +12,7 @@ from apps.governance.ports import template_resource_options
 
 from .legacy import LegacyTemplateAdapter
 from .models import Template, TemplatePrecheckRun, TemplateVersion
+from .toolchains import TOOLCHAIN_CATALOG
 
 
 def teaching_course(*, actor: User, course_id: str, capability: str) -> Course:
@@ -81,6 +82,7 @@ def options_for_course(*, actor: User, course_id: str) -> dict[str, Any]:
         actor=actor, course_id=course_id, capability=CourseStaffGrant.Capability.MANAGE_TEMPLATE
     )
     result: dict[str, Any] = template_resource_options()
+    result["toolchains"] = list(TOOLCHAIN_CATALOG)
     result["materials"] = [
         {
             "public_id": item.public_id,

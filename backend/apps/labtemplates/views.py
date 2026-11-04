@@ -16,7 +16,7 @@ from apps.core.idempotency import PrincipalScope, StoredResponse, execute_idempo
 from apps.courses.models import CourseStaffGrant
 from apps.courses.services import ActorContext
 
-from .assets import asset_for_course, complete_asset_upload, create_asset_upload
+from .assets import asset_for_course, assets_for_version, complete_asset_upload, create_asset_upload
 from .image_services import (
     build_args_digest,
     create_experiment_image,
@@ -46,6 +46,7 @@ from .serializers import (
     PrecheckRunResponseSerializer,
     ReorderWriteSerializer,
     TemplateAssetCreateSerializer,
+    TemplateAssetListResponseSerializer,
     TemplateAssetResponseSerializer,
     TemplateAssetUploadResponseSerializer,
     TemplateChapterListResponseSerializer,
@@ -532,6 +533,21 @@ class TemplateVersionDetailView(APIView):
 
 class TemplateAssetCollectionView(APIView):
     permission_classes = [IsTeachingPortal]
+
+    @extend_schema(
+        operation_id="teaching_template_assets_list",
+        responses={200: TemplateAssetListResponseSerializer},
+        parameters=[OpenApiParameter("version_id", str, required=True)],
+        extensions={"x-portals": ["TEACHING"]},
+    )
+    def get(self, request: HttpRequest, course_id: str, template_id: str) -> Response:
+        version, assets = assets_for_version(
+            actor=request.user,
+            course_id=course_id,
+            template_id=template_id,
+            version_id=str(request.query_params.get("version_id", "")),
+        )
+        return _response(request, [asset_data(asset, version) for asset in assets])
 
     @extend_schema(
         operation_id="teaching_template_assets_create",

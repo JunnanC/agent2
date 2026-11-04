@@ -205,6 +205,11 @@ class SystemArtifact(AppendOnlyModel):
     )
     kind = models.CharField(max_length=32, choices=Kind.choices)
     digest_sha256 = models.CharField(max_length=64, db_collation="ascii_bin")
+    execution_run = models.ForeignKey(
+        "workspaces.WorkspaceExecutionRun", on_delete=models.PROTECT,
+        null=True, blank=True, related_name="system_artifacts",
+    )
+    execution_evidence = models.JSONField(default=dict)
     trace_id = models.CharField(max_length=32)
 
     class Meta:

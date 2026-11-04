@@ -114,6 +114,35 @@ export function Reviews() {
   }, [reviews.data, search]);
 
   const detailData: ReviewDetail | undefined = detail.data;
+  const publicationId = detailData?.publication_id ?? "";
+  const aiBatches = useQuery({
+    queryKey: ["ai-score-batches", courseId, publicationId],
+    queryFn: () => teachingApi.aiScoreBatches(courseId, publicationId),
+    enabled: Boolean(publicationId),
+  });
+  const aiBatch = aiBatches.data?.[0];
+  const aiSuggestion = useQuery({
+    queryKey: ["ai-score-suggestion", courseId, aiBatch?.public_id, selected?.public_id],
+    queryFn: () => teachingApi.aiScoreSuggestion(courseId, aiBatch!.public_id, selected!.public_id),
+    enabled: Boolean(aiBatch && selected),
+    refetchInterval: (query) => ["QUEUED", "RUNNING"].includes(query.state.data?.status ?? "") ? 3000 : false,
+  });
+  const startAI = useMutation({
+    mutationFn: () => teachingApi.startAIScoreBatch(courseId, publicationId),
+    onSuccess: () => { void aiBatches.refetch(); },
+    onError: (error) => toast.notify(apiErrorMessage(error), "error"),
+  });
+  const acceptAI = useMutation({
+    mutationFn: () => teachingApi.acceptAIScoreSuggestion(
+      courseId, detailData!.public_id, aiSuggestion.data!.public_id, detailData!.row_version,
+    ),
+    onSuccess: () => {
+      toast.notify("已采纳建议评分，请核对后完成评审");
+      void detail.refetch();
+      void aiSuggestion.refetch();
+    },
+    onError: (error) => toast.notify(apiErrorMessage(error), "error"),
+  });
   const [evidence, setEvidence] = useState<EvidenceView>(null);
 
   /* 详情载入/刷新时用服务端已存分数重置本地输入（同时避免切换学生后残留上一份打分） */
@@ -220,6 +249,19 @@ export function Reviews() {
             </div>
             <div className="review-section" style={{ marginBottom: 12 }}>
               <span className="eyebrow">工作区证据</span>
+              {detailData.project && (
+                <>
+                  <p className="subtle">提交语言：{detailData.project.language} · 快照：{detailData.project.snapshot_id}</p>
+                  <details><summary>指导书</summary><pre style={{ whiteSpace: "pre-wrap" }}>{detailData.project.guidance.manual?.text ?? detailData.project.guidance.description ?? "未提供指导书"}</pre></details>
+                  {detailData.project.error_code && <p role="status">提交源码暂时无法读取，可稍后重试或继续人工评分。</p>}
+                  {detailData.project.files.map((file) => (
+                    <details key={file.path}><summary>{file.path}</summary>
+                      <pre style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{file.content}</pre>
+                      {file.truncated && <p className="subtle">预览达到大小上限，完整内容保留在提交快照中。</p>}
+                    </details>
+                  ))}
+                </>
+              )}
               <div className="evidence-row"><span>执行记录</span><button type="button" className="btn sm" onClick={() => previewMutation.mutate()} disabled={previewMutation.isPending}>{previewMutation.isPending ? "载入中…" : "查看"}</button></div>
               <div className="evidence-row"><span>工作区快照</span><button type="button" className="btn sm" onClick={() => workspaceMutation.mutate()} disabled={workspaceMutation.isPending}>{workspaceMutation.isPending ? "载入中…" : "查看"}</button></div>
               <div className="evidence-row"><span>操作回放</span><button type="button" className="btn sm" onClick={() => replayMutation.mutate()} disabled={replayMutation.isPending}>{replayMutation.isPending ? "载入中…" : "查看"}</button></div>
@@ -231,6 +273,30 @@ export function Reviews() {
                     : similarityMutation.isPending ? "检测中…" : "发起检测"}
                 </button>
               </div>
+            </div>
+
+            <div className="review-section" style={{ marginBottom: 12 }}>
+              <h3>AI 评分建议</h3>
+              <p className="subtle">实验结束后可生成建议。采纳后仍需教师核对并完成评审；AI 不可用时可直接人工评分。</p>
+              <Button size="sm" disabled={!publicationId || startAI.isPending || ["QUEUED", "RUNNING"].includes(aiSuggestion.data?.status ?? "")}
+                onClick={() => startAI.mutate()}>{startAI.isPending ? "提交中…" : "生成本实验评分建议"}</Button>
+              {(aiBatches.isError || aiSuggestion.isError) && <p role="status">建议暂时无法读取，可刷新重试或继续人工评分。</p>}
+              {aiSuggestion.data && (
+                <>
+                  <p role="status">{({ QUEUED: "等待生成", RUNNING: "正在生成", READY: "待教师采纳", ACCEPTED: "已采纳", FAILED: "生成失败，可人工评分" } as Record<string, string>)[aiSuggestion.data.status] ?? aiSuggestion.data.status}</p>
+                  {aiSuggestion.data.criteria.map((item) => (
+                    <div key={item.criterion_id}>
+                      <strong>{detailData.rubric?.criteria.find((criterion) => criterion.public_id === item.criterion_id)?.title ?? "评分项"}：{item.score} 分</strong>
+                      <p>{item.rationale}</p><blockquote>{item.evidence}</blockquote>
+                    </div>
+                  ))}
+                  {aiSuggestion.data.status === "READY" && (
+                    <Button size="sm" disabled={acceptAI.isPending || String(aiSuggestion.data.review_row_version) !== detailData.row_version}
+                      onClick={() => acceptAI.mutate()}>{acceptAI.isPending ? "采纳中…" : "采纳此份建议评分"}</Button>
+                  )}
+                  {aiSuggestion.data.status === "READY" && String(aiSuggestion.data.review_row_version) !== detailData.row_version && <p role="status">评审已更新，请重新生成建议。</p>}
+                </>
+              )}
             </div>
 
             <div className="review-section" style={{ marginBottom: 12 }}>
