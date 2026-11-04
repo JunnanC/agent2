@@ -9,9 +9,6 @@ param(
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 $compose = Join-Path $root 'docker-compose.frontend-dev.yml'
-$backendCompose = Join-Path $root 'docker-compose.dev.yml'
-$backendCompat = Join-Path $root 'docker-compose.p14-compat.yml'
-$backendProject = 'edu-platform-p14'
 $project = 'edu-platform-frontend-dev'
 
 function Assert-Command([string]$name) {
@@ -29,7 +26,6 @@ function Assert-PortAvailable([int]$port) {
 
 Assert-Command 'docker'
 if (-not (Test-Path -LiteralPath $compose)) { throw "找不到 $compose" }
-if (-not (Test-Path -LiteralPath $backendCompat)) { throw "找不到 $backendCompat" }
 if (-not (Test-Path -LiteralPath (Join-Path $root 'frontend\package-lock.json'))) { throw '找不到 frontend/package-lock.json' }
 
 foreach ($port in @($StudentPort, $TeacherPort, $AdminPort)) { Assert-PortAvailable $port }
@@ -38,7 +34,7 @@ Push-Location $root
 try {
     if (-not $SkipBackend) {
         Write-Host '确保后端 Compose 服务正在运行...'
-        docker compose --project-name $backendProject --profile p14 --env-file .env -f $backendCompose -f $backendCompat up -d --build
+        docker compose --profile runtime --env-file .env up -d --build
         if ($LASTEXITCODE -ne 0) { throw '后端 Compose 启动失败。' }
     }
 
