@@ -2,7 +2,8 @@ import { useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { meApi } from "@edu/api-client";
 import { keys } from "@edu/query-keys";
-import { Button, EmptyState, Modal, Panel, RequestStateView, StatusBadge, useToast } from "@edu/ui";
+import { Breadcrumbs, Button, EmptyState, Icon, Modal, Panel, RequestStateView, StatusBadge, useToast } from "@edu/ui";
+import type { IconName } from "@edu/ui";
 import { formatDateTime } from "@/lib/task-format";
 
 interface NotificationRow {
@@ -16,7 +17,7 @@ interface NotificationRow {
   links?: Array<{ label?: string; task_id?: string; course_id?: string; url?: string }> | null;
 }
 
-const KIND_ICON: Record<string, string> = {
+const KIND_ICON: Record<string, IconName> = {
   deadline: "calendar-clock",
   review: "message",
   system: "bell",
@@ -73,12 +74,18 @@ export function Notifications() {
 
   return (
     <>
-      <div className="page-actions align-end">
-        <span className={`status ${unread ? "warn" : "good"}`}>{unread ? `${unread} 条未读` : "全部已读"}</span>
-        <button type="button" className={`btn sm${readFilter === "all" ? " primary" : ""}`} onClick={() => setReadFilter("all")}>全部</button>
-        <button type="button" className={`btn sm${readFilter === "unread" ? " primary" : ""}`} onClick={() => setReadFilter("unread")}>未读</button>
-      </div>
-      <Panel>
+      <Breadcrumbs items={[{ label: "学生门户" }]} current="通知" />
+      <header className="student-overview-heading">
+        <div><h1>通知</h1><p>任务截止、报告评审与课程消息，在这里查看</p></div>
+      </header>
+      <Panel className="student-notifications">
+        <div className="notification-filters">
+          <div className="notification-tabs" aria-label="通知筛选">
+            <button type="button" aria-pressed={readFilter === "all"} onClick={() => setReadFilter("all")}>全部</button>
+            <button type="button" aria-pressed={readFilter === "unread"} onClick={() => setReadFilter("unread")}>未读</button>
+          </div>
+          <span className="subtle" aria-live="polite">{unread ? `${unread} 条未读` : "全部已读"}</span>
+        </div>
         <RequestStateView
           loading={notifications.isLoading}
           error={notifications.error}
@@ -90,7 +97,7 @@ export function Notifications() {
             {visible.map((row) => (
               <article className={`notification-card${row.read ? " read" : ""}`} key={row.id}>
                 <div className="notification-icon" aria-hidden="true">
-                  {KIND_ICON[row.kind ?? ""] ?? "bell"}
+                  <Icon name={KIND_ICON[row.kind ?? ""] ?? "bell"} size={18} />
                 </div>
                 <div style={{ minWidth: 0, flex: 1 }}>
                   <div className="notification-card-head">

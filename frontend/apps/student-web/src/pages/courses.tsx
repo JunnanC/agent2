@@ -24,11 +24,11 @@ export function Courses() {
   return (
     <>
       <Breadcrumbs items={[{ label: "学生门户" }]} current="我的课程" />
-      <Panel
-        className="courses-browser"
-        title={<><h2>我的课程</h2><span className="subtle">选择一门课程进入学习空间</span></>}
-        actions={<Link className="btn primary" to="/courses/join">加入课程</Link>}
-      >
+      <header className="student-overview-heading">
+        <div><h1>我的课程</h1><p>选择一门课程，进入学习空间</p></div>
+        <Link className="btn primary" to="/courses/join">加入课程</Link>
+      </header>
+      <Panel className="courses-browser">
         <RequestStateView
           loading={enrollments.isLoading}
           error={enrollments.error}
@@ -53,11 +53,8 @@ export function Courses() {
                     <StatusBadge tone={status.tone}>{status.label}</StatusBadge>
                   </div>
                   <div className="course-card-body">
-                    <div className="course-card-emblem" aria-hidden="true">
-                      {(enrollment.course_title || enrollment.course_code || "课").slice(0, 1)}
-                    </div>
                     <h3>{enrollment.course_title || "未命名课程"}</h3>
-                    <p>{enrollment.application_message || "欢迎进入课程学习空间，查看章节、实验任务和课程资料。"}</p>
+                    <p>{enrollment.application_message || "查看章节、实验任务与课程资料"}</p>
                   </div>
                   <div className="course-card-footer">
                     <span>申请于 {formatDate(enrollment.applied_at)}</span>
@@ -66,18 +63,18 @@ export function Courses() {
                 </>
               );
 
-              return <div key={enrollment.public_id}>
+              return <div className="student-course-entry" key={enrollment.public_id}>
                 {active ? <Link className="course-card" to={`/courses/${enrollment.course_id}`} aria-label={`进入课程 ${enrollment.course_title || enrollment.course_code || "未命名课程"}`}>{content}</Link> :
                   <article className="course-card is-disabled">{content}
                     {enrollment.status === "PENDING" ? <Button size="sm" onClick={() => void enrollments.refetch()}>查看最新状态</Button> : null}
                   </article>}
-                <div className="page-actions" style={{ marginTop: 8 }}><EnrollmentExit enrollment={enrollment} /></div>
+                <div className="page-actions course-exit-actions"><EnrollmentExit enrollment={enrollment} /></div>
               </div>;
             })}
           </div>
         </RequestStateView>
       </Panel>
-      <Panel title={<h2>申请中的课程</h2>}>
+      <Panel className="section" title={<h2>申请中的课程</h2>}>
         <RequestStateView loading={applications.isLoading} error={applications.error}
           onRetry={() => void applications.refetch()} empty={!applications.data?.rows.length}
           emptyState={<EmptyState title="暂无待审核申请" hint="提交课程申请后，可在这里查看进度或撤回。" />}>
