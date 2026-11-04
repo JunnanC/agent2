@@ -218,7 +218,7 @@ class DockerLocalAdapterTests(SimpleTestCase):
         )
         self.assertEqual(host_config["nano_cpus"], 1_500_000_000)
         self.assertEqual(host_config["mem_limit"], "2048m")
-        self.assertEqual(host_config["pids_limit"], 128)
+        self.assertEqual(host_config["pids_limit"], 256)
         self.assertEqual(
             host_config["tmpfs"],
             {"/tmp": "rw,noexec,nosuid,size=128m,uid=10001,gid=10001"},

@@ -3,6 +3,7 @@ from unittest.mock import patch
 from django.test import Client, TestCase
 
 from apps.courses.tests.helpers import create_draft_course, create_teacher
+from apps.workspaces.serializers import ExecutionRunCreateSerializer
 
 from ..image_services import create_experiment_image
 from ..models import ExperimentImage, Template, TemplateVersion
@@ -14,6 +15,13 @@ PROXY_HEADERS = {"HTTP_X_PROXY_CONTEXT": "ingress-v1", "REMOTE_ADDR": "127.0.0.1
 
 class TemplateApiTests(TestCase):
     password = "ValidPassword!234"
+
+    def test_student_run_request_cannot_override_teacher_toolchain(self) -> None:
+        serializer = ExecutionRunCreateSerializer(
+            data={"language": "go", "toolchain_version": "1.25.1"}
+        )
+        self.assertFalse(serializer.is_valid())
+        self.assertEqual(set(serializer.errors), {"unknown"})
 
     def setUp(self) -> None:
         self.owner = create_teacher(suffix="templates-api-owner")
@@ -119,6 +127,18 @@ class TemplateApiTests(TestCase):
             **self._headers(),
         )
         self.assertEqual(hidden.status_code, 404)
+
+    def test_asset_listing_is_scoped_to_the_selected_template_version(self) -> None:
+        version = self._version("asset-list-scope")
+        url = (
+            f"/api/v2/teaching/courses/{self.course.public_id}/templates/"
+            f"{version.template.public_id}/assets"
+        )
+        listing = self.client.get(f"{url}?version_id={version.public_id}", **self._headers())
+        self.assertEqual(listing.status_code, 200, listing.content)
+        self.assertEqual(listing.json()["data"], [])
+        missing = self.client.get(f"{url}?version_id={'0' * 26}", **self._headers())
+        self.assertEqual(missing.status_code, 404)
 
     def test_content_routes_require_if_match_and_map_missing_chapter(self) -> None:
         adapter, image, profile = create_resources(self.owner, suffix="api-content")

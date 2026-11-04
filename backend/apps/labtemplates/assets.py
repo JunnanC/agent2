@@ -38,6 +38,8 @@ PURPOSE_FIELDS = {
     # mutable foreign-key slot on the version.
     "TESTS": None,
     "BUILD_CONTEXT": None,
+    "HIDDEN_SOURCE": None,
+    "PUBLIC_DATA": None,
 }
 ALLOWED_FILES = {
     "MANUAL": {
@@ -66,6 +68,23 @@ ALLOWED_FILES = {
         ".tgz": "application/gzip",
     },
     "BUILD_CONTEXT": {
+        ".tgz": "application/gzip",
+        ".tar.gz": "application/gzip",
+    },
+    "HIDDEN_SOURCE": {
+        ".zip": "application/zip",
+        ".tar": "application/x-tar",
+        ".gz": "application/gzip",
+        ".tgz": "application/gzip",
+        ".tar.gz": "application/gzip",
+    },
+    "PUBLIC_DATA": {
+        ".csv": "text/csv",
+        ".json": "application/json",
+        ".txt": "text/plain",
+        ".zip": "application/zip",
+        ".tar": "application/x-tar",
+        ".gz": "application/gzip",
         ".tgz": "application/gzip",
         ".tar.gz": "application/gzip",
     },
@@ -190,6 +209,29 @@ def create_asset_upload(
         },
     )
     return asset, upload
+
+
+def assets_for_version(
+    *, actor: User, course_id: str, template_id: str, version_id: str
+) -> tuple[TemplateVersion, list[ObjectAsset]]:
+    course = _course(
+        actor=actor,
+        course_id=course_id,
+        capability=CourseStaffGrant.Capability.MANAGE_TEMPLATE,
+    )
+    try:
+        version = TemplateVersion.objects.select_related("template").get(
+            public_id=version_id,
+            template__public_id=template_id,
+            template__course=course,
+        )
+    except TemplateVersion.DoesNotExist as exc:
+        raise ResourceNotFound() from exc
+    assets = list(
+        ObjectAsset.objects.filter(owner_type="TEMPLATE_VERSION", owner_ref=version.public_id)
+        .order_by("created_at", "public_id")
+    )
+    return version, assets
 
 
 def asset_for_course(

@@ -59,13 +59,15 @@ func noRedirectClient(server *httptest.Server) *http.Client {
 	return client
 }
 
-func testRouterPair(t *testing.T) (webIDEURL, terminalURL string, close func()) {
+func testRouterPair(t *testing.T) (webIDEURL, terminalURL, saveBridgeURL string, close func()) {
 	t.Helper()
 	webIDE := httptest.NewServer(http.NotFoundHandler())
 	terminal := httptest.NewServer(http.NotFoundHandler())
-	return webIDE.URL, terminal.URL, func() {
+	saveBridge := httptest.NewServer(http.NotFoundHandler())
+	return webIDE.URL, terminal.URL, saveBridge.URL, func() {
 		webIDE.Close()
 		terminal.Close()
+		saveBridge.Close()
 	}
 }
 
@@ -86,9 +88,9 @@ func TestWebIDERoutesRequireTokenStripPrefixAndRewriteRedirects(t *testing.T) {
 		response.WriteHeader(http.StatusOK)
 	}))
 	defer backend.Close()
-	_, terminalURL, closeBackends := testRouterPair(t)
+	_, terminalURL, saveBridgeURL, closeBackends := testRouterPair(t)
 	defer closeBackends()
-	server := httptest.NewServer(newRouter(targetURL(t, backend.URL), targetURL(t, terminalURL), sha256.Sum256([]byte(testToken))))
+	server := httptest.NewServer(newRouter(targetURL(t, backend.URL), targetURL(t, terminalURL), targetURL(t, saveBridgeURL), sha256.Sum256([]byte(testToken))))
 	defer server.Close()
 
 	for _, token := range []string{"", "wrong-token"} {
@@ -104,6 +106,40 @@ func TestWebIDERoutesRequireTokenStripPrefixAndRewriteRedirects(t *testing.T) {
 	response, _ = request(t, noRedirectClient(server), http.MethodGet, server.URL+"/webide/redirect", testToken)
 	if response.StatusCode != http.StatusTemporaryRedirect || response.Header.Get("Location") != "/webide/editor?folder=%2Fworkspace" {
 		t.Fatalf("internal redirect was not rewritten: %d %q", response.StatusCode, response.Header.Get("Location"))
+	}
+}
+
+func TestSaveBridgeRequiresTokenAndStripsItsPrivatePrefix(t *testing.T) {
+	backend := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		if request.URL.Path != "/save" {
+			t.Errorf("unexpected save bridge path: %s", request.URL.Path)
+		}
+		if request.Header.Get("X-Forwarded-Prefix") != saveBridgePathPrefix {
+			t.Errorf("unexpected forwarded prefix: %q", request.Header.Get("X-Forwarded-Prefix"))
+		}
+		if request.Header.Get(upstreamTokenHeader) != "" {
+			t.Error("upstream token reached save bridge")
+		}
+		response.WriteHeader(http.StatusOK)
+	}))
+	defer backend.Close()
+	webIDEURL, terminalURL, _, closeBackends := testRouterPair(t)
+	defer closeBackends()
+	server := httptest.NewServer(newRouter(
+		targetURL(t, webIDEURL), targetURL(t, terminalURL), targetURL(t, backend.URL),
+		sha256.Sum256([]byte(testToken)),
+	))
+	defer server.Close()
+
+	for _, token := range []string{"", "wrong-token"} {
+		response, _ := request(t, server.Client(), http.MethodPost, server.URL+saveBridgePathPrefix+"/save", token)
+		if response.StatusCode != http.StatusForbidden {
+			t.Fatalf("token %q returned %d", token, response.StatusCode)
+		}
+	}
+	response, _ := request(t, server.Client(), http.MethodPost, server.URL+saveBridgePathPrefix+"/save", testToken)
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("authorized save bridge request returned %d", response.StatusCode)
 	}
 }
 
@@ -141,11 +177,12 @@ func TestTerminalRoutesRequireTokenAndKeepPrefixUpstream(t *testing.T) {
 	}))
 	defer pageServer.Close()
 
-	webIDEURL, _, closeBackends := testRouterPair(t)
+	webIDEURL, _, saveBridgeURL, closeBackends := testRouterPair(t)
 	defer closeBackends()
 	router := newRouter(
 		targetURL(t, webIDEURL),
 		targetURL(t, pageServer.URL),
+		targetURL(t, saveBridgeURL),
 		sha256.Sum256([]byte(testToken)),
 	)
 	server := httptest.NewServer(router)
@@ -193,9 +230,9 @@ func TestTerminalWebSocketUpgradeKeepsPrefix(t *testing.T) {
 	}))
 	defer backend.Close()
 
-	webIDEURL, _, closeBackends := testRouterPair(t)
+	webIDEURL, _, saveBridgeURL, closeBackends := testRouterPair(t)
 	defer closeBackends()
-	server := httptest.NewServer(newRouter(targetURL(t, webIDEURL), targetURL(t, backend.URL), sha256.Sum256([]byte(testToken))))
+	server := httptest.NewServer(newRouter(targetURL(t, webIDEURL), targetURL(t, backend.URL), targetURL(t, saveBridgeURL), sha256.Sum256([]byte(testToken))))
 	defer server.Close()
 
 	address := strings.TrimPrefix(server.URL, "http://")
@@ -216,9 +253,9 @@ func TestTerminalWebSocketUpgradeKeepsPrefix(t *testing.T) {
 }
 
 func TestUnsupportedCapabilityIs404(t *testing.T) {
-	webIDEURL, terminalURL, closeBackends := testRouterPair(t)
+	webIDEURL, terminalURL, saveBridgeURL, closeBackends := testRouterPair(t)
 	defer closeBackends()
-	server := httptest.NewServer(newRouter(targetURL(t, webIDEURL), targetURL(t, terminalURL), sha256.Sum256([]byte(testToken))))
+	server := httptest.NewServer(newRouter(targetURL(t, webIDEURL), targetURL(t, terminalURL), targetURL(t, saveBridgeURL), sha256.Sum256([]byte(testToken))))
 	defer server.Close()
 	for _, path := range []string{"/notebook/", "/preview/", "/"} {
 		response, _ := request(t, server.Client(), http.MethodGet, server.URL+path, testToken)
@@ -243,9 +280,9 @@ func TestHealthReflectsWorkspaceToolsReadiness(t *testing.T) {
 
 	// Terminal 的 /healthz 是 404(真实 ttyd 没有该端点):health 必须 200,
 	// 证明 health 探测只覆盖声明了 healthProbe 的 capability(webide)。
-	_, terminalURL, closeBackends := testRouterPair(t)
+	_, terminalURL, saveBridgeURL, closeBackends := testRouterPair(t)
 	defer closeBackends()
-	server := httptest.NewServer(newRouter(targetURL(t, healthy.URL), targetURL(t, terminalURL), sha256.Sum256([]byte(testToken))))
+	server := httptest.NewServer(newRouter(targetURL(t, healthy.URL), targetURL(t, terminalURL), targetURL(t, saveBridgeURL), sha256.Sum256([]byte(testToken))))
 	defer server.Close()
 	response, body := request(t, server.Client(), http.MethodGet, server.URL+"/healthz", "")
 	if response.StatusCode != http.StatusOK {
@@ -255,7 +292,7 @@ func TestHealthReflectsWorkspaceToolsReadiness(t *testing.T) {
 		t.Fatalf("unexpected health body %q", string(body))
 	}
 
-	server2 := httptest.NewServer(newRouter(targetURL(t, unavailable.URL), targetURL(t, terminalURL), sha256.Sum256([]byte(testToken))))
+	server2 := httptest.NewServer(newRouter(targetURL(t, unavailable.URL), targetURL(t, terminalURL), targetURL(t, saveBridgeURL), sha256.Sum256([]byte(testToken))))
 	defer server2.Close()
 	response2, _ := request(t, server2.Client(), http.MethodGet, server2.URL+"/healthz", "")
 	if response2.StatusCode != http.StatusServiceUnavailable {

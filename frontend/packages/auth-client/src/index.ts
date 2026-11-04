@@ -83,7 +83,7 @@ export function readCsrfToken(): string | null {
   return match?.[1] ? decodeURIComponent(match[1]) : null;
 }
 
-async function ensureCsrf(): Promise<void> {
+export async function ensureCsrf(): Promise<void> {
   if (readCsrfToken()) return;
   const response = await fetch(`${API_PREFIX}/auth/csrf`, {
     credentials: "include",
@@ -122,6 +122,8 @@ export interface RequestOptions {
   accept?: string;
   /** 额外请求头（工作区链路需要 X-Workspace-Token），不要用它覆盖认证头 */
   headers?: Record<string, string>;
+  /** 覆盖默认的 /api/v2 前缀（工作区网关挂在站点根 /workspace 下时传 ""） */
+  prefix?: string;
 }
 
 const IDEMPOTENCY_RETRY_WAIT_MS = 800;
@@ -133,7 +135,7 @@ export interface EnvelopeSuccess<T> {
   etag?: string;
 }
 
-function absoluteUrl(path: string, query?: RequestOptions["query"]): string {
+function absoluteUrl(path: string, query?: RequestOptions["query"], prefix: string = API_PREFIX): string {
   const params = new URLSearchParams();
   if (query) {
     for (const [key, value] of Object.entries(query)) {
@@ -142,7 +144,7 @@ function absoluteUrl(path: string, query?: RequestOptions["query"]): string {
     }
   }
   const suffix = params.toString();
-  return `${API_PREFIX}${path}${suffix ? `?${suffix}` : ""}`;
+  return `${prefix}${path}${suffix ? `?${suffix}` : ""}`;
 }
 
 async function parseResponse<T>(response: Response, url: string, method: string): Promise<EnvelopeSuccess<T>> {
@@ -201,7 +203,7 @@ export async function request<T>(
   options: RequestOptions = {},
 ): Promise<EnvelopeSuccess<T>> {
   const method = options.method ?? "GET";
-  const url = absoluteUrl(path, options.query);
+  const url = absoluteUrl(path, options.query, options.prefix);
   const isMutation = method !== "GET";
   const isFormData = typeof FormData !== "undefined" && options.body instanceof FormData;
   const headers: Record<string, string> = {

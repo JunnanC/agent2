@@ -309,6 +309,7 @@ class SubmissionDataSerializer(serializers.Serializer):
 
 
 class ReviewDetailDataSerializer(ReviewListDataSerializer):
+    project = serializers.DictField(required=False)
     rubric_version_id = serializers.CharField()
     scores = CriterionScoresDataSerializer()
     annotations = AnnotationDataSerializer(many=True)
@@ -595,10 +596,37 @@ def decision_data(item: ReviewDecision) -> dict[str, Any]:
     }
 
 
-def review_detail_data(item: Review) -> dict[str, Any]:
+def review_detail_data(item: Review, *, include_source: bool = False) -> dict[str, Any]:
     decision = getattr(item, "decision", None)
+    project = {}
+    if include_source:
+        from apps.workspaces.workbench import _content_data
+
+        from .services import submitted_project_files
+
+        snapshot = (
+            item.report_version.workspace_snapshot if item.report_version_id
+            else item.system_artifact.workspace_snapshot
+        )
+        files = []
+        remaining = 1024 * 1024
+        error_code = ""
+        try:
+            for path, value in sorted(submitted_project_files(item).items()):
+                text = value.decode("utf-8")
+                files.append({"path": path, "content": text[:remaining],
+                              "truncated": len(text) > remaining})
+                remaining = max(0, remaining - len(text))
+        except Exception:  # noqa: BLE001 - manual grading survives unavailable source storage
+            error_code = "SUBMITTED_PROJECT_UNAVAILABLE"
+        project = {"project": {
+            "snapshot_id": snapshot.public_id, "digest_sha256": snapshot.digest_sha256,
+            "language": snapshot.language, "files": files, "error_code": error_code,
+            "guidance": _content_data(item.task),
+        }}
     return {
         **review_list_data(item),
+        **project,
         "rubric_version_id": item.rubric_version.public_id,
         "scores": criterion_scores_data(item),
         "annotations": [annotation_data(value) for value in item.annotations.all()],

@@ -189,7 +189,7 @@ def test_local_runtime_docker_access_is_scoped_to_runtime_worker() -> None:
     )
     assert environment["LOCAL_DOCKER_HOST"] == ("${LOCAL_DOCKER_HOST:-unix:///var/run/docker.sock}")
     assert environment["RUNTIME_ADAPTER_CONFIGS"] == (
-        '${RUNTIME_ADAPTER_CONFIGS:-{"runtime/local-docker":{"pids_limit":128}}}'
+        '${RUNTIME_ADAPTER_CONFIGS:-{"runtime/local-docker":{"pids_limit":256}}}'
     )
     assert "q_workspace_storage" not in services["runtime-worker"]["command"][-1]
     assert services["workspace-storage-worker"]["command"][-1] == "--queues=q_workspace_storage"
@@ -318,8 +318,17 @@ def test_reports_runtime_database_grants_reports_and_download_grants_least_privi
 
 def test_reviews_runtime_database_grants_keep_review_history_append_only() -> None:
     bootstrap = (ROOT / "infrastructure/mysql/configure-users.sh").read_text(encoding="utf-8")
+    compose = (ROOT / "docker-compose.dev.yml").read_text(encoding="utf-8")
+    for variable in ("MODEL_NAME", "BASE_URL", "API_KEY", "TIMEOUT_SECONDS"):
+        assert f"RUBRIC_AI_{variable}: ${{RUBRIC_AI_{variable}:-" in compose
+    config = load_yaml("docker-compose.dev.yml")
+    assert "default" in config["services"]["celery"]["networks"]
+    assert config["networks"]["runtime"]["internal"] is True
+    assert "default" not in config["services"]["runtime-worker"]["networks"]
     for table in (
         "reviews_review",
+        "reviews_ai_score_batch",
+        "reviews_ai_score_suggestion",
         "reviews_criterion_score",
         "reviews_review_annotation",
         "reviews_auto_check_run",

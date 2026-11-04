@@ -22,6 +22,7 @@ class WorkspaceSessionSerializer(serializers.Serializer):
     expires_at = serializers.DateTimeField()
     revoked_at = serializers.DateTimeField(allow_null=True)
     current_version = serializers.IntegerField()
+    language = serializers.CharField()
     latest_client_seq = serializers.IntegerField()
     row_version = serializers.IntegerField()
     # The raw ticket is returned only by issue/renew responses and is never
@@ -45,15 +46,21 @@ class WorkspaceSnapshotSerializer(serializers.Serializer):
     size_bytes = serializers.IntegerField()
     media_type = serializers.CharField()
     saved_at = serializers.DateTimeField()
+    language = serializers.CharField()
+    initial = serializers.BooleanField()
 
 
 class WorkspaceStorageJobWriteSerializer(serializers.Serializer):
-    kind = serializers.ChoiceField(
-        choices=(WorkspaceStorageJob.Kind.CAPTURE, WorkspaceStorageJob.Kind.RESTORE)
-    )
+    kind = serializers.ChoiceField(choices=("CAPTURE", "RESTORE", "SWITCH", "RESET"))
     client_seq = serializers.IntegerField(required=False, min_value=1)
     base_version = serializers.IntegerField(required=False, min_value=0)
     snapshot_id = serializers.CharField(required=False, allow_blank=False)
+    language = serializers.ChoiceField(choices=("c", "cpp", "java", "python", "go"), required=False)
+
+    def to_internal_value(self, data):
+        if set(data) - set(self.fields):
+            raise serializers.ValidationError({"fields": "unknown_field"})
+        return super().to_internal_value(data)
 
 
 class WorkspaceStorageJobSerializer(serializers.Serializer):
@@ -118,6 +125,8 @@ class WorkspaceExecutionRunSerializer(serializers.Serializer):
     finished_at = serializers.DateTimeField(allow_null=True)
     duration_ms = serializers.IntegerField(allow_null=True)
     trace_id = serializers.CharField()
+    evaluation_mode = serializers.ChoiceField(choices=("FORMAL", "SELF_TEST"))
+    test_cases = serializers.ListField(child=serializers.DictField(), required=False)
 
 
 class WorkspaceExecutionRunListSerializer(serializers.Serializer):
@@ -139,6 +148,12 @@ class ExecutionRunCreateSerializer(serializers.Serializer):
         allow_empty=False,
         max_length=64,
     )
+
+    def validate(self, attrs: dict[str, object]) -> dict[str, object]:
+        unknown = set(self.initial_data) - set(self.fields)
+        if unknown:
+            raise serializers.ValidationError({"unknown": sorted(unknown)})
+        return attrs
 
 
 class CheckpointWriteSerializer(serializers.Serializer):
@@ -176,6 +191,7 @@ class WorkbenchContentSerializer(serializers.Serializer):
     constraints = serializers.ListField(child=serializers.JSONField())
     deliverables = serializers.ListField(child=serializers.JSONField())
     materials = serializers.ListField(child=serializers.DictField())
+    manual = serializers.DictField(allow_null=True)
 
 
 class WorkbenchTemplateSerializer(serializers.Serializer):
@@ -240,6 +256,9 @@ class WorkbenchSubmissionSerializer(serializers.Serializer):
 class WorkbenchWorkspaceSerializer(serializers.Serializer):
     mode = serializers.ChoiceField(choices=("LEGACY_DRAFT", "RUNTIME_IDE", "READ_ONLY"))
     entrypoint = serializers.CharField()
+    language = serializers.CharField()
+    language_policy = serializers.DictField()
+    toolchain_version = serializers.CharField(allow_null=True)
     capture_supported = serializers.BooleanField()
     last_synchronized_version = serializers.IntegerField()
     last_synchronized_snapshot_id = serializers.CharField(allow_null=True)
@@ -274,6 +293,7 @@ def session_data(item: WorkspaceSession, *, token: str | None = None) -> dict[st
         "expires_at": item.expires_at,
         "revoked_at": item.revoked_at,
         "current_version": item.current_version,
+        "language": item.language,
         "latest_client_seq": item.latest_snapshot.client_seq if item.latest_snapshot_id else 0,
         "row_version": item.row_version,
     }
@@ -294,6 +314,8 @@ def snapshot_data(item: WorkspaceSnapshot) -> dict[str, object]:
         "size_bytes": item.size_bytes,
         "media_type": item.media_type,
         "saved_at": item.saved_at,
+        "language": item.language,
+        "initial": item.initial,
     }
 
 
@@ -314,12 +336,8 @@ def storage_job_data(item: WorkspaceStorageJob) -> dict[str, object]:
         "status": item.status,
         "client_seq": item.client_seq,
         "base_version": item.base_version,
-        "source_snapshot_id": item.source_snapshot.public_id
-        if item.source_snapshot_id
-        else None,
-        "result_snapshot_id": item.result_snapshot.public_id
-        if item.result_snapshot_id
-        else None,
+        "source_snapshot_id": item.source_snapshot.public_id if item.source_snapshot_id else None,
+        "result_snapshot_id": item.result_snapshot.public_id if item.result_snapshot_id else None,
         "failure": failure,
         "queued_at": item.queued_at,
         "started_at": item.started_at,
@@ -362,8 +380,10 @@ def operation_data(item: OperationEvent) -> dict[str, object]:
     return result
 
 
-def execution_run_data(item: WorkspaceExecutionRun) -> dict[str, object]:
-    return {
+def execution_run_data(
+    item: WorkspaceExecutionRun, *, include_result: bool = False
+) -> dict[str, object]:
+    result = {
         "public_id": item.public_id,
         "task_id": item.task.public_id,
         "session_id": item.session.public_id,
@@ -375,4 +395,19 @@ def execution_run_data(item: WorkspaceExecutionRun) -> dict[str, object]:
         "finished_at": item.finished_at,
         "duration_ms": item.duration_ms,
         "trace_id": item.trace_id,
+        "evaluation_mode": (item.execution_rule_summary or {}).get("evaluation_mode", "FORMAL"),
     }
+    if include_result and item.test_report_asset_id:
+        import json
+
+        from apps.provisioning.evaluator import public_report
+
+        from .presentation import asset_text
+
+        try:
+            report = json.loads(asset_text(item.test_report_asset, limit=1024 * 1024) or "{}")
+        except ValueError:
+            report = {}
+        if isinstance(report, dict):
+            result["test_cases"] = public_report(report)["results"]
+    return result

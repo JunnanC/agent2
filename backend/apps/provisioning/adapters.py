@@ -13,8 +13,10 @@ from typing import Any
 
 from django.conf import settings
 
+from apps.core.project_archive import ProjectArchiveError, bundle, unpack
 from apps.core.workspace_tokens import workspace_upstream_token
 
+from .evaluator import outputs_match
 from .ports import (
     RuntimeAdapter,
     RuntimeExecutionResult,
@@ -73,10 +75,10 @@ def _config_float(value: object) -> float:
 
 
 def _validated_workspace_path(relative_path: str) -> str:
-    """Only the first-version single-file contract is accepted here."""
+    """Accept the legacy main file or the fixed project root."""
 
     value = str(relative_path).replace("\\", "/")
-    if value != "main.py" or "/" in value or ".." in value or not value:
+    if value not in {"main.py", "."}:
         raise RuntimeAdapterFailure("WORKSPACE_PATH_INVALID", retryable=False)
     return value
 
@@ -642,6 +644,7 @@ class DockerLocalProtocolStub(FakeRuntimeAdapter):
         cpu_millicores: int,
         network_mode: str,
         judge_id: str,
+        execution_plan: Mapping[str, list[str]] | None = None,
     ) -> RuntimeExecutionResult:
         """Exercise the judge protocol without creating a Docker container."""
 
@@ -902,7 +905,7 @@ class DockerLocalAdapter(DockerLocalProtocolStub):
         kwargs: dict[str, object] = {
             "mem_limit": f"{memory_mb}m",
             "nano_cpus": cpu_millicores * 1_000_000,
-            "pids_limit": _config_int(self.config.get("pids_limit", 128)),
+            "pids_limit": _config_int(self.config.get("pids_limit", 256)),
             "read_only": read_only,
             "cap_drop": ["ALL"],
             "security_opt": ["no-new-privileges:true"],
@@ -1312,22 +1315,46 @@ class DockerLocalAdapter(DockerLocalProtocolStub):
             raise RuntimeAdapterFailure("WORKSPACE_FILE_TOO_LARGE", retryable=False)
         before = self._workspace_container(external_id)
         try:
-            stream, _stat = self.client.get_archive(external_id, f"/workspace/{path}")
+            if path == ".":
+                created = self.client.exec_create(
+                    external_id,
+                    ["tar", "--exclude=.git", "--exclude=.vscode", "--exclude=__pycache__",
+                     "--exclude=.pytest_cache", "--exclude=.cache", "--exclude=.edu-build",
+                     "--exclude=*.class", "--exclude=*.o", "--exclude=*.pyc",
+                     "-C", "/", "-cf", "-", "workspace"],
+                    user="10001:10001", stdout=True, stderr=False,
+                )
+                capture_id = str(created["Id"])
+                stream = self.client.exec_start(capture_id, stream=True)
+            else:
+                stream, _stat = self.client.get_archive(external_id, f"/workspace/{path}")
             archive_bytes = _bounded_archive_bytes(stream, max_bytes=max_bytes + 1024 * 1024)
+            if path == "." and self.client.exec_inspect(capture_id).get("ExitCode") != 0:
+                raise RuntimeAdapterFailure("WORKSPACE_CAPTURE_CONFLICT", retryable=False)
         except RuntimeAdapterFailure:
             raise
         except Exception as exc:
             raise RuntimeAdapterFailure("WORKSPACE_FILE_MISSING", retryable=False) from exc
-        content = _extract_workspace_archive(archive_bytes, path, max_bytes)
+        if path == ".":
+            try:
+                content = bundle(
+                    unpack(archive_bytes, max_bytes=max_bytes, docker_root=True, generated=True),
+                    max_bytes=max_bytes,
+                )
+            except ProjectArchiveError as exc:
+                raise RuntimeAdapterFailure(str(exc), retryable=False) from exc
+        else:
+            content = _extract_workspace_archive(archive_bytes, path, max_bytes)
         after = self._workspace_container(external_id)
         before_id = str(before.get("Id") or before.get("ID") or external_id)
         after_id = str(after.get("Id") or after.get("ID") or external_id)
         if before_id != after_id:
             raise RuntimeAdapterFailure("WORKSPACE_CAPTURE_CONFLICT", retryable=False)
-        try:
-            content.decode("utf-8")
-        except UnicodeDecodeError as exc:
-            raise RuntimeAdapterFailure("WORKSPACE_FILE_INVALID", retryable=False) from exc
+        if path != ".":
+            try:
+                content.decode("utf-8")
+            except UnicodeDecodeError as exc:
+                raise RuntimeAdapterFailure("WORKSPACE_FILE_INVALID", retryable=False) from exc
         return _workspace_artifact(content, path)
 
     def _exec(self, external_id: str, command: list[str]) -> None:
@@ -1355,18 +1382,18 @@ class DockerLocalAdapter(DockerLocalProtocolStub):
         digest = hashlib.sha256(content).hexdigest()
         if not expected_digest or not hmac.compare_digest(digest, str(expected_digest)):
             raise RuntimeAdapterFailure("WORKSPACE_DIGEST_MISMATCH", retryable=False)
-        temporary = f".edu-restore-{digest[:24]}.tmp"
-        archive = _workspace_archive(temporary, bytes(content))
+        if path == ".":
+            self._restore_project(external_id, bytes(content))
+            return
+        temporary = f"/workspace/.edu-restore-{digest[:24]}"
+        archive = _workspace_archive(temporary.rsplit("/", 1)[-1], bytes(content))
         try:
-            result = self.client.put_archive(external_id, "/workspace", archive)
-            if result is False:
+            if self.client.put_archive(external_id, "/workspace", archive) is False:
                 raise RuntimeAdapterFailure("WORKSPACE_RESTORE_FAILED")
-            command = [
-                "python",
-                "-c",
-                (f"import os; os.replace('/workspace/{temporary}', '/workspace/{path}')"),
-            ]
-            self._exec(external_id, command)
+            self._exec(external_id, [
+                "python", "-I", "-c",
+                f"import os; os.replace({temporary!r}, '/workspace/{path}')",
+            ])
             artifact = self.capture_workspace(
                 external_id=external_id, relative_path=path, max_bytes=len(content)
             )
@@ -1376,6 +1403,74 @@ class DockerLocalAdapter(DockerLocalProtocolStub):
             raise
         except Exception as exc:
             raise RuntimeAdapterFailure("WORKSPACE_RESTORE_FAILED") from exc
+
+    def _restore_project(self, external_id: str, content: bytes) -> None:
+        try:
+            files = unpack(content, max_bytes=20 * 1024 * 1024, require_manifest=True)
+        except ProjectArchiveError as exc:
+            raise RuntimeAdapterFailure(str(exc), retryable=False) from exc
+        payload = json.dumps({
+            name: value.decode("utf-8") for name, value in files.items()
+        }).encode()
+        script = """import json,os,shutil,sys,tempfile
+root='/workspace'
+files=json.loads(sys.stdin.buffer.read(int(sys.argv[1])))
+stage=tempfile.mkdtemp(prefix='.edu-stage-',dir=root)
+backup=tempfile.mkdtemp(prefix='.edu-backup-',dir=root)
+moved=[]
+installed=[]
+try:
+ for name,value in files.items():
+  path=os.path.join(stage,name)
+  if name.endswith('/'):
+   os.makedirs(path,exist_ok=True)
+   continue
+  os.makedirs(os.path.dirname(path),exist_ok=True)
+  with open(path,'w',encoding='utf-8',newline='') as handle: handle.write(value)
+ for name in os.listdir(root):
+  if name in {os.path.basename(stage),os.path.basename(backup)}: continue
+  os.rename(os.path.join(root,name),os.path.join(backup,name))
+  moved.append(name)
+ for name in os.listdir(stage):
+  os.rename(os.path.join(stage,name),os.path.join(root,name))
+  installed.append(name)
+except BaseException:
+ for name in installed: os.rename(os.path.join(root,name),os.path.join(stage,name))
+ for name in moved: os.rename(os.path.join(backup,name),os.path.join(root,name))
+ shutil.rmtree(stage)
+ shutil.rmtree(backup)
+ raise
+else:
+ shutil.rmtree(stage)
+ shutil.rmtree(backup)
+"""
+        connection = None
+        try:
+            created = self.client.exec_create(
+                external_id, ["python", "-I", "-c", script, str(len(payload))],
+                user="10001:10001", stdin=True,
+            )
+            exec_id = str(created["Id"])
+            connection = self.client.exec_start(exec_id, socket=True)
+            transport = getattr(connection, "_sock", connection)
+            transport.sendall(payload)
+            deadline = time.monotonic() + 60
+            while True:
+                result = self.client.exec_inspect(exec_id)
+                if not result.get("Running"):
+                    if result.get("ExitCode") != 0:
+                        raise RuntimeAdapterFailure("WORKSPACE_RESTORE_FAILED")
+                    break
+                if time.monotonic() >= deadline:
+                    raise RuntimeAdapterFailure("WORKSPACE_RESTORE_FAILED")
+                time.sleep(0.05)
+        except RuntimeAdapterFailure:
+            raise
+        except Exception as exc:
+            raise RuntimeAdapterFailure("WORKSPACE_RESTORE_FAILED") from exc
+        finally:
+            if connection is not None:
+                connection.close()
 
     def destroy(self, external_id: str, idempotency_key: str) -> None:
         del idempotency_key
@@ -1417,9 +1512,11 @@ class DockerLocalAdapter(DockerLocalProtocolStub):
         except Exception as exc:
             raise RuntimeAdapterFailure("RUNTIME_VOLUME_RETENTION_FAILED") from exc
         labels = dict(volume.get("Labels") or {})
-        if not self._owns_managed_resource(labels, "volume") or not task_id or labels.get(
-            "edu.platform.task"
-        ) != task_id:
+        if (
+            not self._owns_managed_resource(labels, "volume")
+            or not task_id
+            or labels.get("edu.platform.task") != task_id
+        ):
             raise RuntimeAdapterFailure("RUNTIME_RESOURCE_NOT_MANAGED", retryable=False)
         update_volume = getattr(self.client, "update_volume", None)
         if not callable(update_volume):
@@ -1607,22 +1704,59 @@ class DockerLocalAdapter(DockerLocalProtocolStub):
         return [(tests.decode(errors="replace"), None, False)]
 
     @staticmethod
-    def _runner_source(command: list[str], case_inputs: list[str]) -> bytes:
+    def _runner_source(
+        command: list[str],
+        case_inputs: list[str],
+        compile_command: list[str] | None = None,
+        run_command: list[str] | None = None,
+    ) -> bytes:
         # The submitted file is copied under the private judge directory.  The
         # command remains the server-generated ``python <entrypoint>`` contract,
         # but the runner resolves the entrypoint to that private path.
         runner_command = ["python", f"/judge/{command[1]}"]
+        compile_argv = list(compile_command or [])
+        run_argv = list(run_command or runner_command)
+        if compile_argv:
+            compile_argv = [
+                f"/judge/{arg}"
+                if arg.endswith((".c", ".cpp", ".cc", ".java", ".go"))
+                and not arg.startswith("/")
+                else arg
+                for arg in compile_argv
+            ]
         encoded_command = json.dumps(runner_command, ensure_ascii=True)
         encoded_inputs = json.dumps(case_inputs, ensure_ascii=True)
         return f"""import json, os, subprocess, time
 
 COMMAND = {encoded_command}
+COMPILE = {json.dumps(compile_argv, ensure_ascii=True)}
+RUN = {json.dumps(run_argv, ensure_ascii=True)}
 CASE_INPUTS = {encoded_inputs}
 EXECUTION_DEADLINE = time.monotonic() + float(os.environ.get("TOTAL_TIMEOUT", "5"))
+MAX_OUTPUT = max(1, int(os.environ.get("MAX_OUTPUT_BYTES", "65536")))
 
 
 def tokens(value):
     return str(value or "").split()
+
+
+os.makedirs("/tmp/.cache", exist_ok=True)
+os.chdir("/judge")
+os.environ["GOCACHE"] = "/tmp/.cache/go-build"
+os.environ["GOPATH"] = "/tmp/.cache/go"
+if COMPILE and COMPILE[0] == "go":
+    COMPILE[0] = "/usr/local/go/bin/go"
+if COMPILE:
+    built = subprocess.run(
+        COMPILE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        timeout=float(os.environ.get("CASE_TIMEOUT", "5")),
+    )
+    if built.returncode:
+        print(json.dumps({{
+            "status": "FAILED", "cases": 0,
+            "compile_stderr": built.stderr.decode(errors="replace"),
+        }}))
+        raise SystemExit(0)
 
 
 def run_one(stdin):
@@ -1631,7 +1765,7 @@ def run_one(stdin):
         return {{"status": "TIMEOUT", "stdout": "", "stderr": "timeout"}}
     try:
         completed = subprocess.run(
-            COMMAND,
+            RUN or COMMAND,
             input=str(stdin or "").encode(),
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -1645,6 +1779,8 @@ def run_one(stdin):
         }}
     stdout = completed.stdout.decode(errors="replace")
     stderr = completed.stderr.decode(errors="replace")
+    if len(stdout.encode()) > MAX_OUTPUT or len(stderr.encode()) > MAX_OUTPUT:
+        return {{"status": "OUTPUT_LIMIT", "stdout": stdout[:MAX_OUTPUT], "stderr": "output limit"}}
     if completed.returncode == 0:
         status = "PASSED"
     elif completed.returncode == -9:
@@ -1684,6 +1820,8 @@ print(
         command: list[str],
         source: bytes,
         case_inputs: list[str],
+        compile_command: list[str] | None = None,
+        run_command: list[str] | None = None,
         memory_mb: int,
         cpu_millicores: int,
         resource_id: str,
@@ -1738,10 +1876,15 @@ print(
             external_id=resource_id,
             expires_at=expires_at,
         )
-        archive = self._archive({
-            "runner.py": self._runner_source(command, case_inputs),
-            command[1]: source,
-        })
+        files: dict[str, bytes]
+        try:
+            files = unpack(source, max_bytes=20 * 1024 * 1024, require_manifest=True)
+            if command[1] not in files:
+                raise ProjectArchiveError("RUNTIME_ENTRYPOINT_NOT_FOUND")
+        except ProjectArchiveError:
+            files = {command[1]: source}
+        files["runner.py"] = self._runner_source(command, case_inputs, compile_command, run_command)
+        archive = self._archive(files)
         staged_successfully = False
         try:
             stage_host_config = self._host_config(
@@ -1795,11 +1938,13 @@ print(
         network_mode: str,
         resource_id: str,
         kind: str = "judge",
+        execution_plan: Mapping[str, list[str]] | None = None,
     ) -> RuntimeExecutionResult:
         if (
             len(command) != 2
             or command[0] != "python"
-            or not re.fullmatch(r"[A-Za-z0-9_.-]+", command[1])
+            or not re.fullmatch(r"[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*", command[1])
+            or any(part in {".", ".."} for part in command[1].split("/"))
         ):
             raise RuntimeAdapterFailure("RUNTIME_COMMAND_NOT_ALLOWED", retryable=False)
         if network_mode != "DENY_ALL":
@@ -1818,6 +1963,8 @@ print(
             command=command,
             source=source,
             case_inputs=[case[0] for case in test_cases],
+            compile_command=(execution_plan or {}).get("compile") if execution_plan else None,
+            run_command=(execution_plan or {}).get("run") if execution_plan else None,
             memory_mb=memory_mb,
             cpu_millicores=cpu_millicores,
             resource_id=resource_id,
@@ -1834,6 +1981,8 @@ print(
                 volume_target="/judge",
                 volume_mode="ro",
             )
+            if execution_plan and execution_plan.get("compile"):
+                host_config["Tmpfs"]["/tmp"] = "rw,exec,nosuid,size=128m,uid=10001,gid=10001"
             created = self._call(
                 "RUNTIME_JUDGE_CREATE_FAILED",
                 lambda: self.client.create_container(
@@ -1843,6 +1992,7 @@ print(
                     environment={
                         "CASE_TIMEOUT": str(max(float(timeout_seconds), 0.1)),
                         "TOTAL_TIMEOUT": str(max(float(timeout_seconds), 0.1)),
+                        "MAX_OUTPUT_BYTES": "65536",
                     },
                     labels=labels,
                     host_config=host_config,
@@ -1868,24 +2018,6 @@ print(
             stderr = self.client.logs(container_id, stdout=False, stderr=True).decode(
                 errors="replace"
             )
-            if bool(state.get("OOMKilled")):
-                return RuntimeExecutionResult(
-                    status="RESOURCE_EXCEEDED",
-                    stdout=stdout[-20000:],
-                    stderr=stderr[-20000:],
-                    error_code="RUNTIME_MEMORY_EXCEEDED",
-                    result_summary="Execution exceeded memory limit",
-                    duration_ms=int((time.monotonic() - started) * 1000),
-                )
-            if status_code == 124 or "TIMEOUT" in stdout:
-                return RuntimeExecutionResult(
-                    status="TIMEOUT",
-                    stdout=stdout[-20000:],
-                    stderr=stderr[-20000:],
-                    error_code="RUNTIME_TIMEOUT",
-                    result_summary="Execution timed out",
-                    duration_ms=int((time.monotonic() - started) * 1000),
-                )
             report: dict[str, object] = {}
             for line in reversed(stdout.splitlines()):
                 try:
@@ -1895,20 +2027,76 @@ print(
                 if isinstance(value, dict) and "status" in value:
                     report = value
                     break
+            if bool(state.get("OOMKilled")):
+                return RuntimeExecutionResult(
+                    status="RESOURCE_EXCEEDED",
+                    stdout=stdout[-20000:],
+                    stderr=stderr[-20000:],
+                    error_code="RUNTIME_MEMORY_EXCEEDED",
+                    result_summary="Execution exceeded memory limit",
+                    duration_ms=int((time.monotonic() - started) * 1000),
+                )
+            if status_code == 124 or report.get("status") == "TIMEOUT":
+                return RuntimeExecutionResult(
+                    status="TIMEOUT",
+                    stdout=stdout[-20000:],
+                    stderr=stderr[-20000:],
+                    error_code="RUNTIME_TIMEOUT",
+                    test_report=report,
+                    result_summary="Execution timed out",
+                    duration_ms=int((time.monotonic() - started) * 1000),
+                )
+            if report.get("status") == "OUTPUT_LIMIT" or any(
+                isinstance(item, Mapping) and item.get("status") == "OUTPUT_LIMIT"
+                for item in report.get("results", [])
+            ):
+                return RuntimeExecutionResult(
+                    status="RESOURCE_EXCEEDED",
+                    stdout=stdout[-20000:],
+                    stderr=stderr[-20000:],
+                    error_code="RUNTIME_OUTPUT_LIMIT",
+                    result_summary="Execution output exceeded limit",
+                    test_report=report,
+                    duration_ms=int((time.monotonic() - started) * 1000),
+                )
             default_status = "PASSED" if status_code == 0 else "FAILED"
             result_status = str(report.get("status") or default_status)
             report_results = report.get("results")
-            if result_status == "PASSED" and isinstance(report_results, list):
+            if isinstance(report_results, list):
                 for index, (_stdin, expected, has_expected) in enumerate(test_cases):
                     if not has_expected or index >= len(report_results):
                         continue
                     item = report_results[index]
+                    if not isinstance(item, dict) or item.get("status") != "PASSED":
+                        continue
                     actual = item.get("stdout", "") if isinstance(item, Mapping) else ""
-                    if str(actual or "").split() != str(expected or "").split():
-                        result_status = "FAILED"
-                        report["status"] = "FAILED"
-                        report["failed_case"] = index + 1
-                        break
+                    try:
+                        test_config = json.loads(tests.decode()) if tests else {}
+                    except (UnicodeDecodeError, json.JSONDecodeError):
+                        test_config = {}
+                    comparator = (
+                        str(test_config.get("comparator", "token"))
+                        if isinstance(test_config, Mapping) else "token"
+                    )
+                    absolute_tolerance = (
+                        float(test_config.get("absolute_tolerance", 1e-6))
+                        if isinstance(test_config, Mapping) else 1e-6
+                    )
+                    relative_tolerance = (
+                        float(test_config.get("relative_tolerance", 1e-6))
+                        if isinstance(test_config, Mapping) else 1e-6
+                    )
+                    if not outputs_match(
+                        str(actual or ""), str(expected if expected is not None else ""),
+                        comparator=comparator,
+                        absolute_tolerance=absolute_tolerance,
+                        relative_tolerance=relative_tolerance,
+                    ):
+                        item["status"] = "FAILED"
+                        report.setdefault("failed_case", index + 1)
+                        if result_status == "PASSED":
+                            result_status = "FAILED"
+                            report["status"] = "FAILED"
             allowed_statuses = {
                 "PASSED",
                 "FAILED",
@@ -1923,7 +2111,15 @@ print(
             elif result_status == "RESOURCE_EXCEEDED":
                 error_code = "RUNTIME_MEMORY_EXCEEDED"
             elif result_status != "PASSED":
-                error_code = "RUNTIME_ALGORITHM_FAILED"
+                if "compile_stderr" in report:
+                    error_code = "RUNTIME_COMPILE_FAILED"
+                elif isinstance(report_results, list) and any(
+                    isinstance(item, Mapping) and item.get("returncode") not in (None, 0)
+                    for item in report_results
+                ):
+                    error_code = "RUNTIME_EXECUTION_FAILED"
+                else:
+                    error_code = "RUNTIME_ALGORITHM_FAILED"
             return RuntimeExecutionResult(
                 status=result_status,
                 stdout=stdout[-20000:],
@@ -1957,6 +2153,7 @@ print(
         cpu_millicores: int,
         network_mode: str,
         judge_id: str,
+        execution_plan: Mapping[str, list[str]] | None = None,
     ) -> RuntimeExecutionResult:
         return self._run_container(
             spec=spec,
@@ -1968,6 +2165,7 @@ print(
             cpu_millicores=cpu_millicores,
             network_mode=network_mode,
             resource_id=judge_id,
+            execution_plan=execution_plan,
         )
 
     def execute(
@@ -1981,6 +2179,7 @@ print(
         cpu_millicores: int,
         network_mode: str,
         tests: bytes = b"",
+        execution_plan: Mapping[str, list[str]] | None = None,
     ) -> RuntimeExecutionResult:
         return self._run_container(
             spec=spec,
@@ -1992,6 +2191,7 @@ print(
             cpu_millicores=cpu_millicores,
             network_mode=network_mode,
             resource_id=f"execution-{spec.task_id}-{hashlib.sha256(source).hexdigest()[:12]}",
+            execution_plan=execution_plan,
         )
 
     def destroy_judge(self, judge_id: str, idempotency_key: str = "") -> None:

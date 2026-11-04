@@ -18,13 +18,18 @@ class Command(BaseCommand):
     help = "Verify correct, invalid, and cross-task-derived real workspace upstream tokens."
 
     def add_arguments(self, parser: Any) -> None:
-        parser.add_argument("--title", required=True)
+        scope = parser.add_mutually_exclusive_group(required=True)
+        scope.add_argument("--title")
+        scope.add_argument("--task-id")
 
     def handle(self, *args: object, **options: object) -> None:
-        task = ExperimentTask.objects.filter(
-            publication__title=str(options["title"]),
-            student__email="student.integration@example.edu",
-        ).first()
+        if options.get("task_id"):
+            task = ExperimentTask.objects.filter(public_id=options["task_id"]).first()
+        else:
+            task = ExperimentTask.objects.filter(
+                publication__title=options["title"],
+                student__email="student.integration@example.edu",
+            ).first()
         if task is None:
             raise CommandError("real workspace task not found")
         instance = ProvisioningInstance.objects.filter(task=task).first()

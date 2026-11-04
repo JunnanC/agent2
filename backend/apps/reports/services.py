@@ -233,7 +233,7 @@ def _latest_execution_for_submission(
     路径生成执行凭据(snapshot 级幂等),避免把"检查点型实验"卡在无测试可运行
     的状态;已有真实运行(即使无规则)仍以真实运行为准。
     """
-    run = (
+    runs = (
         WorkspaceExecutionRun.objects.select_related(
             "task",
             "session",
@@ -244,9 +244,15 @@ def _latest_execution_for_submission(
         )
         .filter(task=task)
         .order_by("-created_at", "-id")
-        .first()
+    )
+    run = next(
+        (item for item in runs.iterator()
+         if item.execution_rule_summary.get("evaluation_mode") != "SELF_TEST"),
+        None,
     )
     if run is None:
+        if (task.execution_spec or {}).get("schema_version") == 2:
+            raise ReportExecutionNotReady(detail={"execution": "missing_formal_run"})
         if not task_has_active_test_rules(task):
             return _legacy_fake_execution(task=task, snapshot=snapshot)
         driver = task.runtime_adapter_driver or (
@@ -282,6 +288,39 @@ def _latest_execution_for_submission(
         for asset in (run.stdout_asset, run.stderr_asset, run.test_report_asset)
     ):
         raise ReportExecutionConflict(detail={"execution": "asset_not_available"})
+    if (task.execution_spec or {}).get("schema_version") == 2:
+        from apps.workspaces.services import _execution_rules
+
+        driver = task.runtime_adapter_driver or (
+            task.runtime_adapter.driver if task.runtime_adapter_id else "FAKE"
+        )
+        if driver == "FAKE" or run.status != WorkspaceExecutionRun.Status.PASSED:
+            raise ReportExecutionNotReady(detail={"execution": "formal_pass_required"})
+        summary, _, digest = _execution_rules(task, language=snapshot.language)
+        if (
+            run.execution_rule_digest != digest
+            or run.execution_rule_summary != summary
+            or snapshot.language != run.session.language
+        ):
+            raise ReportExecutionConflict(detail={"execution": "contract_changed"})
+        from apps.workspaces.presentation import asset_text
+
+        try:
+            report = json.loads(asset_text(run.test_report_asset, limit=1024 * 1024) or "{}")
+            tests_asset = ObjectAsset.objects.get(public_id=summary["tests_asset"])
+            tests = json.loads(asset_text(tests_asset, limit=1024 * 1024) or "{}")
+            expected_count = len(tests["cases"])
+            results = report["results"]
+            complete = (
+                report.get("status") == "PASSED"
+                and report.get("cases") == len(results)
+                and len(results) == expected_count > 0
+                and all(item.get("status") == "PASSED" for item in results)
+            )
+        except (KeyError, TypeError, ValueError, AttributeError, ObjectAsset.DoesNotExist):
+            complete = False
+        if not complete:
+            raise ReportExecutionNotReady(detail={"execution": "complete_results_required"})
     return run
 
 
@@ -1025,6 +1064,9 @@ def complete_non_report_task(
     snapshot = _latest_snapshot(task)
     if snapshot is None or not _snapshot_is_valid(snapshot, task):
         raise ReportSnapshotConflict(detail={"snapshot": "missing_or_not_clean"})
+    execution = None
+    if (task.execution_spec or {}).get("schema_version") == 2:
+        execution = _latest_execution_for_submission(task=task, snapshot=snapshot)
     artifact = SystemArtifact.objects.create(
         task=task,
         student=actor,
@@ -1032,6 +1074,19 @@ def complete_non_report_task(
         asset=snapshot.asset,
         kind=SystemArtifact.Kind.WORKSPACE_SNAPSHOT,
         digest_sha256=snapshot.digest_sha256,
+        execution_run=execution,
+        execution_evidence={
+            "status": execution.status,
+            "rule_summary": execution.execution_rule_summary,
+            "rule_digest": execution.execution_rule_digest,
+            "snapshot_id": snapshot.public_id,
+            "snapshot_digest": snapshot.digest_sha256,
+            "stdout_asset_id": execution.stdout_asset.public_id if execution.stdout_asset else None,
+            "stderr_asset_id": execution.stderr_asset.public_id if execution.stderr_asset else None,
+            "test_report_asset_id": (
+                execution.test_report_asset.public_id if execution.test_report_asset else None
+            ),
+        } if execution else {},
         trace_id=_trace(context),
     )
     changed_task = transition_task(

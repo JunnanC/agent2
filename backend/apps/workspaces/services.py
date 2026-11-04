@@ -27,8 +27,10 @@ from apps.courses.services import ActorContext
 from apps.experiments.models import ExperimentTask
 from apps.experiments.services import transition_task
 from apps.governance.services import effective_resource_profile
-from apps.labtemplates.services import build_execution_command
+from apps.labtemplates.services import build_execution_command, build_execution_plan
+from apps.labtemplates.toolchains import TOOLCHAINS_BY_LANGUAGE, resolve_language_policy
 from apps.provisioning.adapters import RuntimeAdapterFailure, runtime_for_driver
+from apps.provisioning.evaluator import public_report
 from apps.provisioning.metrics import (
     RUNTIME_ENGINE_UNAVAILABLE_TOTAL,
     RUNTIME_EXECUTION_DURATION,
@@ -312,6 +314,11 @@ def issue_session(
         )
         session = changed  # type: ignore[assignment]
     else:
+        previous = WorkspaceSnapshot.objects.filter(task=task).order_by("-version_no").first()
+        policy = (task.execution_spec or {}).get("toolchain", {})
+        initial_language = policy.get("language") or next(
+            iter(policy.get("allowed_languages") or ["python"])
+        )
         try:
             session = WorkspaceSession.objects.create(
                 task=task,
@@ -326,6 +333,9 @@ def issue_session(
                 status=WorkspaceSession.Status.ACTIVE,
                 expires_at=expiry,
                 last_seen_at=now,
+                language=previous.language if previous else initial_language,
+                current_version=previous.version_no if previous else 0,
+                latest_snapshot=previous,
             )
         except IntegrityError:
             active = WorkspaceSession.objects.select_for_update().get(
@@ -537,6 +547,7 @@ def create_storage_job(
     idempotency_key: str,
     request_payload: dict[str, Any],
     context: Any,
+    language: str | None = None,
 ) -> tuple[WorkspaceSession, WorkspaceStorageJob]:
     """Declare a storage operation without performing external I/O.
 
@@ -583,6 +594,8 @@ def create_storage_job(
     )
     if driver == "FAKE":
         raise WorkspaceCaptureUnsupported(detail={"driver": driver, "kind": kind})
+    if language is not None and kind != WorkspaceStorageJob.Kind.SWITCH:
+        raise WorkspaceOperationDenied(detail={"language": "not_allowed"})
 
     if kind == WorkspaceStorageJob.Kind.CAPTURE:
         require_workspace_session(
@@ -620,6 +633,27 @@ def create_storage_job(
             or source_snapshot.asset.digest_sha256 != source_snapshot.digest_sha256
         ):
             raise WorkspaceSnapshotNotReady(detail={"snapshot_id": source_snapshot.public_id})
+        if source_snapshot.language != session.language:
+            raise WorkspaceCaptureConflict(detail={"snapshot_id": "language_mismatch"})
+    elif kind in {WorkspaceStorageJob.Kind.SWITCH, WorkspaceStorageJob.Kind.RESET}:
+        require_workspace_session(
+            session=session, token=token, task_id=task_id, capability="snapshot"
+        )
+        if client_seq is not None or base_version is not None or snapshot_id:
+            raise WorkspaceCaptureConflict(detail={"reason": "project_fields_not_allowed"})
+        spec = task.execution_spec or {}
+        policy = spec.get("toolchain", {})
+        if spec.get("schema_version") != 2:
+            raise WorkspaceCaptureUnsupported(detail={"kind": kind})
+        if kind == WorkspaceStorageJob.Kind.SWITCH:
+            if (
+                policy.get("mode") != "STUDENT_SELECT"
+                or language not in policy.get("allowed_languages", [])
+                or language not in TOOLCHAINS_BY_LANGUAGE
+            ):
+                raise WorkspaceOperationDenied(detail={"language": "not_allowed"})
+        elif language is not None:
+            raise WorkspaceOperationDenied(detail={"language": "not_allowed_for_reset"})
     else:
         raise WorkspaceCaptureUnsupported(detail={"kind": kind})
 
@@ -627,12 +661,6 @@ def create_storage_job(
         WorkspaceStorageJob.objects.select_for_update()
         .filter(
             session=session,
-            kind__in=(
-                WorkspaceStorageJob.Kind.INITIALIZE,
-                WorkspaceStorageJob.Kind.CAPTURE,
-                WorkspaceStorageJob.Kind.RESTORE,
-                WorkspaceStorageJob.Kind.FINALIZE,
-            ),
             status__in=(WorkspaceStorageJob.Status.QUEUED, WorkspaceStorageJob.Status.RUNNING),
         )
         .first()
@@ -650,6 +678,7 @@ def create_storage_job(
         session=session,
         instance=session.instance,
         source_snapshot=source_snapshot,
+        target_language=language or session.language,
         status=WorkspaceStorageJob.Status.QUEUED,
         client_seq=client_seq,
         base_version=base_version,
@@ -746,6 +775,8 @@ def transition_storage_job(
         WorkspaceStorageJob.Kind.CAPTURE: "workspace.storage.capture.completed",
         WorkspaceStorageJob.Kind.RESTORE: "workspace.storage.restore.completed",
         WorkspaceStorageJob.Kind.FINALIZE: "workspace.runtime.finalized",
+        WorkspaceStorageJob.Kind.SWITCH: "workspace.language.switched",
+        WorkspaceStorageJob.Kind.RESET: "workspace.project.reset",
     }
     action = (
         successful_actions[job.kind]
@@ -1125,6 +1156,7 @@ def restore_checkpoint(
 ALLOWED_OPERATIONS = {
     "OPEN_PREVIEW": "preview",
     "RUN_CHECK": "snapshot",
+    "SELF_TEST": "snapshot",
     "STOP_PROCESS": "terminal",
     "FORMAT_DOCUMENT": "webide",
     "RESET_WORKSPACE": "webide",
@@ -1141,18 +1173,43 @@ EXECUTION_TERMINAL_STATUSES = frozenset(
 )
 
 
-def _execution_rules(task: ExperimentTask) -> tuple[dict[str, Any], list[str], str]:
+def _execution_rules(
+    task: ExperimentTask, *, language: str = ""
+) -> tuple[dict[str, Any], list[str], str]:
     execution_spec = dict(task.execution_spec or {})
-    command: list[str] = []
-    try:
-        command = list(build_execution_command(execution_spec))
-    except Exception:  # noqa: BLE001 - publication frozen specs may carry legacy overlays
-        try:
-            command = list(
-                build_execution_command(dict(task.template_version.execution_spec or {}))
+    execution_spec.pop("_runtime", None)
+    if execution_spec.get("schema_version") == 2:
+        policy = execution_spec.get("toolchain", {})
+        if policy.get("mode") == "STUDENT_SELECT":
+            if language not in policy.get("allowed_languages", []):
+                raise WorkspaceOperationDenied(detail={"language": "not_allowed"})
+            selected_policy = resolve_language_policy(
+                language=language,
+                toolchain_version=policy["default_versions"][language],
+                language_standard=None,
             )
-        except Exception:  # noqa: BLE001 - legacy FakeRuntime rows have no execution spec
-            command = []
+            execution_spec.update(
+                language=language,
+                entrypoint=TOOLCHAINS_BY_LANGUAGE[language]["entrypoint"],
+                toolchain=selected_policy,
+                toolchain_version=selected_policy["toolchain_version"],
+                language_standard=selected_policy["language_standard"],
+            )
+    command: list[str] = []
+    if execution_spec.get("schema_version") == 2:
+        # The adapter uses this pair to locate the source; the server-generated
+        # execution_plan below supplies the actual compile/run commands.
+        command = ["python", execution_spec["entrypoint"]]
+    else:
+        try:
+            command = list(build_execution_command(execution_spec))
+        except Exception:  # noqa: BLE001 - legacy FakeRuntime rows may have no spec
+            try:
+                command = list(
+                    build_execution_command(dict(task.template_version.execution_spec or {}))
+                )
+            except Exception:  # noqa: BLE001 - legacy FakeRuntime rows have no execution spec
+                command = []
     summary: dict[str, Any] = {
         "language": execution_spec.get("language", ""),
         "entrypoint": execution_spec.get("entrypoint", ""),
@@ -1164,6 +1221,16 @@ def _execution_rules(task: ExperimentTask) -> tuple[dict[str, Any], list[str], s
         "tests_asset": execution_spec.get("tests_asset", ""),
         "command": command,
     }
+    if execution_spec.get("schema_version") == 2:
+        summary["execution_plan"] = build_execution_plan(execution_spec)
+        summary["toolchain"] = execution_spec["toolchain"]
+        summary["template_spec_digest"] = task.template_spec_digest
+        summary["materials"] = execution_spec.get("materials", [])
+        summary["frozen_spec_digest"] = hashlib.sha256(
+            json.dumps(task.execution_spec, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()
+        summary["absolute_tolerance"] = execution_spec.get("absolute_tolerance", 1e-6)
+        summary["relative_tolerance"] = execution_spec.get("relative_tolerance", 1e-6)
     digest = hashlib.sha256(
         json.dumps(summary, ensure_ascii=True, sort_keys=True, separators=(",", ":")).encode()
     ).hexdigest()
@@ -1194,14 +1261,15 @@ def _runtime_spec_for_execution(task: ExperimentTask, *, trace_id: str) -> Runti
 
 
 def _execution_key(
-    *, session: WorkspaceSession, snapshot: WorkspaceSnapshot | None, request_key: str
+    *, session: WorkspaceSession, snapshot: WorkspaceSnapshot | None,
+    request_key: str, mode: str = "RUN_CHECK"
 ) -> str:
     clean = request_key.strip()[:128]
     snapshot_ref = snapshot.public_id if snapshot else "NO_SNAPSHOT"
     source = (
-        f"{session.public_id}:RUN_CHECK:{clean}:{snapshot_ref}"
+        f"{session.public_id}:{mode}:{clean}:{snapshot_ref}"
         if clean
-        else f"{session.public_id}:RUN_CHECK:{snapshot_ref}"
+        else f"{session.public_id}:{mode}:{snapshot_ref}"
     )
     return hashlib.sha256(source.encode()).hexdigest()
 
@@ -1226,6 +1294,7 @@ def request_execution_run(
     arguments: dict[str, Any],
     request_key: str,
     context: Any,
+    mode: str = "RUN_CHECK",
 ) -> WorkspaceExecutionRun:
     """Create or replay one RUN_CHECK execution for the scoped session."""
 
@@ -1257,7 +1326,7 @@ def request_execution_run(
             )
         except WorkspaceSnapshot.DoesNotExist as exc:
             raise ResourceNotFound() from exc
-    key = _execution_key(session=locked, snapshot=snapshot, request_key=request_key)
+    key = _execution_key(session=locked, snapshot=snapshot, request_key=request_key, mode=mode)
     existing = (
         WorkspaceExecutionRun.objects.select_related("snapshot")
         .filter(idempotency_key=key)
@@ -1265,7 +1334,12 @@ def request_execution_run(
     )
     if existing is not None:
         return existing
-    summary, _command, digest = _execution_rules(locked.task)
+    if snapshot is not None and snapshot.language != locked.language:
+        raise WorkspaceOperationDenied(detail={"snapshot_id": "language_mismatch"})
+    summary, _command, digest = _execution_rules(locked.task, language=locked.language)
+    if mode == "SELF_TEST":
+        summary["evaluation_mode"] = "SELF_TEST"
+        summary["self_test_input"] = str((arguments or {}).get("input", ""))[:65536]
     driver = locked.task.runtime_adapter_driver or (
         locked.task.runtime_adapter.driver if locked.task.runtime_adapter_id else "FAKE"
     )
@@ -1428,9 +1502,12 @@ def execute_execution_run(*, execution_run_id: str, trace_id: str = "") -> Works
                 object_key=run.snapshot.asset.object_key,
                 version_id=run.snapshot.asset.object_version,
             )
-            source = stored.body.read() if hasattr(stored.body, "read") else b""
+            try:
+                source = stored.body.read() if hasattr(stored.body, "read") else b""
+            finally:
+                stored.body.close()
             tests_asset_id = str(summary.get("tests_asset", ""))
-            if tests_asset_id:
+            if tests_asset_id and summary.get("evaluation_mode") != "SELF_TEST":
                 from apps.core.models import ObjectAsset
 
                 tests_asset = ObjectAsset.objects.filter(public_id=tests_asset_id).first()
@@ -1440,11 +1517,18 @@ def execute_execution_run(*, execution_run_id: str, trace_id: str = "") -> Works
                         object_key=tests_asset.object_key,
                         version_id=tests_asset.object_version,
                     )
-                    tests = (
-                        tests_stored.body.read()
-                        if hasattr(tests_stored.body, "read")
-                        else b""
-                    )
+                    try:
+                        tests = tests_stored.body.read()
+                    finally:
+                        tests_stored.body.close()
+                    if (task.execution_spec or {}).get("schema_version") == 2:
+                        test_config = json.loads(tests)
+                        test_config.update({key: summary[key] for key in (
+                            "comparator", "absolute_tolerance", "relative_tolerance"
+                        )})
+                        tests = json.dumps(test_config).encode()
+        if summary.get("evaluation_mode") == "SELF_TEST":
+            tests = json.dumps({"cases": [{"input": summary.get("self_test_input", "")}]}).encode()
         result: RuntimeExecutionResult = adapter.execute(
             spec=_runtime_spec_for_execution(task, trace_id=run.trace_id),
             command=command,
@@ -1454,6 +1538,7 @@ def execute_execution_run(*, execution_run_id: str, trace_id: str = "") -> Works
             memory_mb=int(summary.get("memory_mb", 0) or 0),
             cpu_millicores=int(summary.get("cpu_millicores", 0) or 0),
             network_mode=str(summary.get("network_mode", "DENY_ALL")),
+            execution_plan=summary.get("execution_plan"),
         )
         status = (
             result.status if result.status in WorkspaceExecutionRun.Status.values else "FAILED"
@@ -1462,10 +1547,22 @@ def execute_execution_run(*, execution_run_id: str, trace_id: str = "") -> Works
         duration = result.duration_ms
         if duration is None and run.started_at:
             duration = max(0, int((finished - run.started_at).total_seconds() * 1000))
-        stdout_asset = _output_asset(run=run, kind="STDOUT", content=result.stdout.encode())
-        stderr_asset = _output_asset(run=run, kind="STDERR", content=result.stderr.encode())
+        safe_report = public_report(result.test_report or {})
+        from .presentation import public_examples
+
+        _, examples = public_examples(tests.decode(errors="replace"))
+        for case, example in zip(safe_report["results"][:3], examples, strict=False):
+            case["input"] = example["input"]
+            if summary.get("evaluation_mode") != "SELF_TEST":
+                case["expected"] = example["expected"]
+        stdout_asset = _output_asset(
+            run=run, kind="STDOUT",
+            content=json.dumps(safe_report, ensure_ascii=True, sort_keys=True).encode(),
+        )
+        stderr_asset = _output_asset(run=run, kind="STDERR", content=b"")
         report_bytes = json.dumps(
-            result.test_report or {}, ensure_ascii=True, sort_keys=True, separators=(",", ":")
+            safe_report, ensure_ascii=True,
+            sort_keys=True, separators=(",", ":")
         ).encode()
         report_asset = _output_asset(run=run, kind="TEST_REPORT", content=report_bytes)
         changed = compare_and_swap(
@@ -1567,7 +1664,7 @@ def record_operation(
         raise WorkspaceCapabilityDenied(detail={"capability": capability})
     safe_arguments = redact(arguments or {})
     execution_run: WorkspaceExecutionRun | None = None
-    if operation == "RUN_CHECK":
+    if operation in {"RUN_CHECK", "SELF_TEST"}:
         execution_run = request_execution_run(
             session=session,
             token=token,
@@ -1575,6 +1672,7 @@ def record_operation(
             arguments=arguments or {},
             request_key=request_key,
             context=context,
+            mode=operation,
         )
         safe_arguments = {
             **safe_arguments,
@@ -1584,7 +1682,7 @@ def record_operation(
         existing_event = (
             OperationEvent.objects.filter(
                 task=session.task,
-                event_type="operation.run_check",
+                event_type=f"operation.{operation.lower()}",
                 payload_masked__execution_run_id=execution_run.public_id,
             )
             .order_by("id")

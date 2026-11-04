@@ -1,9 +1,10 @@
 import hashlib
 import io
 import json
+import math
 import re
 from collections.abc import Callable, Mapping
-from typing import Any, Final
+from typing import Any
 
 from django.conf import settings
 from django.db import IntegrityError, transaction
@@ -47,6 +48,11 @@ from .models import (
     TemplateTask,
     TemplateVersion,
 )
+from .toolchains import (
+    TOOLCHAINS_BY_LANGUAGE,
+    resolve_language_policy,
+    validate_frozen_language_policy,
+)
 
 VERSION_FIELDS = {
     "runtime_type",
@@ -63,7 +69,7 @@ VERSION_FIELDS = {
     "retention_days",
 }
 ASSET_FIELDS = ("manual_asset", "starter_asset", "report_template_asset")
-EXECUTION_SPEC_KEYS = frozenset({
+LEGACY_EXECUTION_SPEC_KEYS = frozenset({
     "language",
     "entrypoint",
     "timeout_seconds",
@@ -74,13 +80,16 @@ EXECUTION_SPEC_KEYS = frozenset({
     "network_mode",
 })
 _PYTHON_ENTRYPOINT = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,126}\.py$")
+_PROJECT_ENTRYPOINT = re.compile(r"^[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*$")
 
 
 def _normalize_execution_spec(value: Any) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise TemplateValidationError(detail={"execution_spec": "object_required"})
-    unknown = sorted(set(value) - EXECUTION_SPEC_KEYS)
-    missing = sorted(EXECUTION_SPEC_KEYS - set(value))
+    if value.get("schema_version") == 2:
+        return _normalize_execution_spec_v2(value)
+    unknown = sorted(set(value) - LEGACY_EXECUTION_SPEC_KEYS)
+    missing = sorted(LEGACY_EXECUTION_SPEC_KEYS - set(value))
     if unknown:
         raise TemplateValidationError(detail={"execution_spec": {"unknown": unknown}})
     if missing:
@@ -130,10 +139,183 @@ def _normalize_execution_spec(value: Any) -> dict[str, Any]:
     }
 
 
+def _normalize_execution_spec_v2(value: dict[str, Any]) -> dict[str, Any]:
+    allowed = LEGACY_EXECUTION_SPEC_KEYS | {
+        "schema_version",
+        "toolchain_version",
+        "language_standard",
+        "absolute_tolerance",
+        "relative_tolerance",
+        "toolchain",
+        "materials",
+    }
+    unknown = sorted(set(value) - allowed)
+    missing = sorted((LEGACY_EXECUTION_SPEC_KEYS - {"entrypoint"}) - set(value))
+    if unknown or missing:
+        detail: dict[str, Any] = {}
+        if unknown:
+            detail["unknown"] = unknown
+        if missing:
+            detail["required"] = missing
+        raise TemplateValidationError(detail={"execution_spec": detail})
+    if value.get("schema_version") != 2:
+        raise TemplateValidationError(detail={"execution_spec": {"schema_version": "unsupported"}})
+    language = value.get("language")
+    if language is not None and not isinstance(language, str):
+        raise TemplateValidationError(detail={"language": "invalid"})
+    toolchain_version = value.get("toolchain_version")
+    language_standard = value.get("language_standard")
+    if toolchain_version is not None and not isinstance(toolchain_version, str):
+        raise TemplateValidationError(detail={"toolchain_version": "invalid"})
+    if language_standard is not None and not isinstance(language_standard, str):
+        raise TemplateValidationError(detail={"language_standard": "invalid"})
+    policy = (
+        validate_frozen_language_policy(value["toolchain"], language=language)
+        if "toolchain" in value
+        else resolve_language_policy(
+            language=language,
+            toolchain_version=toolchain_version,
+            language_standard=language_standard,
+        )
+    )
+    if "toolchain" in value and (
+        toolchain_version != policy["toolchain_version"]
+        or language_standard != policy["language_standard"]
+    ):
+        raise TemplateValidationError(detail={"toolchain": "resolved_policy_mismatch"})
+    entrypoint = value.get("entrypoint")
+    if language is None:
+        if entrypoint is not None:
+            raise TemplateValidationError(detail={"entrypoint": "must_be_null_for_student_select"})
+    else:
+        extension = {
+            "c": ".c",
+            "cpp": ".cpp",
+            "java": ".java",
+            "python": ".py",
+            "go": ".go",
+        }[language]
+        if (
+            not isinstance(entrypoint, str)
+            or not _PROJECT_ENTRYPOINT.fullmatch(entrypoint)
+            or ".." in entrypoint.split("/")
+            or not entrypoint.endswith(extension)
+        ):
+            raise TemplateValidationError(detail={"entrypoint": "invalid_for_language"})
+    comparator = value.get("comparator")
+    if comparator not in {"token", "numeric"}:
+        raise TemplateValidationError(detail={"comparator": "unsupported"})
+    tolerances: dict[str, float] = {}
+    for key in ("absolute_tolerance", "relative_tolerance"):
+        number = value.get(key, 1e-6)
+        if isinstance(number, bool) or not isinstance(number, (int, float)):
+            raise TemplateValidationError(detail={key: "non_negative_finite_number_required"})
+        try:
+            normalized_number = float(number)
+        except OverflowError as exc:
+            raise TemplateValidationError(
+                detail={key: "non_negative_finite_number_required"}
+            ) from exc
+        if not math.isfinite(normalized_number) or normalized_number < 0:
+            raise TemplateValidationError(detail={key: "non_negative_finite_number_required"})
+        tolerances[key] = normalized_number
+    if value.get("network_mode") != "DENY_ALL":
+        raise TemplateValidationError(detail={"network_mode": "must_be_DENY_ALL"})
+    materials = value.get("materials", [])
+    if not isinstance(materials, list):
+        raise TemplateValidationError(detail={"materials": "list_required"})
+    clean_materials: list[dict[str, str]] = []
+    seen_assets: set[str] = set()
+    for material in materials:
+        if not isinstance(material, dict) or set(material) != {"asset_id", "role"}:
+            raise TemplateValidationError(detail={"materials": "invalid_entry"})
+        asset_id, role = material.get("asset_id"), material.get("role")
+        if not isinstance(asset_id, str) or not re.fullmatch(r"[0-9A-Za-z]{26}", asset_id):
+            raise TemplateValidationError(detail={"materials": "invalid_asset_id"})
+        if not isinstance(role, str) or role not in {
+            "STUDENT_FILES",
+            "HIDDEN_SOURCE",
+            "PUBLIC_DATA",
+        }:
+            raise TemplateValidationError(detail={"materials": "unsupported_role"})
+        if asset_id in seen_assets:
+            raise TemplateValidationError(detail={"materials": "duplicate_asset"})
+        seen_assets.add(asset_id)
+        clean_materials.append({"asset_id": asset_id, "role": role})
+    tests_asset = value.get("tests_asset")
+    if not isinstance(tests_asset, str) or not re.fullmatch(r"[0-9A-Za-z]{26}", tests_asset):
+        raise TemplateValidationError(detail={"tests_asset": "invalid_public_id"})
+    numeric = ("timeout_seconds", "memory_mb", "cpu_millicores")
+    if any(
+        isinstance(value.get(name), bool)
+        or not isinstance(value.get(name), int)
+        or value.get(name, 0) < 1
+        for name in numeric
+    ):
+        raise TemplateValidationError(detail={"resources": "positive_integers_required"})
+    if value["timeout_seconds"] > settings.TEMPLATE_CHECK_TIMEOUT_MAX_SECONDS:
+        raise TemplateValidationError(detail={"timeout_seconds": "too_large"})
+    return {
+        "schema_version": 2,
+        "language": language,
+        "toolchain_version": policy["toolchain_version"],
+        "language_standard": policy["language_standard"],
+        "toolchain": policy,
+        "materials": clean_materials,
+        "entrypoint": entrypoint,
+        "timeout_seconds": int(value["timeout_seconds"]),
+        "memory_mb": int(value["memory_mb"]),
+        "cpu_millicores": int(value["cpu_millicores"]),
+        "comparator": comparator,
+        **tolerances,
+        "tests_asset": tests_asset,
+        "network_mode": "DENY_ALL",
+    }
+
+
 def build_execution_command(execution_spec: Mapping[str, Any]) -> list[str]:
-    """Return the only command supported by the first Python algorithm runtime."""
+    """Return a command only for toolchains verified in the current runtime."""
     normalized = _normalize_execution_spec(dict(execution_spec))
+    if normalized.get("schema_version") == 2:
+        if normalized["toolchain"]["mode"] == "STUDENT_SELECT":
+            if normalized["toolchain"]["allowed_languages"] == ["python"]:
+                return ["python", "main.py"]
+            raise TemplateValidationError(detail={"toolchain": "runtime_not_available"})
+        if normalized["language"] != "python":
+            raise TemplateValidationError(detail={"toolchain": "runtime_not_available"})
+        if normalized["comparator"] != "token":
+            raise TemplateValidationError(detail={"comparator": "runtime_not_available"})
     return ["python", normalized["entrypoint"]]
+
+
+def build_execution_plan(execution_spec: Mapping[str, Any]) -> dict[str, list[str]]:
+    """Return a fixed compile/run argv pair; never invokes a shell."""
+    normalized = _normalize_execution_spec(dict(execution_spec))
+    language = normalized.get("language")
+    entrypoint = str(normalized.get("entrypoint") or "")
+    if language == "python":
+        return {"compile": [], "run": ["python", entrypoint]}
+    if language == "c":
+        return {
+            "compile": ["gcc", "-std=c17", "-O2", entrypoint, "-o", "/tmp/.cache/program"],
+            "run": ["/tmp/.cache/program"],
+        }
+    if language == "cpp":
+        return {
+            "compile": ["g++", "-std=c++20", "-O2", entrypoint, "-o", "/tmp/.cache/program"],
+            "run": ["/tmp/.cache/program"],
+        }
+    if language == "java":
+        return {
+            "compile": ["javac", "-d", "/tmp/.cache/classes", entrypoint],
+            "run": ["java", "-cp", "/tmp/.cache/classes", "Main"],
+        }
+    if language == "go":
+        return {
+            "compile": ["go", "build", "-o", "/tmp/.cache/program", entrypoint],
+            "run": ["/tmp/.cache/program"],
+        }
+    raise TemplateValidationError(detail={"toolchain": "unsupported"})
 
 
 def _course(course_id: str, actor: User, capability: str) -> Course:
@@ -426,12 +608,6 @@ def delete_template(
     return changed  # type: ignore[return-value]
 
 
-_ALLOWED_SPEC_LANGUAGES: Final = {"python"}
-_ALLOWED_SPEC_COMPARATORS: Final = {"token"}
-_ALLOWED_SPEC_NETWORK: Final = {"DENY_ALL"}
-_ENTRYPOINT_RE: Final[re.Pattern[str]] = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,126}\.py$")
-
-
 @transaction.atomic
 def save_execution_spec(
     *,
@@ -462,25 +638,11 @@ def save_execution_spec(
         raise ResourceNotFound() from exc
     version = _content_guard(version, expected_version, context)
 
-    language = str(spec.get("language", ""))
-    entrypoint = str(spec.get("entrypoint", "")).strip()
-    comparator = str(spec.get("comparator", ""))
-    network_mode = str(spec.get("network_mode", ""))
-    if language not in _ALLOWED_SPEC_LANGUAGES:
-        raise TemplateValidationError(detail={"language": "unsupported"})
-    if not _ENTRYPOINT_RE.fullmatch(entrypoint):
-        raise TemplateValidationError(detail={"entrypoint": "invalid"})
-    if comparator not in _ALLOWED_SPEC_COMPARATORS:
-        raise TemplateValidationError(detail={"comparator": "unsupported"})
-    if network_mode not in _ALLOWED_SPEC_NETWORK:
-        raise TemplateValidationError(detail={"network_mode": "unsupported"})
-    timeout_seconds = int(spec.get("timeout_seconds", 0) or 0)
-    memory_mb = int(spec.get("memory_mb", 0) or 0)
-    cpu_millicores = int(spec.get("cpu_millicores", 0) or 0)
-    if timeout_seconds < 1 or memory_mb < 1 or cpu_millicores < 1:
-        raise TemplateValidationError(
-            detail={"resources": "timeout/memory/cpu must be positive"}
-        )
+    raw_spec = {key: value for key, value in spec.items() if key != "tests_json"}
+    raw_spec["tests_asset"] = "0" * 26
+    normalized_spec = _normalize_execution_spec(raw_spec)
+    if normalized_spec.get("schema_version") == 2:
+        _execution_material_snapshots(version, normalized_spec["materials"])
     try:
         probe = json.loads(tests_json)
     except json.JSONDecodeError as exc:
@@ -522,16 +684,8 @@ def save_execution_spec(
         expected_version=asset.row_version,
         scan_status=ObjectAsset.ScanStatus.CLEAN,
     )
-    clean_spec: dict[str, Any] = {
-        "language": language,
-        "entrypoint": entrypoint,
-        "timeout_seconds": timeout_seconds,
-        "memory_mb": memory_mb,
-        "cpu_millicores": cpu_millicores,
-        "comparator": comparator,
-        "tests_asset": asset.public_id,
-        "network_mode": network_mode,
-    }
+    raw_spec["tests_asset"] = asset.public_id
+    clean_spec = _normalize_execution_spec(raw_spec)
     changed = compare_and_swap(
         TemplateVersion,
         pk=version.pk,
@@ -1177,6 +1331,36 @@ def _asset_snapshot(asset: ObjectAsset | None) -> dict[str, Any] | None:
     }
 
 
+def _execution_material_snapshots(
+    version: TemplateVersion, materials: list[dict[str, str]]
+) -> list[dict[str, Any]]:
+    purposes = {
+        "STUDENT_FILES": "STARTER",
+        "HIDDEN_SOURCE": "HIDDEN_SOURCE",
+        "PUBLIC_DATA": "PUBLIC_DATA",
+    }
+    snapshots = []
+    for item in materials:
+        try:
+            asset = ObjectAsset.objects.get(
+                public_id=item["asset_id"],
+                owner_type="TEMPLATE_VERSION",
+                owner_ref=version.public_id,
+                purpose=purposes[item["role"]],
+            )
+        except ObjectAsset.DoesNotExist as exc:
+            raise TemplateValidationError(
+                detail={"materials": {item["asset_id"]: "not_found_or_wrong_role"}}
+            ) from exc
+        snapshots.append({
+            "asset_id": asset.public_id,
+            "role": item["role"],
+            "purpose": asset.purpose,
+            "asset": _asset_snapshot(asset),
+        })
+    return snapshots
+
+
 def _validated_snapshot(
     version: TemplateVersion,
     *,
@@ -1199,6 +1383,9 @@ def _validated_snapshot(
     report("ASSETS", "PASSED")
 
     execution_spec = _normalize_execution_spec(version.execution_spec)
+    execution_materials = _execution_material_snapshots(
+        version, execution_spec.get("materials", [])
+    ) if execution_spec.get("schema_version") == 2 else []
 
     report("GOVERNANCE", "RUNNING")
     governance = template_governance_snapshot(
@@ -1332,6 +1519,28 @@ def _validated_snapshot(
         raise TemplateValidationError(detail={"workspace_capabilities": "interactive_required"})
     report("POLICY", "PASSED")
 
+    # V2 runs use compile/run plans; the legacy command builder only supports Python.
+    execution_plans = {}
+    if execution_spec.get("schema_version") == 2:
+        policy = execution_spec["toolchain"]
+        for language in policy["allowed_languages"]:
+            selected = dict(execution_spec)
+            if policy["mode"] == "STUDENT_SELECT":
+                selected.update(
+                    language=language,
+                    entrypoint=TOOLCHAINS_BY_LANGUAGE[language]["entrypoint"],
+                    toolchain=resolve_language_policy(
+                        language=language,
+                        toolchain_version=policy["default_versions"][language],
+                        language_standard=None,
+                    ),
+                )
+                selected.update(
+                    toolchain_version=selected["toolchain"]["toolchain_version"],
+                    language_standard=selected["toolchain"]["language_standard"],
+                )
+            execution_plans[language] = build_execution_plan(selected)
+
     return {
         "runtime_type": version.runtime_type,
         "runtime_adapter": {"code": adapter.code, "driver": adapter.driver},
@@ -1350,7 +1559,11 @@ def _validated_snapshot(
         },
         "dependencies": version.dependencies,
         "execution_spec": execution_spec,
-        "execution_command": list(build_execution_command(execution_spec)),
+        "execution_materials": execution_materials,
+        "execution_command": (
+            [] if execution_plans else list(build_execution_command(execution_spec))
+        ),
+        **({"execution_plans": execution_plans} if execution_plans else {}),
         "execution_tests_asset": {
             "public_id": tests_asset.public_id,
             "digest_sha256": tests_asset.digest_sha256,
@@ -1735,7 +1948,10 @@ def publish_version(
             "version_id": version.public_id,
             "spec_digest": version.spec_digest,
             "execution_spec": publish_snapshot["execution_spec"],
+            "execution_materials": publish_snapshot["execution_materials"],
             "execution_command": publish_snapshot["execution_command"],
+                **({"execution_plans": publish_snapshot["execution_plans"]}
+                   if "execution_plans" in publish_snapshot else {}),
             "execution_tests_asset": publish_snapshot["execution_tests_asset"],
         },
     )

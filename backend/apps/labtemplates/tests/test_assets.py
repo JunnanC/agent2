@@ -77,6 +77,31 @@ class TemplateAssetTests(TestCase):
             )
         self.assertEqual(asset.purpose, "BUILD_CONTEXT")
 
+    def test_hidden_source_and_public_data_asset_purposes_are_uploadable(self) -> None:
+        owner, course, template, version = create_template_version(suffix="role-assets")
+        for purpose, file_name, media_type in (
+            ("HIDDEN_SOURCE", "support.zip", "application/zip"),
+            ("PUBLIC_DATA", "records.csv", "text/csv"),
+        ):
+            payload = b"role asset"
+            with patch(
+                "apps.labtemplates.assets.object_storage", return_value=FakeStorage(payload)
+            ):
+                asset, _upload = create_asset_upload(
+                    course_id=course.public_id,
+                    template_id=template.public_id,
+                    version_id=version.public_id,
+                    actor=owner,
+                    expected_version=version.row_version,
+                    purpose=purpose,
+                    file_name=file_name,
+                    media_type=media_type,
+                    size_bytes=len(payload),
+                    digest_sha256=hashlib.sha256(payload).hexdigest(),
+                    context=context(owner),
+                )
+            self.assertEqual(asset.purpose, purpose)
+
     def test_build_context_rejects_non_gzip_tar_declaration(self) -> None:
         owner, course, template, version = create_template_version(suffix="build-context-format")
         with self.assertRaises(TemplateUploadInvalid):

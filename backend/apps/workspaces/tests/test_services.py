@@ -4,6 +4,8 @@ from datetime import timedelta
 from types import SimpleNamespace
 from unittest.mock import patch
 
+from django.core.management import call_command
+from django.core.management.base import CommandError
 from django.test import Client, TestCase, override_settings
 from django.utils import timezone
 
@@ -26,11 +28,13 @@ from apps.provisioning.services import execute_provisioning_job, start_provision
 
 from ..errors import (
     WorkspaceCaptureUnsupported,
+    WorkspaceOperationDenied,
     WorkspaceSessionInvalid,
     WorkspaceSessionRevoked,
     WorkspaceStorageJobActive,
 )
 from ..models import (
+    WorkspaceAutosaveLog,
     WorkspaceExecutionRun,
     WorkspaceSession,
     WorkspaceSnapshot,
@@ -39,11 +43,13 @@ from ..models import (
 from ..permissions import require_workspace_session
 from ..serializers import execution_run_data
 from ..services import (
+    _execution_rules,
     _output_asset,
     _runtime_spec_for_execution,
     create_storage_job,
     enter_task,
     execute_execution_run,
+    record_operation,
     renew_session,
     request_execution_run,
     revoke_session,
@@ -51,8 +57,11 @@ from ..services import (
     transition_storage_job,
 )
 from ..storage import (
+    WorkspaceStorageFailure,
     _claim,
     _Content,
+    _project_archive,
+    _project_files,
     _runtime,
     _starter_main,
     create_finalize_job,
@@ -63,6 +72,9 @@ from ..workbench import workbench_data
 
 class WorkspaceSessionServiceTests(TestCase):
     def setUp(self) -> None:
+        text = patch("apps.workspaces.workbench.asset_text", return_value=None)
+        text.start()
+        self.addCleanup(text.stop)
         reset_fake_runtime()
         self.teacher, self.course, template_version, rubric_version = create_domain(
             suffix="workspaces"
@@ -132,6 +144,32 @@ class WorkspaceSessionServiceTests(TestCase):
         self.assertEqual(data["tests"]["summary"], [])
         self.assertNotIn("private-tests-asset", json.dumps(data, default=str))
 
+    def test_workbench_exposes_only_three_examples_and_authorized_reset(self) -> None:
+        cases = [{"input": f"input-{index}", "expected": f"answer-{index}"} for index in range(5)]
+        asset = ObjectAsset.objects.create(
+            bucket="test", object_key="private-tests", digest_sha256="a" * 64,
+            size_bytes=1, media_type="application/json", purpose="TESTS",
+            owner_type="TEMPLATE_VERSION", owner_ref=self.task.template_version.public_id,
+            scan_status="CLEAN",
+        )
+        ExperimentTask.objects.filter(pk=self.task.pk).update(
+            execution_spec={"tests_asset": asset.public_id}, status="IN_PROGRESS",
+        )
+        with patch(
+            "apps.workspaces.workbench.asset_text", return_value=json.dumps({"cases": cases})
+        ):
+            data = workbench_data(actor=self.task.student, task_id=self.task.public_id)
+        self.assertEqual(data["tests"]["count"], 5)
+        self.assertEqual(len(data["tests"]["summary"]), 3)
+        self.assertEqual(data["tests"]["summary"][2]["expected"], "answer-2")
+        self.assertNotIn("answer-3", json.dumps(data, default=str))
+        self.assertIn("RESET_WORKSPACE", data["task"]["allowed_operations"])
+        type(self.task.template_version).objects.filter(pk=self.task.template_version_id).update(
+            workspace_capabilities={"webide": False}
+        )
+        data = workbench_data(actor=self.task.student, task_id=self.task.public_id)
+        self.assertNotIn("RESET_WORKSPACE", data["task"]["allowed_operations"])
+
     def test_execution_evidence_uses_the_permitted_storage_prefix_and_exposes_failures(
         self,
     ) -> None:
@@ -184,6 +222,84 @@ class WorkspaceSessionServiceTests(TestCase):
         self.assertEqual(spec.memory_mb, 2048)
         self.assertEqual(spec.disk_gb, 7)
         self.assertEqual(spec.network_policy["mode"], "DENY_ALL")
+
+    def test_scoped_cleanup_does_not_delete_resources_during_active_execution(self) -> None:
+        _, session, _ = enter_task(
+            task_id=self.task.public_id, actor=self.task.student,
+            expected_version=self.task.row_version, context=self.context,
+        )
+        run = WorkspaceExecutionRun.objects.create(
+            task=self.task, session=session, status="RUNNING",
+            execution_rule_digest="a" * 64, idempotency_key="cleanup-active-run",
+            trace_id=self.context.trace_id,
+        )
+        clock = iter((0, 61))
+        command_module = "apps.workspaces.management.commands.cleanup_workspace_e2e"
+        with (
+            patch(command_module + ".time", SimpleNamespace(monotonic=lambda: next(clock))),
+            patch(command_module + ".destroy_task_instance") as destroy,
+            self.assertRaisesMessage(CommandError, "Execution is still active"),
+        ):
+            call_command("cleanup_workspace_e2e", "--task-id", self.task.public_id)
+        destroy.assert_not_called()
+        run.refresh_from_db()
+        self.assertEqual(run.status, "RUNNING")
+
+    def test_selected_language_reaches_the_frozen_execution_plan(self) -> None:
+        from apps.labtemplates.services import _normalize_execution_spec
+        from apps.labtemplates.toolchains import resolve_language_policy
+
+        spec = _normalize_execution_spec({
+            "schema_version": 2, "language": None, "entrypoint": None,
+            "timeout_seconds": 5, "memory_mb": 256, "cpu_millicores": 500,
+            "comparator": "token", "tests_asset": "A" * 26, "network_mode": "DENY_ALL",
+        })
+        policy = spec["toolchain"]
+        spec["_runtime"] = {"material_assets": [], "workspace_capabilities": {"webide": True}}
+        self.task.execution_spec = spec
+        for language, entrypoint in (
+            ("python", "main.py"), ("c", "main.c"), ("cpp", "main.cpp"),
+            ("java", "Main.java"), ("go", "main.go"),
+        ):
+            with self.subTest(language=language):
+                summary, actual, digest = _execution_rules(self.task, language=language)
+                self.assertEqual(actual, ["python", entrypoint])
+                self.assertEqual(summary["language"], language)
+                self.assertEqual(summary["toolchain"]["toolchain_version"],
+                                 policy["default_versions"][language])
+                executable = {"python": "python", "java": "java"}.get(
+                    language, "/tmp/.cache/program"
+                )
+                self.assertEqual(summary["execution_plan"]["run"][0], executable)
+                self.assertEqual(len(digest), 64)
+        self.assertEqual(self.task.execution_spec, spec)
+        with self.assertRaises(WorkspaceOperationDenied):
+            _execution_rules(self.task, language="rust")
+        fixed_policy = resolve_language_policy(
+            language="c", toolchain_version="12.2.0", language_standard=None,
+        )
+        self.task.execution_spec = {
+            **spec, "language": "c", "entrypoint": "main.c", "toolchain": fixed_policy,
+            "toolchain_version": "12.2.0", "language_standard": "c17",
+        }
+        summary, command, _ = _execution_rules(self.task, language="c")
+        self.assertEqual(command, ["python", "main.c"])
+        self.assertEqual(summary["execution_plan"]["compile"][0], "gcc")
+
+        ExperimentTask.objects.filter(pk=self.task.pk).update(execution_spec=spec)
+        WorkspaceSession.objects.filter(task=self.task).update(language="c")
+        self.task.refresh_from_db()
+        _, session, token = enter_task(
+            task_id=self.task.public_id, actor=self.task.student,
+            expected_version=self.task.row_version, context=self.context,
+        )
+        for mode in ("RUN_CHECK", "SELF_TEST"):
+            run = request_execution_run(
+                session=session, token=token, actor=self.task.student, arguments={},
+                request_key=f"selected-{mode}", mode=mode, context=self.context,
+            )
+            self.assertEqual(run.execution_rule_summary["language"], "c")
+            self.assertEqual(run.execution_rule_summary["command"], ["python", "main.c"])
 
     def test_ready_task_exposes_enter_and_issue_is_scoped(self) -> None:
         self.assertEqual(
@@ -555,6 +671,133 @@ class WorkspaceSessionServiceTests(TestCase):
         self.assertEqual(session.current_version, 1)
         self.assertEqual(session.latest_snapshot_id, snapshot.pk)
 
+        # Saving unchanged buffers before submission must keep the formal run's
+        # snapshot identity, while consuming every confirmed client sequence.
+        from apps.reports.errors import ReportExecutionConflict
+        from apps.reports.services import _latest_execution_for_submission
+
+        formal = WorkspaceExecutionRun.objects.create(
+            task=self.task, session=session, snapshot=snapshot, status="PASSED",
+            execution_rule_summary={"evaluation_mode": "FORMAL"},
+            execution_rule_digest="f" * 64, idempotency_key="capture-formal",
+            trace_id=self.context.trace_id,
+        )
+        for seq in (2, 3):
+            job = WorkspaceStorageJob.objects.create(
+                kind="CAPTURE", task=self.task, session=session, instance=session.instance,
+                client_seq=seq, base_version=1, idempotency_key=f"capture-repeat-{seq}",
+                request_digest="b" * 64, trace_id=self.context.trace_id,
+            )
+            with (
+                patch("apps.workspaces.storage._runtime", return_value=(object(), "runtime")),
+                patch("apps.workspaces.storage._capture", return_value=_Content(
+                    content_bytes, digest, "text/x-python",
+                )),
+                patch("apps.workspaces.storage._put_asset") as upload,
+            ):
+                execute_storage_job(storage_job_id=job.public_id)
+            job.refresh_from_db()
+            session.refresh_from_db()
+            self.assertEqual(job.status, "PASSED")
+            self.assertEqual(job.result_snapshot_id, snapshot.pk)
+            self.assertEqual(session.current_version, 1)
+            upload.assert_not_called()
+        self.assertEqual(WorkspaceSnapshot.objects.filter(task=self.task).count(), 1)
+        self.assertEqual(WorkspaceAutosaveLog.objects.filter(task=self.task).count(), 3)
+        # V2 restore/reset/re-entry of the same language and bytes retains formal
+        # eligibility even when capture registered another clean object.
+        ExperimentTask.objects.filter(pk=self.task.pk).update(execution_spec={"schema_version": 2})
+        from apps.workspaces.storage import _commit_snapshot
+
+        duplicate_asset = ObjectAsset.objects.create(
+            bucket=asset.bucket, object_key=f"{asset.object_key}-same-bytes",
+            digest_sha256=digest, size_bytes=len(content_bytes),
+            media_type="text/x-python", owner_type=asset.owner_type,
+            owner_ref=asset.owner_ref, purpose=asset.purpose, scan_status="CLEAN",
+        )
+        for seq, kind in enumerate(("RESTORE", "RESET", "INITIALIZE"), start=4):
+            same = WorkspaceStorageJob.objects.create(
+                kind=kind, task=self.task, session=session, instance=session.instance,
+                source_snapshot=snapshot if kind == "RESTORE" else None,
+                status="RUNNING", idempotency_key=f"unchanged-{kind}",
+                request_digest="b" * 64, trace_id=self.context.trace_id,
+            )
+            actual = _commit_snapshot(
+                job_id=same.public_id, claim_version=same.row_version, asset=duplicate_asset,
+                content=_Content(content_bytes, digest, "text/x-python"),
+                client_seq=seq, base_version=1,
+            )
+            self.assertEqual(actual.pk, snapshot.pk)
+        session.refresh_from_db()
+        ExperimentTask.objects.filter(pk=self.task.pk).update(execution_spec={})
+        self.assertEqual(
+            _latest_execution_for_submission(task=self.task, snapshot=session.latest_snapshot).pk,
+            formal.pk,
+        )
+
+        # Re-entering a legacy task must restore the saved file and advance the
+        # task-wide sequence, rather than overwrite it with the starter at zero.
+        revoke_session(
+            session=session, token=token, actor=self.task.student,
+            expected_version=session.row_version, context=self.context,
+        )
+        self.task.refresh_from_db()
+        with patch("apps.workspaces.storage.create_initialization_job"):
+            _, reopened, _ = enter_task(
+                task_id=self.task.public_id, actor=self.task.student,
+                expected_version=self.task.row_version, context=self.context,
+            )
+        self.assertEqual(reopened.current_version, 1)
+        initialize = WorkspaceStorageJob.objects.create(
+            kind="INITIALIZE", task=self.task, session=reopened, instance=reopened.instance,
+            idempotency_key="legacy-reenter", request_digest="b" * 64,
+            trace_id=self.context.trace_id,
+        )
+        adapter = SimpleNamespace(restore_workspace=lambda **kwargs: None)
+        with (
+            patch("apps.workspaces.storage._runtime", return_value=(adapter, "runtime")),
+            patch("apps.workspaces.storage._read_object", return_value=content_bytes),
+            patch("apps.workspaces.storage._capture", return_value=_Content(content_bytes, digest)),
+            patch("apps.workspaces.storage._put_asset", return_value=asset),
+            patch("apps.workspaces.storage._scan"),
+        ):
+            execute_storage_job(storage_job_id=initialize.public_id)
+        initialize.refresh_from_db()
+        reopened.refresh_from_db()
+        self.assertEqual(initialize.status, "PASSED")
+        self.assertEqual(reopened.current_version, 2)
+        self.assertEqual(reopened.latest_snapshot.digest_sha256, digest)
+        self.assertEqual(reopened.latest_snapshot.client_seq, 7)
+
+        changed_bytes = b"print('changed')\n"
+        changed_digest = hashlib.sha256(changed_bytes).hexdigest()
+        changed_asset = ObjectAsset.objects.create(
+            bucket="test", object_key="changed.py", digest_sha256=changed_digest,
+            size_bytes=len(changed_bytes), media_type="text/x-python",
+            owner_type="WORKSPACE_TASK", owner_ref=self.task.public_id,
+            purpose="WORKSPACE_SNAPSHOT", scan_status="CLEAN",
+        )
+        changed_job = WorkspaceStorageJob.objects.create(
+            kind="CAPTURE", task=self.task, session=reopened, instance=reopened.instance,
+            client_seq=8, base_version=2, idempotency_key="capture-changed",
+            request_digest="c" * 64, trace_id=self.context.trace_id,
+        )
+        with (
+            patch("apps.workspaces.storage._runtime", return_value=(object(), "runtime")),
+            patch("apps.workspaces.storage._capture", return_value=_Content(
+                changed_bytes, changed_digest, "text/x-python",
+            )),
+            patch("apps.workspaces.storage._put_asset", return_value=changed_asset),
+        ):
+            execute_storage_job(storage_job_id=changed_job.public_id)
+        changed_job.refresh_from_db()
+        reopened.refresh_from_db()
+        self.assertEqual(changed_job.status, "PASSED")
+        self.assertEqual(reopened.current_version, 3)
+        self.assertEqual(reopened.latest_snapshot.digest_sha256, changed_digest)
+        with self.assertRaises(ReportExecutionConflict):
+            _latest_execution_for_submission(task=self.task, snapshot=reopened.latest_snapshot)
+
     def test_starter_archive_extracts_only_main_and_rejects_traversal(self) -> None:
         import io
         import zipfile
@@ -580,6 +823,125 @@ class WorkspaceSessionServiceTests(TestCase):
 
         with self.assertRaises(WorkspaceStorageFailure):
             _starter_main(unsafe_bytes.getvalue(), "application/zip")
+
+    def test_language_projects_survive_switch_and_reset_uses_original_files(self) -> None:
+        ExperimentTask.objects.filter(pk=self.task.pk).update(
+            runtime_adapter_driver="DOCKER_LOCAL",
+            execution_spec={"schema_version": 2, "language": None, "toolchain": {
+                "mode": "STUDENT_SELECT", "allowed_languages": ["python", "c"],
+            }},
+        )
+        self.task.refresh_from_db()
+        with patch("apps.workspaces.storage.create_initialization_job"):
+            _, session, _token = enter_task(
+                task_id=self.task.public_id, actor=self.task.student,
+                expected_version=self.task.row_version, context=self.context,
+            )
+        state = {"content": _project_archive({})}
+        objects = {}
+
+        def put_asset(*, job, content):
+            asset = ObjectAsset.objects.create(
+                bucket="test", object_key=f"{job.public_id}/{content.digest}",
+                digest_sha256=content.digest, size_bytes=content.size,
+                media_type=content.media_type, owner_type="WORKSPACE_TASK",
+                owner_ref=self.task.public_id, purpose="WORKSPACE_SNAPSHOT", scan_status="CLEAN",
+            )
+            objects[asset.pk] = content.value
+            return asset
+
+        def restore(**kwargs):
+            state["content"] = kwargs["content"]
+
+        def raise_failure(job_id, exc, trace_id, claim_version):
+            raise exc
+
+        adapter = SimpleNamespace(restore_workspace=restore)
+
+        def run(kind, language=""):
+            session.refresh_from_db()
+            job = WorkspaceStorageJob.objects.create(
+                kind=kind, target_language=language, task=self.task, session=session,
+                instance=session.instance, idempotency_key=f"project-{len(objects)}-{kind}",
+                request_digest="a" * 64, trace_id=self.context.trace_id,
+            )
+            execute_storage_job(storage_job_id=job.public_id)
+            job.refresh_from_db()
+            self.assertEqual(job.status, "PASSED", getattr(job.failure_record, "error_code", ""))
+            session.refresh_from_db()
+
+        with (
+            patch("apps.workspaces.storage._runtime", return_value=(adapter, "runtime")),
+            patch("apps.workspaces.storage._capture", side_effect=lambda *a, **k: _Content(
+                state["content"], hashlib.sha256(state["content"]).hexdigest(), "application/gzip",
+            )),
+            patch("apps.workspaces.storage._put_asset", side_effect=put_asset),
+            patch("apps.workspaces.storage._read_object", side_effect=lambda a: objects[a.pk]),
+            patch("apps.workspaces.storage._scan"),
+            patch("apps.workspaces.storage._record_failure", side_effect=raise_failure),
+        ):
+            run("INITIALIZE")
+            initial_python = _project_files(state["content"])
+            state["content"] = _project_archive({"main.py": b"print('python saved')"})
+            run("SWITCH", "c")
+            self.assertEqual(session.language, "c")
+            state["content"] = _project_archive({"main.c": b"int main(void) { return 7; }"})
+            run("SWITCH", "python")
+            self.assertEqual(
+                _project_files(state["content"]), {"main.py": b"print('python saved')"}
+            )
+            run("RESET")
+            self.assertEqual(_project_files(state["content"]), initial_python)
+            run("SWITCH", "c")
+            self.assertIn(b"return 7", _project_files(state["content"])["main.c"])
+        self.assertEqual(WorkspaceSnapshot.objects.filter(task=self.task, initial=True).count(), 2)
+        for snapshot in WorkspaceSnapshot.objects.filter(task=self.task):
+            self.assertEqual(snapshot.digest_sha256, snapshot.asset.digest_sha256)
+
+    def test_project_snapshot_manifest_is_deterministic_and_rejects_unsafe_paths(self) -> None:
+        import io
+        import tarfile
+
+        files = {"src/Main.java": b"class Main {}\n", "README.md": b"starter\n"}
+        first = _project_archive(files)
+        self.assertEqual(first, _project_archive(files))
+        self.assertEqual(_project_files(first), files)
+
+        unsafe = io.BytesIO()
+        with tarfile.open(fileobj=unsafe, mode="w") as archive:
+            info = tarfile.TarInfo("../secret.java")
+            info.size = 1
+            archive.addfile(info, io.BytesIO(b"x"))
+        with self.assertRaises(WorkspaceStorageFailure):
+            _project_files(unsafe.getvalue())
+
+    def test_initial_project_keeps_json_data_adds_entrypoint_and_excludes_hidden_source(self):
+        from ..storage import _initial_project
+
+        asset = ObjectAsset.objects.create(
+            bucket="test", object_key="public-data", digest_sha256="a" * 64,
+            size_bytes=7, media_type="application/json", original_name="data.json",
+            owner_type="TEMPLATE_VERSION", owner_ref=self.task.template_version.public_id,
+            purpose="PUBLIC_DATA", scan_status="CLEAN",
+        )
+        self.task.execution_spec = {
+            "schema_version": 2,
+            "_runtime": {"material_assets": [
+                {"asset_id": asset.public_id, "role": "PUBLIC_DATA", "digest": asset.digest_sha256},
+                {"asset_id": "hidden-id", "role": "HIDDEN_SOURCE", "digest": "b" * 64},
+            ]},
+        }
+        with patch("apps.workspaces.storage._read_object", return_value=b'{"x":1}') as read:
+            content = _initial_project(SimpleNamespace(task=self.task), "python")
+        self.assertEqual(read.call_count, 1)
+        files = _project_files(content.value)
+        self.assertEqual(files["data.json"], b'{"x":1}')
+        self.assertIn("main.py", files)
+        self.assertEqual(len(files), 2)
+
+        self.task.execution_spec["_runtime"]["material_assets"][0]["object_version"] = "changed"
+        with self.assertRaises(WorkspaceStorageFailure):
+            _initial_project(SimpleNamespace(task=self.task), "python")
 
     def test_non_report_submission_requires_a_clean_workspace_snapshot(self) -> None:
         TaskPublication.objects.filter(pk=self.publication.pk).update(report_required=False)
@@ -872,6 +1234,24 @@ class WorkspaceSessionServiceTests(TestCase):
         self.assertEqual(replay.status_code, 201)
         self.assertEqual(replay.json()["data"]["public_id"], operation_id)
         self.assertEqual(WorkspaceExecutionRun.objects.filter(task=self.task).count(), 1)
+
+    @override_settings(WORKSPACE_INTERNAL_KEY="internal-secret")
+    def test_self_test_is_separate_from_formal_run(self) -> None:
+        _, session, token = enter_task(
+            task_id=self.task.public_id, actor=self.task.student,
+            expected_version=self.task.row_version, context=self.context,
+        )
+        WorkspaceSession.objects.filter(pk=session.pk).update(
+            capabilities={**session.capabilities, "snapshot": True}
+        )
+        event = record_operation(
+            session=session, token=token, actor=self.task.student,
+            operation="SELF_TEST", arguments={"input": "debug"},
+            context=self.context, request_key="self-test-1",
+        )
+        run = WorkspaceExecutionRun.objects.get(public_id=event.payload_masked["execution_run_id"])
+        self.assertEqual(run.execution_rule_summary["evaluation_mode"], "SELF_TEST")
+        self.assertNotEqual(run.idempotency_key, "")
 
     def test_non_fake_run_is_queued_and_worker_publishes_terminal_rejection(self) -> None:
         RuntimeAdapter.objects.filter(pk=self.task.runtime_adapter_id).update(
