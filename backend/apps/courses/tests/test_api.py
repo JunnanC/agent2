@@ -1,3 +1,4 @@
+from datetime import timedelta
 from unittest.mock import patch
 
 import yaml
@@ -6,8 +7,9 @@ from django.utils import timezone
 
 from apps.accounts.tests.helpers import create_user, grant_admin, grant_teacher
 
-from ..models import Course, Enrollment
-from ..services import current_academic_term
+from ..content_services import create_invitation
+from ..models import Course, Enrollment, Invitation
+from ..services import ActorContext, current_academic_term
 
 PROXY_HEADERS = {
     "HTTP_X_PROXY_CONTEXT": "ingress-v1",
@@ -91,6 +93,33 @@ class CourseApiTests(TestCase):
         self.assertEqual(publish.status_code, 200, publish.content)
         return publish.json()["data"]
 
+    def test_invitation_resolution_returns_published_course_and_rejects_invalid_code(self) -> None:
+        teacher_client = Client(enforce_csrf_checks=True)
+        csrf = self._login(teacher_client, portal="TEACHING", identifier=self.teacher.email)
+        data = self._create_and_publish(teacher_client, csrf)
+        course = Course.objects.get(public_id=data["public_id"])
+        invitation, code = create_invitation(
+            course_id=course.public_id, actor=self.teacher, max_uses=1,
+            expires_at=timezone.now() + timedelta(days=1),
+            context=ActorContext(self.teacher.public_id, "TEACHING", "i" * 32),
+        )
+        student_client = Client(enforce_csrf_checks=True)
+        self._login(student_client, portal="USER", identifier=self.student.email)
+        endpoint = "/api/v2/courses/invitations/resolve"
+        response = student_client.get(
+            endpoint, {"code": code}, HTTP_X_PORTAL="USER", **PROXY_HEADERS
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(response.json()["data"]["public_id"], course.public_id)
+        invitation.refresh_from_db()
+        self.assertEqual(invitation.used_count, 0)
+        Invitation.objects.filter(pk=invitation.pk).update(used_count=1)
+        for value in (code, "invalid-code"):
+            response = student_client.get(
+                endpoint, {"code": value}, HTTP_X_PORTAL="USER", **PROXY_HEADERS
+            )
+            self.assertEqual(response.status_code, 400, response.content)
+
     def test_teacher_course_and_student_enrollment_real_api(self) -> None:
         teacher_client = Client(enforce_csrf_checks=True)
         teacher_csrf = self._login(
@@ -155,8 +184,12 @@ class CourseApiTests(TestCase):
             return client.post(path, payload, content_type="application/json", **headers)
 
         def assert_access(allowed):
-            for suffix in ("", "/chapters", "/materials", "/announcements", "/calendar", "/questions"):
-                response = student_client.get(f"/api/v2/courses/{course_id}{suffix}", HTTP_X_PORTAL="USER", **PROXY_HEADERS)
+            for suffix in (
+                "", "/chapters", "/materials", "/announcements", "/calendar", "/questions"
+            ):
+                response = student_client.get(
+                    f"/api/v2/courses/{course_id}{suffix}", HTTP_X_PORTAL="USER", **PROXY_HEADERS
+                )
                 self.assertEqual(response.status_code, 200 if allowed else 403, response.content)
 
         apply_path = f"/api/v2/courses/{course_id}/enrollments"
@@ -166,8 +199,11 @@ class CourseApiTests(TestCase):
         self.assertEqual(pending["status"], "PENDING")
         assert_access(False)
 
-        withdrawn = post(student_client, "USER", student_csrf,
-                         f"/api/v2/me/enrollments/{pending['public_id']}/withdraw", {}, "lifecycle-withdraw", pending["row_version"])
+        withdrawn = post(
+            student_client, "USER", student_csrf,
+            f"/api/v2/me/enrollments/{pending['public_id']}/withdraw", {},
+            "lifecycle-withdraw", pending["row_version"],
+        )
         self.assertEqual(withdrawn.status_code, 200, withdrawn.content)
         self.assertEqual(withdrawn.json()["data"]["status"], "WITHDRAWN")
         assert_access(False)
@@ -177,23 +213,34 @@ class CourseApiTests(TestCase):
         new_pending = reapplied.json()["data"]
         self.assertEqual(new_pending["cycle_no"], 2)
         assert_access(False)
-        approved = post(teacher_client, "TEACHING", teacher_csrf,
-                        f"/api/v2/teaching/courses/{course_id}/enrollments/{new_pending['public_id']}/review",
-                        {"decision": "APPROVE", "note": "同意选课"}, "lifecycle-approve", new_pending["row_version"])
+        approved = post(
+            teacher_client, "TEACHING", teacher_csrf,
+            f"/api/v2/teaching/courses/{course_id}/enrollments/{new_pending['public_id']}/review",
+            {"decision": "APPROVE", "note": "同意选课"},
+            "lifecycle-approve", new_pending["row_version"],
+        )
         self.assertEqual(approved.status_code, 200, approved.content)
         active = approved.json()["data"]
         self.assertEqual(active["status"], "ACTIVE")
         assert_access(True)
 
-        check = student_client.get(f"/api/v2/me/enrollments/{active['public_id']}/drop-check", HTTP_X_PORTAL="USER", **PROXY_HEADERS)
+        check = student_client.get(
+            f"/api/v2/me/enrollments/{active['public_id']}/drop-check",
+            HTTP_X_PORTAL="USER", **PROXY_HEADERS,
+        )
         self.assertEqual(check.status_code, 200, check.content)
         self.assertTrue(check.json()["data"]["allowed"])
-        dropped = post(student_client, "USER", student_csrf,
-                       f"/api/v2/me/enrollments/{active['public_id']}/drop", {"reason": "选课调整"}, "lifecycle-drop", active["row_version"])
+        dropped = post(
+            student_client, "USER", student_csrf,
+            f"/api/v2/me/enrollments/{active['public_id']}/drop", {"reason": "选课调整"},
+            "lifecycle-drop", active["row_version"],
+        )
         self.assertEqual(dropped.status_code, 200, dropped.content)
         self.assertEqual(dropped.json()["data"]["status"], "DROPPED")
         assert_access(False)
-        active_list = student_client.get("/api/v2/me/enrollments?status=ACTIVE", HTTP_X_PORTAL="USER", **PROXY_HEADERS)
+        active_list = student_client.get(
+            "/api/v2/me/enrollments?status=ACTIVE", HTTP_X_PORTAL="USER", **PROXY_HEADERS
+        )
         self.assertEqual(active_list.status_code, 200, active_list.content)
         self.assertEqual(active_list.json()["data"], [])
 

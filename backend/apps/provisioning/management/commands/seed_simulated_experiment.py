@@ -120,6 +120,7 @@ class Command(BaseCommand):
                 },
                 context=context,
             )
+        previous_tests_id = (version.execution_spec or {}).get("tests_asset")
         version = Command._ensure_tests_asset(version)
         if version.status != TemplateVersion.Status.PUBLISHED:
             version = compare_and_swap(
@@ -149,6 +150,21 @@ class Command(BaseCommand):
         publication = TaskPublication.objects.filter(
             course=course, title__in=("模拟环境实验任务", "P07 FakeRuntime 任务")
         ).first()
+        # Repair only this disposable publication's stale asset reference; keep
+        # its other frozen settings and the source template's asset unchanged.
+        if publication is not None and publication.template_version_id == version.pk:
+            repaired_tests_id = version.execution_spec.get("tests_asset")
+            for item in [publication, *publication.tasks.filter(template_version=version)]:
+                spec = dict(item.execution_spec or {})
+                if (
+                    spec.get("tests_asset") == previous_tests_id
+                    and previous_tests_id != repaired_tests_id
+                ):
+                    compare_and_swap(
+                        type(item), pk=item.pk, expected_version=item.row_version,
+                        changes={"execution_spec": {**spec, "tests_asset": repaired_tests_id}},
+                    )
+            publication.refresh_from_db()
         if publication is not None and publication.title == "P07 FakeRuntime 任务":
             publication = compare_and_swap(
                 TaskPublication,

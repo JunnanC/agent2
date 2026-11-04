@@ -9,6 +9,7 @@ from apps.accounts.services import change_teacher_qualification
 from apps.accounts.tests.helpers import create_user
 from apps.core.models import AuditLog, OutboxEvent
 
+from ..content_services import create_invitation
 from ..errors import (
     CourseGrantRequired,
     EnrollmentAlreadyLive,
@@ -35,7 +36,6 @@ from ..services import (
     review_enrollment,
     transfer_course_ownership,
 )
-from ..content_services import create_invitation
 from .helpers import create_draft_course, create_teacher
 
 
@@ -219,7 +219,8 @@ class CourseServiceTests(TestCase):
         )
         enrollment = apply_for_course(
             course_id=self.course.public_id, student=student, application_message="",
-            invitation_code=f"  {code}  ", context=ActorContext(student.public_id, "USER", "a" * 32),
+            invitation_code=f"  {code}  ",
+            context=ActorContext(student.public_id, "USER", "a" * 32),
         )
         invitation.refresh_from_db()
         self.assertEqual(enrollment.status, Enrollment.Status.ACTIVE)
@@ -232,7 +233,8 @@ class CourseServiceTests(TestCase):
         with self.assertRaises(InvitationInvalid):
             apply_for_course(
                 course_id=self.course.public_id, student=student, application_message="",
-                invitation_code="wrong-code", context=ActorContext(student.public_id, "USER", "a" * 32),
+                invitation_code="wrong-code",
+                context=ActorContext(student.public_id, "USER", "a" * 32),
             )
         self.assertFalse(Enrollment.objects.filter(course=self.course, student=student).exists())
 

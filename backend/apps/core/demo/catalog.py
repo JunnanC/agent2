@@ -32,6 +32,7 @@ from apps.governance.models import (
     RuntimeAdapter,
     SecurityPolicy,
 )
+
 from .banks import (
     ANNOUNCEMENTS,
     CALENDAR_EVENTS,

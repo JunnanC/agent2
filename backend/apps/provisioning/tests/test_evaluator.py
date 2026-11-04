@@ -3,7 +3,9 @@ from apps.provisioning.evaluator import outputs_match, public_report
 
 def test_numeric_comparison_supports_tolerance_and_zero():
     assert outputs_match("1.000001", "1", comparator="numeric")
-    assert not outputs_match("1.000001", "1", comparator="numeric", absolute_tolerance=0, relative_tolerance=0)
+    assert not outputs_match(
+        "1.000001", "1", comparator="numeric", absolute_tolerance=0, relative_tolerance=0
+    )
     assert not outputs_match("NaN", "NaN", comparator="numeric")
 
 
