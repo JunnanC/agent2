@@ -105,6 +105,8 @@ GRANT SELECT, INSERT, UPDATE ON \`${MYSQL_DATABASE}\`.reviews_rubric TO '${MYSQL
 GRANT SELECT, INSERT, UPDATE ON \`${MYSQL_DATABASE}\`.reviews_rubric_version TO '${MYSQL_APP_USER}'@'%';
 GRANT SELECT, INSERT, UPDATE ON \`${MYSQL_DATABASE}\`.reviews_rubric_criterion TO '${MYSQL_APP_USER}'@'%';
 GRANT SELECT, INSERT, UPDATE ON \`${MYSQL_DATABASE}\`.reviews_review TO '${MYSQL_APP_USER}'@'%';
+GRANT SELECT, INSERT, UPDATE ON \`${MYSQL_DATABASE}\`.reviews_ai_score_batch TO '${MYSQL_APP_USER}'@'%';
+GRANT SELECT, INSERT, UPDATE ON \`${MYSQL_DATABASE}\`.reviews_ai_score_suggestion TO '${MYSQL_APP_USER}'@'%';
 GRANT SELECT, INSERT, UPDATE ON \`${MYSQL_DATABASE}\`.reviews_criterion_score TO '${MYSQL_APP_USER}'@'%';
 GRANT SELECT, INSERT ON \`${MYSQL_DATABASE}\`.reviews_criterion_score_event TO '${MYSQL_APP_USER}'@'%';
 GRANT SELECT, INSERT ON \`${MYSQL_DATABASE}\`.reviews_review_decision TO '${MYSQL_APP_USER}'@'%';

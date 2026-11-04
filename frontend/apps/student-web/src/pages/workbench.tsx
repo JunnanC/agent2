@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiError } from "@edu/auth-client";
@@ -15,8 +15,8 @@ import {
 type SaveStatusState = { label: string; tone: "" | "good" | "warn" | "bad" };
 type WorkspaceTab = "terminal" | "editor" | "preview";
 
-const TESTS_MIN = 120;
-const TESTS_MAX = 360;
+const TESTS_MIN = 200;
+const TESTS_MAX = 480;
 const REPORT_MIN = 240;
 
 /* 后端 WorkspaceExecutionRun.Status 契约(QUEUED/RUNNING/PASSED/FAILED/TIMEOUT/RESOURCE_EXCEEDED/REJECTED) */
@@ -31,6 +31,17 @@ function runIsFailed(status?: string): boolean {
   return status != null && RUN_FAILED_STATUSES.has(status);
 }
 
+function runFailureLabel(errorCode?: string | null): string {
+  switch (errorCode) {
+    case "RUNTIME_COMPILE_FAILED": return "编译失败";
+    case "RUNTIME_EXECUTION_FAILED": return "运行失败";
+    case "RUNTIME_TIMEOUT": return "运行超时";
+    case "RUNTIME_MEMORY_EXCEEDED": return "内存超限";
+    case "RUNTIME_OUTPUT_LIMIT": return "输出超限";
+    default: return "测试失败";
+  }
+}
+
 export function Workbench() {
   const { taskId = "" } = useParams();
   const navigate = useNavigate();
@@ -42,10 +53,15 @@ export function Workbench() {
     () => readWorkspaceSession(taskId),
   );
   const workspaceToken = storedSession?.token ?? "";
+  const [editorGeneration, setEditorGeneration] = useState(0);
 
   /* ── 服务端数据 ── */
-  const workbench = useQuery({ queryKey: keys.workbench(taskId), queryFn: () => workspaceApi.workbench(taskId) });
+  const workbench = useQuery({
+    queryKey: keys.workbench(taskId), queryFn: () => workspaceApi.workbench(taskId),
+    refetchInterval: (query) => query.state.data?.workspace?.active_storage_job ? 2000 : false,
+  });
   const taskDetail = useQuery({ queryKey: keys.task(taskId), queryFn: () => taskApi.detail(taskId) });
+  const reportRequired = (taskDetail.data?.report_required ?? workbench.data?.task?.report_required) !== false;
   const checkpoints = useQuery({
     queryKey: [...keys.checkpoints(taskId), storedSession?.session_id ?? "none"],
     queryFn: () => workspaceApi.checkpoints(taskId, workspaceToken),
@@ -58,18 +74,20 @@ export function Workbench() {
   });
   const [chapterId, setChapterId] = useState<string | null>(null);
   const [view, setView] = useState<"brief" | "report">("brief");
-  const [workspaceTab, setWorkspaceTab] = useState<WorkspaceTab>("terminal");
+  const [workspaceTab, setWorkspaceTab] = useState<WorkspaceTab>("editor");
   const [chapterMenuOpen, setChapterMenuOpen] = useState(false);
   const [draftHtml, setDraftHtml] = useState<string>("");
   const [draftBase, setDraftBase] = useState<ReportDraft | null>(null);
   const [saveStatus, setSaveStatus] = useState<SaveStatusState>({ label: "草稿", tone: "" });
   const [conflict, setConflict] = useState<string | null>(null);
   const [reportSize, setReportSize] = useState(320);
-  const [testsSize, setTestsSize] = useState(155);
+  const [testsSize, setTestsSize] = useState(320);
   const [exitOpen, setExitOpen] = useState(false);
   const [checkpointOpen, setCheckpointOpen] = useState(false);
   const [checkpointName, setCheckpointName] = useState("");
   const [submitOpen, setSubmitOpen] = useState(false);
+  const [completeOpen, setCompleteOpen] = useState(false);
+  const [resetOpen, setResetOpen] = useState(false);
   const [selfTestInput, setSelfTestInput] = useState("");
   const draftBaseRef = useRef<ReportDraft | null>(null);
   const saveQueue = useRef<Promise<boolean>>(Promise.resolve(true));
@@ -77,7 +95,7 @@ export function Workbench() {
   draftRef.current = draftHtml;
 
   /* ── 报告草稿载入 ── */
-  const draftQuery = useQuery({ queryKey: keys.reportDraft(taskId), queryFn: () => reportApi.draft(taskId), retry: false });
+  const draftQuery = useQuery({ queryKey: keys.reportDraft(taskId), queryFn: () => reportApi.draft(taskId), enabled: Boolean(taskDetail.data || workbench.data) && reportRequired, retry: false });
   useEffect(() => {
     if (draftQuery.data && draftBase == null) {
       setDraftBase(draftQuery.data);
@@ -120,6 +138,7 @@ export function Workbench() {
       setConflict(null);
       if (html === draftRef.current) setSaveStatus({ label: "已保存", tone: "good" });
       void queryClient.invalidateQueries({ queryKey: keys.reportDraft(taskId) });
+      void queryClient.invalidateQueries({ queryKey: keys.workbench(taskId) });
       return true;
     } catch (error) {
       if (error instanceof ApiError && error.kind === "conflict") {
@@ -137,9 +156,33 @@ export function Workbench() {
     return save;
   }, [taskId, toast, queryClient]);
 
+  const captureCode = async () => {
+    if (storedSession?.capabilities?.["webide"] === true) {
+      await workspaceApi.editorControl(storedSession.session_id, "save", workspaceToken);
+    }
+    const snapshot = await workspaceApi.captureSnapshot(taskId, workspaceToken);
+    void queryClient.invalidateQueries({ queryKey: keys.workbench(taskId) });
+    return snapshot;
+  };
+
+  const reloadEditor = async () => {
+    if (storedSession?.capabilities?.["webide"] !== true) return;
+    try {
+      await workspaceApi.editorControl(storedSession.session_id, "reload", workspaceToken);
+    } catch {
+      toast.notify("文件操作已完成，编辑器重载失败，请刷新工作台", "error");
+    }
+  };
+
+  const saveWorkspace = useMutation({
+    mutationFn: captureCode,
+    onSuccess: () => toast.notify("工作区已保存"),
+    onError: (error) => toast.notify(serializeError(error), "error"),
+  });
+
   const createCheckpoint = useMutation({
     mutationFn: async () => {
-      await workspaceApi.captureSnapshot(taskId, workspaceToken);
+      await captureCode();
       return workspaceApi.createCheckpoint(taskId, { label: checkpointName.trim() || "阶段检查点" }, workspaceToken);
     },
     onSuccess: (checkpoint) => {
@@ -155,10 +198,12 @@ export function Workbench() {
   const restoreCheckpoint = useMutation({
     /* If-Match 锁的是会话 row_version，恢复会推进会话版本；先取最新列表再恢复，避免 428/412 */
     mutationFn: async (checkpointId: string) => {
+      await captureCode();
       const list = await workspaceApi.checkpoints(taskId, workspaceToken);
       return workspaceApi.restoreCheckpoint(taskId, checkpointId, list.sessionRowVersion, workspaceToken);
     },
-    onSuccess: () => {
+    onSuccess: async () => {
+      await reloadEditor();
       toast.notify("检查点已恢复");
       void checkpoints.refetch();
       void workbench.refetch();
@@ -182,11 +227,23 @@ export function Workbench() {
       };
       storeWorkspaceSession(taskId, payload);
       setStoredSession(payload);
+      setEditorGeneration((generation) => generation + 1);
       void queryClient.invalidateQueries({ queryKey: keys.task(taskId) });
       void queryClient.invalidateQueries({ queryKey: keys.checkpoints(taskId) });
       void queryClient.invalidateQueries({ queryKey: keys.executionRuns(taskId) });
     },
     onError: (error) => toast.notify(serializeError(error), "error"),
+  });
+
+  const renewWorkspace = useMutation({
+    mutationFn: () => workspaceApi.renewSession(storedSession!.session_id, workspaceToken),
+    onSuccess: (session) => {
+      if (!session.workspace_token || !storedSession) return;
+      const payload = { ...storedSession, token: session.workspace_token, expires_at: session.expires_at ?? null };
+      storeWorkspaceSession(taskId, payload);
+      setStoredSession(payload);
+    },
+    onError: () => toast.notify("工作区续期失败，请先在编辑器中保存文件，再重新进入工作台", "error"),
   });
 
   const aggregateTaskStatus = taskDetail.data?.status ?? workbench.data?.task?.status;
@@ -218,20 +275,19 @@ export function Workbench() {
 
   const runTests = useMutation({
     mutationFn: async (testKeys?: string[]) => {
-      const snapshot = await workspaceApi.captureSnapshot(taskId, workspaceToken);
+      const snapshot = await captureCode();
       return workspaceApi.createExecutionRun(taskId, { snapshot_id: snapshot.result_snapshot_id!, test_keys: testKeys }, workspaceToken);
     },
-    onSuccess: (run) => {
+    onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: keys.executionRuns(taskId) });
       void workbench.refetch();
-      currentRunId.current = run.public_id;
     },
     onError: (error) => toast.notify(serializeError(error), "error"),
   });
 
   const selfTest = useMutation({
     mutationFn: async () => {
-      const snapshot = await workspaceApi.captureSnapshot(taskId, workspaceToken);
+      const snapshot = await captureCode();
       return workspaceApi.operation(
         storedSession?.session_id ?? "",
         "SELF_TEST",
@@ -239,8 +295,8 @@ export function Workbench() {
         workspaceToken,
       );
     },
-    onSuccess: (event) => {
-      currentRunId.current = event.execution_run_id ?? null;
+    onSuccess: () => {
+
       void queryClient.invalidateQueries({ queryKey: keys.executionRuns(taskId) });
       void workbench.refetch();
     },
@@ -249,11 +305,12 @@ export function Workbench() {
 
   const switchLanguage = useMutation({
     mutationFn: async (language: string) => {
-      await workspaceApi.captureSnapshot(taskId, workspaceToken);
+      await captureCode();
       const latest = await workspaceApi.checkpoints(taskId, workspaceToken);
       return workspaceApi.storageJob(taskId, { kind: "SWITCH", language }, latest.sessionRowVersion ?? 0, workspaceToken);
     },
-    onSuccess: () => {
+    onSuccess: async () => {
+      await reloadEditor();
       toast.notify("语言工作区已切换");
       void queryClient.invalidateQueries({ queryKey: keys.workbench(taskId) });
       void queryClient.invalidateQueries({ queryKey: keys.checkpoints(taskId) });
@@ -262,17 +319,35 @@ export function Workbench() {
     onError: (error) => toast.notify(serializeError(error), "error"),
   });
 
-  const currentRunId = useRef<string | null>(null);
-  const lastRun: ExecutionRun | undefined = useMemo(() => {
-    const rows = executionRuns.data?.rows ?? [];
-    return currentRunId.current
-      ? rows.find((row) => row.public_id === currentRunId.current) ?? rows[0]
-      : rows[0];
-  }, [executionRuns.data]);
+  const lastRunSummary = executionRuns.data?.rows.find((run) => run.evaluation_mode !== "SELF_TEST");
+  const selfTestSummary = executionRuns.data?.rows.find((run) => run.evaluation_mode === "SELF_TEST");
+  useEffect(() => {
+    if (lastRunSummary?.status && !runIsRunning(lastRunSummary.status)) {
+      void queryClient.invalidateQueries({ queryKey: keys.workbench(taskId) });
+    }
+  }, [taskId, lastRunSummary?.public_id, lastRunSummary?.status, queryClient]);
+  const resultQueries = useQuery({
+    queryKey: [...keys.executionRuns(taskId), "details", lastRunSummary?.public_id, lastRunSummary?.status],
+    enabled: Boolean(lastRunSummary?.public_id && workspaceToken),
+    queryFn: () => workspaceApi.executionRun(taskId, lastRunSummary!.public_id, workspaceToken),
+  });
+  const selfTestResult = useQuery({
+    queryKey: [...keys.executionRuns(taskId), "self-test", selfTestSummary?.public_id, selfTestSummary?.status],
+    enabled: Boolean(selfTestSummary?.public_id && workspaceToken),
+    queryFn: () => workspaceApi.executionRun(taskId, selfTestSummary!.public_id, workspaceToken),
+  });
+  const formalResult: ExecutionRun | undefined = resultQueries.data ?? lastRunSummary;
+  const currentSnapshotId = workbench.data?.workspace?.last_synchronized_snapshot_id;
+  const lastRun = formalResult?.snapshot_id && currentSnapshotId
+    && formalResult.snapshot_id !== currentSnapshotId ? undefined : formalResult;
+  const selfTestData = selfTestResult.data ?? selfTestSummary;
+  const currentSelfTest = selfTestData?.snapshot_id && currentSnapshotId
+    && selfTestData.snapshot_id !== currentSnapshotId ? undefined : selfTestData;
 
   const submitReport = useMutation({
     /* If-Match 锁的是任务 row_version；保存草稿会推进任务状态，缓存里的版本会过期，提交前现取最新 */
     mutationFn: async () => {
+      await captureCode();
       if (!await saveDraftNow()) throw new Error("请先保存报告并解决保存冲突");
       const latest = await taskApi.detail(taskId);
       return reportApi.submitReport(taskId, undefined, latest.row_version);
@@ -292,18 +367,65 @@ export function Workbench() {
     },
   });
 
+  const completeTask = useMutation({
+    mutationFn: async () => {
+      await captureCode();
+      const latest = await taskApi.detail(taskId);
+      return taskApi.complete(taskId, latest.row_version);
+    },
+    onSuccess: () => {
+      toast.notify("实验已完成，等待教师评审");
+      setCompleteOpen(false);
+      void taskDetail.refetch();
+      void workbench.refetch();
+    },
+    onError: (error) => toast.notify(serializeError(error), "error"),
+  });
+
+  const resetWorkspace = useMutation({
+    mutationFn: async () => {
+      await captureCode();
+      const latest = await workspaceApi.checkpoints(taskId, workspaceToken);
+      return workspaceApi.storageJob(taskId, { kind: "RESET" }, latest.sessionRowVersion ?? 0, workspaceToken);
+    },
+    onSuccess: async () => {
+      await reloadEditor();
+      toast.notify("工作区已重置");
+      setResetOpen(false);
+      void queryClient.invalidateQueries({ queryKey: keys.workbench(taskId) });
+      void queryClient.invalidateQueries({ queryKey: keys.checkpoints(taskId) });
+      void queryClient.invalidateQueries({ queryKey: keys.executionRuns(taskId) });
+    },
+    onError: (error) => toast.notify(serializeError(error), "error"),
+  });
+
   const leaveWorkbench = (mode: "keep" | "release") => {
     const backend = async () => {
       if (mode === "release" && storedSession) {
         await workspaceApi.revokeSession(storedSession.session_id, storedSession.token);
         sessionStorage.removeItem(`edu.workspace.${taskId}`);
       }
-      if (mode === "keep") await saveDraftNow(true);
+      if (mode === "keep") {
+        await captureCode();
+        if (reportRequired && !await saveDraftNow(true)) throw new Error("请先保存报告并解决保存冲突");
+      }
     };
     void backend()
       .then(() => navigate(`/experiments/${taskId}`))
       .catch((error: unknown) => toast.notify(serializeError(error), "error"));
   };
+
+  const operationBusy = saveWorkspace.isPending || switchLanguage.isPending || resetWorkspace.isPending
+    || createCheckpoint.isPending || restoreCheckpoint.isPending || runTests.isPending
+    || selfTest.isPending || completeTask.isPending || submitReport.isPending || renewWorkspace.isPending
+    || runIsRunning(lastRunSummary?.status) || runIsRunning(selfTestSummary?.status)
+    || Boolean(workbench.data?.workspace?.active_storage_job);
+  useEffect(() => {
+    if (!storedSession?.expires_at || storedSessionStale || operationBusy || renewWorkspace.isPending || renewWorkspace.isError) return;
+    const timer = setTimeout(() => renewWorkspace.mutate(), Math.max(0, Date.parse(storedSession.expires_at) - Date.now() - 60_000));
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [storedSession, storedSessionStale, operationBusy, renewWorkspace.isPending, renewWorkspace.isError]);
 
   if (workbench.isLoading && taskDetail.isLoading) {
     return <div className="workbench-shell"><LoadingState label="正在装载工作台" /></div>;
@@ -327,7 +449,7 @@ export function Workbench() {
 
   const aggregate = workbench.data as WorkbenchAggregate | undefined;
   const task = (taskDetail.data ?? aggregate?.task);
-  const sessionActive = storedSession != null;
+  const sessionActive = storedSession != null && !storedSessionStale;
   /* 真实终端:会话有用的 terminal capability 时才嵌入 workspace-gateway 终端页 */
   const terminalOnline = storedSession?.capabilities?.["terminal"] === true;
   const terminalBase = storedSession?.workspace_urls?.["terminal"]
@@ -339,9 +461,16 @@ export function Workbench() {
   const chapters = aggregate?.chapters ?? [];
   const activeChapter = chapters.find((chapter) => chapter.public_id === chapterId) ?? chapters[0];
   const tests = aggregate?.tests ?? [];
+  const testsCount = aggregate?.tests_count ?? tests.length;
   const testsAvailable = aggregate?.tests_available ?? tests.length > 0;
   const blockers = task?.blockers ?? [];
   const allowed = task?.allowed_actions ?? [];
+  const canComplete = blockers.length === 0
+    && (!testsAvailable || lastRun?.status === "PASSED")
+    && sessionActive && task?.status === "IN_PROGRESS";
+  const canReset = sessionActive
+    && storedSession?.capabilities?.["webide"] === true
+    && (aggregate?.task?.allowed_operations ?? []).includes("RESET_WORKSPACE");
   const workspace = aggregate?.workspace;
   const languagePolicy = workspace?.language_policy;
   const allowedLanguages = languagePolicy?.allowed_languages ?? [];
@@ -350,6 +479,7 @@ export function Workbench() {
 
   /* 判题资源可能不公开分项用例，由服务端声明是否需要测试。 */
   const submitChecks = [
+    { label: "实验报告已填写", ok: htmlToMarkdown(draftHtml).trim().length > 0, failReason: "请先填写报告内容" },
     { label: "实验报告已保存", ok: saveStatus.tone === "good", failReason: "请等待报告草稿保存完成" },
     ...(testsAvailable
       ? [{ label: "本阶段测试已通过", ok: lastRun?.status === "PASSED", failReason: "请先运行并通过本阶段测试" }]
@@ -357,7 +487,9 @@ export function Workbench() {
     ...blockers.map((blocker) => ({ label: blocker.reason ?? "服务端阻塞", ok: false, failReason: blocker.reason ?? "存在未解除的阻塞" })),
   ];
 
-  const canSubmit = submitChecks.every((check) => check.ok);
+  const canSubmit = submitChecks.every((check) => check.ok)
+    && (aggregate?.submission?.can_submit ?? true);
+  const manual = aggregate?.content?.manual;
 
   return (
     <div className="workbench-shell">
@@ -373,7 +505,7 @@ export function Workbench() {
         </div>
         <div className="topbar-actions workbench-top-actions">
           <span className={`status ${sessionActive ? "good" : "warn"}`}>
-            {sessionActive ? "自动保存已开启" : "等待工作区就绪"}
+            {sessionActive ? "工作区已就绪" : "等待工作区就绪"}
           </span>
         </div>
       </header>
@@ -423,22 +555,31 @@ export function Workbench() {
             <div className="workbench-switcher" role="tablist" aria-label="任务内容">
               <button type="button" role="tab" aria-selected={view === "brief"} className={view === "brief" ? "active" : ""}
                 data-view="brief" onClick={() => setView("brief")}>实验说明</button>
-              <button type="button" role="tab" aria-selected={view === "report"} className={view === "report" ? "active" : ""}
-                data-view="report" onClick={() => setView("report")}>实验报告</button>
+              {reportRequired ? (
+                <button type="button" role="tab" aria-selected={view === "report"} className={view === "report" ? "active" : ""}
+                  data-view="report" onClick={() => setView("report")}>实验报告</button>
+              ) : null}
             </div>
 
             <section className="task-detail-panel" role="tabpanel" aria-label="实验说明" hidden={view !== "brief"}>
               <div className="detail-kicker">{activeChapter ? `章节 ${activeChapter.sort_order + 1}` : "当前章节"}</div>
               <h2>{activeChapter?.title ?? "实验说明"}</h2>
               <p>{activeChapter?.description ?? aggregate?.current_chapter?.instructions?.join("\n") ?? "按教师发布的说明完成本章节任务。"}</p>
+              {manual ? <section aria-label="实验指导书">
+                <h3>实验指导书</h3>
+                {manual.text == null ? <p>指导书暂时无法载入，请稍后重试。</p>
+                  : manual.format === "markdown"
+                    ? <div className="workbench-manual" dangerouslySetInnerHTML={{ __html: markdownToHtml(manual.text) }} />
+                    : <pre className="workbench-manual">{manual.text}</pre>}
+              </section> : null}
               {sessionActive ? (
                 <div className="task-completion-note">
-                  <span>完成本阶段后，请在「实验报告」中填写并提交对应报告。</span>
+                  <span>{reportRequired ? "完成本阶段后，请在「实验报告」中填写并提交对应报告。" : "完成本阶段后，确认工作区内容并提交实验成果。"}</span>
                 </div>
               ) : null}
             </section>
 
-            <div className="report-editor-panel" role="tabpanel" aria-label="实验报告编辑器" hidden={view !== "report"}>
+            {reportRequired ? <div className="report-editor-panel" role="tabpanel" aria-label="实验报告编辑器" hidden={view !== "report"}>
               <RichTextEditor
                 ariaLabel="实验报告编辑器"
                 initialHtml={draftHtml || reportTemplateHtml}
@@ -470,7 +611,7 @@ export function Workbench() {
                   </Button>
                 </div>
               ) : null}
-            </div>
+            </div> : null}
           </div>
         </aside>
 
@@ -494,8 +635,8 @@ export function Workbench() {
             <div className="workspace-language-control">
               <label htmlFor="workspace-language">编程语言</label>
               {languageSelectable ? (
-                <select id="workspace-language" value={currentLanguage}
-                  disabled={!sessionActive || switchLanguage.isPending || Boolean(workspace?.active_storage_job)}
+                <select id="workspace-language" value={currentLanguage} title="切换前会先保存当前工程"
+                  disabled={!sessionActive || operationBusy}
                   onChange={(event) => {
                     const next = event.target.value;
                     if (next !== currentLanguage) switchLanguage.mutate(next);
@@ -505,11 +646,20 @@ export function Workbench() {
               ) : (
                 <span aria-label="当前编程语言">{languageLabel(currentLanguage)}{workspace?.toolchain_version ? ` · ${workspace.toolchain_version}` : ""}</span>
               )}
+              {workspace?.toolchain_version && languageSelectable ? <small>{workspace.toolchain_version}</small> : null}
               {switchLanguage.isPending ? <small aria-live="polite">切换中…</small> : null}
             </div>
+            <Button size="sm" disabled={!sessionActive || operationBusy} onClick={() => saveWorkspace.mutate()}>
+              {saveWorkspace.isPending ? "保存中…" : "保存代码"}
+            </Button>
             <Button size="sm" className="workspace-exit" onClick={() => setExitOpen(true)}>
               <Icon name="log-out" size={13} /> 退出实验
             </Button>
+              {canReset ? (
+                <Button size="sm" onClick={() => setResetOpen(true)} disabled={operationBusy}>
+                  重置工作区
+                </Button>
+              ) : null}
           </div>
 
           <div className="workspace-content" style={{ ["--tests-pane-size" as never]: `${testsSize}px` }}>
@@ -519,7 +669,7 @@ export function Workbench() {
                   <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
                     <div className="terminal-head"><span>终端</span><small>真实工作区终端</small></div>
                     <iframe
-                      key={storedSession?.session_id}
+                      key={`${storedSession?.session_id}:${editorGeneration}`}
                       src={terminalUrl}
                       title="实验工作区终端"
                       aria-label="终端输出"
@@ -539,13 +689,14 @@ export function Workbench() {
                   </div>
                 )
               ) : null}
-              {workspaceTab === "editor" ? (
-                storedSession?.capabilities?.["webide"] === true ? (
-                  <iframe title="实验文件编辑器"
+              <div hidden={workspaceTab !== "editor"} className="workspace-editor-pane">
+                {sessionActive && storedSession?.capabilities?.["webide"] === true ? (
+                  <iframe key={`${storedSession.session_id}:${editorGeneration}`} title="实验文件编辑器"
                     src={storedSession.workspace_urls?.["webide"] ?? `/workspace/${storedSession.session_id}/webide/`}
                     style={{ flex: 1, width: "100%", minHeight: 0, border: 0 }} />
                 ) : <EmptyState title="文件编辑器尚未就绪" hint="工作区连接后，启用了 Web IDE 的实验可在这里编辑和保存文件。" />
-              ) : null}
+                }
+              </div>
               {workspaceTab === "preview" ? (
                 lastRun && (lastRun.status === "PASSED" || runIsRunning(lastRun.status) || runIsFailed(lastRun.status)) ? (
                   <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
@@ -553,7 +704,9 @@ export function Workbench() {
                     <div style={{ padding: 10, overflow: "auto" }}>
                       {(lastRun.test_cases ?? []).map((testCase, index) => (
                         <div className={`test-case${testCase.status === "PASSED" ? " is-passed" : " is-failed"}`} key={index}>
-                          <span><strong>{testCase.name}</strong><small>{testCase.message}</small></span>
+                          <span><strong>{testCase.name ?? (testCase.hidden ? "隐藏用例" : `用例 ${index + 1}`)}</strong><small>{testCase.message}</small>
+                            {!testCase.hidden ? <><pre>输入：{testCase.input}</pre><pre>预期输出：{testCase.expected}</pre><pre>实际输出：{testCase.stdout}</pre>{testCase.stderr ? <pre>{testCase.stderr}</pre> : null}</> : null}
+                          </span>
                           <span className="test-case-result">{testCase.status}</span>
                         </div>
                       ))}
@@ -578,19 +731,26 @@ export function Workbench() {
             <section className="test-panel" aria-label="测试用例">
               <div className="test-panel-heading">
                 <h2>测试用例</h2>
-                <span className="test-summary">{tests.length ? `本阶段共 ${tests.length} 项` : testsAvailable ? "分项用例未公开" : "暂无测试"} · {lastRun?.status === "PASSED" ? "全部通过" : runIsRunning(lastRun?.status) ? "运行中" : runIsFailed(lastRun?.status) ? `测试失败${lastRun?.error_code ? ` · ${lastRun.error_code}` : ""}` : "尚未运行"}</span>
+                <span className="test-summary">{testsCount ? `本阶段共 ${testsCount} 项` : testsAvailable ? "分项用例未公开" : "暂无测试"} · {lastRun?.status === "PASSED" ? "全部通过" : runIsRunning(lastRun?.status) ? "运行中" : runIsFailed(lastRun?.status) ? `${runFailureLabel(lastRun?.error_code)}${lastRun?.error_code ? ` · ${lastRun.error_code}` : ""}` : "尚未运行"}</span>
                 <span className={`test-status ${lastRun?.status === "PASSED" ? "passed" : runIsRunning(lastRun?.status) ? "running" : runIsFailed(lastRun?.status) ? "failed" : ""}`}>
                   {lastRun?.status === "PASSED" ? "通过" : runIsRunning(lastRun?.status) ? "运行中" : runIsFailed(lastRun?.status) ? "失败" : "待运行"}
                 </span>
               </div>
               <div className="test-case-list">
-                {tests.length ? tests.map((testCase, index) => (
+                {tests.length ? tests.map((testCase, index) => {
+                  const result = lastRun?.test_cases?.[index];
+                  return (
                   <div className="test-case" key={String(testCase.key ?? index)}>
                     <span className="test-case-icon"><Icon name={lastRun?.status === "PASSED" ? "circle-check" : "circle-dashed"} /></span>
-                    <span><strong>{testCase.name}</strong><small>{testCase.description}</small></span>
-                    <span className="test-case-result">{lastRun?.status === "PASSED" ? "通过" : runIsRunning(lastRun?.status) ? "运行中" : runIsFailed(lastRun?.status) ? "未返回分项结果" : "待测试"}</span>
+                    <span><strong>{testCase.name}</strong><small>{testCase.description}</small>
+                      {testCase.input != null ? <pre>输入：{testCase.input}</pre> : null}
+                      {testCase.expected != null ? <pre>预期输出：{testCase.expected}</pre> : null}
+                      {result && !result.hidden && result.status !== "PASSED" ? <pre>实际输出：{result.stdout}</pre> : null}
+                    </span>
+                    <span className="test-case-result">{result ? (result.status === "PASSED" ? "通过" : "未通过") : lastRun?.status === "PASSED" ? "通过" : runIsRunning(lastRun?.status) ? "运行中" : runIsFailed(lastRun?.status) ? "未返回分项结果" : "待测试"}</span>
                   </div>
-                )) : (
+                  );
+                }) : (
                   <div className="state-block" style={{ padding: 14 }}><strong>{testsAvailable ? "运行测试以检查本阶段代码，分项用例未公开" : "本阶段暂无测试用例"}</strong></div>
                 )}
               </div>
@@ -601,28 +761,40 @@ export function Workbench() {
                     <textarea id="self-test-input" value={selfTestInput}
                       onChange={(event) => setSelfTestInput(event.target.value)}
                       placeholder="输入本次自测数据，可换行" rows={3} maxLength={65536} />
-                    <Button size="sm" disabled={!sessionActive || !selfTestInput.trim() || selfTest.isPending || runIsRunning(lastRun?.status)}
+                    <Button size="sm" disabled={!sessionActive || operationBusy}
                       onClick={() => selfTest.mutate()}>
                       <Icon name="play" size={13} /> {selfTest.isPending ? "自测中…" : "自测运行"}
                     </Button>
+                    {currentSelfTest ? <div aria-label="自测结果" aria-live="polite">
+                      <strong>{currentSelfTest.status} · 自测不作为正式通过资格</strong>
+                      <pre>{currentSelfTest.test_cases?.[0]?.stdout ?? currentSelfTest.result_summary}</pre>
+                      {currentSelfTest.test_cases?.[0]?.stderr ? <pre>{currentSelfTest.test_cases[0].stderr}</pre> : null}
+                    </div> : null}
                   </div>
                 ) : null}
-                <Button size="sm" onClick={() => setCheckpointOpen(true)}>
+                <Button size="sm" disabled={!sessionActive || operationBusy} onClick={() => setCheckpointOpen(true)}>
                   <Icon name="bookmark-plus" size={13} /> 保存检查点
                 </Button>
                 <div>
-                  <Button size="sm" disabled={!sessionActive || runTests.isPending || runIsRunning(lastRun?.status) || createCheckpoint.isPending || restoreCheckpoint.isPending || !testsAvailable}
+                  <Button size="sm" disabled={!sessionActive || operationBusy || !testsAvailable}
                     onClick={() => runTests.mutate(undefined)}>
                     <Icon name="play" size={13} />
                     {sessionActive
                       ? (runTests.isPending ? "运行中…" : "运行测试")
                       : "等待工作区就绪"}
                   </Button>
-                  <Button size="sm" variant="primary" onClick={() => setSubmitOpen(true)}
-                    disabled={blockers.length > 0 && !allowed.includes("submit_report")}>
-                    <Icon name="send" size={13} /> 提交报告
-                  </Button>
-                  {blockers.length > 0 && !allowed.includes("submit_report")
+                  {reportRequired ? (
+                    <Button size="sm" variant="primary" onClick={() => setSubmitOpen(true)}
+                      disabled={operationBusy || (blockers.length > 0 && !allowed.includes("submit_report"))}>
+                      <Icon name="send" size={13} /> 提交报告
+                    </Button>
+                  ) : (
+                    <Button size="sm" variant="primary" onClick={() => setCompleteOpen(true)}
+                      disabled={!canComplete || operationBusy}>
+                      <Icon name="send" size={13} /> 完成实验
+                    </Button>
+                  )}
+                  {reportRequired && blockers.length > 0 && !allowed.includes("submit_report")
                     ? <small style={{ display: "block", marginTop: 4 }}>{blockers.map((b) => b.reason ?? b.detail ?? "").join("；")}</small>
                     : null}
                 </div>
@@ -713,6 +885,7 @@ export function Workbench() {
           </>
         )}>
         <p className="subtle">提交后当前阶段进入教师评审。提交前请确认以下内容。</p>
+        {aggregate?.submission?.blocked_reason ? <p role="alert">{submissionReason(aggregate.submission.blocked_reason.code)}</p> : null}
         {submitChecks.map((check) => (
           <div key={check.label} className={`status-line ${check.ok ? "is-ok" : "is-blocked"}`}>
             {check.ok ? "✓" : "!"}　{check.ok ? check.label : check.failReason}
@@ -721,6 +894,35 @@ export function Workbench() {
         {saveStatus.tone === "bad" || saveStatus.tone === "warn" ? (
           <AsyncJobProgress status="processing" stages={[{ key: "draft", label: "报告草稿保存", state: "running" }]} />
         ) : null}
+      </Modal>
+
+      <Modal open={completeOpen} onClose={() => setCompleteOpen(false)} eyebrow="阶段提交"
+        title="完成实验？" wide
+        actions={(
+          <>
+            <Button onClick={() => setCompleteOpen(false)}>返回修改</Button>
+            <Button variant="primary" disabled={!canComplete || operationBusy} onClick={() => completeTask.mutate()}>
+              {completeTask.isPending ? "提交中…" : canComplete ? "确认完成" : "请先完成检查"}
+            </Button>
+          </>
+        )}>
+        <p className="subtle">提交前会保存当前工作区快照，并将实验成果送交教师评审。</p>
+        <div className={`status-line ${canComplete ? "is-ok" : "is-blocked"}`}>
+          {canComplete ? "✓ 工作区快照与测试状态满足提交条件" : "! 请先完成测试并解除服务端阻塞"}
+        </div>
+      </Modal>
+
+      <Modal open={resetOpen} onClose={() => setResetOpen(false)} eyebrow="工作区操作"
+        title="重置工作区？" wide
+        actions={(
+          <>
+            <Button onClick={() => setResetOpen(false)}>取消</Button>
+            <Button variant="primary" disabled={!canReset || operationBusy} onClick={() => resetWorkspace.mutate()}>
+              {resetWorkspace.isPending ? "重置中…" : "确认重置"}
+            </Button>
+          </>
+        )}>
+        <p className="subtle">重置会清除当前工作区文件并恢复到实验初始状态。操作前会先保存当前快照。</p>
       </Modal>
     </div>
   );
@@ -734,4 +936,19 @@ function serializeError(error: unknown): string {
 
 function languageLabel(language: string): string {
   return ({ c: "C", cpp: "C++", java: "Java", python: "Python", go: "Go" } as Record<string, string>)[language] ?? language;
+}
+
+function submissionReason(code?: string): string {
+  return ({
+    WORKSPACE_SNAPSHOT_REQUIRED: "请先保存工作区",
+    REPORT_DRAFT_REQUIRED: "请先填写并保存实验报告",
+    REPORT_DRAFT_STALE: "代码已更新，请重新保存报告",
+    TEST_NOT_FINISHED: "请先完成正式测试",
+    TEST_NOT_PASSED: "请先通过全部正式测试",
+    TEST_SNAPSHOT_STALE: "代码已更新，请重新运行正式测试",
+    REPORT_ATTACHMENTS_SCANNING: "报告附件正在扫描",
+    REPORT_ATTACHMENTS_NOT_READY: "报告附件尚未就绪",
+    TASK_STATE: "当前任务状态不允许提交",
+    TASK_BLOCKED: "请先解除任务阻塞",
+  } as Record<string, string>)[code ?? ""] ?? "当前成果尚不满足提交条件";
 }

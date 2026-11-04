@@ -9,10 +9,12 @@ from apps.experiments.models import ExperimentTask
 from apps.experiments.services import allowed_actions, prerequisite_blockers_for_publication
 from apps.labtemplates.errors import TemplateAssetNotReady
 from apps.labtemplates.models import AutoCheckRule, TemplateVersion
+from apps.labtemplates.toolchains import TOOLCHAINS_BY_LANGUAGE
 from apps.provisioning.models import ProvisioningJob, ProvisioningStageEvent
 from apps.reports.models import ReportDraft
 
 from .models import WorkspaceExecutionRun, WorkspaceSession, WorkspaceSnapshot
+from .presentation import asset_text, public_examples
 from .selectors import active_storage_job_for_user, workbench_task_for_user
 from .serializers import storage_job_data
 from .services import task_has_active_test_rules
@@ -167,6 +169,15 @@ def _content_data(task: ExperimentTask) -> dict[str, Any]:
         for item in (task.template_version.material_refs or [])
         if isinstance(item, dict) and item.get("version_id")
     ]
+    manual = task.template_version.manual_asset
+    manual_data = None
+    if manual is not None:
+        _asset_id(manual, version=task.template_version, purpose="MANUAL")
+        manual_data = {
+            "asset_id": manual.public_id,
+            "format": "markdown" if manual.media_type == "text/markdown" else "text",
+            "text": asset_text(manual) if manual.media_type.startswith("text/") else None,
+        }
     return {
         "description": task.publication.description,
         "objectives": [],
@@ -174,6 +185,7 @@ def _content_data(task: ExperimentTask) -> dict[str, Any]:
         "constraints": [],
         "deliverables": [],
         "materials": refs,
+        "manual": manual_data,
     }
 
 
@@ -220,11 +232,18 @@ def _tests_data(task: ExperimentTask) -> dict[str, Any]:
         if run is not None
         else None
     )
+    count, examples = 0, []
+    tests_id = str((task.execution_spec or {}).get("tests_asset", ""))
+    if tests_id:
+        asset = ObjectAsset.objects.filter(public_id=tests_id).first()
+        if asset is not None:
+            _asset_id(asset, version=task.template_version, purpose="TESTS")
+            count, examples = public_examples(asset_text(asset) or "")
     return {
-        "public_count": len(rules),
-        "count": len(rules),
+        "public_count": len(examples) if tests_id else len(rules),
+        "count": count if tests_id else len(rules),
         "runnable": task_has_active_test_rules(task),
-        "summary": [_rule_summary(rule) for rule in rules],
+        "summary": examples if tests_id else [_rule_summary(rule) for rule in rules],
         "recent_execution": recent_data,
     }
 
@@ -298,10 +317,25 @@ def _submission_data(
                 blocked_reason = {"code": "REPORT_ATTACHMENTS_NOT_READY"}
 
     if (
+        blocked_reason is None and snapshot is not None
+        and (task.execution_spec or {}).get("schema_version") == 2
+    ):
+        from apps.reports.errors import ReportExecutionConflict, ReportExecutionNotReady
+        from apps.reports.services import _latest_execution_for_submission
+
+        try:
+            _latest_execution_for_submission(task=task, snapshot=snapshot)
+        except ReportExecutionNotReady:
+            blocked_reason = {"code": "TEST_NOT_PASSED"}
+        except ReportExecutionConflict:
+            blocked_reason = {"code": "TEST_SNAPSHOT_STALE"}
+
+    if (
         required
         and blocked_reason is None
         and snapshot is not None
         and task_has_active_test_rules(task)
+        and (task.execution_spec or {}).get("schema_version") != 2
     ):
         driver = task.runtime_adapter_driver or (
             task.runtime_adapter.driver if task.runtime_adapter_id else "FAKE"
@@ -335,13 +369,15 @@ def workbench_data(*, actor: User, task_id: str) -> dict[str, Any]:
     blockers = prerequisite_blockers_for_publication(publication=task.publication, student=actor)
     actions = allowed_actions(task, actor=actor)
     operations: list[str] = []
+    capabilities = task.template_version.workspace_capabilities or {}
     if task.status in _ACTIVE_TASK_STATUSES:
-        operations = ["SAVE_SNAPSHOT", "RUN_TEST"]
+        operations = ["SAVE_SNAPSHOT", "RUN_TEST", "SELF_TEST"]
+        if bool(capabilities.get("webide")):
+            operations.append("RESET_WORKSPACE")
         operations.append("SUBMIT_REPORT" if task.publication.report_required else "COMPLETE")
     driver = task.runtime_adapter_driver or (
         task.runtime_adapter.driver if task.runtime_adapter_id else "FAKE"
     )
-    capabilities = task.template_version.workspace_capabilities or {}
     real_runtime = driver != "FAKE" and bool(capabilities.get("webide"))
     active_job = active_storage_job_for_user(actor=actor, task_id=task_id)
     active_session = (
@@ -368,6 +404,8 @@ def workbench_data(*, actor: User, task_id: str) -> dict[str, Any]:
     capture_supported = workspace_mode == "RUNTIME_IDE" and bool(
         capabilities.get("snapshot")
     )
+    policy = (task.execution_spec or {}).get("toolchain", {})
+    language = active_session.language if active_session else policy.get("language") or "python"
     return {
         "task": {
             "public_id": task.public_id,
@@ -392,7 +430,11 @@ def workbench_data(*, actor: User, task_id: str) -> dict[str, Any]:
         "provisioning": _provisioning_data(task),
         "workspace": {
             "mode": workspace_mode,
-            "entrypoint": "main.py",
+            "entrypoint": (task.execution_spec or {}).get("entrypoint")
+            or TOOLCHAINS_BY_LANGUAGE.get(language, TOOLCHAINS_BY_LANGUAGE["python"])["entrypoint"],
+            "language": language,
+            "language_policy": policy,
+            "toolchain_version": policy.get("default_versions", {}).get(language),
             "capture_supported": capture_supported,
             "last_synchronized_version": current_version,
             "last_synchronized_snapshot_id": last_snapshot_id,

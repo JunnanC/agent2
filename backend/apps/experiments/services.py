@@ -13,7 +13,7 @@ from apps.accounts.models import User
 from apps.core.audit import append_audit, hash_client_ip
 from apps.core.concurrency import compare_and_swap
 from apps.core.errors import ResourceNotFound
-from apps.core.models import CompensationTask
+from apps.core.models import CompensationTask, ObjectAsset
 from apps.core.outbox import append_outbox_event, enqueue_relay_after_commit
 from apps.courses.content_services import prerequisite_status
 from apps.courses.models import Chapter, CourseStaffGrant, Enrollment
@@ -430,6 +430,24 @@ def _runtime_snapshot(
         "network_policy": dict(template.network_policy or {}),
         "workspace_capabilities": dict(template.workspace_capabilities or {}),
     }
+    if execution_spec.get("schema_version") == 2:
+        refs = list(execution_spec.get("materials", []))
+        if not refs and template.starter_asset_id:
+            refs = [{"asset_id": template.starter_asset.public_id, "role": "STUDENT_FILES"}]
+        assets = {
+            a.public_id: a
+            for a in ObjectAsset.objects.filter(public_id__in=[r["asset_id"] for r in refs])
+        }
+        execution_spec["_runtime"]["material_assets"] = [
+            {
+                **ref,
+                "digest": assets[ref["asset_id"]].digest_sha256,
+                "object_version": assets[ref["asset_id"]].object_version,
+                "bucket": assets[ref["asset_id"]].bucket,
+                "object_key": assets[ref["asset_id"]].object_key,
+            }
+            for ref in refs
+        ]
     return {
         "template_spec_digest": (
             content["template_spec_digest"] if content is not None else template.spec_digest

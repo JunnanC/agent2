@@ -83,7 +83,7 @@ export function readCsrfToken(): string | null {
   return match?.[1] ? decodeURIComponent(match[1]) : null;
 }
 
-async function ensureCsrf(): Promise<void> {
+export async function ensureCsrf(): Promise<void> {
   if (readCsrfToken()) return;
   const response = await fetch(`${API_PREFIX}/auth/csrf`, {
     credentials: "include",

@@ -1,5 +1,5 @@
 // @ts-expect-error Test the TypeScript source even when a stale emitted index.js exists.
-import { reportApi, taskApi, workspaceApi } from "./index.ts";
+import { reportApi, taskApi, workspaceApi, teachingApi } from "./index.ts";
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 
 function jsonResponse(status: number, body: unknown, headers?: Record<string, string>): Response {
@@ -47,6 +47,66 @@ describe("task 数据边界规范化", () => {
     expect(task.allowed_actions).toEqual(["enter", "request_extension"]);
     expect(task.blockers).toEqual([]);
     expect(task.status).toBe("READY");
+  });
+
+  it("AI suggestions paginate to the selected review and adoption sends its version", async () => {
+    document.cookie = "csrftoken=ai-csrf; Path=/";
+    const fetchMock = vi.fn(async (_input: string | URL, _init?: RequestInit) => jsonResponse(200, okEnvelope))
+      .mockResolvedValueOnce(jsonResponse(200, { data: { suggestions: [], total: 101 } }))
+      .mockResolvedValueOnce(jsonResponse(200, { data: { suggestions: [
+        { public_id: "suggestion", review_id: "review", review_row_version: 7, status: "READY" },
+      ], total: 101 } }));
+    vi.stubGlobal("fetch", fetchMock);
+    expect((await teachingApi.aiScoreSuggestion("course", "batch", "review"))?.public_id).toBe("suggestion");
+    expect(String(fetchMock.mock.calls[1]?.[0])).toContain("page=2");
+    await teachingApi.acceptAIScoreSuggestion("course", "review", "suggestion", "7");
+    const init = fetchMock.mock.calls[2]?.[1] as RequestInit;
+    expect(init.method).toBe("POST");
+    expect(new Headers(init.headers).get("If-Match")).toBe('"7"');
+    expect(new Headers(init.headers).get("Idempotency-Key")).toBeTruthy();
+  });
+
+  it("editor control checks the raw bridge response and sends CSRF and session identity", async () => {
+    document.cookie = "csrftoken=bridge-csrf; Path=/";
+    const fetchMock = vi.fn(async (_input: string | URL, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body));
+      return jsonResponse(200, { ...body, schema_version: 1, dirty_files: [], saved: true });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    await workspaceApi.editorControl("session-1", "save", "ticket");
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(url).toBe("/workspace/session-1/webide/edu-control/save");
+    const headers = new Headers(init?.headers);
+    expect(headers.get("X-CSRFToken")).toBe("bridge-csrf");
+    expect(headers.get("X-Workspace-Token")).toBe("ticket");
+    expect(init?.credentials).toBe("include");
+    expect(JSON.parse(String(init?.body)).session_id).toBe("session-1");
+  });
+
+  it("rejects a bridge response from another session or with dirty buffers", async () => {
+    document.cookie = "csrftoken=bridge-csrf; Path=/";
+    for (const extra of [{ session_id: "other-session" }, { dirty_files: ["unsaved.py"] }]) {
+      vi.stubGlobal("fetch", vi.fn(async (_input: string | URL, init?: RequestInit) =>
+        jsonResponse(200, { ...JSON.parse(String(init?.body)), schema_version: 1, dirty_files: [], saved: true, ...extra })));
+      await expect(workspaceApi.editorControl("session-1", "save", "ticket")).rejects.toThrow("编辑器仍有未保存文件");
+    }
+  });
+
+  it("retries save during a brief extension reload but never retries authentication failures", async () => {
+    vi.useFakeTimers();
+    document.cookie = "csrftoken=bridge-csrf; Path=/";
+    const fetchMock = vi.fn(async (_input: string | URL, init?: RequestInit) =>
+      jsonResponse(200, { ...JSON.parse(String(init?.body)), schema_version: 1, dirty_files: [], saved: true }))
+      .mockResolvedValueOnce(jsonResponse(502, {}));
+    vi.stubGlobal("fetch", fetchMock);
+    const saving = workspaceApi.editorControl("session-1", "save", "ticket");
+    await vi.advanceTimersByTimeAsync(1000);
+    await saving;
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[0]?.[1]?.body).toBe(fetchMock.mock.calls[1]?.[1]?.body);
+    fetchMock.mockClear().mockResolvedValueOnce(jsonResponse(401, {}));
+    await expect(workspaceApi.editorControl("session-1", "save", "ticket")).rejects.toThrow("编辑器保存失败");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it("字段缺失时不抛错（空数组保底）", async () => {

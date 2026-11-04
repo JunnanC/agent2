@@ -13,7 +13,9 @@ import json
 import os
 import re
 import socket
+import subprocess
 import sys
+import tempfile
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -29,9 +31,20 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
         return None
 
 
-def fetch(path: str, token: str | None = None, *, follow_redirects: bool = True):
+def fetch(
+    path: str,
+    token: str | None = None,
+    *,
+    follow_redirects: bool = True,
+    method: str = "GET",
+    body: bytes | None = None,
+    extra_headers: dict[str, str] | None = None,
+):
     headers = {TOKEN_HEADER: token} if token is not None else {}
-    request = urllib.request.Request(f"http://{HOST}:{PORT}{path}", headers=headers)
+    headers.update(extra_headers or {})
+    request = urllib.request.Request(
+        f"http://{HOST}:{PORT}{path}", data=body, headers=headers, method=method
+    )
     opener = (
         urllib.request.build_opener()
         if follow_redirects
@@ -155,8 +168,86 @@ def main() -> None:
     terminal_ws_status = websocket_upgrade("/terminal/ws", token)
     assert terminal_ws_status == http.client.SWITCHING_PROTOCOLS, terminal_ws_status
 
+    bridge_extensions = subprocess.check_output(
+        ["/opt/code-server/bin/code-server", "--list-extensions", "--show-versions",
+         "--extensions-dir", "/opt/workspace-extensions"], text=True
+    )
+    assert "edu.edu-save-bridge@1.0.0" in bridge_extensions, bridge_extensions
+    with open("/opt/debug-extensions.lock.json", encoding="utf-8") as handle:
+        expected_extensions = {f"{item['id']}@{item['version']}" for item in json.load(handle)}
+    expected_extensions.add("edu.edu-save-bridge@1.0.0")
+    installed_extensions = {line.strip().lower() for line in bridge_extensions.splitlines() if "@" in line}
+    assert installed_extensions == expected_extensions, (installed_extensions, expected_extensions)
+    bridge_test = subprocess.run(
+        ["/opt/code-server/lib/node", "/opt/workspace-tests/save-bridge-test.js"],
+        env=os.environ | {
+            "EDU_SAVE_BRIDGE_EXTENSION": "/opt/workspace-extensions/edu.edu-save-bridge-1.0.0/extension.js"
+        },
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
     assert os.geteuid() == 10001
     assert sys.version_info[:3] == (3, 14, 0), sys.version
+    tool_versions = {
+        "gcc": subprocess.check_output(["gcc", "-dumpfullversion"], text=True).strip(),
+        "g++": subprocess.check_output(["g++", "-dumpfullversion"], text=True).strip(),
+        "java": subprocess.check_output(["java", "-version"], stderr=subprocess.STDOUT, text=True).splitlines()[0],
+        "go": subprocess.check_output(["go", "version"], text=True).strip(),
+        "pytest": subprocess.check_output(["pytest", "--version"], text=True).strip(),
+        "debugpy": __import__("debugpy").__version__,
+        "numpy": __import__("numpy").__version__,
+        "pandas": __import__("pandas").__version__,
+    }
+    assert tool_versions["gcc"].startswith("12.2."), tool_versions
+    assert tool_versions["g++"].startswith("12.2."), tool_versions
+    assert "17.0.21" in tool_versions["java"], tool_versions
+    assert tool_versions["go"].endswith("go1.25.1 linux/amd64"), tool_versions
+    with tempfile.TemporaryDirectory(dir="/workspace") as project:
+        cache = os.path.join(project, ".cache")
+        os.makedirs(cache)
+        build_env = os.environ | {
+            "GOCACHE": os.path.join(cache, "go-build"),
+            "GOMAXPROCS": "2",
+            "GOFLAGS": "-p=2",
+            "GOTMPDIR": os.path.join(cache, "go-tmp"),
+        }
+        os.makedirs(build_env["GOTMPDIR"])
+        sources = {
+            "main.c": "#include <stdio.h>\nconst char *value(void);\nint main(void){puts(value());}\n",
+            "helper.c": 'const char *value(void){return "c-ok";}\n',
+            "main.cpp": "#include <iostream>\nconst char *value();\nint main(){std::cout << value() << '\\n';}\n",
+            "helper.cpp": 'const char *value(){return "cpp-ok";}\n',
+            "Main.java": "public class Main { public static void main(String[] a) { System.out.println(Helper.value()); } }\n",
+            "Helper.java": 'class Helper { static String value() { return "java-ok"; } }\n',
+            "main.py": "from helper import value\nprint(value())\n",
+            "helper.py": "def value():\n    return 'python-ok'\n",
+            "main.go": "package main\nimport \"fmt\"\nfunc main(){fmt.Println(value())}\n",
+            "helper.go": 'package main\nfunc value() string { return "go-ok" }\n',
+        }
+        expected = {"main.c": "c-ok", "main.cpp": "cpp-ok", "Main.java": "java-ok", "main.py": "python-ok", "main.go": "go-ok"}
+        commands = {
+            "main.c": [["gcc", "main.c", "helper.c", "-o", "c"], ["./c"]],
+            "main.cpp": [["g++", "main.cpp", "helper.cpp", "-o", "cpp"], ["./cpp"]],
+            "Main.java": [["javac", "Main.java", "Helper.java"], ["java", "Main"]],
+            "main.py": [["python", "main.py"]],
+            "main.go": [["go", "run", "main.go", "helper.go"]],
+        }
+        for filename, source in sources.items():
+            with open(os.path.join(project, filename), "w", encoding="utf-8") as handle:
+                handle.write(source)
+        for filename in commands:
+            for command in commands[filename]:
+                result = subprocess.run(
+                    command, cwd=project, env=build_env, capture_output=True, text=True, timeout=120
+                )
+                assert result.returncode == 0, (filename, command, result.stderr)
+            assert result.stdout.strip() == expected[filename], (filename, result.stdout)
+    debug = subprocess.run(
+        ["python", "/opt/workspace-tests/debug-smoke.py"], capture_output=True, text=True, timeout=240,
+    )
+    assert debug.returncode == 0, (debug.stdout, debug.stderr)
     assert_listener(8080, "00000000:1F90")
     assert_listener(3000, "0100007F:0BB8")
     assert_listener(7681, "0100007F:1E01")
@@ -186,6 +277,11 @@ def main() -> None:
                 "http": "passed",
                 "non_root_uid": os.geteuid(),
                 "python": ".".join(str(part) for part in sys.version_info[:3]),
+                "tool_versions": tool_versions,
+                "language_smoke": "passed",
+                "debug_smoke": json.loads(debug.stdout),
+                "extensions": sorted(installed_extensions),
+                "save_bridge": bridge_test.stdout.strip(),
                 "read_only_rootfs": "passed",
                 "static_asset": asset_path,
                 "terminal_http": "passed",

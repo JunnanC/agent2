@@ -269,7 +269,7 @@ try {
     }
     $allowedImages | ConvertTo-Json -Depth 10 | Out-File -LiteralPath (Join-Path $evidence 'allowed-images.json') -Encoding utf8
 
-    $runtimeAdapterConfigs = (@{ 'runtime/local-docker' = @{ runtime_network = 'experimental-platform-promotion-runtime'; image = $digestRef; pids_limit = 128 } } | ConvertTo-Json -Compress)
+    $runtimeAdapterConfigs = (@{ 'runtime/local-docker' = @{ runtime_network = 'experimental-platform-promotion-runtime'; image = $digestRef; pids_limit = 256 } } | ConvertTo-Json -Compress)
     $deploymentConfig = [ordered]@{
         schema = 'workspace-image-promotion/deployment-config/v1'
         generated_at_utc = [DateTimeOffset]::UtcNow.ToString('o')

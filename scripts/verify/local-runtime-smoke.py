@@ -152,7 +152,7 @@ def main() -> None:
             "runtime_network": network,
             "boot_timeout": 60,
             "poll_interval": 0.2,
-            "pids_limit": int(os.environ.get("RUNTIME_SMOKE_PIDS_LIMIT", "128")),
+            "pids_limit": int(os.environ.get("RUNTIME_SMOKE_PIDS_LIMIT", "256")),
         },
         config_ref=config_ref,
     )

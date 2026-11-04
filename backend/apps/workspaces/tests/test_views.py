@@ -1,3 +1,4 @@
+import json
 from unittest.mock import patch
 
 from django.test import Client, SimpleTestCase, TestCase, override_settings
@@ -5,7 +6,7 @@ from rest_framework.response import Response
 
 from apps.accounts.models import User
 from apps.accounts.tests.helpers import create_user
-from apps.core.models import OutboxEvent
+from apps.core.models import ObjectAsset, OutboxEvent
 from apps.courses.services import ActorContext
 from apps.experiments.services import publish_publication
 from apps.experiments.tests.helpers import (
@@ -18,7 +19,7 @@ from apps.provisioning.adapters import reset_fake_runtime
 from apps.provisioning.models import ProvisioningJob
 from apps.provisioning.services import execute_provisioning_job, start_provisioning
 
-from ..models import WorkspaceSession
+from ..models import WorkspaceExecutionRun, WorkspaceSession
 from ..views import _set_workspace_cookie
 
 
@@ -61,6 +62,9 @@ class WorkbenchApiBase(TestCase):
     proxy_headers = {"HTTP_X_PROXY_CONTEXT": "ingress-v1", "REMOTE_ADDR": "127.0.0.1"}
 
     def setUp(self) -> None:
+        text = patch("apps.workspaces.workbench.asset_text", return_value=None)
+        text.start()
+        self.addCleanup(text.stop)
         reset_fake_runtime()
         self.teacher, self.course, template_version, rubric_version = create_domain(
             suffix="workbench-workbench"
@@ -208,6 +212,9 @@ class WorkbenchReadOnlyApiTests(WorkbenchApiBase):
             {
                 "mode": "READ_ONLY",
                 "entrypoint": "main.py",
+                "language": "python",
+                "language_policy": {},
+                "toolchain_version": None,
                 "capture_supported": False,
                 "last_synchronized_version": 0,
                 "last_synchronized_snapshot_id": None,
@@ -248,6 +255,38 @@ class WorkbenchReadOnlyApiTests(WorkbenchApiBase):
 
 
 class ExecutionRunApiTests(WorkbenchApiBase):
+    def test_detail_returns_public_outputs_but_never_hidden_inputs_or_logs(self) -> None:
+        client = self._client(self.student)
+        data = self._enter_task(client, key="public-output-enter")
+        session = data["session"]
+        status, payload = self._post_execution_run(
+            client, key="public-output-run", token=session["workspace_token"]
+        )
+        self.assertEqual(status, 201)
+        run = WorkspaceExecutionRun.objects.get(public_id=payload["data"]["public_id"])
+        asset = ObjectAsset.objects.create(
+            bucket="private", object_key="test-result", digest_sha256="a" * 64,
+            size_bytes=1, purpose="TEST_REPORT", owner_type="WORKSPACE_EXECUTION",
+            owner_ref=run.public_id, scan_status="CLEAN",
+        )
+        WorkspaceExecutionRun.objects.filter(pk=run.pk).update(test_report_asset=asset)
+        report = {"status": "FAILED", "results": [
+            {"status": "FAILED", "input": f"input-{i}", "expected": f"expected-{i}",
+             "stdout": f"actual-{i}", "stderr": f"log-{i}"} for i in range(5)
+        ]}
+        with patch("apps.workspaces.presentation.asset_text", return_value=json.dumps(report)):
+            response = client.get(
+                f"/api/v2/tasks/{self.task.public_id}/execution-runs/{run.public_id}",
+                HTTP_X_PORTAL="USER", HTTP_X_WORKSPACE_TOKEN=session["workspace_token"],
+                **self.proxy_headers,
+            )
+        self.assertEqual(response.status_code, 200, response.content)
+        result = response.json()["data"]["test_cases"]
+        self.assertEqual(result[0]["expected"], "expected-0")
+        self.assertEqual(result[3], {"status": "FAILED", "hidden": True})
+        for private in ("input-3", "expected-3", "actual-3", "log-3"):
+            self.assertNotIn(private, response.content.decode())
+
     def test_enter_then_create_run_creates_passed_execution(self) -> None:
         client = self._client(self.student)
         data = self._enter_task(client, key="rest-enter-run-1")

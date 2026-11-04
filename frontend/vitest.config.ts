@@ -12,6 +12,7 @@ export default defineConfig({
     include: ["packages/*/src/**/*.test.{ts,tsx}", "apps/*/src/**/*.test.{ts,tsx}"],
   },
   resolve: {
+    extensions: [".tsx", ".ts", ".mjs", ".js", ".mts", ".jsx", ".json"],
     alias: [
       { find: "@edu/ui/styles.css", replacement: pkgRoot("ui", "styles.css") },
       { find: /^@edu\/ui$/, replacement: pkgRoot("ui", "index.tsx") },

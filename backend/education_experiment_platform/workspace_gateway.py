@@ -35,6 +35,7 @@ FORWARD_HEADERS = frozenset({
     b"if-none-match",
     b"range",
     b"user-agent",
+    b"origin",
 })
 
 
@@ -194,6 +195,10 @@ async def _proxy_http(
             f"/workspace/{scope['workspace_session']}/{capability}",
         )
     )
+    request_headers.extend([
+        ("x-workspace-session", str(scope["workspace_session"])),
+        ("x-edu-origin", raw_headers.get(b"origin", b"").decode("latin-1")),
+    ])
     if upstream_token:
         request_headers.append(("x-workspace-upstream-token", upstream_token))
     timeout = float(settings.WORKSPACE_UPSTREAM_TIMEOUT_SECONDS)

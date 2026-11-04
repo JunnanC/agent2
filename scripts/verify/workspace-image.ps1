@@ -29,6 +29,9 @@ $inspectPath = Join-Path $evidence 'image-inspect.json'
 $sbomPath = Join-Path $evidence 'sbom.spdx.json'
 $smokePath = Join-Path $evidence 'smoke.json'
 $summaryPath = Join-Path $evidence 'summary.json'
+foreach ($oldEvidence in @($metadataPath, $inspectPath, $sbomPath, $smokePath, $summaryPath)) {
+    Remove-Item -LiteralPath $oldEvidence -Force -ErrorAction SilentlyContinue
+}
 $secretPath = Join-Path ([IO.Path]::GetTempPath()) "workspace-image-upstream-$PID"
 $container = "experimental-platform-workspace-verify-$PID"
 
@@ -69,11 +72,11 @@ try {
         '--read-only',
         '--cap-drop', 'ALL',
         '--security-opt', 'no-new-privileges:true',
-        '--pids-limit', '128',
-        '--memory', '768m',
+        '--pids-limit', '256',
+        '--memory', '1g',
         '--network', 'none',
         '--tmpfs', '/tmp:rw,noexec,nosuid,size=128m,uid=10001,gid=10001',
-        '--tmpfs', '/workspace:rw,noexec,nosuid,size=64m,uid=10001,gid=10001',
+        '--tmpfs', '/workspace:rw,exec,nosuid,nodev,size=256m,uid=10001,gid=10001',
         '--mount', "type=bind,source=$secretPath,target=/run/secrets/workspace_upstream_token,readonly",
         '--mount', "type=bind,source=$testsPath,target=/opt/workspace-tests,readonly",
         $Image
@@ -119,9 +122,10 @@ try {
     & docker image inspect $Image | Out-File -LiteralPath $inspectPath -Encoding utf8
     if ($LASTEXITCODE -ne 0) { throw 'Real workspace image inspect failed.' }
 
-    Invoke-Docker -Arguments @('sbom', $Image, '--format', 'spdx-json', '--output', $sbomPath) -FailureMessage 'Real workspace SBOM generation failed.'
+    Invoke-Docker -Arguments @('scout', 'sbom', "local://$Image", '--format', 'spdx', '--output', $sbomPath) -FailureMessage 'Real workspace SBOM generation failed.'
 
     $imageInspect = (Get-Content -LiteralPath $inspectPath -Raw | ConvertFrom-Json)[0]
+    $smokeEvidence = Get-Content -LiteralPath $smokePath -Raw | ConvertFrom-Json
     $buildMetadata = if (Test-Path -LiteralPath $metadataPath) {
         Get-Content -LiteralPath $metadataPath -Raw | ConvertFrom-Json
     } else {
@@ -159,7 +163,10 @@ try {
         published_ports = $publishedPorts
         code_server = $codeServerVersion
         ttyd = $ttydVersion
-        python = '3.14.0'
+        tool_versions = $smokeEvidence.tool_versions
+        language_smoke = $smokeEvidence.language_smoke
+        debug_smoke = $smokeEvidence.debug_smoke
+        extensions = $smokeEvidence.extensions
         base_image = 'public.ecr.aws/docker/library/python:3.14.0-slim-bookworm@sha256:9bbb8720ae0a24a6ca8dd678bfdf57818fe70caf54c52a53ec01d8db43405056'
         code_server_archive_sha256 = 'bc650b57fd8d0bcee952c97308dd43ae37ad8dc11b83a713d8eca8ce823fefd9'
         ttyd_binary_sha256 = '8a217c968aba172e0dbf3f34447218dc015bc4d5e59bf51db2f2cd12b7be4f55'
