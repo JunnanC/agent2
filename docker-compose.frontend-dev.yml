@@ -1,4 +1,4 @@
-name: edu-platform-frontend-dev
+name: experimental-platform-frontend
 
 x-frontend-dev: &frontend-dev
   image: node:24-alpine
@@ -21,7 +21,7 @@ services:
     command: >-
       sh -lc "if [ ! -x node_modules/.bin/vite ]; then npm ci --ignore-scripts; fi && npm --workspace @edu/student-web run dev"
     ports:
-      - "127.0.0.1:${FRONTEND_STUDENT_PORT:-5173}:5173"
+      - "127.0.0.1:${FRONTEND_STUDENT_PORT:-8081}:5173"
     volumes:
       - ./frontend:/workspace:ro
       - student-web-node-modules:/workspace/node_modules
@@ -34,7 +34,7 @@ services:
     command: >-
       sh -lc "if [ ! -x node_modules/.bin/vite ]; then npm ci --ignore-scripts; fi && npm --workspace @edu/teacher-web run dev"
     ports:
-      - "127.0.0.1:${FRONTEND_TEACHER_PORT:-5174}:5174"
+      - "127.0.0.1:${FRONTEND_TEACHER_PORT:-8082}:5174"
     volumes:
       - ./frontend:/workspace:ro
       - teacher-web-node-modules:/workspace/node_modules
@@ -47,7 +47,7 @@ services:
     command: >-
       sh -lc "if [ ! -x node_modules/.bin/vite ]; then npm ci --ignore-scripts; fi && npm --workspace @edu/admin-web run dev"
     ports:
-      - "127.0.0.1:${FRONTEND_ADMIN_PORT:-5176}:5175"
+      - "127.0.0.1:${FRONTEND_ADMIN_PORT:-8083}:5175"
     volumes:
       - ./frontend:/workspace:ro
       - admin-web-node-modules:/workspace/node_modules

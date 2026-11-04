@@ -1,15 +1,15 @@
 [CmdletBinding()]
 param(
     [switch]$SkipBackend,
-    [int]$StudentPort = 5173,
-    [int]$TeacherPort = 5174,
-    [int]$AdminPort = 5176
+    [int]$StudentPort = 8081,
+    [int]$TeacherPort = 8082,
+    [int]$AdminPort = 8083
 )
 
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 $compose = Join-Path $root 'docker-compose.frontend-dev.yml'
-$project = 'edu-platform-frontend-dev'
+$project = 'experimental-platform-frontend'
 
 function Assert-Command([string]$name) {
     if (-not (Get-Command $name -ErrorAction SilentlyContinue)) {

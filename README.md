@@ -33,16 +33,16 @@ changes, so saving a source file updates the browser without rebuilding Nginx.
 
 Development portal URLs:
 
-- `http://student.localhost:5173`
-- `http://teacher.localhost:5174`
-- `http://admin.localhost:5176`
+- `http://student.localhost:8081`
+- `http://teacher.localhost:8082`
+- `http://admin.localhost:8083`
 
 The command above uses an already running backend. Omit `-SkipBackend` to also build and start the standard backend with the Compose configuration selected by `.env` and the `runtime` profile.
 
 View or stop the frontend development services:
 
 ```powershell
-docker compose --project-name edu-platform-frontend-dev -f docker-compose.frontend-dev.yml logs -f
+docker compose --project-name experimental-platform-frontend -f docker-compose.frontend-dev.yml logs -f
 .\scripts\frontend-dev-down.ps1
 ```
 

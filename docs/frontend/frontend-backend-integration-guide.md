@@ -23,7 +23,7 @@
 .\scripts\frontend-dev-up.ps1 -SkipBackend
 ```
 
-学生、教师、管理入口分别为 `http://student.localhost:5173`、`http://teacher.localhost:5174`、`http://admin.localhost:5176`。源码以只读卷挂载，依赖卷单独管理。
+学生、教师、管理入口分别为 `http://student.localhost:8081`、`http://teacher.localhost:8082`、`http://admin.localhost:8083`。源码以只读卷挂载，依赖卷单独管理。
 
 已有标准 Compose 后端时使用 `-SkipBackend`；省略该参数会按 `.env` 选择的 Compose 配置和 `runtime` profile 构建并启动标准后端。脚本的端口检查要求与实际映射一致；不要仅修改访问 URL。
 
