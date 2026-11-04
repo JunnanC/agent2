@@ -47,7 +47,7 @@ export function EnrollmentExit({ enrollment, onExited }: { enrollment: Enrollmen
       <RequestStateView loading={latest.isPending} error={latest.error} empty={false} onRetry={() => void latest.refetch()}>
         {pending ? <p>撤回后，教师将不再审核这次申请。</p> : active ?
           <RequestStateView loading={check.isPending} error={check.error} empty={false} onRetry={() => void check.refetch()}>
-            {check.data?.allowed ? <p>退出后将失去本课程的学习权限，已有学习记录会保留。</p> :
+            {check.data?.allowed ? <p>有未完成任务也可以退出课程。确认后退课立即生效，系统会通知课程老师，无需老师同意。退出后将失去本课程的学习权限，未完成任务不再显示在待办列表中，已有学习记录会保留。</p> :
               <div role="alert">当前无法退出课程{check.data?.blockers.map((blocker) => <p key={blocker.type}>{blocker.message}（{blocker.count} 项）</p>)}</div>}
             <label className="form-label" htmlFor={`exit-${enrollment.public_id}`}>退出原因</label>
             <textarea id={`exit-${enrollment.public_id}`} className="field" maxLength={500} rows={3} value={reason}

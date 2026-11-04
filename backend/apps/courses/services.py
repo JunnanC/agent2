@@ -41,7 +41,7 @@ from .ports import (
     run_course_closed_handlers,
     run_enrollment_activation_handlers,
 )
-from .selectors import require_course_capability, require_owner
+from .selectors import has_course_capability, require_course_capability, require_owner
 
 
 def invitation_digest(code: str) -> str:
@@ -1091,7 +1091,9 @@ def review_enrollment(
     return changed  # type: ignore[return-value]
 
 
-def enrollment_exit_check(*, enrollment: Enrollment) -> list[Blocker]:
+def enrollment_exit_check(
+    *, enrollment: Enrollment, allow_unfinished_tasks: bool = False
+) -> list[Blocker]:
     if enrollment.status != Enrollment.Status.ACTIVE:
         return [
             Blocker(
@@ -1101,7 +1103,10 @@ def enrollment_exit_check(*, enrollment: Enrollment) -> list[Blocker]:
                 message="选课周期不是有效状态",
             )
         ]
-    return enrollment_blockers(enrollment)
+    return [
+        blocker for blocker in enrollment_blockers(enrollment)
+        if not (allow_unfinished_tasks and blocker.type == "UNFINISHED_TASK")
+    ]
 
 
 def _record_enrollment_end(
@@ -1151,7 +1156,7 @@ def drop_enrollment(
         )
     except Enrollment.DoesNotExist as exc:
         raise ResourceNotFound() from exc
-    blockers = enrollment_exit_check(enrollment=enrollment)
+    blockers = enrollment_exit_check(enrollment=enrollment, allow_unfinished_tasks=True)
     if blockers:
         raise EnrollmentBlocked(detail={"blockers": [item.as_dict() for item in blockers]})
     changed = compare_and_swap(
@@ -1173,6 +1178,34 @@ def drop_enrollment(
         context=context,
     )
     _record_enrollment_end(enrollment, changed, student, "enrollment.drop", context)
+    teacher_ids = [
+        staff.user.public_id
+        for staff in CourseStaff.objects.select_related("user").filter(
+            course=enrollment.course, status=CourseStaff.Status.ACTIVE,
+        )
+        if has_course_capability(
+            course=enrollment.course, actor=staff.user,
+            capability=CourseStaffGrant.Capability.MANAGE_ENROLLMENT,
+        )
+    ]
+    _event(
+        context,
+        event_type=events.ENROLLMENT_STUDENT_DROPPED,
+        aggregate_type="enrollment",
+        aggregate_ref=changed.public_id,
+        payload={
+            "enrollment_id": changed.public_id,
+            "course_id": enrollment.course.public_id,
+            "course_name": enrollment.course.title,
+            "student_id": student.public_id,
+            "student_name": student.display_name or student.username,
+            "student_username": student.username,
+            "teacher_ids": teacher_ids,
+            "reason": changed.end_reason,
+            "ended_at": changed.ended_at.isoformat(),
+            "portal": "TEACHING",
+        },
+    )
     return changed  # type: ignore[return-value]
 
 

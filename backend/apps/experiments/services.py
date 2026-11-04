@@ -1417,7 +1417,11 @@ def transition_task(
 
 def allowed_actions(task: ExperimentTask, *, actor: User | None = None) -> list[str]:
     actions: list[str] = []
-    if actor is None or actor.pk != task.student_id:
+    if (
+        actor is None
+        or actor.pk != task.student_id
+        or task.enrollment.status != Enrollment.Status.ACTIVE
+    ):
         return actions
     if task.status == ExperimentTask.Status.ASSIGNED:
         actions.append("START")

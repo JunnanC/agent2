@@ -1,4 +1,7 @@
 import { useRef } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { meApi } from "@edu/api-client";
+import { keys } from "@edu/query-keys";
 import { Outlet, useLocation, useNavigate, useParams } from "react-router-dom";
 import { AppShell, EmptyState, LoadingState } from "@edu/ui";
 import type { NavEntry } from "@edu/ui";
@@ -32,6 +35,13 @@ export function AuthGuard() {
   const navigate = useNavigate();
   const location = useLocation();
   const params = useParams();
+  const notifications = useQuery({
+    queryKey: keys.notifications({}),
+    queryFn: () => meApi.notifications({ page_size: 50 }),
+    enabled: session.me != null,
+    refetchInterval: 30_000,
+  });
+  const unread = (notifications.data?.rows ?? []).filter((item) => !item.read).length;
 
   if (session.loading || session.error?.kind === "auth") {
     return <div className="app-shell"><LoadingState label="正在确认登录会话" /></div>;
@@ -82,6 +92,8 @@ export function AuthGuard() {
         activePath={location.pathname}
         onNavigate={navigate}
         avatar={{ name: displayName, role: "教师", badge: displayName.slice(0, 1) }}
+        actions={<button type="button" className="btn sm" aria-label={`通知中心，${unread} 条未读`}
+          onClick={() => navigate("/notifications")}>通知中心{unread ? `（${unread}）` : ""}</button>}
         avatarItems={[
           { label: "退出登录", icon: "log-out", onClick: () => { void logout().then(() => navigate("/login", { replace: true })); } },
         ]}

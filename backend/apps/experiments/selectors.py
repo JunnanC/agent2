@@ -3,7 +3,7 @@ from django.db.models import Prefetch, Q, QuerySet
 from apps.accounts.models import User
 from apps.core.errors import ResourceNotFound
 from apps.core.pagination import PageSpec
-from apps.courses.models import Course, CourseStaffGrant
+from apps.courses.models import Course, CourseStaffGrant, Enrollment
 from apps.courses.selectors import require_course_capability, visible_course
 
 from .models import (
@@ -164,7 +164,14 @@ def paged_user_tasks(
         "runtime_adapter",
         "image",
         "resource_profile",
-    ).filter(student=actor)
+    ).filter(student=actor).filter(
+        Q(enrollment__status=Enrollment.Status.ACTIVE)
+        | Q(status__in=(
+            ExperimentTask.Status.COMPLETED,
+            ExperimentTask.Status.CANCELLED,
+            ExperimentTask.Status.EXPIRED,
+        ))
+    )
     if course_id:
         tasks = tasks.filter(course__public_id=course_id)
     if status:

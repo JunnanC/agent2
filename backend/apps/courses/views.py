@@ -432,7 +432,10 @@ class MyEnrollmentDropCheckView(APIView):
             portal="USER",
             enrollment_id=enrollment_id,
         )
-        return _response(request, check_data(enrollment_exit_check(enrollment=value)))
+        return _response(
+            request,
+            check_data(enrollment_exit_check(enrollment=value, allow_unfinished_tasks=True)),
+        )
 
 
 class MyEnrollmentDropView(APIView):
