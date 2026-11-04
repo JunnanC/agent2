@@ -22,15 +22,19 @@ class Command(BaseCommand):
     help = "Emit real workspace digest-only local Docker journey evidence."
 
     def add_arguments(self, parser: Any) -> None:
-        parser.add_argument("--title", required=True)
+        scope = parser.add_mutually_exclusive_group(required=True)
+        scope.add_argument("--title")
+        scope.add_argument("--task-id")
 
     def handle(self, *args: object, **options: object) -> None:
-        title = str(options["title"])
-        task = (
-            ExperimentTask.objects.select_related("runtime_adapter", "image")
-            .filter(publication__title=title, student__email="student.integration@example.edu")
-            .first()
-        )
+        tasks = ExperimentTask.objects.select_related("runtime_adapter", "image")
+        if options.get("task_id"):
+            task = tasks.filter(public_id=options["task_id"]).first()
+        else:
+            task = tasks.filter(
+                publication__title=options["title"],
+                student__email="student.integration@example.edu",
+            ).first()
         if task is None:
             raise CommandError("real workspace task not found")
         instance = (
@@ -54,6 +58,7 @@ class Command(BaseCommand):
             "phase": "real-workspace-integration",
             "task_id": task.public_id,
             "task_status": task.status,
+            "image_digest": task.image_digest,
             "instance_id": instance.public_id if instance else None,
             "instance_status": instance.status if instance else None,
             "external_id_present": bool(instance and instance.external_id),
@@ -75,8 +80,12 @@ class Command(BaseCommand):
             try:
                 artifact = adapter.capture_workspace(
                     external_id=instance.external_id,
-                    relative_path="main.py",
-                    max_bytes=int(getattr(settings, "WORKSPACE_MAX_FILE_BYTES", 1_048_576)),
+                    relative_path=(
+                        "." if task.execution_spec.get("schema_version") == 2 else "main.py"
+                    ),
+                    max_bytes=int(getattr(
+                        settings, "WORKSPACE_SNAPSHOT_MAX_BYTES", 20 * 1024 * 1024
+                    )),
                 )
                 result["runtime_file_digest"] = artifact.digest
                 result["runtime_file_size"] = artifact.size

@@ -1,4 +1,5 @@
 import hashlib
+import json
 from datetime import timedelta
 from io import BytesIO
 from types import SimpleNamespace
@@ -38,11 +39,17 @@ from apps.workspaces.models import WorkspaceExecutionRun, WorkspaceSnapshot
 from apps.workspaces.permissions import require_workspace_session
 from apps.workspaces.services import enter_task, issue_session
 
-from ..errors import ReportExecutionConflict, ReportExecutionNotReady, ReportSnapshotConflict
+from ..errors import (
+    ReportAttachmentNotReady,
+    ReportExecutionConflict,
+    ReportExecutionNotReady,
+    ReportSnapshotConflict,
+)
 from ..models import (
     ReportAttachment,
     ReportDraft,
     ReportVersion,
+    ReportVersionAttachment,
     SystemArtifact,
 )
 from ..serializers import report_version_data
@@ -58,6 +65,177 @@ from ..services import (
 
 class ReportServiceTests(TestCase):
     password = "ValidPassword!234"
+
+    def test_v2_submission_requires_current_complete_formal_pass(self) -> None:
+        from apps.labtemplates.services import _normalize_execution_spec
+        from apps.reports.services import _latest_execution_for_submission
+        from apps.workspaces.services import _execution_rules
+
+        snapshot = self._snapshot()
+        tests = snapshot.asset
+        spec = _normalize_execution_spec({
+            "schema_version": 2, "language": "python", "entrypoint": "main.py",
+            "timeout_seconds": 5, "memory_mb": 256, "cpu_millicores": 500,
+            "comparator": "token", "tests_asset": tests.public_id, "network_mode": "DENY_ALL",
+        })
+        ExperimentTask.objects.filter(pk=self.task.pk).update(
+            execution_spec=spec, runtime_adapter_driver="DOCKER_LOCAL",
+        )
+        self.task.refresh_from_db()
+        with self.assertRaises(ReportExecutionNotReady):
+            _latest_execution_for_submission(task=self.task, snapshot=snapshot)
+        run = self._execution(snapshot)
+        WorkspaceExecutionRun.objects.filter(pk=run.pk).update(
+            execution_rule_summary={"evaluation_mode": "SELF_TEST"},
+        )
+        with self.assertRaises(ReportExecutionNotReady):
+            _latest_execution_for_submission(task=self.task, snapshot=snapshot)
+        summary, _, digest = _execution_rules(self.task, language="python")
+        WorkspaceExecutionRun.objects.filter(pk=run.pk).update(
+            execution_rule_summary=summary, execution_rule_digest=digest,
+        )
+        # Use separate clean output asset; the workspace snapshot stays task-owned.
+        output = ObjectAsset.objects.create(
+            bucket="edu-platform", object_key="strict/report.json", object_version="1",
+            digest_sha256="b" * 64, size_bytes=1, owner_type="WORKSPACE_EXECUTION",
+            owner_ref=run.public_id, purpose="TEST_REPORT", scan_status="CLEAN",
+        )
+        WorkspaceExecutionRun.objects.filter(pk=run.pk).update(test_report_asset=output)
+        payload = {"status": "PASSED", "cases": 2, "results": [{"status": "PASSED"}] * 2}
+
+        def read(asset, **kwargs):
+            return json.dumps({"cases": [{}, {}]} if asset.pk == tests.pk else payload)
+
+        with patch("apps.workspaces.presentation.asset_text", side_effect=read):
+            self.assertEqual(
+                _latest_execution_for_submission(task=self.task, snapshot=snapshot).pk, run.pk,
+            )
+            for status in (
+                "FAILED", "TIMEOUT", "RESOURCE_EXCEEDED", "REJECTED", "QUEUED", "RUNNING",
+            ):
+                with self.subTest(status=status):
+                    WorkspaceExecutionRun.objects.filter(pk=run.pk).update(status=status)
+                    with self.assertRaises(ReportExecutionNotReady):
+                        _latest_execution_for_submission(task=self.task, snapshot=snapshot)
+            WorkspaceExecutionRun.objects.filter(pk=run.pk).update(status="PASSED")
+            payload["results"] = [{"status": "PASSED"}]
+            payload["cases"] = 1
+            with self.assertRaises(ReportExecutionNotReady):
+                _latest_execution_for_submission(task=self.task, snapshot=snapshot)
+            payload["results"] = [{"status": "PASSED"}] * 2
+            payload["cases"] = 2
+            for change in (
+                {"absolute_tolerance": 0}, {"relative_tolerance": 0},
+                {"tests_asset": "Z" * 26}, {"entrypoint": "other.py"},
+                {"_runtime": {"material_assets": [{"object_version": "changed"}]}},
+            ):
+                with self.subTest(change=change):
+                    self.task.execution_spec = {**spec, **change}
+                    with self.assertRaises(ReportExecutionConflict):
+                        _latest_execution_for_submission(task=self.task, snapshot=snapshot)
+            self.task.execution_spec = spec
+            snapshot.language = "c"
+            with self.assertRaises(ReportExecutionConflict):
+                _latest_execution_for_submission(task=self.task, snapshot=snapshot)
+            snapshot.language = "python"
+            for index in range(2):
+                WorkspaceExecutionRun.objects.create(
+                    task=self.task, session=self.session, snapshot=snapshot, status="PASSED",
+                    execution_rule_summary={"evaluation_mode": "SELF_TEST"},
+                    execution_rule_digest="c" * 64,
+                    idempotency_key=f"strict-self-{index}", trace_id="s" * 32,
+                )
+            self.assertEqual(
+                _latest_execution_for_submission(task=self.task, snapshot=snapshot).pk, run.pk,
+            )
+            ExperimentTask.objects.filter(pk=self.task.pk).update(runtime_adapter_driver="FAKE")
+            self.task.refresh_from_db()
+            with self.assertRaises(ReportExecutionNotReady):
+                _latest_execution_for_submission(task=self.task, snapshot=snapshot)
+
+            ExperimentTask.objects.filter(pk=self.task.pk).update(
+                runtime_adapter_driver="DOCKER_LOCAL",
+            )
+            self.task.refresh_from_db()
+            TaskPublication.objects.filter(pk=self.task.publication_id).update(report_required=False)
+            payload["results"] = [{"status": "PASSED"}]
+            payload["cases"] = 1
+            with self.assertRaises(ReportExecutionNotReady):
+                complete_non_report_task(
+                    task_id=self.task.public_id, actor=self.task.student,
+                    expected_task_version=self.task.row_version, context=self.context,
+                )
+            self.assertFalse(SystemArtifact.objects.filter(task=self.task).exists())
+            payload["results"] = [{"status": "PASSED"}] * 2
+            payload["cases"] = 2
+            artifact, changed_task = complete_non_report_task(
+                task_id=self.task.public_id, actor=self.task.student,
+                expected_task_version=self.task.row_version, context=self.context,
+            )
+            self.assertEqual(changed_task.status, ExperimentTask.Status.UNDER_REVIEW)
+            self.assertEqual(artifact.execution_run_id, run.pk)
+            self.assertEqual(artifact.execution_evidence["rule_digest"], digest)
+            self.assertEqual(artifact.execution_evidence["snapshot_digest"], snapshot.digest_sha256)
+            with self.assertRaises(ImmutableRecordError):
+                SystemArtifact.objects.filter(pk=artifact.pk).update(execution_evidence={})
+
+    def test_worker_uses_frozen_numeric_zero_and_sanitizes_hidden_result(self) -> None:
+        from apps.labtemplates.services import _normalize_execution_spec
+        from apps.provisioning.ports import RuntimeExecutionResult
+        from apps.workspaces.services import _execution_rules, execute_execution_run
+
+        snapshot = self._snapshot()
+        spec = _normalize_execution_spec({
+            "schema_version": 2, "language": "python", "entrypoint": "main.py",
+            "timeout_seconds": 5, "memory_mb": 256, "cpu_millicores": 500,
+            "comparator": "numeric", "absolute_tolerance": 0, "relative_tolerance": 0,
+            "tests_asset": snapshot.asset.public_id, "network_mode": "DENY_ALL",
+        })
+        ExperimentTask.objects.filter(pk=self.task.pk).update(
+            execution_spec=spec, runtime_adapter_driver="DOCKER_LOCAL",
+        )
+        self.task.refresh_from_db()
+        summary, _, digest = _execution_rules(self.task, language="python")
+        run = self._execution(snapshot, status="QUEUED")
+        WorkspaceExecutionRun.objects.filter(pk=run.pk).update(
+            execution_rule_summary=summary, execution_rule_digest=digest,
+        )
+        tests = {"comparator": "token", "absolute_tolerance": 99,
+                 "relative_tolerance": 99, "cases": [
+                     {"input": str(i), "expected": str(i)} for i in range(4)
+                 ]}
+        source_stream = BytesIO(b"print(input())")
+        tests_stream = BytesIO(json.dumps(tests).encode())
+        outputs = []
+        with (
+            patch("apps.workspaces.services.runtime_for_driver") as runtime,
+            patch("apps.workspaces.services.object_storage") as storage,
+            patch(
+                "apps.workspaces.services._output_asset",
+                side_effect=lambda **kw: outputs.append(kw),
+            ),
+        ):
+            storage.return_value.open_object.side_effect = [
+                SimpleNamespace(body=source_stream), SimpleNamespace(body=tests_stream),
+            ]
+            runtime.return_value.execute.return_value = RuntimeExecutionResult(
+                test_report={"status": "PASSED", "cases": 4, "results": [
+                    {"status": "PASSED", "actual": str(i), "stdout": "private-log"}
+                    for i in range(4)
+                ]},
+            )
+            completed = execute_execution_run(execution_run_id=run.public_id)
+            self.assertEqual(completed.status, "PASSED", completed.error_code)
+            delivered = json.loads(runtime.return_value.execute.call_args.kwargs["tests"])
+        self.assertEqual(delivered["comparator"], "numeric")
+        self.assertEqual(delivered["absolute_tolerance"], 0)
+        self.assertEqual(delivered["relative_tolerance"], 0)
+        self.assertTrue(source_stream.closed)
+        self.assertTrue(tests_stream.closed)
+        report = json.loads(next(
+            item["content"] for item in outputs if item["kind"] == "TEST_REPORT"
+        ))
+        self.assertEqual(report["results"][3], {"hidden": True, "status": "PASSED"})
 
     def setUp(self) -> None:
         reset_fake_runtime()
@@ -357,6 +535,48 @@ class ReportServiceTests(TestCase):
         with self.assertRaises(ImmutableRecordError):
             ReportVersion.objects.filter(pk=version.pk).update(body_markdown="mutated")
 
+    def test_submit_blocks_unscanned_attachments_then_freezes_clean_digest(self) -> None:
+        self._snapshot()
+        draft = ReportDraft.objects.get(task=self.task)
+        update_report_draft(
+            task_id=self.task.public_id, actor=self.task.student, body_markdown="Final report",
+            expected_version=draft.row_version, context=self.context,
+        )
+        self.task.refresh_from_db()
+        asset = ObjectAsset.objects.create(
+            bucket="edu-platform", object_key=f"reports/{self.task.public_id}/attachment",
+            object_version="pinned-v1", digest_sha256="a" * 64, size_bytes=4,
+            media_type="text/plain", owner_type="REPORT_ATTACHMENT",
+            owner_ref=self.task.public_id, purpose="REPORT_ATTACHMENT", scan_status="PENDING",
+        )
+
+        def submit():
+            return submit_report(
+                task_id=self.task.public_id, actor=self.task.student,
+                expected_task_version=self.task.row_version, context=self.context,
+            )
+
+        with self.assertRaises(ReportAttachmentNotReady):
+            submit()
+        attachment = ReportAttachment.objects.create(
+            draft=draft, asset=asset, uploaded_by=self.task.student, trace_id="a" * 32,
+        )
+        for state in ("PENDING", "INFECTED", "FAILED"):
+            with self.subTest(scan_status=state):
+                ObjectAsset.objects.filter(pk=asset.pk).update(scan_status=state)
+                with self.assertRaises(ReportAttachmentNotReady):
+                    submit()
+                self.assertFalse(ReportVersion.objects.filter(task=self.task).exists())
+        ObjectAsset.objects.filter(pk=asset.pk).update(scan_status="CLEAN", status="PURGED")
+        with self.assertRaises(ReportAttachmentNotReady):
+            submit()
+        ObjectAsset.objects.filter(pk=asset.pk).update(status="ACTIVE")
+        version, _ = submit()
+        frozen = ReportVersionAttachment.objects.get(version=version, attachment=attachment)
+        self.assertEqual(frozen.asset_digest, "a" * 64)
+        with self.assertRaises(ImmutableRecordError):
+            ReportVersionAttachment.objects.filter(pk=frozen.pk).update(asset_digest="b" * 64)
+
     def test_submit_copies_latest_execution_evidence_into_immutable_report(self) -> None:
         snapshot = self._snapshot()
         run = self._execution(snapshot, asset_owner_ref="placeholder")
@@ -413,6 +633,51 @@ class ReportServiceTests(TestCase):
             task_id=self.task.public_id,
             actor=self.task.student,
             body_markdown="# Missing execution",
+            expected_version=draft.row_version,
+            context=self.context,
+        )
+        self.task.refresh_from_db()
+        with self.assertRaises(ReportExecutionNotReady):
+            submit_report(
+                task_id=self.task.public_id,
+                actor=self.task.student,
+                expected_task_version=self.task.row_version,
+                context=self.context,
+            )
+        self.assertFalse(ReportVersion.objects.filter(task=self.task).exists())
+
+    def test_submit_ignores_self_test_as_execution_evidence(self) -> None:
+        type(self.task).objects.filter(pk=self.task.pk).update(
+            runtime_adapter_driver=RuntimeAdapter.Driver.DOCKER_LOCAL,
+            runtime_adapter_config_ref="runtime/local-algorithm",
+        )
+        AutoCheckRule.objects.create(
+            template_version=self.task.template_version,
+            position=1,
+            position_key="reports-self-test-rule",
+            checker_type="PYTEST",
+            input_schema={"type": "object"},
+            output_schema={"type": "object"},
+            timeout_seconds=30,
+            resource_limit={},
+            network_policy={"mode": "DENY_ALL"},
+            display_policy={"show_score": True},
+            failure_semantics={"on_failure": "FAIL_CHECK"},
+            rule_digest="s" * 64,
+        )
+        snapshot = self._snapshot()
+        run = self._execution(snapshot)
+        WorkspaceExecutionRun.objects.filter(pk=run.pk).update(
+            execution_rule_summary={
+                **run.execution_rule_summary,
+                "evaluation_mode": "SELF_TEST",
+            }
+        )
+        draft = ReportDraft.objects.get(task=self.task)
+        update_report_draft(
+            task_id=self.task.public_id,
+            actor=self.task.student,
+            body_markdown="# Self test only",
             expected_version=draft.row_version,
             context=self.context,
         )

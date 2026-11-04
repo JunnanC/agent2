@@ -17,7 +17,7 @@ class StoredObject:
 
 
 class S3ObjectStorage:
-    def __init__(self, *, public: bool = False) -> None:
+    def __init__(self, *, public: bool = False, timeout_seconds: int | None = None) -> None:
         endpoint = settings.MINIO_PUBLIC_ENDPOINT if public else settings.MINIO_INTERNAL_ENDPOINT
         self.client = boto3.client(
             "s3",
@@ -25,7 +25,11 @@ class S3ObjectStorage:
             aws_access_key_id=settings.MINIO_APP_ACCESS_KEY,
             aws_secret_access_key=settings.MINIO_APP_SECRET_KEY,
             region_name=settings.MINIO_REGION,
-            config=Config(signature_version="s3v4", s3={"addressing_style": "path"}),
+            config=Config(
+                signature_version="s3v4", s3={"addressing_style": "path"},
+                **({"connect_timeout": timeout_seconds, "read_timeout": timeout_seconds,
+                    "retries": {"max_attempts": 0}} if timeout_seconds is not None else {}),
+            ),
         )
 
     def create_upload_post(

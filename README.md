@@ -28,7 +28,7 @@ entry when editing frontend source files; it mounts `frontend/` read-only and po
 changes, so saving a source file updates the browser without rebuilding Nginx.
 
 ```powershell
-.\scripts\frontend-dev-up.ps1
+.\scripts\frontend-dev-up.ps1 -SkipBackend
 ```
 
 Development portal URLs:
@@ -37,11 +37,7 @@ Development portal URLs:
 - `http://teacher.localhost:5174`
 - `http://admin.localhost:5176`
 
-To start only the frontend services when the backend stack is already running:
-
-```powershell
-.\scripts\frontend-dev-up.ps1 -SkipBackend
-```
+The command above uses an already running backend. Omit `-SkipBackend` to also build and start the standard backend with the Compose configuration selected by `.env` and the `runtime` profile.
 
 View or stop the frontend development services:
 
@@ -98,11 +94,12 @@ docker compose --profile tools run --rm --no-deps core-check python manage.py se
 
 ## 开发与验证
 
-- 后端命令、迁移和检查：[backend/README.md](backend/README.md)。唯一 Django 项目位于 `backend`。
+- 后端命令、迁移和检查：[docs/开发指南/后端开发.md](docs/开发指南/后端开发.md)。唯一 Django 项目位于 `backend`。
 - 前端：在 `frontend/` 运行 `npm ci --ignore-scripts`、`npm run typecheck`、`npm test`、`npm run build`。
 - 工作区镜像验证：`scripts/verify/workspace-image.ps1 -Image experimental-platform-workspace:local -SkipBuild`。
-- 文档导航：[项目资料索引](docs/项目资料索引.md)。`docs/` 统一存放架构设计、前端对接、阶段规划和历史执行记录。
-- 脚本入口与前置条件：[脚本索引](scripts/README.md)；旧编号与功能名称的对应见[命名约定与迁移表](docs/naming-conventions.md)。
+- 项目文档：[文档索引](docs/README.md)，保留九份当前说明，覆盖架构、数据与接口、前后端开发、脚本、工作区、部署和记录模板。
+- 过程产物：`outputs/` 当前为空，仅在需要时生成临时报告和证据，不维护历史资料索引。
+- 脚本入口与前置条件：[脚本索引](docs/开发指南/脚本索引.md)；文件、脚本和命令直接按功能命名，不再使用阶段编号，见[命名约定](docs/README.md#命名约定)。
 - `.env`、`secrets/`、本机覆盖配置、临时日志和个人材料留在本地，不上传 GitHub；具体边界见 `.gitignore`。
 
-Compose 本机通过只证明已验证的本地范围。Swarm 模板、Registry 晋级、真实 DNS/TLS、外部存储、故障恢复和 HA 需要在对应环境单独验收，参见 [Swarm 部署说明](infrastructure/swarm/README.md)。历史记录保留原日期、镜像及项目名称，不作为当前启动命令。
+Compose 本机通过只证明已验证的本地范围。Swarm 模板、Registry 晋级、真实 DNS/TLS、外部存储、故障恢复和 HA 需要在对应环境单独验收，参见 [Swarm 部署说明](docs/开发指南/Swarm部署.md)。历史记录保留原日期、镜像及项目名称，不作为当前启动命令。

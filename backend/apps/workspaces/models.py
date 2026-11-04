@@ -44,6 +44,7 @@ class WorkspaceSession(VersionedModel):
     revoke_reason = models.CharField(max_length=255, blank=True, default="")
     last_seen_at = models.DateTimeField(null=True, blank=True)
     current_version = models.PositiveIntegerField(default=0)
+    language = models.CharField(max_length=16, default="python")
     latest_snapshot = models.ForeignKey(
         "WorkspaceSnapshot",
         on_delete=models.PROTECT,
@@ -99,6 +100,8 @@ class WorkspaceSnapshot(AppendOnlyModel):
     digest_sha256 = models.CharField(max_length=64, db_collation="ascii_bin")
     size_bytes = models.PositiveBigIntegerField(default=0)
     media_type = models.CharField(max_length=255, blank=True, default="application/octet-stream")
+    language = models.CharField(max_length=16, default="python")
+    initial = models.BooleanField(default=False)
     saved_at = models.DateTimeField()
     trace_id = models.CharField(max_length=32)
 
@@ -175,6 +178,8 @@ class WorkspaceStorageJob(VersionedModel):
         CAPTURE = "CAPTURE"
         RESTORE = "RESTORE"
         FINALIZE = "FINALIZE"
+        SWITCH = "SWITCH"
+        RESET = "RESET"
 
     class Status(models.TextChoices):
         QUEUED = "QUEUED"
@@ -187,6 +192,7 @@ class WorkspaceStorageJob(VersionedModel):
 
     public_id = public_id_field()
     kind = models.CharField(max_length=16, choices=Kind.choices)
+    target_language = models.CharField(max_length=16, blank=True, default="")
     task = models.ForeignKey(
         ExperimentTask, on_delete=models.PROTECT, related_name="workspace_storage_jobs"
     )
@@ -233,7 +239,7 @@ class WorkspaceStorageJob(VersionedModel):
         constraints = [
             models.CheckConstraint(
                 condition=models.Q(
-                    kind__in=("INITIALIZE", "CAPTURE", "RESTORE", "FINALIZE")
+                    kind__in=("INITIALIZE", "CAPTURE", "RESTORE", "FINALIZE", "SWITCH", "RESET")
                 ),
                 name="workspace_storage_kind_ck",
             ),

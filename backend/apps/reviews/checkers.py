@@ -12,6 +12,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Protocol
 
+from django.conf import settings
+
 from apps.core.models import ObjectAsset
 from apps.core.object_storage import object_storage
 from apps.experiments.models import ExperimentTask
@@ -25,7 +27,7 @@ from apps.provisioning.metrics import (
 )
 from apps.provisioning.ports import RuntimeExecutionResult, RuntimeSpec
 
-from .models import AutoCheckRun
+from .models import AutoCheckRun, Review
 
 logger = logging.getLogger("runtime.judge")
 
@@ -145,12 +147,14 @@ class FakeRuntimeAutoCheckExecutor:
         )
 
 
-def _read_asset(asset: ObjectAsset) -> bytes:
+def _read_asset(asset: ObjectAsset, *, limit: int | None = None) -> bytes:
     if (
         asset.status != ObjectAsset.Status.ACTIVE
         or asset.scan_status != ObjectAsset.ScanStatus.CLEAN
     ):
         raise AutoCheckRejected("AUTO_CHECK_ASSET_NOT_READY")
+    if limit is not None and asset.size_bytes > limit:
+        raise AutoCheckRejected("AUTO_CHECK_ASSET_TOO_LARGE")
     try:
         stored = object_storage().open_object(
             bucket=asset.bucket,
@@ -158,15 +162,65 @@ def _read_asset(asset: ObjectAsset) -> bytes:
             version_id=asset.object_version,
         )
         body = stored.body
-        value = body.read() if hasattr(body, "read") else body
-        return bytes(value or b"")
+        try:
+            value = (
+                body.read(limit + 1) if limit is not None else body.read()
+            ) if hasattr(body, "read") else body
+        finally:
+            if hasattr(body, "close"):
+                body.close()
+        value = bytes(value or b"")
+        if limit is not None and (
+            len(value) > limit or hashlib.sha256(value).hexdigest() != asset.digest_sha256
+        ):
+            raise AutoCheckRejected("AUTO_CHECK_ASSET_INVALID")
+        return value
     except AutoCheckRejected:
         raise
     except Exception as exc:  # noqa: BLE001 - the audit layer masks storage details
         raise AutoCheckRejected("AUTO_CHECK_ASSET_UNAVAILABLE") from exc
 
 
+def submitted_execution_contract(
+    task: ExperimentTask, review: Review,
+) -> tuple[dict[str, Any], str]:
+    """Resolve the shared execution contract using the submitted snapshot's language."""
+    from apps.workspaces.services import _execution_rules
+
+    submission = review.report_version if review.report_version_id else review.system_artifact
+    snapshot = submission.workspace_snapshot
+    if snapshot.task_id != task.pk:
+        raise AutoCheckRejected("AUTO_CHECK_SUBMISSION_MISMATCH")
+    try:
+        summary, _command, digest = _execution_rules(task, language=snapshot.language)
+    except (KeyError, ValueError) as exc:
+        raise AutoCheckRejected("AUTO_CHECK_EXECUTION_SPEC_INVALID") from exc
+    if summary["language"] != snapshot.language:
+        raise AutoCheckRejected("AUTO_CHECK_SUBMISSION_MISMATCH")
+    return summary, digest
+
+
 def _execution_summary(task: ExperimentTask, run: AutoCheckRun) -> dict[str, Any]:
+    if (task.execution_spec or {}).get("schema_version") == 2:
+        summary, digest = submitted_execution_contract(task, run.review)
+        submission = (
+            run.review.report_version
+            if run.review.report_version_id else run.review.system_artifact
+        )
+        snapshot = submission.workspace_snapshot
+        submitted_digest = (
+            submission.snapshot_digest if run.review.report_version_id else submission.digest_sha256
+        )
+        if (
+            run.input_asset_id != snapshot.asset_id
+            or run.artifact_digest != submitted_digest
+            or snapshot.digest_sha256 != submitted_digest
+            or snapshot.asset.digest_sha256 != submitted_digest
+        ):
+            raise AutoCheckRejected("AUTO_CHECK_SUBMISSION_MISMATCH")
+        if run.execution_rule_summary != summary or run.execution_rule_digest != digest:
+            raise AutoCheckRejected("AUTO_CHECK_EXECUTION_RULE_MISMATCH")
+        return summary
     summary = dict(run.execution_rule_summary or {})
     if not summary:
         spec = dict(task.execution_spec or task.template_version.execution_spec or {})
@@ -273,8 +327,19 @@ class DockerLocalAutoCheckExecutor:
             )
         except ObjectAsset.DoesNotExist as exc:
             raise AutoCheckRejected("AUTO_CHECK_HIDDEN_TESTS_UNAVAILABLE") from exc
-        source = _read_asset(run.input_asset)
-        tests = _read_asset(tests_asset)
+        project = (task.execution_spec or {}).get("schema_version") == 2
+        if project:
+            limit = int(settings.WORKSPACE_SNAPSHOT_MAX_BYTES)
+            source = _read_asset(run.input_asset, limit=limit)
+            tests = _read_asset(tests_asset, limit=int(settings.TEMPLATE_ASSET_MAX_BYTES))
+            test_config = json.loads(tests)
+            test_config.update({key: summary[key] for key in (
+                "comparator", "absolute_tolerance", "relative_tolerance"
+            )})
+            tests = json.dumps(test_config).encode()
+        else:
+            source = _read_asset(run.input_asset)
+            tests = _read_asset(tests_asset)
         config_ref = task.runtime_adapter_config_ref or (
             task.runtime_adapter.config_ref if task.runtime_adapter_id else ""
         )
@@ -299,8 +364,11 @@ class DockerLocalAutoCheckExecutor:
                     cpu_millicores=cpu_millicores,
                     network_mode="DENY_ALL",
                     judge_id=run.public_id,
+                    **({"execution_plan": summary["execution_plan"]} if project else {}),
                 )
             else:
+                if project:
+                    raise AutoCheckRejected("AUTO_CHECK_EXECUTION_PLAN_UNSUPPORTED")
                 # The legacy protocol stub has no hidden-test parameter. It
                 # still exercises driver selection and the stable one-shot port.
                 result = adapter.execute(

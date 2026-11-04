@@ -89,14 +89,28 @@ class SimulatedExperimentSeedTests(TestCase):
         self.assertEqual(repaired.public_id, self.version.public_id)
         publication.refresh_from_db()
         self.assertEqual(publication.title, "模拟环境实验任务")
+        task.refresh_from_db()
+        self.assertEqual(task.execution_spec["tests_asset"], repaired.execution_spec["tests_asset"])
+        self.assertEqual(
+            publication.execution_spec["tests_asset"], repaired.execution_spec["tests_asset"]
+        )
+        self.assertEqual(
+            task.execution_spec["comparator"], self.source.execution_spec["comparator"]
+        )
         workbench_data(actor=task.student, task_id=task.public_id)
         _validate_tests_asset(self.source)
         count = ObjectAsset.objects.count()
+        task_version = task.row_version
+        publication_version = publication.row_version
         repeated = Command._fake_template_version(
             self.course, self.teacher, self.version.runtime_adapter, "a" * 32
         )
         self.assertEqual(repeated.row_version, repaired.row_version)
         self.assertEqual(ObjectAsset.objects.count(), count)
+        task.refresh_from_db()
+        publication.refresh_from_db()
+        self.assertEqual(task.row_version, task_version)
+        self.assertEqual(publication.row_version, publication_version)
 
     def test_legacy_adapter_is_renamed_and_reused(self) -> None:
         adapter = self.version.runtime_adapter

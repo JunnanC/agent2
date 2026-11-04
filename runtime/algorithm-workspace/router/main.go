@@ -22,9 +22,11 @@ const (
 	defaultListenAddress   = "0.0.0.0:8080"
 	defaultWebIDEURL       = "http://127.0.0.1:3000"
 	defaultTerminalURL     = "http://127.0.0.1:7681"
+	defaultSaveBridgeURL   = "http://127.0.0.1:3001"
 	defaultTokenFile       = "/run/secrets/workspace_upstream_token"
 	upstreamTokenHeader    = "X-Workspace-Upstream-Token"
 	webIDEPathPrefix       = "/webide"
+	saveBridgePathPrefix   = "/webide/edu-control"
 	terminalPathPrefix     = "/terminal"
 	responseBodyProbeLimit = 4096
 )
@@ -118,11 +120,12 @@ func (handler *router) authorized(request *http.Request) bool {
 	return subtle.ConstantTimeCompare(presented[:], handler.tokenDigest[:]) == 1
 }
 
-func newRouter(webIDE, terminal *url.URL, tokenDigest [sha256.Size]byte) *router {
+func newRouter(webIDE, terminal, saveBridge *url.URL, tokenDigest [sha256.Size]byte) *router {
 	return &router{
 		healthClient: &http.Client{Timeout: 2 * time.Second},
 		tokenDigest:  tokenDigest,
 		capabilities: []*capabilityProxy{
+			newCapabilityProxy(saveBridge, saveBridgePathPrefix, true, false),
 			newCapabilityProxy(webIDE, webIDEPathPrefix, true, true),
 			newCapabilityProxy(terminal, terminalPathPrefix, false, false),
 		},
@@ -231,6 +234,10 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	saveBridge, err := parseTarget("WORKSPACE_SAVE_BRIDGE_URL", defaultSaveBridgeURL)
+	if err != nil {
+		return err
+	}
 	tokenDigest, err := loadTokenDigest(envOrDefault("WORKSPACE_UPSTREAM_TOKEN_FILE", defaultTokenFile))
 	if err != nil {
 		return err
@@ -238,7 +245,7 @@ func run() error {
 
 	server := &http.Server{
 		Addr:    envOrDefault("WORKSPACE_ROUTER_ADDR", defaultListenAddress),
-		Handler: newRouter(codeServer, terminal, tokenDigest),
+		Handler: newRouter(codeServer, terminal, saveBridge, tokenDigest),
 		ReadHeaderTimeout: 5 * time.Second,
 		IdleTimeout:       2 * time.Minute,
 		MaxHeaderBytes:    32 * 1024,

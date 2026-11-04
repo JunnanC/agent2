@@ -1,4 +1,4 @@
-import { newIdempotencyKey, request } from "@edu/auth-client";
+import { ensureCsrf, readCsrfToken, newIdempotencyKey, request } from "@edu/auth-client";
 import type { EnvelopeSuccess } from "@edu/auth-client";
 import type { components } from "./generated/schema";
 import type {
@@ -8,12 +8,12 @@ import type {
   PortalContext, PrecheckRun, Publication, Quota, ReportDraft, ResourceProfile, ReviewDetail,
   ReviewResult, ReviewSummary, Rubric, RuntimeAdapter, StudentDashboard, Task, TeachingCourseList, Template,
   TemplateChapter, TemplateTask, ToolPolicy, TemplateVersion, UsageCost, Verification,
-  WorkspaceSession, WorkspaceStorageJob, AgentMessage, AgentMode, CourseResourceSummary,
+  WorkspaceOperationEvent, WorkspaceSession, WorkspaceStorageJob, AgentMessage, AgentMode, CourseResourceSummary,
   LearningHistoryData, NotificationPreferences, TimetableData, TimetableImport, AgentProfile, AgentSession,
   AgentToolCall, ToolRequest, ToolDecision, AgentFeedback, VerificationUpdate, NotificationPreferenceUpdate,
   EnrollmentExitCheck, CourseQuestion, CourseAnswer, DownloadGrant, DownloadGrantRevoke,
   ReportAttachmentData, ReportAttachmentUpload, ReportAttachmentCreate, LearningRecommendation, LearningRiskSignal,
-  OIDCIdentity, OIDCStart,
+  OIDCIdentity, OIDCStart, AIScoreBatch, AIScoreSuggestion,
 } from "./types";
 
 export * from "./types";
@@ -92,6 +92,8 @@ function normalizeWorkbenchAggregate(data: WorkbenchAggregate | undefined | null
           key: entry["key"] != null ? String(entry["key"]) : String(index),
           name: String(entry["name"] ?? entry["title"] ?? `测试用例 ${index + 1}`),
           description: entry["description"] != null ? String(entry["description"]) : undefined,
+          input: entry["input"] != null ? String(entry["input"]) : undefined,
+          expected: entry["expected"] != null ? String(entry["expected"]) : undefined,
         };
       });
     }
@@ -115,6 +117,7 @@ function normalizeWorkbenchAggregate(data: WorkbenchAggregate | undefined | null
     task: data.task ? normalizeTask(data.task) : (data.task as never),
     chapters,
     tests: testsList,
+    tests_count: (rawTests as { count?: number } | null)?.count ?? testsList?.length ?? 0,
     tests_available: (rawTests as { runnable?: boolean } | null)?.runnable ?? Boolean(testsList?.length),
     template_caps: templateCaps,
   };
@@ -371,13 +374,28 @@ export interface WorkbenchAggregate {
   task: Task;
   session?: WorkspaceSession | null;
   chapters: Array<{ public_id: string; title: string; description?: string | null; sort_order: number; status?: string; tasks?: unknown; instructions?: string[] }>;
-  content?: { description?: string | null; steps?: Array<Record<string, unknown>> } | null;
+  content?: { description?: string | null; steps?: Array<Record<string, unknown>>; manual?: { asset_id: string; format: string; text: string | null } | null } | null;
   current_chapter?: { public_id: string; title: string; instructions?: string[] } | null;
-  tests?: Array<{ key?: string; name: string; description?: string }>;
+  tests?: Array<{ key?: string; name: string; description?: string; input?: string; expected?: string }>;
   tests_available?: boolean;
+  tests_count?: number;
   capabilities?: string[];
   /** 模板锁定的工作区能力声明(布尔开关,后端 template.workspace_capabilities) */
   template_caps?: Record<string, boolean> | null;
+  submission?: { can_submit: boolean; blocked_reason?: { code?: string } | null };
+  workspace?: {
+    mode?: string;
+    language?: string;
+    language_policy?: {
+      mode?: string;
+      language?: string | null;
+      allowed_languages?: string[];
+      default_versions?: Record<string, string>;
+    };
+    toolchain_version?: string | null;
+    last_synchronized_snapshot_id?: string | null;
+    active_storage_job?: WorkspaceStorageJob | null;
+  };
 }
 
 async function waitForStorageJob(job: WorkspaceStorageJob): Promise<WorkspaceStorageJob> {
@@ -393,6 +411,27 @@ async function waitForStorageJob(job: WorkspaceStorageJob): Promise<WorkspaceSto
 }
 
 export const workspaceApi = {
+  editorControl: async (sessionId: string, action: "save" | "reload", workspaceToken: string) => {
+    await ensureCsrf();
+    const requestId = newIdempotencyKey();
+    const send = () => fetch(`/workspace/${sessionId}/webide/edu-control/${action}`, {
+      method: "POST", credentials: "include", signal: AbortSignal.timeout(15000),
+      headers: { "Content-Type": "application/json", "X-CSRFToken": readCsrfToken() ?? "", "X-Workspace-Token": workspaceToken },
+      body: JSON.stringify({ session_id: sessionId, request_id: requestId }),
+    });
+    let response = await send();
+    // Reload briefly stops the extension host. saveAll is safe to repeat; never bypass it.
+    for (let attempt = 0; action === "save" && [502, 503].includes(response.status) && attempt < 4; attempt++) {
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      response = await send();
+    }
+    if (!response.ok) throw new Error(action === "save" ? "编辑器保存失败，请先保存文件后重试" : "编辑器重载失败，请刷新工作台");
+    const body = await response.json() as { schema_version?: number; session_id?: string; request_id?: string; dirty_files?: unknown; saved?: boolean };
+    if (body.schema_version !== 1 || body.session_id !== sessionId || body.request_id !== requestId
+      || !Array.isArray(body.dirty_files) || body.dirty_files.length || (action === "save" && body.saved !== true)) {
+      throw new Error("编辑器仍有未保存文件，请保存后重试");
+    }
+  },
   workbench: (taskId: string) => request<WorkbenchAggregate>(`/tasks/${taskId}/workbench`)
     .then((r) => r.data)
     .then((data) => normalizeWorkbenchAggregate(data)),
@@ -436,6 +475,23 @@ export const workspaceApi = {
       idempotencyKey: newIdempotencyKey(),
       headers: { "X-Workspace-Token": workspaceToken },
     }).then(r => r.data);
+    return waitForStorageJob(job);
+  },
+
+  storageJob: async (
+    taskId: string,
+    payload: { kind: "SWITCH" | "RESET"; language?: string },
+    sessionRowVersion: number,
+    workspaceToken: string,
+    reuseKey?: string,
+  ) => {
+    const job = await request<WorkspaceStorageJob>(`/tasks/${taskId}/workspace-storage-jobs`, {
+      method: "POST",
+      body: payload,
+      ifMatch: sessionRowVersion,
+      idempotencyKey: reuseKey ?? newIdempotencyKey(),
+      headers: { "X-Workspace-Token": workspaceToken },
+    }).then((r) => r.data);
     return waitForStorageJob(job);
   },
 
@@ -497,6 +553,20 @@ export const workspaceApi = {
     request(`/student/task-runtimes/${runtimeId}/stop`, {
       method: "POST", body: {}, ifMatch, idempotencyKey: reuseKey ?? newIdempotencyKey(),
     }).then((r) => r.data),
+
+  operation: (
+    sessionId: string,
+    operation: string,
+    arguments_: Record<string, unknown>,
+    workspaceToken: string,
+    reuseKey?: string,
+  ) => request<WorkspaceOperationEvent>(`/workspace/${sessionId}/operations`, {
+    prefix: "",
+    method: "POST",
+    body: { operation, arguments: arguments_ },
+    idempotencyKey: reuseKey ?? newIdempotencyKey(),
+    headers: { "X-Workspace-Token": workspaceToken },
+  }).then((r) => r.data),
 };
 
 /* ══════════ 报告 ══════════ */
@@ -703,7 +773,41 @@ export const teachingApi = {
         cpu_millicores: number; memory_mb: number; disk_gb: number; network_mode?: string;
       }>;
       materials: Array<{ public_id: string; title: string; version_no: number; digest_sha256?: string }>;
+      toolchains: Array<{
+        language: string;
+        toolchain_id: string;
+        versions: Array<{ version: string; default: boolean }>;
+        default_standard: string;
+        standards: string[];
+        entrypoint: string;
+        available: boolean;
+      }>;
     }>(`/teaching/courses/${courseId}/template-options`).then((r) => r.data),
+
+  templateAssets: (courseId: string, templateId: string, versionId: string) =>
+    request<Array<Record<string, unknown>>>(
+      `/teaching/courses/${courseId}/templates/${templateId}/assets?version_id=${encodeURIComponent(versionId)}`,
+    ).then(toList),
+
+  createTemplateAsset: (
+    courseId: string,
+    templateId: string,
+    payload: {
+      version_id: string; purpose: string; file_name: string; media_type: string;
+      size_bytes: number; digest_sha256: string;
+    },
+    ifMatch: string | number | null,
+  ) => request<{ asset: Record<string, unknown>; upload: { url: string; fields: Record<string, string> } }>(
+    `/teaching/courses/${courseId}/templates/${templateId}/assets`,
+    { method: "POST", body: payload, idempotencyKey: newIdempotencyKey(), ifMatch },
+  ).then((r) => r.data),
+
+  completeTemplateAsset: (
+    courseId: string, templateId: string, assetId: string, ifMatch: string | number | null,
+  ) => request<Record<string, unknown>>(
+    `/teaching/courses/${courseId}/templates/${templateId}/assets/${assetId}/complete`,
+    { method: "POST", body: {}, idempotencyKey: newIdempotencyKey(), ifMatch },
+  ).then((r) => r.data),
 
   // 镜像
   experimentImages: (courseId: string) =>
@@ -735,9 +839,13 @@ export const teachingApi = {
     courseId: string,
     versionId: string,
     payload: {
-      tests_json: string; language: string; entrypoint: string;
+      tests_json: string; schema_version: 2; language: string | null;
+      toolchain_version: string | null; language_standard: string | null;
+      entrypoint: string | null;
       timeout_seconds: number; memory_mb: number; cpu_millicores: number;
-      comparator: string; network_mode: string;
+      comparator: string; absolute_tolerance: number; relative_tolerance: number;
+      network_mode: string;
+      materials: Array<{ asset_id: string; role: string }>;
     },
     ifMatch: string | number | null,
     reuseKey?: string,
@@ -822,9 +930,36 @@ export const teachingApi = {
     request<Rubric[]>(`/teaching/courses/${courseId}/rubrics`).then(toList),
 
   review: (courseId: string, reviewId: string) =>
-    request<unknown>(`/teaching/courses/${courseId}/reviews/${reviewId}`)
+    request<unknown>(`/teaching/courses/${courseId}/reviews/${reviewId}`, { query: { include_source: "1" } })
       .then((r) => r.data)
       .then(normalizeReviewDetail),
+
+  aiScoreBatches: (courseId: string, publicationId: string) =>
+    request<{ batches: AIScoreBatch[] }>(`/teaching/courses/${courseId}/ai-score-batches`, {
+      query: { publication_id: publicationId },
+    }).then((r) => r.data.batches),
+
+  startAIScoreBatch: (courseId: string, publicationId: string) =>
+    request<AIScoreBatch>(`/teaching/courses/${courseId}/ai-score-batches`, {
+      method: "POST", body: { publication_id: publicationId }, idempotencyKey: newIdempotencyKey(),
+    }).then((r) => r.data),
+
+  aiScoreSuggestion: async (courseId: string, batchId: string, reviewId: string) => {
+    let page = 1;
+    while (true) {
+      const { data } = await request<{ suggestions: AIScoreSuggestion[]; total: number }>(
+        `/teaching/courses/${courseId}/ai-score-batches/${batchId}`, { query: { page, page_size: 100 } },
+      );
+      const suggestion = data.suggestions.find((item) => item.review_id === reviewId);
+      if (suggestion || page * 100 >= data.total) return suggestion ?? null;
+      page += 1;
+    }
+  },
+
+  acceptAIScoreSuggestion: (courseId: string, reviewId: string, suggestionId: string, ifMatch: string) =>
+    request<AIScoreSuggestion>(`/teaching/courses/${courseId}/reviews/${reviewId}/ai-score-suggestions/${suggestionId}/accept`, {
+      method: "POST", body: {}, idempotencyKey: newIdempotencyKey(), ifMatch,
+    }).then((r) => r.data),
 
   saveCriterionScores: (courseId: string, reviewId: string, payload: { scores: Array<{ criterion_id: string; score: number; note?: string }> }, ifMatch?: string, reuseKey?: string) =>
     request<ReviewDetail>(`/teaching/courses/${courseId}/reviews/${reviewId}/criterion-scores`, {

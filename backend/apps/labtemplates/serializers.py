@@ -16,15 +16,33 @@ from .models import (
 )
 
 
+class ExecutionMaterialSerializer(serializers.Serializer):
+    asset_id = serializers.CharField(max_length=26)
+    role = serializers.ChoiceField(choices=("STUDENT_FILES", "HIDDEN_SOURCE", "PUBLIC_DATA"))
+
+
 class ExecutionSpecSerializer(serializers.Serializer):
-    language = serializers.ChoiceField(choices=("python",))
-    entrypoint = serializers.RegexField(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,126}\.py$", max_length=128)
+    schema_version = serializers.ChoiceField(choices=(2,), required=False)
+    language = serializers.ChoiceField(
+        choices=("c", "cpp", "java", "python", "go"), allow_null=True
+    )
+    toolchain_version = serializers.CharField(
+        max_length=32, required=False, allow_null=True, allow_blank=True
+    )
+    language_standard = serializers.CharField(
+        max_length=16, required=False, allow_null=True, allow_blank=True
+    )
+    toolchain = serializers.DictField(required=False)
+    materials = ExecutionMaterialSerializer(many=True, required=False)
+    entrypoint = serializers.CharField(max_length=255, allow_null=True, allow_blank=True)
     timeout_seconds = serializers.IntegerField(
         min_value=1, max_value=settings.TEMPLATE_CHECK_TIMEOUT_MAX_SECONDS
     )
     memory_mb = serializers.IntegerField(min_value=1)
     cpu_millicores = serializers.IntegerField(min_value=1)
-    comparator = serializers.ChoiceField(choices=("token",))
+    comparator = serializers.ChoiceField(choices=("token", "numeric"))
+    absolute_tolerance = serializers.FloatField(min_value=0, required=False)
+    relative_tolerance = serializers.FloatField(min_value=0, required=False)
     tests_asset = serializers.CharField(max_length=26)
     network_mode = serializers.ChoiceField(choices=("DENY_ALL",))
 
@@ -64,8 +82,11 @@ class TemplateVersionWriteSerializer(serializers.Serializer):
         execution_spec = self.initial_data.get("execution_spec")
         if isinstance(execution_spec, dict):
             spec_unknown = set(execution_spec) - {
-                "language", "entrypoint", "timeout_seconds", "memory_mb",
-                "cpu_millicores", "comparator", "tests_asset", "network_mode",
+                "schema_version", "language", "toolchain_version", "language_standard", "toolchain",
+                "materials",
+                "entrypoint", "timeout_seconds", "memory_mb", "cpu_millicores",
+                "comparator", "absolute_tolerance", "relative_tolerance", "tests_asset",
+                "network_mode",
             }
             if spec_unknown:
                 raise serializers.ValidationError(
@@ -118,21 +139,47 @@ class ReorderWriteSerializer(serializers.Serializer):
 
 class ExecutionSpecSaveSerializer(serializers.Serializer):
     tests_json = serializers.CharField()
-    language = serializers.ChoiceField(choices=("python",))
-    entrypoint = serializers.RegexField(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,126}\.py$", max_length=128)
+    schema_version = serializers.ChoiceField(choices=(2,), required=False)
+    language = serializers.ChoiceField(
+        choices=("c", "cpp", "java", "python", "go"), allow_null=True
+    )
+    toolchain_version = serializers.CharField(
+        max_length=32, required=False, allow_null=True, allow_blank=True
+    )
+    language_standard = serializers.CharField(
+        max_length=16, required=False, allow_null=True, allow_blank=True
+    )
+    materials = ExecutionMaterialSerializer(many=True, required=False)
+    entrypoint = serializers.CharField(max_length=255, allow_null=True, allow_blank=True)
     timeout_seconds = serializers.IntegerField(
         min_value=1, max_value=settings.TEMPLATE_CHECK_TIMEOUT_MAX_SECONDS
     )
     memory_mb = serializers.IntegerField(min_value=1)
     cpu_millicores = serializers.IntegerField(min_value=1)
-    comparator = serializers.ChoiceField(choices=("token",))
+    comparator = serializers.ChoiceField(choices=("token", "numeric"))
+    absolute_tolerance = serializers.FloatField(min_value=0, required=False)
+    relative_tolerance = serializers.FloatField(min_value=0, required=False)
     network_mode = serializers.ChoiceField(choices=("DENY_ALL",))
+
+    def validate(self, attrs: dict[str, object]) -> dict[str, object]:
+        unknown = set(self.initial_data) - set(self.fields)
+        if unknown:
+            raise serializers.ValidationError({"unknown": sorted(unknown)})
+        return attrs
 
 
 class TemplateAssetCreateSerializer(serializers.Serializer):
     version_id = serializers.CharField(max_length=26)
     purpose = serializers.ChoiceField(
-        choices=("MANUAL", "STARTER", "REPORT_TEMPLATE", "TESTS", "BUILD_CONTEXT")
+        choices=(
+            "MANUAL",
+            "STARTER",
+            "REPORT_TEMPLATE",
+            "TESTS",
+            "BUILD_CONTEXT",
+            "HIDDEN_SOURCE",
+            "PUBLIC_DATA",
+        )
     )
     file_name = serializers.CharField(max_length=255)
     media_type = serializers.CharField(max_length=255)
@@ -233,6 +280,11 @@ class TemplateAssetUploadDataSerializer(serializers.Serializer):
 
 class TemplateAssetResponseSerializer(serializers.Serializer):
     data = TemplateAssetDataSerializer()
+    meta = serializers.DictField()
+
+
+class TemplateAssetListResponseSerializer(serializers.Serializer):
+    data = TemplateAssetDataSerializer(many=True)
     meta = serializers.DictField()
 
 
@@ -373,6 +425,7 @@ class TemplateOptionsDataSerializer(serializers.Serializer):
     images = serializers.ListField(child=serializers.DictField())
     resource_profiles = serializers.ListField(child=serializers.DictField())
     materials = serializers.ListField(child=serializers.DictField())
+    toolchains = serializers.ListField(child=serializers.DictField())
 
 
 class TemplateResponseSerializer(serializers.Serializer):
@@ -585,6 +638,15 @@ def asset_data(item: object, version: TemplateVersion) -> dict[str, object]:
     elif item.purpose == "REPORT_TEMPLATE":
         attached_id = version.report_template_asset_id
         attached = attached_id == item.pk
+    elif item.purpose in {"HIDDEN_SOURCE", "PUBLIC_DATA"}:
+        spec = version.execution_spec if isinstance(version.execution_spec, dict) else {}
+        role = "HIDDEN_SOURCE" if item.purpose == "HIDDEN_SOURCE" else "PUBLIC_DATA"
+        materials = spec.get("materials", [])
+        attached = any(
+            row.get("asset_id") == item.public_id and row.get("role") == role
+            for row in (materials if isinstance(materials, list) else [])
+            if isinstance(row, dict)
+        )
     else:
         spec = version.execution_spec if isinstance(version.execution_spec, dict) else {}
         attached = spec.get("tests_asset") == item.public_id

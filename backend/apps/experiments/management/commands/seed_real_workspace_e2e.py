@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import io
+import json
 import os
 import secrets
 from typing import Any
@@ -28,6 +29,7 @@ from apps.courses.services import ActorContext
 from apps.governance.models import ImageAsset, ResourceProfile, RuntimeAdapter
 from apps.labtemplates.models import Template, TemplatePrecheckRun, TemplateVersion
 from apps.labtemplates.services import (
+    create_chapter,
     create_template,
     create_version,
     execute_precheck,
@@ -123,7 +125,9 @@ class Command(BaseCommand):
             purpose="TESTS",
             name="tests.json",
             media_type="application/json",
-            content=b'{"cases":[{"input":"workspace\n","expected":"WORKSPACE"}]}',
+            content=json.dumps({
+                "cases": [{"input": "workspace\n", "expected": "WORKSPACE"}],
+            }).encode(),
         )
         if version.status in {TemplateVersion.Status.DRAFT, TemplateVersion.Status.PRECHECK_FAILED}:
             TemplateVersion.objects.filter(pk=version.pk).update(
@@ -149,6 +153,13 @@ class Command(BaseCommand):
                 },
             )
             version.refresh_from_db()
+            if not version.chapters.exists():
+                create_chapter(
+                    course_id=course.public_id, version_id=version.public_id, actor=teacher,
+                    expected_version=version.row_version,
+                    data={"title": "Real workspace", "sort_order": 1}, context=context,
+                )
+                version.refresh_from_db()
             if not version.auto_check_rules.filter(is_active=True).exists():
                 replace_rules(
                     course_id=course.public_id,

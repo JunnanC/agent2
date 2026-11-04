@@ -287,6 +287,7 @@ export interface Task {
   window_end?: Iso8601 | null;
   effective_deadline?: Iso8601 | null;
   allowed_actions: string[];
+  allowed_operations?: string[];
   blockers: Blocker[];
   current_failure?: { code?: string; message?: string } | null;
   provisioning?: Record<string, unknown> | null;
@@ -311,8 +312,20 @@ export interface WorkspaceSession {
 export interface WorkspaceStorageJob {
   public_id: string;
   status: "QUEUED" | "RUNNING" | "PASSED" | "FAILED" | "CANCELLED";
+  kind?: "CAPTURE" | "RESTORE" | "SWITCH" | "RESET";
+  target_language?: string;
   result_snapshot_id: string | null;
   failure?: { code: string; message: string } | null;
+}
+
+export interface WorkspaceOperationEvent {
+  public_id: string;
+  event_type: string;
+  phase: string;
+  payload?: Record<string, unknown>;
+  result_summary?: string;
+  execution_run_id?: string | null;
+  execution_status?: string | null;
 }
 
 export interface Checkpoint {
@@ -347,7 +360,18 @@ export interface ExecutionRun {
   finished_at?: Iso8601 | null;
   duration_ms?: number | null;
   trace_id?: string;
-  test_cases?: Array<{ key?: string; name: string; status: string; message?: string }>;
+  evaluation_mode?: "FORMAL" | "SELF_TEST";
+  test_cases?: Array<{ key?: string; name?: string; status: string; message?: string; hidden?: boolean; input?: string; expected?: string; stdout?: string; stderr?: string }>;
+}
+
+export interface WorkspaceOperationEvent {
+  public_id: string;
+  event_type: string;
+  phase: string;
+  payload?: Record<string, unknown>;
+  result_summary?: string;
+  execution_run_id?: string | null;
+  execution_status?: string | null;
 }
 
 export interface ReportAttachment {
@@ -389,6 +413,7 @@ export interface ReviewSummary {
   public_id: string;
   task_id: string;
   publication_title?: string;
+  publication_id?: string;
   student_name: string;
   round_no?: number;
   status: string;
@@ -400,7 +425,32 @@ export interface ReviewSummary {
   row_version: string;
 }
 
+export interface AIScoreBatch {
+  public_id: string;
+  publication_id: string;
+  status: string;
+  row_version: number;
+}
+
+export interface AIScoreSuggestion {
+  public_id: string;
+  review_id: string;
+  review_row_version: number;
+  status: string;
+  error_code: string;
+  total_score: string | null;
+  criteria: Array<{ criterion_id: string; score: string; rationale: string; evidence: string }>;
+}
+
 export interface ReviewDetail extends ReviewSummary {
+  project?: {
+    snapshot_id: string;
+    digest_sha256: string;
+    language: string;
+    files: Array<{ path: string; content: string; truncated: boolean }>;
+    error_code: string;
+    guidance: { description?: string; manual?: { text?: string | null } | null };
+  };
   submission?: {
     report_id?: string;
     report_html?: string;
