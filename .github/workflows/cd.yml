@@ -6,6 +6,11 @@ on:
     types: [completed]
     branches: [main]
   workflow_dispatch:
+    inputs:
+      preflight_only:
+        description: Check server configuration without changing running services
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -88,7 +93,9 @@ jobs:
 
   deploy:
     needs: build
-    if: vars.DEPLOY_ENABLED == 'true'
+    if: >-
+      vars.DEPLOY_ENABLED == 'true' ||
+      (github.event_name == 'workflow_dispatch' && inputs.preflight_only)
     environment: production
     runs-on: [self-hosted, Linux, X64, agent2-production]
     timeout-minutes: 25
@@ -97,11 +104,12 @@ jobs:
         with:
           ref: ${{ needs.build.outputs.revision }}
           persist-credentials: false
-      - name: Deploy verified revision
+      - name: Check configuration or deploy verified revision
         env:
           ACR_REGISTRY: ${{ vars.ACR_REGISTRY }}
           ACR_NAMESPACE: ${{ vars.ACR_NAMESPACE }}
           ACR_USERNAME: ${{ secrets.ACR_USERNAME }}
           ACR_PASSWORD: ${{ secrets.ACR_PASSWORD }}
           RELEASE_SHA: ${{ needs.build.outputs.revision }}
+          DEPLOY_PREFLIGHT_ONLY: ${{ github.event_name == 'workflow_dispatch' && inputs.preflight_only && 'true' || 'false' }}
         run: bash scripts/cd/deploy.sh
