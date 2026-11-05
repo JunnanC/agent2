@@ -77,6 +77,9 @@ jobs:
           file: ${{ matrix.dockerfile }}
           platforms: linux/amd64
           push: true
+          # ACR Personal rejects OCI artifact attestation manifests (oci.empty.v1+json).
+          provenance: false
+          sbom: false
           tags: ${{ vars.ACR_REGISTRY }}/${{ vars.ACR_NAMESPACE }}/agent2-${{ matrix.image }}:${{ steps.revision.outputs.sha }}
           build-args: |
             GIT_REVISION=${{ steps.revision.outputs.sha }}
