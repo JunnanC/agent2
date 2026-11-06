@@ -22,4 +22,9 @@ export default tseslint.config(
     files: ["packages/ui/src/index.tsx", "packages/ui/src/toast.tsx", "apps/admin-web/src/legacy/ui.tsx", "**/providers.tsx"],
     rules: { "react-refresh/only-export-components": "off" },
   },
+  {
+    files: ["apps/**/*.js"],
+    plugins: { "react-hooks": reactHooks },
+    rules: { "react-hooks/exhaustive-deps": "warn" },
+  },
 );

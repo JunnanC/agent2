@@ -1,10 +1,26 @@
 """Pinned toolchain identities and the language-selection contract."""
 
-from typing import Any, Final
+from typing import Any, Final, TypedDict
 
 from .errors import TemplateValidationError
 
-TOOLCHAIN_CATALOG: Final = (
+
+class ToolchainVersion(TypedDict):
+    version: str
+    default: bool
+
+
+class ToolchainEntry(TypedDict):
+    language: str
+    toolchain_id: str
+    versions: tuple[ToolchainVersion, ...]
+    default_standard: str
+    standards: tuple[str, ...]
+    entrypoint: str
+    available: bool
+
+
+TOOLCHAIN_CATALOG: Final[tuple[ToolchainEntry, ...]] = (
     {
         "language": "c",
         "toolchain_id": "gnu-gcc",
@@ -52,7 +68,9 @@ TOOLCHAIN_CATALOG: Final = (
     },
 )
 
-TOOLCHAINS_BY_LANGUAGE: Final = {item["language"]: item for item in TOOLCHAIN_CATALOG}
+TOOLCHAINS_BY_LANGUAGE: Final[dict[str, ToolchainEntry]] = {
+    item["language"]: item for item in TOOLCHAIN_CATALOG
+}
 
 
 def resolve_language_policy(

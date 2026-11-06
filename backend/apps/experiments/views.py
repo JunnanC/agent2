@@ -5,6 +5,7 @@ from django.db import models
 from django.http import HttpRequest
 from django.utils import timezone
 from drf_spectacular.utils import OpenApiParameter, extend_schema, extend_schema_view
+from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -18,6 +19,7 @@ from apps.core.models import CompensationTask
 from apps.core.pagination import PageSpec
 from apps.courses.services import ActorContext
 
+from .grades import task_grades
 from .models import ExperimentTask, TaskPublication
 from .selectors import (
     extension_request_for_teaching,
@@ -38,6 +40,7 @@ from .serializers import (
     PublicationPatchSerializer,
     PublicationPublishSerializer,
     PublicationWriteSerializer,
+    RetakePublicationWriteSerializer,
     TaskDataSerializer,
     TaskExtensionDecisionSerializer,
     TaskExtensionWriteSerializer,
@@ -51,6 +54,7 @@ from .services import (
     allowed_actions,
     close_publication,
     create_publication,
+    create_retake_publication,
     decide_extension,
     prerequisite_blockers_for_publication,
     publish_publication,
@@ -142,6 +146,7 @@ def _refresh_publication(publication_id: str) -> TaskPublication:
             "runtime_adapter",
             "image",
             "resource_profile",
+            "retake_of",
         )
         .prefetch_related(*publication_response_prefetches())
         .get(public_id=publication_id)
@@ -299,6 +304,47 @@ class PublishPublicationView(TeachingPublicationActionView):
 
 @extend_schema_view(
     post=extend_schema(
+        operation_id="teaching_experiment_retake_create",
+        request=RetakePublicationWriteSerializer,
+        responses={201: PublicationDataSerializer, 202: PublicationDataSerializer},
+        parameters=[IDEMPOTENCY_KEY],
+        extensions={"x-portals": ["TEACHING"]},
+    )
+)
+class TeachingPublicationRetakeView(APIView):
+    permission_classes = [IsTeachingPortal]
+
+    def post(self, request: HttpRequest, course_id: str, publication_id: str) -> Response:
+        serializer = RetakePublicationWriteSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        payload = serializer.validated_data
+
+        def operation() -> StoredResponse:
+            item, status = create_retake_publication(
+                course_id=course_id,
+                publication_id=publication_id,
+                selected_enrollment_ids=list(payload["selected_enrollment_ids"]),
+                window_start=payload["window_start"],
+                window_end=payload["window_end"],
+                actor=request.user,
+                context=_context(request),
+            )
+            item = _refresh_publication(item.public_id)
+            return StoredResponse(
+                status,
+                _body(request, publication_data(item)),
+                {"ETag": etag_for_version(item.row_version)},
+            )
+
+        return _idempotent(
+            request,
+            payload={"publication_id": publication_id, **payload},
+            operation=operation,
+        )
+
+
+@extend_schema_view(
+    post=extend_schema(
         operation_id="teaching_experiments_close",
         request=None,
         responses={200: PublicationDataSerializer},
@@ -342,8 +388,16 @@ class TeachingTaskListView(APIView):
             student_id=request.query_params.get("student_id", ""),
             query=request.query_params.get("q", ""),
         )
+        tasks = list(tasks)
+        grades = task_grades(tasks)
         return _page_response(
-            request, [task_data(item, actions=allowed_actions(item)) for item in tasks], spec, total
+            request,
+            [
+                {**task_data(item, actions=allowed_actions(item)), **grades[item.pk]}
+                for item in tasks
+            ],
+            spec,
+            total,
         )
 
 
@@ -488,15 +542,29 @@ class UserTaskListView(APIView):
 
     @extend_schema(
         operation_id="tasks_list",
+        parameters=[
+            OpenApiParameter(
+                "course_id", str, OpenApiParameter.QUERY,
+                description="按课程筛选任务。",
+            ),
+            OpenApiParameter(
+                "course", str, OpenApiParameter.QUERY,
+                description="兼容旧客户端的课程筛选参数；与 course_id 同时传入时必须相同。",
+            ),
+        ],
         responses=TaskDataSerializer(many=True),
         extensions={"x-portals": ["USER"]},
     )
     def get(self, request: HttpRequest) -> Response:
         spec = _page_spec(request)
+        course_id = request.query_params.get("course_id", "")
+        legacy_course_id = request.query_params.get("course", "")
+        if course_id and legacy_course_id and course_id != legacy_course_id:
+            raise ValidationError({"course_id": "course_id 与 course 不能指定不同课程"})
         tasks, total = paged_user_tasks(
             actor=request.user,
             spec=spec,
-            course_id=request.query_params.get("course", ""),
+            course_id=course_id or legacy_course_id,
             status=request.query_params.get("status", ""),
             runtime_type=request.query_params.get("runtime_type", ""),
             query=request.query_params.get("q", ""),

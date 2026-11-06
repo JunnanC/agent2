@@ -3529,6 +3529,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v2/teaching/courses/{course_id}/experiments/{publication_id}/retakes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["teaching_experiment_retake_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v2/teaching/courses/{course_id}/experiments/{publication_id}/tasks": {
         parameters: {
             query?: never;
@@ -6269,6 +6285,7 @@ export interface components {
         PublicationData: {
             public_id: string;
             course_id: string;
+            retake_of_publication_id: string | null;
             template_version_id: string;
             rubric_version_id: string;
             template_spec_digest: string | null;
@@ -6693,6 +6710,13 @@ export interface components {
             data: components["schemas"]["ResourceSummaryData"];
             meta: components["schemas"]["GovernanceTraceMeta"];
         };
+        RetakePublicationWrite: {
+            selected_enrollment_ids: string[];
+            /** Format: date-time */
+            window_start: string;
+            /** Format: date-time */
+            window_end: string;
+        };
         /**
          * @description * `APPROVE` - Approve
          *     * `REJECT` - Reject
@@ -6786,6 +6810,7 @@ export interface components {
         ReviewResultData: {
             task_id: string;
             task_status: string;
+            effective_score: string | null;
             rounds: components["schemas"]["ReviewRoundData"][];
             allowed_actions: string[];
         };
@@ -7143,6 +7168,10 @@ export interface components {
             enrollment_id: string;
             student_id: string;
             student_name?: string;
+            score?: string | null;
+            retake_of_task_id?: string | null;
+            has_retake?: boolean;
+            retake_task_id?: string | null;
             title: string;
             template_version_id: string;
             template_name: string;
@@ -11810,7 +11839,12 @@ export interface operations {
     };
     tasks_list: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description 兼容旧客户端的课程筛选参数；与 course_id 同时传入时必须相同。 */
+                course?: string;
+                /** @description 按课程筛选任务。 */
+                course_id?: string;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -14466,6 +14500,44 @@ export interface operations {
                 "application/json": components["schemas"]["PublicationPublish"];
                 "application/x-www-form-urlencoded": components["schemas"]["PublicationPublish"];
                 "multipart/form-data": components["schemas"]["PublicationPublish"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicationData"];
+                };
+            };
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicationData"];
+                };
+            };
+        };
+    };
+    teaching_experiment_retake_create: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                course_id: string;
+                publication_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RetakePublicationWrite"];
+                "application/x-www-form-urlencoded": components["schemas"]["RetakePublicationWrite"];
+                "multipart/form-data": components["schemas"]["RetakePublicationWrite"];
             };
         };
         responses: {

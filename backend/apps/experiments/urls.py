@@ -10,6 +10,7 @@ from .views import (
     TeachingProgressView,
     TeachingPublicationDetailView,
     TeachingPublicationListView,
+    TeachingPublicationRetakeView,
     TeachingTaskListView,
     UserDashboardView,
     UserLearningHistoryView,
@@ -68,6 +69,11 @@ urlpatterns = [
         "teaching/courses/<str:course_id>/experiments/<str:publication_id>/publish",
         PublishPublicationView.as_view(),
         name="teaching-experiment-publish",
+    ),
+    path(
+        "teaching/courses/<str:course_id>/experiments/<str:publication_id>/retakes",
+        TeachingPublicationRetakeView.as_view(),
+        name="teaching-experiment-retakes",
     ),
     path(
         "teaching/courses/<str:course_id>/experiments/<str:publication_id>/close",

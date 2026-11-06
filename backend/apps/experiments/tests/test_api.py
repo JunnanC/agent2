@@ -3,14 +3,16 @@ from unittest.mock import patch
 
 from django.db import connection
 from django.test import Client, TestCase
-from django.test.utils import CaptureQueriesContext
+from django.test.utils import CaptureQueriesContext, override_settings
 from django.utils import timezone
 
 from apps.accounts.tests.helpers import create_user
 from apps.core.models import IdempotencyRecord, OutboxEvent
 from apps.courses.events import ENROLLMENT_STUDENT_DROPPED
+from apps.courses.models import Enrollment
 from apps.courses.ports import register_enrollment_blocker
 from apps.courses.services import enrollment_exit_check
+from apps.courses.tests.helpers import create_draft_course, create_teacher
 from apps.governance.models import Quota, RuntimeAdapter
 from apps.labtemplates.models import ExperimentImage
 from apps.notifications.models import Notification
@@ -19,6 +21,7 @@ from apps.provisioning.adapters import reset_fake_runtime
 from apps.provisioning.services import execute_provisioning_job, start_provisioning
 
 from ..models import (
+    ExperimentRetakeLink,
     ExperimentTask,
     PublicationAudience,
     PublicationChapter,
@@ -27,7 +30,12 @@ from ..models import (
 )
 from ..selectors import publication_for_course
 from ..serializers import publication_data
-from ..services import enrollment_task_blockers, publish_publication
+from ..services import (
+    create_retake_publication,
+    enrollment_task_blockers,
+    execute_publication_assignment_chunk,
+    publish_publication,
+)
 from .helpers import context, create_domain, create_draft_publication, create_enrollment
 
 PROXY_HEADERS = {"HTTP_X_PROXY_CONTEXT": "ingress-v1", "REMOTE_ADDR": "127.0.0.1"}
@@ -126,6 +134,291 @@ class ExperimentApiTests(TestCase):
             HTTP_X_PORTAL="TEACHING", **PROXY_HEADERS,
         )
         self.assertIn("task_counts", aggregate.json()["data"])
+
+    def test_student_task_list_filters_course_id_and_keeps_legacy_alias(self) -> None:
+        first_publication, _ = publish_publication(
+            course_id=self.course.public_id,
+            publication_id=self.publication.public_id,
+            actor=self.owner,
+            expected_version=self.publication.row_version,
+            selected_ids=[],
+            context=context(self.owner),
+        )
+        first_task = ExperimentTask.objects.get(
+            publication=first_publication, student=self.enrollment.student
+        )
+        with patch("apps.labtemplates.tests.helpers.create_resources", return_value=(
+            self.template_version.runtime_adapter,
+            self.template_version.image,
+            self.template_version.resource_profile,
+        )):
+            other_owner, other_course, other_template, other_rubric = create_domain(
+                suffix="other-course-filter"
+            )
+        now = timezone.now()
+        Enrollment.objects.create(
+            course=other_course, student=self.enrollment.student, cycle_no=1,
+            status=Enrollment.Status.ACTIVE, applied_at=now, activated_at=now,
+        )
+        other_publication = create_draft_publication(
+            owner=other_owner, course=other_course,
+            template_version=other_template, rubric_version=other_rubric,
+        )
+        publish_publication(
+            course_id=other_course.public_id, publication_id=other_publication.public_id,
+            actor=other_owner, expected_version=other_publication.row_version,
+            selected_ids=[], context=context(other_owner),
+        )
+
+        client, _csrf = self._client(
+            portal="USER", identifier=self.enrollment.student.email
+        )
+        for param in ("course_id", "course"):
+            with self.subTest(param=param):
+                response = client.get(
+                    f"/api/v2/tasks?{param}={self.course.public_id}",
+                    HTTP_X_PORTAL="USER",
+                    **PROXY_HEADERS,
+                )
+                self.assertEqual(response.status_code, 200, response.content)
+                self.assertEqual(
+                    [row["public_id"] for row in response.json()["data"]],
+                    [first_task.public_id],
+                )
+                self.assertEqual(response.json()["meta"]["total"], 1)
+        unfiltered = client.get("/api/v2/tasks", HTTP_X_PORTAL="USER", **PROXY_HEADERS)
+        self.assertEqual(unfiltered.json()["meta"]["total"], 2)
+
+        combined = client.get(
+            f"/api/v2/tasks?course_id={self.course.public_id}&status=ASSIGNED&page_size=1",
+            HTTP_X_PORTAL="USER",
+            **PROXY_HEADERS,
+        )
+        self.assertEqual(combined.status_code, 200, combined.content)
+        self.assertEqual(
+            [row["public_id"] for row in combined.json()["data"]], [first_task.public_id]
+        )
+        self.assertEqual(combined.json()["meta"]["total"], 1)
+
+        invalid = client.get(
+            "/api/v2/tasks?course_id=not-a-course",
+            HTTP_X_PORTAL="USER",
+            **PROXY_HEADERS,
+        )
+        self.assertEqual(invalid.status_code, 200, invalid.content)
+        self.assertEqual(invalid.json()["data"], [])
+        self.assertEqual(invalid.json()["meta"]["total"], 0)
+
+        conflicting = client.get(
+            f"/api/v2/tasks?course_id={self.course.public_id}&course=not-a-course",
+            HTTP_X_PORTAL="USER",
+            **PROXY_HEADERS,
+        )
+        self.assertEqual(conflicting.status_code, 400, conflicting.content)
+
+    def test_retake_creation_links_tasks_and_allows_only_one_per_original_task(self) -> None:
+        second_enrollment = create_enrollment(self.course, suffix="retake-second-student")
+        source_publication, _ = publish_publication(
+            course_id=self.course.public_id,
+            publication_id=self.publication.public_id,
+            actor=self.owner,
+            expected_version=self.publication.row_version,
+            selected_ids=[],
+            context=context(self.owner),
+        )
+        source_task = ExperimentTask.objects.get(
+            publication=source_publication, student=self.enrollment.student
+        )
+        client, csrf = self._client(portal="TEACHING", identifier=self.owner.email)
+        url = (
+            f"/api/v2/teaching/courses/{self.course.public_id}/experiments/"
+            f"{source_publication.public_id}/retakes"
+        )
+        now = timezone.now()
+        payload = {
+            "selected_enrollment_ids": [self.enrollment.public_id, second_enrollment.public_id],
+            "window_start": (now + timezone.timedelta(hours=1)).isoformat(),
+            "window_end": (now + timezone.timedelta(days=2)).isoformat(),
+        }
+        headers = {
+            "HTTP_X_CSRFTOKEN": csrf,
+            "HTTP_X_PORTAL": "TEACHING",
+            "HTTP_IDEMPOTENCY_KEY": "retake-create-once",
+            **PROXY_HEADERS,
+        }
+        response = client.post(url, payload, content_type="application/json", **headers)
+        self.assertEqual(response.status_code, 201, response.content)
+        retake_publication_id = response.json()["data"]["public_id"]
+        self.assertEqual(
+            response.json()["data"]["retake_of_publication_id"], source_publication.public_id
+        )
+        link = ExperimentRetakeLink.objects.get(source_task=source_task)
+        self.assertEqual(link.retake_publication.public_id, retake_publication_id)
+        self.assertEqual(link.retake_task.student, source_task.student)
+        self.assertEqual(link.retake_task.publication.public_id, retake_publication_id)
+        self.assertEqual(
+            ExperimentRetakeLink.objects.filter(retake_publication=link.retake_publication).count(),
+            2,
+        )
+
+        replay = client.post(url, payload, content_type="application/json", **headers)
+        self.assertEqual(replay.status_code, 201, replay.content)
+        self.assertEqual(replay["X-Idempotent-Replayed"], "true")
+        self.assertEqual(ExperimentRetakeLink.objects.filter(source_task=source_task).count(), 1)
+        self.assertEqual(
+            TaskPublication.objects.filter(retake_of=source_publication).count(), 1
+        )
+
+        repeat = client.post(
+            url,
+            payload,
+            content_type="application/json",
+            HTTP_X_CSRFTOKEN=csrf,
+            HTTP_X_PORTAL="TEACHING",
+            HTTP_IDEMPOTENCY_KEY="retake-create-twice",
+            **PROXY_HEADERS,
+        )
+        self.assertEqual(repeat.status_code, 422, repeat.content)
+        self.assertEqual(
+            TaskPublication.objects.filter(retake_of=source_publication).count(), 1
+        )
+
+    def test_retake_creation_rejects_empty_student_list(self) -> None:
+        client, csrf = self._client(portal="TEACHING", identifier=self.owner.email)
+        now = timezone.now()
+        response = client.post(
+            f"/api/v2/teaching/courses/{self.course.public_id}/experiments/"
+            f"{self.publication.public_id}/retakes",
+            {
+                "selected_enrollment_ids": [],
+                "window_start": (now + timezone.timedelta(hours=1)).isoformat(),
+                "window_end": (now + timezone.timedelta(days=2)).isoformat(),
+            },
+            content_type="application/json",
+            HTTP_X_CSRFTOKEN=csrf,
+            HTTP_X_PORTAL="TEACHING",
+            HTTP_IDEMPOTENCY_KEY="retake-empty-list",
+            **PROXY_HEADERS,
+        )
+        self.assertEqual(response.status_code, 400, response.content)
+        self.assertFalse(TaskPublication.objects.filter(retake_of=self.publication).exists())
+
+    def test_retake_creation_rejects_active_student_without_source_task(self) -> None:
+        source_publication, _ = publish_publication(
+            course_id=self.course.public_id,
+            publication_id=self.publication.public_id,
+            actor=self.owner,
+            expected_version=self.publication.row_version,
+            selected_ids=[],
+            context=context(self.owner),
+        )
+        other_enrollment = create_enrollment(self.course, suffix="retake-no-source-task")
+        client, csrf = self._client(portal="TEACHING", identifier=self.owner.email)
+        now = timezone.now()
+        response = client.post(
+            f"/api/v2/teaching/courses/{self.course.public_id}/experiments/"
+            f"{source_publication.public_id}/retakes",
+            {
+                "selected_enrollment_ids": [other_enrollment.public_id],
+                "window_start": (now + timezone.timedelta(hours=1)).isoformat(),
+                "window_end": (now + timezone.timedelta(days=2)).isoformat(),
+            },
+            content_type="application/json",
+            HTTP_X_CSRFTOKEN=csrf,
+            HTTP_X_PORTAL="TEACHING",
+            HTTP_IDEMPOTENCY_KEY="retake-without-source-task",
+            **PROXY_HEADERS,
+        )
+        self.assertEqual(response.status_code, 422, response.content)
+        self.assertEqual(
+            response.json()["error"]["detail"]["selected_enrollment_ids"],
+            "所选学生没有对应的原实验任务",
+        )
+        self.assertFalse(TaskPublication.objects.filter(retake_of=source_publication).exists())
+
+    def test_retake_permissions_and_invalid_audience_leave_no_partial_records(self) -> None:
+        source, _ = publish_publication(
+            course_id=self.course.public_id, publication_id=self.publication.public_id,
+            actor=self.owner, expected_version=self.publication.row_version,
+            selected_ids=[], context=context(self.owner),
+        )
+        outsider = create_teacher(suffix="retake-outsider")
+        client, csrf = self._client(portal="TEACHING", identifier=outsider.email)
+        url = (
+            f"/api/v2/teaching/courses/{self.course.public_id}/experiments/"
+            f"{source.public_id}/retakes"
+        )
+        start = timezone.now() + timezone.timedelta(hours=1)
+        end = start + timezone.timedelta(days=1)
+        payload = {"selected_enrollment_ids": [self.enrollment.public_id],
+                   "window_start": start.isoformat(), "window_end": end.isoformat()}
+        forbidden = client.post(
+            url, payload, content_type="application/json", HTTP_X_CSRFTOKEN=csrf,
+            HTTP_X_PORTAL="TEACHING", HTTP_IDEMPOTENCY_KEY="retake-forbidden",
+            **PROXY_HEADERS,
+        )
+        self.assertEqual(forbidden.status_code, 403, forbidden.content)
+        other_course = create_draft_course(outsider, code="RETAKE-OTHER")
+        invalid_enrollment = create_enrollment(other_course, suffix="retake-other-student")
+        client, csrf = self._client(portal="TEACHING", identifier=self.owner.email)
+        invalid = client.post(
+            url, {**payload, "selected_enrollment_ids": [
+                self.enrollment.public_id, invalid_enrollment.public_id,
+            ]}, content_type="application/json", HTTP_X_CSRFTOKEN=csrf,
+            HTTP_X_PORTAL="TEACHING", HTTP_IDEMPOTENCY_KEY="retake-cross-course",
+            **PROXY_HEADERS,
+        )
+        self.assertEqual(invalid.status_code, 422, invalid.content)
+        with (
+            patch(
+                "apps.experiments.services._copy_publication_snapshots", side_effect=RuntimeError
+            ),
+            self.assertRaises(RuntimeError),
+        ):
+            create_retake_publication(
+                course_id=self.course.public_id, publication_id=source.public_id,
+                selected_enrollment_ids=[self.enrollment.public_id],
+                window_start=start, window_end=end,
+                actor=self.owner, context=context(self.owner),
+            )
+        self.assertFalse(TaskPublication.objects.filter(retake_of=source).exists())
+        self.assertFalse(ExperimentRetakeLink.objects.exists())
+
+    def test_async_retake_assignment_completes_the_task_link(self) -> None:
+        with override_settings(PUBLICATION_SYNC_LIMIT=100):
+            source_publication, _ = publish_publication(
+                course_id=self.course.public_id,
+                publication_id=self.publication.public_id,
+                actor=self.owner,
+                expected_version=self.publication.row_version,
+                selected_ids=[],
+                context=context(self.owner),
+            )
+        source_task = ExperimentTask.objects.get(
+            publication=source_publication, student=self.enrollment.student
+        )
+        with override_settings(PUBLICATION_SYNC_LIMIT=0):
+            retake_publication, status = create_retake_publication(
+                course_id=self.course.public_id,
+                publication_id=source_publication.public_id,
+                selected_enrollment_ids=[self.enrollment.public_id],
+                window_start=timezone.now() + timezone.timedelta(hours=1),
+                window_end=timezone.now() + timezone.timedelta(days=2),
+                actor=self.owner,
+                context=context(self.owner),
+            )
+        self.assertEqual(status, 202)
+        link = ExperimentRetakeLink.objects.get(source_task=source_task)
+        self.assertIsNone(link.retake_task_id)
+
+        execute_publication_assignment_chunk(
+            publication_id=retake_publication.public_id,
+            enrollment_ids=[self.enrollment.public_id],
+            context=context(self.owner),
+        )
+        link.refresh_from_db()
+        self.assertIsNotNone(link.retake_task_id)
+        self.assertEqual(link.retake_task.student, source_task.student)
 
     def test_student_can_drop_with_pending_task_and_keeps_learning_history(self) -> None:
         register_enrollment_blocker(enrollment_task_blockers)

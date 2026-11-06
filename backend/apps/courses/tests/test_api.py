@@ -2,6 +2,7 @@ from datetime import timedelta
 from unittest.mock import patch
 
 import yaml
+from django.http import HttpResponse
 from django.test import Client, TestCase
 from django.utils import timezone
 
@@ -174,7 +175,10 @@ class CourseApiTests(TestCase):
         student_client = Client(enforce_csrf_checks=True)
         student_csrf = self._login(student_client, portal="USER", identifier=self.student.email)
 
-        def post(client, portal, csrf, path, payload, key, version=None):
+        def post(
+            client: Client, portal: str, csrf: str, path: str,
+            payload: dict[str, object], key: str, version: int | None = None,
+        ) -> HttpResponse:
             headers = {
                 "HTTP_X_CSRFTOKEN": csrf, "HTTP_X_PORTAL": portal,
                 "HTTP_IDEMPOTENCY_KEY": key, **PROXY_HEADERS,
@@ -183,7 +187,7 @@ class CourseApiTests(TestCase):
                 headers["HTTP_IF_MATCH"] = f'"{version}"'
             return client.post(path, payload, content_type="application/json", **headers)
 
-        def assert_access(allowed):
+        def assert_access(allowed: bool) -> None:
             for suffix in (
                 "", "/chapters", "/materials", "/announcements", "/calendar", "/questions"
             ):

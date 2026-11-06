@@ -67,7 +67,8 @@ def _notification_content(kind: str, payload: dict[str, Any]) -> dict[str, str]:
         return {"title": title, "body_masked": body}
     if kind in ASSIGNMENT_KINDS:
         task_id = payload.get("task_id")
-        title, course_name = payload.get("experiment_title"), payload.get("course_name")
+        title = str(payload.get("experiment_title") or "")
+        course_name = payload.get("course_name")
         course_id = payload.get("course_id")
         deadline = parse_datetime(payload["deadline"]) if payload.get("deadline") else None
         if task_id and not (title and course_name and course_id and deadline):

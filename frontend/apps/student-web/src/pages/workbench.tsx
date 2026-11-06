@@ -44,6 +44,10 @@ function runFailureLabel(errorCode?: string | null): string {
 
 export function Workbench() {
   const { taskId = "" } = useParams();
+  return <TaskWorkbench key={taskId} taskId={taskId} />;
+}
+
+function TaskWorkbench({ taskId }: { taskId: string }) {
   const navigate = useNavigate();
   const toast = useToast();
   const queryClient = useQueryClient();

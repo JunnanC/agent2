@@ -3,6 +3,8 @@
 import json
 import os
 import uuid
+from collections.abc import Generator
+from typing import Any, TypedDict
 
 import pytest
 
@@ -15,7 +17,17 @@ pytestmark = pytest.mark.skipif(
     os.environ.get("IDE_REAL_DOCKER_TEST") != "1", reason="explicit Docker opt-in"
 )
 
-PROJECTS = {
+
+class JudgeProject(TypedDict):
+    entrypoint: str
+    success: str
+    syntax: str
+    runtime: str
+    timeout: str
+    multifile: dict[str, str]
+
+
+PROJECTS: dict[str, JudgeProject] = {
     "python": {
         "entrypoint": "main.py",
         "success": "print(42)\n",
@@ -84,7 +96,7 @@ PROJECTS = {
 
 
 @pytest.fixture(scope="module")
-def real_judge():
+def real_judge() -> Generator[tuple[Any, DockerLocalAdapter, str]]:
     import docker
 
     client = docker.from_env()
@@ -104,15 +116,23 @@ def real_judge():
 @pytest.mark.parametrize("scenario", [
     "success", "multifile", "nested", "syntax", "runtime", "timeout",
 ])
-def test_real_judge_language_matrix(real_judge, language, scenario):
+def test_real_judge_language_matrix(
+    real_judge: tuple[Any, DockerLocalAdapter, str], language: str, scenario: str
+) -> None:
     client, adapter, image_id = real_judge
     project = PROJECTS[language]
     entrypoint = project["entrypoint"]
+    single_file = {
+        "success": project["success"], "syntax": project["syntax"],
+        "runtime": project["runtime"], "timeout": project["timeout"],
+    }
     if scenario == "nested":
         entrypoint = f"src/{entrypoint}"
         files = {entrypoint: project["success"]}
     else:
-        files = project["multifile"] if scenario == "multifile" else {entrypoint: project[scenario]}
+        files = (
+            project["multifile"] if scenario == "multifile" else {entrypoint: single_file[scenario]}
+        )
     timeout = 25 if language == "go" else 15 if language != "python" else 2
     specification = {
         "schema_version": 2, "language": language, "entrypoint": entrypoint,

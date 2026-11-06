@@ -356,6 +356,7 @@ class ReviewRoundDataSerializer(serializers.Serializer):
 class ReviewResultDataSerializer(serializers.Serializer):
     task_id = serializers.CharField()
     task_status = serializers.CharField()
+    effective_score = serializers.CharField(allow_null=True)
     rounds = ReviewRoundDataSerializer(many=True)
     allowed_actions = serializers.ListField(child=serializers.CharField())
 
@@ -642,6 +643,8 @@ def review_detail_data(item: Review, *, include_source: bool = False) -> dict[st
 
 
 def review_result_data(values: list[Review]) -> dict[str, Any]:
+    from apps.experiments.grades import task_grades
+
     latest = values[0]
     rounds = []
     for item in values:
@@ -668,6 +671,7 @@ def review_result_data(values: list[Review]) -> dict[str, Any]:
     return {
         "task_id": latest.task.public_id,
         "task_status": latest.task.status,
+        "effective_score": task_grades([latest.task])[latest.task.pk]["score"],
         "rounds": rounds,
         "allowed_actions": allowed_actions,
     }

@@ -57,7 +57,7 @@ class WorkspaceStorageJobWriteSerializer(serializers.Serializer):
     snapshot_id = serializers.CharField(required=False, allow_blank=False)
     language = serializers.ChoiceField(choices=("c", "cpp", "java", "python", "go"), required=False)
 
-    def to_internal_value(self, data):
+    def to_internal_value(self, data: dict[str, object]) -> dict[str, object]:
         if set(data) - set(self.fields):
             raise serializers.ValidationError({"fields": "unknown_field"})
         return super().to_internal_value(data)
