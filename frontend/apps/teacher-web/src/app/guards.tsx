@@ -79,7 +79,7 @@ export function AuthGuard() {
         collapseStorageKey="edu.teacher.sidebar-collapsed"
         nav={nav}
         activePath={location.pathname.startsWith("/courses/") ? "/courses" : location.pathname}
-        onNavigate={navigate}
+        onNavigate={(path) => navigate(path === "/courses" ? "/courses" : path)}
         avatar={{ name: displayName, role: "教师", badge: displayName.slice(0, 1) }}
         actions={<button type="button" className="btn sm" aria-label={`通知中心，${unread} 条未读`}
           onClick={() => navigate("/notifications")}>通知中心{unread ? `（${unread}）` : ""}</button>}
