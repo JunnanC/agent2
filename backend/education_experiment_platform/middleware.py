@@ -17,6 +17,8 @@ INTEGRATION_PREFIXES = (
 )
 IDEMPOTENCY_EXEMPT_POST_PATHS = frozenset({
     "/api/v2/auth/login",
+    "/api/v2/auth/register",
+    "/api/v2/auth/verify-email",
     "/api/v2/auth/logout",
     "/api/v2/auth/logout-all",
     "/api/v2/integrations/oauth/token",

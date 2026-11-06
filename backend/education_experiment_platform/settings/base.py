@@ -198,6 +198,23 @@ AUDIT_IP_HASH_SALT = env("AUDIT_IP_HASH_SALT", SECRET_KEY)
 IDENTITY_HMAC_KEY = env("IDENTITY_HMAC_KEY", SECRET_KEY)
 LOGIN_RATE_LIMIT_WINDOW_SECONDS = int(env("LOGIN_RATE_LIMIT_WINDOW_SECONDS", "300"))
 LOGIN_RATE_LIMIT_ATTEMPTS = int(env("LOGIN_RATE_LIMIT_ATTEMPTS", "8"))
+REGISTRATION_EMAIL_BACKEND = env("EMAIL_BACKEND", "django.core.mail.backends.smtp.EmailBackend")
+MAILERS = {
+    "default": {
+        "BACKEND": REGISTRATION_EMAIL_BACKEND,
+        "OPTIONS": {
+            "host": env("EMAIL_HOST"),
+            "port": int(env("EMAIL_PORT", "587")),
+            "username": env("EMAIL_HOST_USER"),
+            "password": env("EMAIL_HOST_PASSWORD"),
+            "use_tls": bool_env("EMAIL_USE_TLS", True),
+            "timeout": 10,
+        } if REGISTRATION_EMAIL_BACKEND == "django.core.mail.backends.smtp.EmailBackend" else {},
+    }
+}
+DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", "no-reply@example.edu")
+STUDENT_PUBLIC_URL = env("STUDENT_PUBLIC_URL", "http://student.localhost:8080")
+TEACHER_PUBLIC_URL = env("TEACHER_PUBLIC_URL", "http://teacher.localhost:8080")
 USER_SESSION_IDLE_SECONDS = int(env("USER_SESSION_IDLE_SECONDS", "43200"))
 TEACHING_SESSION_IDLE_SECONDS = int(env("TEACHING_SESSION_IDLE_SECONDS", "28800"))
 PLATFORM_SESSION_IDLE_SECONDS = int(env("PLATFORM_SESSION_IDLE_SECONDS", "3600"))

@@ -1,12 +1,17 @@
 from __future__ import annotations
 
 from typing import cast
+from unittest.mock import MagicMock, patch
 
 from django.test import SimpleTestCase, override_settings
 from redis import Redis
 
 from apps.accounts.errors import RateLimited
-from apps.accounts.security import check_login_rate_limit, clear_login_rate_limit
+from apps.accounts.security import (
+    check_login_rate_limit,
+    check_registration_rate_limit,
+    clear_login_rate_limit,
+)
 
 
 class FakePipeline:
@@ -42,6 +47,19 @@ class FakeRedis:
 
 
 class LoginRateLimitTests(SimpleTestCase):
+    def test_registration_limits_ip_and_email(self) -> None:
+        client = MagicMock()
+        client.pipeline.return_value.execute.side_effect = [
+            [10, True, 3, True],
+            [11, True, 4, True],
+        ]
+        with patch("apps.accounts.security._redis_client", return_value=client):
+            check_registration_rate_limit(email="person@example.edu", ip_address="192.0.2.10")
+            with self.assertRaises(RateLimited):
+                check_registration_rate_limit(email="person@example.edu", ip_address="192.0.2.10")
+        keys = [call.args[0] for call in client.pipeline.return_value.incr.call_args_list]
+        self.assertTrue(all("person@example.edu" not in key for key in keys))
+
     @override_settings(LOGIN_RATE_LIMIT_ATTEMPTS=2, LOGIN_RATE_LIMIT_WINDOW_SECONDS=300)
     def test_rate_limit_is_scoped_by_portal_ip_and_normalized_account(self) -> None:
         fake = FakeRedis()

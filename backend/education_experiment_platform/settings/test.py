@@ -13,4 +13,5 @@ ALLOWED_HOSTS = [
 TRUSTED_PROXY_CIDRS = ["127.0.0.0/8"]
 DATABASES = {"default": {"ENGINE": "django.db.backends.sqlite3", "NAME": ":memory:"}}
 PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
+MAILERS = {"default": {"BACKEND": "django.core.mail.backends.locmem.EmailBackend"}}
 LOCAL_RUNTIME_MODE = "STUB"

@@ -128,12 +128,32 @@ def create_user(
     context: ActorContext,
 ) -> User:
     validate_new_password(password)
+    return create_user_with_password_hash(
+        email=email,
+        username=username,
+        display_name=display_name,
+        password_hash=make_password(password),
+        context=context,
+    )
+
+
+@transaction.atomic
+def create_user_with_password_hash(
+    *,
+    email: str,
+    username: str,
+    display_name: str,
+    password_hash: str,
+    context: ActorContext,
+    registration_role: str = User.RegistrationRole.STUDENT,
+) -> User:
     try:
         user = User.objects.create(
             email=normalize_email(email),
             username=normalize_username(username),
             display_name=display_name.strip(),
-            password=make_password(password),
+            password=password_hash,
+            registration_role=registration_role,
         )
         IdentityVerification.objects.create(user=user)
     except IntegrityError as exc:
@@ -470,11 +490,24 @@ def change_teacher_qualification(
         )
     except TeacherQualification.DoesNotExist as exc:
         raise ResourceNotFound() from exc
-    if status not in {TeacherQualification.Status.SUSPENDED, TeacherQualification.Status.REVOKED}:
+    if status not in {
+        TeacherQualification.Status.SUSPENDED,
+        TeacherQualification.Status.REVOKED,
+        TeacherQualification.Status.REJECTED,
+    }:
         raise QualificationStateConflict(detail={"target_status": status})
     if (
         qualification.status == status
         or qualification.status == TeacherQualification.Status.REVOKED
+        or (
+            status == TeacherQualification.Status.REJECTED
+            and qualification.status != TeacherQualification.Status.PENDING
+        )
+        or (
+            qualification.status == TeacherQualification.Status.PENDING
+            and status != TeacherQualification.Status.REJECTED
+        )
+        or qualification.status == TeacherQualification.Status.REJECTED
     ):
         raise QualificationStateConflict(detail={"status": qualification.status})
     from apps.courses.errors import OwnerTransferRequired
@@ -487,7 +520,7 @@ def change_teacher_qualification(
     changes: dict[str, Any] = {"status": status, "reason": reason.strip()}
     if status == TeacherQualification.Status.SUSPENDED:
         changes.update({"suspended_by": actor, "suspended_at": now})
-    else:
+    elif status == TeacherQualification.Status.REVOKED:
         changes.update({"revoked_by": actor, "revoked_at": now})
     previous = qualification.status
     changed = compare_and_swap(
@@ -538,7 +571,7 @@ def grant_platform_admin(
     user_public_id: str,
     reason: str,
     expected_user_version: int,
-    actor: User,
+    actor: User | None,
     context: ActorContext,
 ) -> PlatformAdminAssignment:
     try:

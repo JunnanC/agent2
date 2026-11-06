@@ -97,3 +97,16 @@ class AuthenticationServiceUnavailable(CoreError):
     message = "认证服务暂时不可用"
     status_code = 503
     retryable = True
+
+
+class EmailServiceUnavailable(CoreError):
+    code = "EMAIL_SERVICE_UNAVAILABLE"
+    message = "验证邮件暂时无法发送，请稍后再试"
+    status_code = 503
+    retryable = True
+
+
+class InvalidVerificationToken(CoreError):
+    code = "INVALID_VERIFICATION_TOKEN"
+    message = "验证链接无效或已过期"
+    status_code = 400

@@ -57,6 +57,7 @@ GRANT SELECT, INSERT, UPDATE ON \`${MYSQL_DATABASE}\`.core_compensation_task TO 
 GRANT SELECT, INSERT, UPDATE ON \`${MYSQL_DATABASE}\`.core_file_download_grant TO '${MYSQL_APP_USER}'@'%';
 GRANT SELECT, INSERT, UPDATE, DELETE ON \`${MYSQL_DATABASE}\`.django_session TO '${MYSQL_APP_USER}'@'%';
 GRANT SELECT, INSERT, UPDATE ON \`${MYSQL_DATABASE}\`.accounts_user TO '${MYSQL_APP_USER}'@'%';
+GRANT SELECT, INSERT, UPDATE, DELETE ON \`${MYSQL_DATABASE}\`.accounts_pending_registration TO '${MYSQL_APP_USER}'@'%';
 GRANT SELECT, INSERT, UPDATE ON \`${MYSQL_DATABASE}\`.accounts_identity_verification TO '${MYSQL_APP_USER}'@'%';
 GRANT SELECT, INSERT, UPDATE ON \`${MYSQL_DATABASE}\`.accounts_teacher_qualification TO '${MYSQL_APP_USER}'@'%';
 GRANT SELECT, INSERT ON \`${MYSQL_DATABASE}\`.accounts_teacher_qualification_event TO '${MYSQL_APP_USER}'@'%';

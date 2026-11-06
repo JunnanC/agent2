@@ -1,6 +1,6 @@
 # 部署与运维
 
-> 核对日期：2026-11-04。依据当前 Compose、Swarm 模板和部署脚本。返回[文档索引](../README.md)。
+> 核对日期：2026-11-05。依据当前 Compose、Swarm 模板和部署脚本。返回[文档索引](../README.md)。
 
 ## 本地与目标环境
 
@@ -12,8 +12,8 @@ Swarm 服务栈位于 [stack.yml](../../infrastructure/swarm/stack.yml)，用于
 
 - 先审阅 [.env.example](../../.env.example)、生产设置、stack 模板与 [deploy-swarm.ps1](../../scripts/deploy/deploy-swarm.ps1) 的实际检查；配置项以这些文件为准。
 - 镜像使用可追溯标签和 Registry digest；运行时使用受控镜像与网络，不用浮动 `latest` 作为验收依据。
-- 数据库、对象存储、Django、身份 HMAC、邀请码 HMAC、工作区及 Docker mTLS 等密钥通过对应 secret 管理；不能把密钥值写进普通配置、文档或命令历史。
-- 核对四个门户 Host、可信代理网段、CSRF/工作区允许 Origin、证书、外部服务地址、日志和运行时网络。
+- 数据库、对象存储、Django、身份 HMAC、邀请码 HMAC、SMTP 密码、工作区及 Docker mTLS 等密钥通过对应 secret 管理；不能把密钥值写进普通配置、文档或命令历史。注册邮件使用外部 `email_host_password` secret。
+- 核对四个门户 Host、学生和教师公开 URL、SMTP 主机与发件人、可信代理网段、CSRF/工作区允许 Origin、证书、外部服务地址、日志和运行时网络。
 - 工作区访问材料只授予对应 Worker 或网关，Django Web 和普通 Worker 不直接获得 Docker API 管理权限。
 
 ## Swarm 基础条件
