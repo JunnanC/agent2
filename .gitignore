@@ -120,7 +120,7 @@ frontend/l[0-9]*.json
 # Generated deployment configuration and local evidence
 infrastructure/kong/kong.rendered.yml
 # Generated outputs stay local.
-outputs/
+/outputs/
 .presentation-build/
 evidence/p16/*/
 evidence/workspace-image/
