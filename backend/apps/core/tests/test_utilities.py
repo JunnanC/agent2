@@ -15,11 +15,13 @@ class CoreUtilityTests(SimpleTestCase):
         self.assertNotIn("=", cursor)
         self.assertEqual(decode_cursor(cursor)["id"], 42)
 
-    def test_only_the_five_architecture_post_exceptions_are_exempt(self) -> None:
+    def test_only_public_auth_and_other_architecture_post_exceptions_are_exempt(self) -> None:
         self.assertEqual(
             IDEMPOTENCY_EXEMPT_POST_PATHS,
             {
                 "/api/v2/auth/login",
+                "/api/v2/auth/register",
+                "/api/v2/auth/verify-email",
                 "/api/v2/auth/logout",
                 "/api/v2/auth/logout-all",
                 "/api/v2/integrations/oauth/token",

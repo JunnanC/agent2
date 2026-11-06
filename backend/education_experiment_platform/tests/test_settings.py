@@ -116,6 +116,7 @@ class SettingsTests(SimpleTestCase):
         }
         assert {model._meta.db_table for model in apps.get_app_config("accounts").get_models()} == {
             "accounts_user",
+            "accounts_pending_registration",
             "accounts_identity_verification",
             "accounts_teacher_qualification",
             "accounts_teacher_qualification_event",

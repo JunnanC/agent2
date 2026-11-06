@@ -212,6 +212,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v2/auth/register": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["api_v2_auth_register_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v2/auth/session/step-up": {
         parameters: {
             query?: never;
@@ -222,6 +238,22 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["api_v2_auth_session_step_up_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/auth/verify-email": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["api_v2_auth_verify_email_create"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1975,22 +2007,6 @@ export interface paths {
         options?: never;
         head?: never;
         patch: operations["api_v2_platform_users_partial_update"];
-        trace?: never;
-    };
-    "/api/v2/platform/users/{user_id}/admin-assignment": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["api_v2_platform_users_admin_assignment_create"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
         trace?: never;
     };
     "/api/v2/platform/users/{user_id}/revoke-sessions": {
@@ -6366,11 +6382,12 @@ export interface components {
         QualificationData: {
             public_id: string;
             user_id: string;
+            user_row_version: number;
             display_name: string;
             status: string;
             reason: string;
             /** Format: date-time */
-            granted_at: string;
+            granted_at: string | null;
             /** Format: date-time */
             suspended_at: string | null;
             /** Format: date-time */
@@ -6449,6 +6466,13 @@ export interface components {
         };
         Reason: {
             reason: string;
+        };
+        RegistrationResponse: {
+            data: components["schemas"]["RegistrationStatus"];
+            meta: components["schemas"]["AccountTraceMeta"];
+        };
+        RegistrationStatus: {
+            status: string;
         };
         ReorderWrite: {
             ids: string[];
@@ -7193,9 +7217,10 @@ export interface components {
         /**
          * @description * `SUSPENDED` - SUSPENDED
          *     * `REVOKED` - REVOKED
+         *     * `REJECTED` - REJECTED
          * @enum {string}
          */
-        TeacherQualificationUpdateStatusEnum: "SUSPENDED" | "REVOKED";
+        TeacherQualificationUpdateStatusEnum: "SUSPENDED" | "REVOKED" | "REJECTED";
         TemplateAssetCreate: {
             version_id: string;
             purpose: components["schemas"]["PurposeEnum"];
@@ -7612,6 +7637,9 @@ export interface components {
         VerificationResponse: {
             data: components["schemas"]["VerificationData"];
             meta: components["schemas"]["AccountTraceMeta"];
+        };
+        VerifyEmail: {
+            token: string;
         };
         /**
          * @description * `PUBLIC` - Public
@@ -8243,6 +8271,31 @@ export interface operations {
             };
         };
     };
+    api_v2_auth_register_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UserCreate"];
+                "application/x-www-form-urlencoded": components["schemas"]["UserCreate"];
+                "multipart/form-data": components["schemas"]["UserCreate"];
+            };
+        };
+        responses: {
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RegistrationResponse"];
+                };
+            };
+        };
+    };
     api_v2_auth_session_step_up_create: {
         parameters: {
             query?: never;
@@ -8264,6 +8317,31 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SessionStepUpResponse"];
+                };
+            };
+        };
+    };
+    api_v2_auth_verify_email_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VerifyEmail"];
+                "application/x-www-form-urlencoded": components["schemas"]["VerifyEmail"];
+                "multipart/form-data": components["schemas"]["VerifyEmail"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RegistrationResponse"];
                 };
             };
         };
@@ -11563,33 +11641,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["UserResponse"];
-                };
-            };
-        };
-    };
-    api_v2_platform_users_admin_assignment_create: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                user_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["QualificationGrant"];
-                "application/x-www-form-urlencoded": components["schemas"]["QualificationGrant"];
-                "multipart/form-data": components["schemas"]["QualificationGrant"];
-            };
-        };
-        responses: {
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AdminAssignmentResponse"];
                 };
             };
         };

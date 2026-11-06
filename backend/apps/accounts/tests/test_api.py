@@ -251,6 +251,8 @@ class AccountApiTests(TestCase):
         document = yaml.safe_load(response.content)
         expected_operations = {
             ("/api/v2/auth/login", "post"): ("auth", ["USER", "TEACHING", "PLATFORM"]),
+            ("/api/v2/auth/register", "post"): ("auth", ["USER", "TEACHING"]),
+            ("/api/v2/auth/verify-email", "post"): ("auth", ["USER", "TEACHING"]),
             ("/api/v2/me", "get"): ("me", ["USER", "TEACHING", "PLATFORM"]),
             ("/api/v2/me/verification", "get"): ("me", ["USER"]),
             ("/api/v2/platform/users", "get"): ("platform-accounts", ["PLATFORM"]),
@@ -271,6 +273,7 @@ class AccountApiTests(TestCase):
             operation = document["paths"][path][method]
             self.assertIn(tag, operation["tags"])
             self.assertEqual(operation["x-portals"], portals)
+        self.assertNotIn("/api/v2/platform/users/{user_id}/admin-assignment", document["paths"])
 
     def test_forged_portal_without_trusted_proxy_is_rejected(self) -> None:
         response = Client().get(

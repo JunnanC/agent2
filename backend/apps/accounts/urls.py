@@ -4,7 +4,6 @@ from .views import (
     AdminAssignmentDetailView,
     AdminAssignmentsView,
     CsrfView,
-    GrantAdminAssignmentView,
     GrantTeacherQualificationView,
     LoginView,
     LogoutAllView,
@@ -15,16 +14,20 @@ from .views import (
     PlatformRevokeSessionsView,
     PlatformUserDetailView,
     PlatformUsersView,
+    RegisterView,
     ReviewVerificationView,
     SessionStepUpView,
     TeacherQualificationDetailView,
     TeacherQualificationsView,
     VerificationsView,
+    VerifyEmailView,
 )
 
 urlpatterns = [
     path("auth/csrf", CsrfView.as_view(), name="auth-csrf"),
     path("auth/login", LoginView.as_view(), name="auth-login"),
+    path("auth/register", RegisterView.as_view(), name="auth-register"),
+    path("auth/verify-email", VerifyEmailView.as_view(), name="auth-verify-email"),
     path("auth/logout", LogoutView.as_view(), name="auth-logout"),
     path("auth/logout-all", LogoutAllView.as_view(), name="auth-logout-all"),
     path("auth/session/step-up", SessionStepUpView.as_view(), name="auth-session-step-up"),
@@ -61,11 +64,6 @@ urlpatterns = [
         "platform/admin-assignments",
         AdminAssignmentsView.as_view(),
         name="platform-admin-assignments",
-    ),
-    path(
-        "platform/users/<str:user_id>/admin-assignment",
-        GrantAdminAssignmentView.as_view(),
-        name="platform-grant-admin-assignment",
     ),
     path(
         "platform/admin-assignments/<str:assignment_id>",

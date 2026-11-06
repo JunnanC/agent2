@@ -1,4 +1,4 @@
-from django.db.models import Q, QuerySet
+from django.db.models import Case, IntegerField, Q, QuerySet, Value, When
 
 from apps.core.pagination import PageSpec
 
@@ -17,7 +17,7 @@ def user_by_login(identifier: str) -> User | None:
 def eligible_portals(user: User) -> list[str]:
     if user.account_status != User.AccountStatus.ACTIVE:
         return []
-    portals = ["USER"]
+    portals = [] if user.registration_role == User.RegistrationRole.TEACHER else ["USER"]
     if TeacherQualification.objects.filter(
         user=user, status=TeacherQualification.Status.ACTIVE
     ).exists():
@@ -51,7 +51,14 @@ def paged_users(*, spec: PageSpec, query: str = "") -> tuple[QuerySet[User], int
 def paged_teacher_qualifications(
     *, spec: PageSpec, status: str = ""
 ) -> tuple[QuerySet[TeacherQualification], int]:
-    queryset = TeacherQualification.objects.select_related("user").order_by("id")
+    queryset = TeacherQualification.objects.select_related("user").order_by(
+        Case(
+            When(status=TeacherQualification.Status.PENDING, then=Value(0)),
+            default=Value(1),
+            output_field=IntegerField(),
+        ),
+        "id",
+    )
     if status:
         queryset = queryset.filter(status=status)
     return queryset[spec.offset : spec.offset + spec.page_size], queryset.count()

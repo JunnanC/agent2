@@ -8,6 +8,7 @@ import { AppProviders, queryClient } from "./providers";
 import { keys } from "@edu/query-keys";
 import { AuthGuard, PortalSSEBridge } from "./guards";
 import { Login } from "@/pages/login";
+import { Register } from "@/pages/register";
 import { Home } from "@/pages/home";
 import { Courses } from "@/pages/courses";
 import { Enrollments } from "@/pages/enrollments";
@@ -27,6 +28,8 @@ export function App(): JSX.Element {
         <PortalSSEBridge />
         <Routes>
           <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
+          <Route path="/verify-email" element={<Register />} />
           <Route element={<AuthGuard />}>
             <Route path="/" element={<Home />} />
             <Route path="/courses" element={<Courses />} />

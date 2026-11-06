@@ -561,6 +561,50 @@
                 }
             }
         },
+        "/api/v2/auth/register": {
+            "post": {
+                "operationId": "api_v2_auth_register_create",
+                "tags": [
+                    "auth"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/UserCreate"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/UserCreate"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/UserCreate"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "responses": {
+                    "202": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/RegistrationResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                },
+                "x-portals": [
+                    "USER",
+                    "TEACHING"
+                ]
+            }
+        },
         "/api/v2/auth/session/step-up": {
             "post": {
                 "operationId": "api_v2_auth_session_step_up_create",
@@ -608,6 +652,50 @@
                     "USER",
                     "TEACHING",
                     "PLATFORM"
+                ]
+            }
+        },
+        "/api/v2/auth/verify-email": {
+            "post": {
+                "operationId": "api_v2_auth_verify_email_create",
+                "tags": [
+                    "auth"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/VerifyEmail"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/VerifyEmail"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/VerifyEmail"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/RegistrationResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                },
+                "x-portals": [
+                    "USER",
+                    "TEACHING"
                 ]
             }
         },
@@ -6391,64 +6479,6 @@
                             "application/json": {
                                 "schema": {
                                     "$ref": "#/components/schemas/UserResponse"
-                                }
-                            }
-                        },
-                        "description": ""
-                    }
-                },
-                "x-portals": [
-                    "PLATFORM"
-                ]
-            }
-        },
-        "/api/v2/platform/users/{user_id}/admin-assignment": {
-            "post": {
-                "operationId": "api_v2_platform_users_admin_assignment_create",
-                "parameters": [
-                    {
-                        "in": "path",
-                        "name": "user_id",
-                        "schema": {
-                            "type": "string"
-                        },
-                        "required": true
-                    }
-                ],
-                "tags": [
-                    "platform-accounts"
-                ],
-                "requestBody": {
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "$ref": "#/components/schemas/QualificationGrant"
-                            }
-                        },
-                        "application/x-www-form-urlencoded": {
-                            "schema": {
-                                "$ref": "#/components/schemas/QualificationGrant"
-                            }
-                        },
-                        "multipart/form-data": {
-                            "schema": {
-                                "$ref": "#/components/schemas/QualificationGrant"
-                            }
-                        }
-                    },
-                    "required": true
-                },
-                "security": [
-                    {
-                        "portalSession": []
-                    }
-                ],
-                "responses": {
-                    "201": {
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/AdminAssignmentResponse"
                                 }
                             }
                         },
@@ -22767,6 +22797,9 @@
                     "user_id": {
                         "type": "string"
                     },
+                    "user_row_version": {
+                        "type": "integer"
+                    },
                     "display_name": {
                         "type": "string"
                     },
@@ -22778,7 +22811,8 @@
                     },
                     "granted_at": {
                         "type": "string",
-                        "format": "date-time"
+                        "format": "date-time",
+                        "nullable": true
                     },
                     "suspended_at": {
                         "type": "string",
@@ -22803,7 +22837,8 @@
                     "row_version",
                     "status",
                     "suspended_at",
-                    "user_id"
+                    "user_id",
+                    "user_row_version"
                 ]
             },
             "QualificationGrant": {
@@ -23096,6 +23131,32 @@
                 },
                 "required": [
                     "reason"
+                ]
+            },
+            "RegistrationResponse": {
+                "type": "object",
+                "properties": {
+                    "data": {
+                        "$ref": "#/components/schemas/RegistrationStatus"
+                    },
+                    "meta": {
+                        "$ref": "#/components/schemas/AccountTraceMeta"
+                    }
+                },
+                "required": [
+                    "data",
+                    "meta"
+                ]
+            },
+            "RegistrationStatus": {
+                "type": "object",
+                "properties": {
+                    "status": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "status"
                 ]
             },
             "ReorderWrite": {
@@ -25387,10 +25448,11 @@
             "TeacherQualificationUpdateStatusEnum": {
                 "enum": [
                     "SUSPENDED",
-                    "REVOKED"
+                    "REVOKED",
+                    "REJECTED"
                 ],
                 "type": "string",
-                "description": "* `SUSPENDED` - SUSPENDED\n* `REVOKED` - REVOKED"
+                "description": "* `SUSPENDED` - SUSPENDED\n* `REVOKED` - REVOKED\n* `REJECTED` - REJECTED"
             },
             "TemplateAssetCreate": {
                 "type": "object",
@@ -26659,6 +26721,18 @@
                 "required": [
                     "data",
                     "meta"
+                ]
+            },
+            "VerifyEmail": {
+                "type": "object",
+                "properties": {
+                    "token": {
+                        "type": "string",
+                        "maxLength": 256
+                    }
+                },
+                "required": [
+                    "token"
                 ]
             },
             "VisibilityEnum": {

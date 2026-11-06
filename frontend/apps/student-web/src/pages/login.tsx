@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { authFlow } from "@edu/auth-client";
 import { queryClient, meApiFn } from "@/app/api";
 import { keys } from "@edu/query-keys";
@@ -57,7 +57,7 @@ export function Login() {
         </div>
         <h1 style={{ fontSize: 22, margin: "4px 0 2px" }}>登录学生门户</h1>
         <p className="subtle" style={{ margin: 0 }}>
-          使用课程发起方提供的账号登录，会话与身份由后端统一管理。
+          使用学生账号登录，或先完成邮箱验证注册。
         </p>
 
         <label className="form-label" htmlFor="login-identifier">账号 / 邮箱</label>
@@ -73,7 +73,7 @@ export function Login() {
         <button type="submit" className="btn primary" style={{ marginTop: 10, justifyContent: "center" }} disabled={submitting}>
           {submitting ? "登录中…" : "登录学生门户"}
         </button>
-        <small>密码由学校统一管理，忘记密码请联系平台管理员。</small>
+        <Link to="/register">注册学生账号</Link>
       </form>
     </div>
   );

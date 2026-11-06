@@ -57,18 +57,18 @@ export function UsersPage() {
       await queryClient.invalidateQueries({ queryKey: accountKeys.users() })
     } catch (reason) { setError(messageFor(reason)) }
   }
-  const grant = async (user: UserData, kind: 'teacher' | 'admin') => {
-    const suffix = kind === 'teacher' ? 'teacher-qualification' : 'admin-assignment'
+  const grant = async (user: UserData) => {
+    const suffix = 'teacher-qualification'
     try {
       await apiRequestWithMetadata(`/api/v2/platform/users/${user.public_id}/${suffix}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason: '管理员授予资格' }), ifMatch: `"${user.row_version}"`, intent: new RequestIntent() })
-      await queryClient.invalidateQueries({ queryKey: kind === 'teacher' ? accountKeys.teachers() : accountKeys.admins() })
+      await queryClient.invalidateQueries({ queryKey: accountKeys.teachers() })
     } catch (reason) { setError(messageFor(reason)) }
   }
   const values = query.data?.payload.data ?? []
   return <section className="workspace-page"><PageHeader eyebrow="PLATFORM ACCOUNTS" title="用户账号" description="创建、停用、恢复账号并授予门户资格。" actions={<button className="text-button" onClick={() => setShowCreate((value) => !value)}>新建账号</button>} />{null}
     {error ? <p className="form-error" role="alert">{error}</p> : null}
     {showCreate ? <section className="section-block"><h2>新建账号</h2><form className="form-grid" onSubmit={create}><TextField label="邮箱" name="email" type="email" required /><TextField label="用户名" name="username" required /><TextField label="展示名称" name="display_name" required /><TextField label="初始密码" name="password" type="password" minLength={12} required /><div className="form-actions"><button className="primary-button" type="submit">创建</button></div></form></section> : null}
-    <AsyncState query={query}>{values.length === 0 ? <RequestStateView state="empty" /> : <div className="data-table-wrap"><table className="data-table"><thead><tr><th>用户</th><th>用户名</th><th>状态</th><th>版本</th><th>操作</th></tr></thead><tbody>{values.map((user) => <tr key={user.public_id}><td data-wrap><strong>{user.display_name}</strong><br />{user.email}</td><td>{user.username}</td><td><StatusBadge status={user.account_status} /></td><td>{user.row_version}</td><td><div className="toolbar"><button className={user.account_status === 'ACTIVE' ? 'text-button text-button--danger' : 'text-button'} onClick={() => void changeStatus(user)}>{user.account_status === 'ACTIVE' ? '停用' : '恢复'}</button><button className="text-button" onClick={() => void grant(user, 'teacher')}>授予教师</button><button className="text-button" onClick={() => void grant(user, 'admin')}>授予管理员</button></div></td></tr>)}</tbody></table></div>}</AsyncState>
+    <AsyncState query={query}>{values.length === 0 ? <RequestStateView state="empty" /> : <div className="data-table-wrap"><table className="data-table"><thead><tr><th>用户</th><th>用户名</th><th>状态</th><th>版本</th><th>操作</th></tr></thead><tbody>{values.map((user) => <tr key={user.public_id}><td data-wrap><strong>{user.display_name}</strong><br />{user.email}</td><td>{user.username}</td><td><StatusBadge status={user.account_status} /></td><td>{user.row_version}</td><td><div className="toolbar"><button className={user.account_status === 'ACTIVE' ? 'text-button text-button--danger' : 'text-button'} onClick={() => void changeStatus(user)}>{user.account_status === 'ACTIVE' ? '停用' : '恢复'}</button><button className="text-button" onClick={() => void grant(user)}>授予教师</button></div></td></tr>)}</tbody></table></div>}</AsyncState>
   </section>
 }
 
@@ -82,8 +82,19 @@ export function TeachersPage() {
       await queryClient.invalidateQueries({ queryKey: accountKeys.teachers() })
     } catch (reason) { setError(messageFor(reason)) }
   }
+  const review = async (value: QualificationData, approve: boolean) => {
+    if (!window.confirm(`确认${approve ? '通过' : '拒绝'} ${value.display_name} 的教师申请？`)) return
+    try {
+      if (approve) {
+        await apiRequestWithMetadata(`/api/v2/platform/users/${value.user_id}/teacher-qualification`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason: '教师注册审核通过' }), ifMatch: `"${value.user_row_version}"`, intent: new RequestIntent() })
+      } else {
+        await apiRequestWithMetadata(`/api/v2/platform/teacher-qualifications/${value.public_id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'REJECTED', reason: '教师注册审核未通过' }), ifMatch: `"${value.row_version}"` })
+      }
+      await queryClient.invalidateQueries({ queryKey: accountKeys.teachers() })
+    } catch (reason) { setError(messageFor(reason)) }
+  }
   const values = query.data?.payload.data ?? []
-  return <section className="workspace-page"><PageHeader eyebrow="QUALIFICATIONS" title="教师资格" description="暂停或撤销将停止教师端访问；仍负责有效课程时，需要先转移课程负责人。" />{null}{error ? <p className="form-error">{error}</p> : null}<AsyncState query={query}>{values.length === 0 ? <RequestStateView state="empty" /> : <div className="data-table-wrap"><table className="data-table"><thead><tr><th>教师</th><th>状态</th><th>原因</th><th>操作</th></tr></thead><tbody>{values.map((value) => <tr key={value.public_id}><td>{value.display_name}</td><td><StatusBadge status={value.status} /></td><td data-wrap>{value.reason}</td><td><div className="toolbar">{value.status === 'ACTIVE' ? <button className="text-button" onClick={() => void change(value, 'SUSPENDED')}>暂停</button> : null}{value.status !== 'REVOKED' ? <button className="text-button text-button--danger" onClick={() => void change(value, 'REVOKED')}>撤销</button> : null}</div></td></tr>)}</tbody></table></div>}</AsyncState></section>
+  return <section className="workspace-page"><PageHeader eyebrow="QUALIFICATIONS" title="教师资格" description="审核教师注册申请，并管理已授予的教师资格。" />{null}{error ? <p className="form-error">{error}</p> : null}<AsyncState query={query}>{values.length === 0 ? <RequestStateView state="empty" /> : <div className="data-table-wrap"><table className="data-table"><thead><tr><th>教师</th><th>状态</th><th>原因</th><th>操作</th></tr></thead><tbody>{values.map((value) => <tr key={value.public_id}><td>{value.display_name}</td><td><StatusBadge status={value.status} /></td><td data-wrap>{value.reason}</td><td><div className="toolbar">{value.status === 'PENDING' ? <><button className="text-button" onClick={() => void review(value, true)}>通过</button><button className="text-button text-button--danger" onClick={() => void review(value, false)}>拒绝</button></> : null}{value.status === 'ACTIVE' ? <button className="text-button" onClick={() => void change(value, 'SUSPENDED')}>暂停</button> : null}{value.status === 'SUSPENDED' ? <button className="text-button text-button--danger" onClick={() => void change(value, 'REVOKED')}>撤销</button> : null}</div></td></tr>)}</tbody></table></div>}</AsyncState></section>
 }
 
 export function AdminsPage() {
