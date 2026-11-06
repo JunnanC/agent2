@@ -232,7 +232,8 @@ def _tests_data(task: ExperimentTask) -> dict[str, Any]:
         if run is not None
         else None
     )
-    count, examples = 0, []
+    count = 0
+    examples: list[dict[str, str]] = []
     tests_id = str((task.execution_spec or {}).get("tests_asset", ""))
     if tests_id:
         asset = ObjectAsset.objects.filter(public_id=tests_id).first()

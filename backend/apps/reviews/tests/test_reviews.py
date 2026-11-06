@@ -4,6 +4,7 @@ import os
 from decimal import Decimal
 from io import BytesIO
 from types import SimpleNamespace
+from typing import Any
 from unittest import skipUnless
 from unittest.mock import Mock, patch
 
@@ -554,7 +555,7 @@ class ReviewServiceTests(TestCase):
                 self.assertEqual(summary["language"], language)
                 self.assertTrue(summary["execution_plan"]["run"])
                 self.assertEqual(summary["absolute_tolerance"], 0)
-                captured = {}
+                captured: dict[str, Any] = {}
                 adapter = SimpleNamespace(
                     execute_judge=lambda captured=captured, **kwargs: (
                         captured.update(kwargs) or RuntimeExecutionResult(status="PASSED")

@@ -132,7 +132,7 @@ def _starter_main(value: bytes, media_type: str) -> bytes:
     if media_type == "application/zip" or value.startswith(b"PK"):
         try:
             with zipfile.ZipFile(io.BytesIO(value)) as archive:
-                candidates: list[zipfile.ZipInfo] = []
+                zip_candidates: list[zipfile.ZipInfo] = []
                 for info in archive.infolist():
                     name = info.filename.replace("\\", "/")
                     safe_name = name.rstrip("/") if info.is_dir() else name
@@ -145,10 +145,10 @@ def _starter_main(value: bytes, media_type: str) -> bytes:
                     if mode and mode != 0o100000:
                         raise WorkspaceStorageFailure("WORKSPACE_FILE_INVALID")
                     if name == WORKSPACE_PATH:
-                        candidates.append(info)
-                if len(candidates) != 1:
+                        zip_candidates.append(info)
+                if len(zip_candidates) != 1:
                     raise WorkspaceStorageFailure("WORKSPACE_FILE_MISSING")
-                info = candidates[0]
+                info = zip_candidates[0]
                 if info.file_size > _max_bytes():
                     raise WorkspaceStorageFailure("WORKSPACE_FILE_TOO_LARGE")
                 return archive.read(info)
@@ -158,7 +158,7 @@ def _starter_main(value: bytes, media_type: str) -> bytes:
             raise WorkspaceStorageFailure("WORKSPACE_FILE_INVALID") from exc
     try:
         with tarfile.open(fileobj=io.BytesIO(value), mode="r:*") as archive:
-            candidates: list[tarfile.TarInfo] = []
+            tar_candidates: list[tarfile.TarInfo] = []
             for tar_info in archive.getmembers():
                 name = tar_info.name.replace("\\", "/")
                 safe_name = name.rstrip("/") if tar_info.isdir() else name
@@ -169,10 +169,10 @@ def _starter_main(value: bytes, media_type: str) -> bytes:
                 if not tar_info.isreg() or tar_info.issym() or tar_info.islnk():
                     raise WorkspaceStorageFailure("WORKSPACE_FILE_INVALID")
                 if name == WORKSPACE_PATH:
-                    candidates.append(tar_info)
-            if len(candidates) != 1:
+                    tar_candidates.append(tar_info)
+            if len(tar_candidates) != 1:
                 raise WorkspaceStorageFailure("WORKSPACE_FILE_MISSING")
-            tar_info = candidates[0]
+            tar_info = tar_candidates[0]
             if tar_info.size > _max_bytes():
                 raise WorkspaceStorageFailure("WORKSPACE_FILE_TOO_LARGE")
             handle = archive.extractfile(tar_info)
@@ -556,7 +556,7 @@ def _initial_project(job: WorkspaceStorageJob, language: str) -> _Content:
         raw = _read_object(asset)
         if asset.media_type.startswith("text/") or asset.media_type == "application/json":
             name = asset.original_name or TOOLCHAINS_BY_LANGUAGE[language]["entrypoint"]
-            material_files = {name: raw}
+            material_files: dict[str, bytes] = {name: raw}
         else:
             material_files = _project_files(raw, asset.media_type)
         if set(files) & set(material_files):
@@ -576,7 +576,7 @@ def _initial_project(job: WorkspaceStorageJob, language: str) -> _Content:
         files = _project_files(_read_object(asset), asset.media_type)
         has_student_files = True
     if not has_student_files:
-        entrypoint = spec.get("entrypoint") or TOOLCHAINS_BY_LANGUAGE[language]["entrypoint"]
+        entrypoint = str(spec.get("entrypoint") or TOOLCHAINS_BY_LANGUAGE[language]["entrypoint"])
         starters = {
             "c": b"#include <stdio.h>\nint main(void) {\n    return 0;\n}\n",
             "cpp": b"#include <iostream>\nint main() {\n    return 0;\n}\n",

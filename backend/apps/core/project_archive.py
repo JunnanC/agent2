@@ -6,6 +6,7 @@ import json
 import stat
 import tarfile
 import zipfile
+from collections.abc import Callable
 
 MANIFEST = ".edu-workspace.json"
 MAX_FILES = 256
@@ -92,7 +93,13 @@ def unpack(
     seen: dict[str, bool] = {}
     total = 0
 
-    def add(name: str, size: int, directory: bool, regular: bool, read) -> None:
+    def add(
+        name: str,
+        size: int,
+        directory: bool,
+        regular: bool,
+        read: Callable[[int], bytes] | None,
+    ) -> None:
         nonlocal total
         name = name.rstrip("/") if directory else name
         if docker_root:
@@ -116,6 +123,8 @@ def unpack(
             raise ProjectArchiveError("WORKSPACE_FILE_TOO_LARGE")
         if directory:
             return
+        if read is None:
+            raise ProjectArchiveError("WORKSPACE_FILE_INVALID")
         content = read(size + 1)
         if len(content) != size:
             raise ProjectArchiveError("WORKSPACE_FILE_INVALID")
@@ -137,18 +146,21 @@ def unpack(
 
     try:
         if value.startswith(b"PK"):
-            with zipfile.ZipFile(io.BytesIO(value)) as archive:
-                members = archive.infolist()
+            with zipfile.ZipFile(io.BytesIO(value)) as zip_archive:
+                members = zip_archive.infolist()
                 if len(members) > MAX_FILES * 4:
                     raise ProjectArchiveError("WORKSPACE_FILE_TOO_LARGE")
-                for item in members:
-                    if item.orig_filename != item.filename:
+                for zip_item in members:
+                    if zip_item.orig_filename != zip_item.filename:
                         raise ProjectArchiveError("WORKSPACE_FILE_INVALID")
-                    mode = stat.S_IFMT(item.external_attr >> 16)
+                    mode = stat.S_IFMT(zip_item.external_attr >> 16)
                     if mode not in {0, stat.S_IFREG, stat.S_IFDIR}:
                         raise ProjectArchiveError("WORKSPACE_FILE_INVALID")
-                    with archive.open(item) as source:
-                        add(item.filename, item.file_size, item.is_dir(), True, source.read)
+                    with zip_archive.open(zip_item) as zip_source:
+                        add(
+                            zip_item.filename, zip_item.file_size, zip_item.is_dir(),
+                            True, zip_source.read,
+                        )
         else:
             # Bound decompression including TAR headers before tarfile parses PAX metadata.
             raw = value
@@ -158,17 +170,17 @@ def unpack(
                     raw = compressed.read(limit + 1)
             if len(raw) > limit:
                 raise ProjectArchiveError("WORKSPACE_FILE_TOO_LARGE")
-            with tarfile.open(fileobj=io.BytesIO(raw), mode="r:") as archive:
-                for item in archive:
-                    if not item.isdir() and not item.isreg():
+            with tarfile.open(fileobj=io.BytesIO(raw), mode="r:") as tar_archive:
+                for tar_item in tar_archive:
+                    if not tar_item.isdir() and not tar_item.isreg():
                         raise ProjectArchiveError("WORKSPACE_FILE_INVALID")
-                    source = archive.extractfile(item) if item.isreg() else None
+                    tar_source = tar_archive.extractfile(tar_item) if tar_item.isreg() else None
                     add(
-                        item.name,
-                        item.size,
-                        item.isdir(),
-                        item.isreg(),
-                        source.read if source else None,
+                        tar_item.name,
+                        tar_item.size,
+                        tar_item.isdir(),
+                        tar_item.isreg(),
+                        tar_source.read if tar_source else None,
                     )
     except ProjectArchiveError:
         raise

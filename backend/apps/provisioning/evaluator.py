@@ -3,6 +3,14 @@
 import math
 import re
 from collections.abc import Mapping
+from typing import TypedDict
+
+
+class PublicReport(TypedDict):
+    status: str
+    cases: int
+    results: list[dict[str, object]]
+
 
 _NUMBER = re.compile(r"^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$")
 
@@ -47,7 +55,7 @@ def outputs_match(
     return True
 
 
-def public_report(report: Mapping[str, object], public_count: int = 3) -> dict[str, object]:
+def public_report(report: Mapping[str, object], public_count: int = 3) -> PublicReport:
     """Keep only safe case metadata; hidden inputs/outputs/logs never cross the boundary."""
     results = report.get("results", [])
     safe: list[dict[str, object]] = []

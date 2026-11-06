@@ -631,7 +631,9 @@ class DockerLocalAdapterTests(SimpleTestCase):
         )
         self.assertEqual(result.status, "FAILED")
         self.assertEqual(result.error_code, "RUNTIME_ALGORITHM_FAILED")
-        self.assertEqual([item["status"] for item in result.test_report["results"]],
+        cases = result.test_report["results"]
+        assert isinstance(cases, list)
+        self.assertEqual([item["status"] for item in cases],
                          ["FAILED", "PASSED", "FAILED", "FAILED"])
         self.assertEqual(client.containers_state, {})
 

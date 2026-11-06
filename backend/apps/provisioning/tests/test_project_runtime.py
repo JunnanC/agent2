@@ -11,7 +11,7 @@ from apps.provisioning.adapters import DockerLocalAdapter
 
 
 @pytest.mark.skipif(os.environ.get("IDE_REAL_DOCKER_TEST") != "1", reason="explicit Docker opt-in")
-def test_real_project_roundtrip_is_writable_and_replaces_file_set():
+def test_real_project_roundtrip_is_writable_and_replaces_file_set() -> None:
     import docker
 
     client = docker.from_env()

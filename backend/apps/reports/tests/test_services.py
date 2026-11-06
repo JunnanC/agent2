@@ -103,7 +103,7 @@ class ReportServiceTests(TestCase):
         WorkspaceExecutionRun.objects.filter(pk=run.pk).update(test_report_asset=output)
         payload = {"status": "PASSED", "cases": 2, "results": [{"status": "PASSED"}] * 2}
 
-        def read(asset, **kwargs):
+        def read(asset: ObjectAsset, **kwargs: object) -> str:
             return json.dumps({"cases": [{}, {}]} if asset.pk == tests.pk else payload)
 
         with patch("apps.workspaces.presentation.asset_text", side_effect=read):
@@ -550,7 +550,7 @@ class ReportServiceTests(TestCase):
             owner_ref=self.task.public_id, purpose="REPORT_ATTACHMENT", scan_status="PENDING",
         )
 
-        def submit():
+        def submit() -> tuple[ReportVersion, ExperimentTask]:
             return submit_report(
                 task_id=self.task.public_id, actor=self.task.student,
                 expected_task_version=self.task.row_version, context=self.context,

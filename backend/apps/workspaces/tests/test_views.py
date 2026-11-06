@@ -1,4 +1,5 @@
 import json
+from typing import cast
 from unittest.mock import patch
 
 from django.test import Client, SimpleTestCase, TestCase, override_settings
@@ -258,12 +259,13 @@ class ExecutionRunApiTests(WorkbenchApiBase):
     def test_detail_returns_public_outputs_but_never_hidden_inputs_or_logs(self) -> None:
         client = self._client(self.student)
         data = self._enter_task(client, key="public-output-enter")
-        session = data["session"]
+        session = cast(dict[str, str], data["session"])
         status, payload = self._post_execution_run(
             client, key="public-output-run", token=session["workspace_token"]
         )
         self.assertEqual(status, 201)
-        run = WorkspaceExecutionRun.objects.get(public_id=payload["data"]["public_id"])
+        run_data = cast(dict[str, str], payload["data"])
+        run = WorkspaceExecutionRun.objects.get(public_id=run_data["public_id"])
         asset = ObjectAsset.objects.create(
             bucket="private", object_key="test-result", digest_sha256="a" * 64,
             size_bytes=1, purpose="TEST_REPORT", owner_type="WORKSPACE_EXECUTION",
