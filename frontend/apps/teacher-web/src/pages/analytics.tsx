@@ -1,3 +1,4 @@
+import { GradeAnalysis } from "./grade-analysis";
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useParams } from "react-router-dom";
@@ -91,6 +92,7 @@ export function Analytics() {
   return (
     <>
       <Breadcrumbs items={[{ label: "教师门户" }, { label: "课程" }]} current="教学分析" />
+      <GradeAnalysis courseId={courseId} />
       <div className="page-actions align-end">
         <select className="field" style={{ width: 130 }} aria-label="统计周期" value={period}
           onChange={(event) => setPeriod(event.target.value === "month" ? "month" : "term")}>

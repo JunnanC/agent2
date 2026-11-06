@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useNavigate } from "react-router-dom";
 import { teachingApi } from "@edu/api-client";
 import { keys } from "@edu/query-keys";
 import {
@@ -35,6 +35,7 @@ const STATUS_LABEL: Record<string, string> = {
 export function Templates() {
   const { courseId = "" } = useParams();
   const toast = useToast();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [createOpen, setCreateOpen] = useState(false);
   const [name, setName] = useState("");
@@ -54,6 +55,7 @@ export function Templates() {
       setCreateOpen(false);
       setName("");
       void templates.refetch();
+      navigate(`/courses/${courseId}/templates/${created.public_id}/edit`);
     },
     onError: (error) => toast.notify(apiErrorMessage(error), "error"),
   });
@@ -137,6 +139,8 @@ export function Templates() {
                           to={`/courses/${courseId}/templates/${row.public_id}/edit`}>
                           {actionLabel}
                         </Link>
+                        <Link className="btn sm" to={`/courses/${courseId}/templates/${row.public_id}/validate?version=${row.current_version_id ?? ""}`}>验证实验</Link>
+                        <Link className="btn sm" to={`/courses/${courseId}/publishing?template=${row.public_id}`}>配置发布</Link>
                         {isDraft ? (
                           <Button size="sm" variant="danger"
                             disabled={remove.isPending}

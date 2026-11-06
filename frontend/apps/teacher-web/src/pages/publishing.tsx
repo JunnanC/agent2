@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import { teachingApi } from "@edu/api-client";
 import type { Publication, Template } from "@edu/api-client";
 import { keys } from "@edu/query-keys";
@@ -35,10 +35,11 @@ const initialCreateForm = {
 export function Publishing() {
   const { courseId = "" } = useParams();
   const toast = useToast();
+  const [searchParams] = useSearchParams();
   const [withdrawTarget, setWithdrawTarget] = useState<Publication | null>(null);
   const [closeTarget, setCloseTarget] = useState<Publication | null>(null);
-  const [createOpen, setCreateOpen] = useState(false);
-  const [createForm, setCreateForm] = useState({ ...initialCreateForm });
+  const [createOpen, setCreateOpen] = useState(Boolean(searchParams.get("template")));
+  const [createForm, setCreateForm] = useState({ ...initialCreateForm, templateId: searchParams.get("template") ?? "" });
 
   const publications = useQuery({
     queryKey: keys.publications(courseId, {}),
@@ -212,6 +213,7 @@ export function Publishing() {
                         ) : null}
                       </td>
                       <td className="table-actions">
+                        <Link className="btn sm" to={`/courses/${courseId}/publishing/${row.public_id}/reviews`}>报告与评审</Link>
                         {row.status === "DRAFT" ? (
                           <button type="button" className="btn sm" disabled={runPrecheck.isPending}
                             onClick={() => row.template_version_id && runPrecheck.mutate(row.template_version_id)}>

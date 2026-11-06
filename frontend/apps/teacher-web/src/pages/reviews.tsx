@@ -1,3 +1,5 @@
+import { allPages } from "@/lib/all-pages";
+import { BatchReviews } from "./batch-reviews";
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useParams } from "react-router-dom";
@@ -26,15 +28,15 @@ function sanitizeReportHtml(html: string): string {
 }
 
 export function Reviews() {
-  const { courseId = "" } = useParams();
+  const { courseId = "", publicationId: routePublicationId = "" } = useParams();
   const toast = useToast();
   const [statusFilter, setStatusFilter] = useState("PENDING");
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<ReviewSummary | null>(null);
 
   const reviews = useQuery({
-    queryKey: keys.reviews(courseId, { status: statusFilter === "ALL" ? null : statusFilter }),
-    queryFn: () => teachingApi.reviews(courseId, { status: statusFilter === "ALL" ? undefined : statusFilter }),
+    queryKey: keys.reviews(courseId, { status: statusFilter === "ALL" ? null : statusFilter, publication_id: routePublicationId }),
+    queryFn: async () => ({ rows: await allPages(page => teachingApi.reviews(courseId, { page, publication_id: routePublicationId || undefined, status: statusFilter === "ALL" ? undefined : statusFilter })) }),
   });
 
   const detail = useQuery({
@@ -187,7 +189,7 @@ export function Reviews() {
 
   return (
     <>
-      <Breadcrumbs items={[{ label: "教师门户" }, { label: "课程" }]} current="评审中心" />
+      <Breadcrumbs items={[{ label: "教师门户" }, { label: "课程" }]} current="实验报告与评审" />
       <div className="page-actions align-end">
         <button type="button" className={`btn sm${statusFilter === "PENDING" ? " primary" : ""}`} onClick={() => setStatusFilter("PENDING")}>待评审</button>
         <button type="button" className={`btn sm${statusFilter === "ALL" ? " primary" : ""}`} onClick={() => setStatusFilter("ALL")}>全部记录</button>
@@ -195,6 +197,7 @@ export function Reviews() {
           {(reviews.data?.rows ?? []).filter((row: ReviewSummary) => row.status === "PENDING").length} 份待处理
         </span>
       </div>
+      {routePublicationId && <BatchReviews key={`${routePublicationId}-${statusFilter}-${search}`} courseId={courseId} publicationId={routePublicationId} rows={rows} refresh={() => { void reviews.refetch(); void detail.refetch(); }} />}
       <Panel title={<><h2>报告提交</h2><span className="subtle">先看提交预览和自动检查，再进入评分。</span></>}
         actions={(
           <input className="field" style={{ width: 220 }} type="search" placeholder="搜索学生或实验"
