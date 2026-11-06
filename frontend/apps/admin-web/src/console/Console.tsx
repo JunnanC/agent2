@@ -99,6 +99,7 @@ export default function Console() {
     ? (candidate as Page)
     : (aliases[candidate] ?? "overview");
   const [menu, setMenu] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
   useEffect(() => {
     document.title = names[current] + " · 教学实验平台管理";
   }, [current]);
@@ -107,7 +108,7 @@ export default function Console() {
     setMenu(false);
   }
   return (
-    <div className="admin-console">
+    <div className={`admin-console${collapsed ? " nav-collapsed" : ""}`}>
       <a className="console-skip" href="#console-main">
         跳到主要内容
       </a>
@@ -132,12 +133,17 @@ export default function Console() {
           <div>
             教学实验平台<small>运维管理控制台</small>
           </div>
+          <button type="button" className="nav-collapse" aria-label={collapsed ? "展开导航栏" : "收起导航栏"} title={collapsed ? "展开导航栏" : "收起导航栏"} aria-expanded={!collapsed} aria-controls="admin-primary-nav" onClick={() => setCollapsed(value => !value)}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path d={collapsed ? "m10 6 6 6-6 6" : "m14 6-6 6 6 6"} /></svg>
+          </button>
         </div>
         <div className="nav-label">平台管理</div>
-        <nav className="nav" aria-label="平台管理">
+        <nav id="admin-primary-nav" className="nav" aria-label="平台管理">
           {(Object.keys(names) as Page[]).map((key) => (
             <button
               key={key}
+              title={names[key]}
+              aria-label={names[key]}
               className={current === key ? "active" : ""}
               aria-current={current === key ? "page" : undefined}
               onClick={() => go(key)}

@@ -641,6 +641,12 @@ function normalizeReviewDetail(raw: unknown): ReviewDetail {
   const annotations = (base["annotations"] ?? []) as Array<Record<string, unknown>>;
   return {
     ...(base as unknown as ReviewDetail),
+    decision: typeof base["decision"] === "object" && base["decision"] !== null
+      ? String((base["decision"] as Record<string, unknown>)["decision"] ?? "")
+      : typeof base["decision"] === "string" ? base["decision"] : null,
+    score: typeof base["decision"] === "object" && base["decision"] !== null && (base["decision"] as Record<string, unknown>)["score"] != null
+      ? Number((base["decision"] as Record<string, unknown>)["score"])
+      : null,
     rubric: {
       criteria: criteria.map((row) => ({
         public_id: String(row["public_id"] ?? ""),
@@ -923,7 +929,7 @@ export const teachingApi = {
     request<Array<Record<string, unknown>>>(`/teaching/courses/${courseId}/tasks/${taskId}/operation-replay`).then(toList),
 
   // 评审
-  reviews: (courseId: string, query?: { status?: string; page?: number }) =>
+  reviews: (courseId: string, query?: { status?: string; page?: number; publication_id?: string; page_size?: number }) =>
     request<ReviewSummary[]>(`/teaching/courses/${courseId}/reviews`, { query }).then(toList),
 
   rubrics: (courseId: string) =>

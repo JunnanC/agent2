@@ -116,3 +116,26 @@
 .student-portal .notification-card>.status{align-self:flex-start;font-size:12px;background:transparent;color:var(--teal);padding:0}
 @media(max-width:1200px){.student-portal .course-card-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:760px){.student-portal .course-card-grid{grid-template-columns:minmax(0,1fr)}.student-portal .notification-card{gap:12px;flex-wrap:wrap}.student-portal .notification-card-head{flex-direction:column;align-items:flex-start;gap:8px}.student-portal .notification-card-head strong{font-size:14px}.student-portal .notification-card>.status{margin-left:30px}.student-portal .student-overview-heading{align-items:flex-start}.student-portal .student-overview-heading .btn{flex:none}}
+
+/* Match the admin console palette and the approved homepage prototype. */
+.student-portal{--paper:#f1f3f2;--ink:#252b2a;--muted:#69716e;--line:#e7eae8;--teal:#246657;--teal-soft:#e2e9e4;--content-pad:32px}
+.student-portal .panel{background:#fff;border:1px solid var(--line);box-shadow:none;border-radius:12px}
+.student-portal .brand-mark{background:transparent;color:var(--teal)}
+.student-portal .student-overview-heading h1{font-size:24px;margin-bottom:8px}
+.student-portal .student-overview-heading{padding:28px 0}
+.student-portal .student-overview-grid{margin-top:24px;gap:24px}
+.student-portal .panel-title h2{font-size:16px}
+.student-portal .btn.primary{background:#293b34;border-color:#293b34}
+@media(min-width:1051px){
+.student-portal .side-nav-shell>.topbar{position:sticky;top:0;display:grid;grid-template-columns:minmax(0,1fr) 28px;align-content:start;gap:24px 4px;padding:28px 16px;background:#f1f3f2;border-right:0}
+.student-portal .side-nav-shell .brand-lockup{grid-column:1;min-width:0;gap:8px;flex-wrap:wrap}
+.student-portal .brand-name{font-size:16px;white-space:nowrap}
+.student-portal .brand-mark{width:24px;height:24px}
+.student-portal .context-dot,.student-portal .context-label{display:none}
+.student-portal .side-nav-shell .sidebar-toggle{grid-column:2;grid-row:1;align-self:start;width:28px;height:28px;padding:4px;justify-content:center;background:transparent;border:0}
+.student-portal .sidebar-toggle .nav-label{display:none}
+.student-portal .side-nav-shell .primary-nav,.student-portal .side-nav-shell .topbar-actions{grid-column:1 / -1}
+.student-portal .side-nav-shell .nav-item{min-height:36px;padding:8px 12px}
+.student-portal .nav-collapsed>.topbar{display:flex;align-items:center;padding:28px 16px}
+.student-portal .nav-collapsed .sidebar-toggle{width:28px}
+}

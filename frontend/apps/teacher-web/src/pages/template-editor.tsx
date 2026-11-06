@@ -763,7 +763,8 @@ export function TemplateEditor() {
                 <EmptyState title="还没有预检记录" hint="点击「运行预检」生成最新预检结果。" />
               )}
               <div className="section" style={{ display: "flex", gap: 8 }}>
-                <Button variant="primary" onClick={() => navigate(`/courses/${courseId}/publishing`)}>去发布实验</Button>
+                <Button variant="primary" onClick={() => navigate(`/courses/${courseId}/publishing?template=${templateId}`)}>配置并发布此实验</Button>
+                <Button onClick={() => navigate(`/courses/${courseId}/templates/${templateId}/validate`)}>进入验证工作台</Button>
               </div>
             </div>
           ) : null}
