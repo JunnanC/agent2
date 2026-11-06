@@ -17,8 +17,14 @@ from apps.core.models import AuditLog, FailureRecord, ObjectAsset, OutboxEvent
 from apps.core.project_archive import bundle
 from apps.courses.models import Course, CourseStaff
 from apps.courses.services import ActorContext
-from apps.experiments.models import ExperimentTask, TaskPublication
-from apps.experiments.services import publish_publication
+from apps.experiments.grades import capped_retake_score, task_grades
+from apps.experiments.models import ExperimentRetakeLink, ExperimentTask, TaskPublication
+from apps.experiments.services import (
+    create_retake_publication,
+    publish_publication,
+    student_learning_history,
+    teaching_progress,
+)
 from apps.experiments.tests.helpers import (
     create_domain,
     create_draft_publication,
@@ -237,6 +243,98 @@ class ReviewServiceTests(TestCase):
             ],
             context=self.context(self.teacher),
         )
+
+    def _confirm_score(self, review: Review, score: str) -> ReviewDecision:
+        total = Decimal(score)
+        changed = score_review_criteria(
+            course_id=self.course.public_id,
+            review_id=review.public_id,
+            actor=self.teacher,
+            expected_version=review.row_version,
+            scores=[
+                {"criterion_id": self.criteria[0].public_id, "score": min(total, Decimal("60"))},
+                {
+                    "criterion_id": self.criteria[1].public_id,
+                    "score": max(total - 60, Decimal("0")),
+                },
+            ],
+            context=self.context(self.teacher),
+        )
+        decision, _, _ = decide_review(
+            course_id=self.course.public_id,
+            review_id=review.public_id,
+            actor=self.teacher,
+            expected_version=changed.row_version,
+            decision="APPROVE",
+            requested_score=total,
+            feedback="Confirmed",
+            context=self.context(self.teacher),
+        )
+        return decision
+
+    def _assert_retake_grade(self, first: str | None, second: str, expected: str) -> None:
+        if first is not None:
+            self._confirm_score(self.review, first)
+        retake, _ = create_retake_publication(
+            course_id=self.course.public_id,
+            publication_id=self.publication.public_id,
+            selected_enrollment_ids=[self.enrollment.public_id],
+            window_start=timezone.now() + timezone.timedelta(hours=1),
+            window_end=timezone.now() + timezone.timedelta(days=2),
+            actor=self.teacher,
+            context=self.context(self.teacher),
+        )
+        retake_task = retake.tasks.get(student=self.task.student)
+        pending_grade = task_grades([self.task])[self.task.pk]["score"]
+        if first is None:
+            self.assertIsNone(pending_grade)
+        else:
+            self.assertEqual(Decimal(str(pending_grade)), Decimal(first))
+        review = self._submitted_review(retake_task, "Retake report")
+        decision = self._confirm_score(review, second)
+        link = ExperimentRetakeLink.objects.get(source_task=self.task)
+        capped = capped_retake_score(Decimal(second))
+        self.assertEqual(link.registered_score, capped)
+        self.assertEqual(decision.score, capped)
+        self.assertEqual(
+            Decimal(str(task_grades([self.task])[self.task.pk]["score"])), Decimal(expected)
+        )
+        client, _ = self._client(identifier=self.teacher.email, portal="TEACHING")
+        response = client.get(
+            f"/api/v2/teaching/courses/{self.course.public_id}/tasks",
+            HTTP_X_PORTAL="TEACHING",
+            HTTP_X_PROXY_CONTEXT="ingress-v1",
+            REMOTE_ADDR="127.0.0.1",
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+        rows = {item["public_id"]: item for item in response.json()["data"]}
+        self.assertEqual(Decimal(rows[self.task.public_id]["score"]), Decimal(expected))
+        self.assertEqual(rows[retake_task.public_id]["retake_of_task_id"], self.task.public_id)
+        progress = teaching_progress(course_id=self.course.public_id, actor=self.teacher)
+        self.assertEqual(progress["total"], 2)
+        students = progress["experiments"][0]["students"]
+        student = next(item for item in students if item["task_id"] == self.task.public_id)
+        self.assertEqual(Decimal(student["score"]), Decimal(expected))
+        history = student_learning_history(actor=self.task.student)
+        experiments = [item for year in history["years"] for term in year["terms"]
+                       for course in term["courses"] for item in course["experiments"]]
+        self.assertEqual(len(experiments), 1)
+        self.assertEqual(Decimal(experiments[0]["score"]), Decimal(expected))
+
+    def test_retake_caps_80_and_uses_it_when_original_is_45(self) -> None:
+        self._assert_retake_grade("45", "80", "60")
+
+    def test_retake_registers_59_without_rounding_to_60(self) -> None:
+        self._assert_retake_grade("45", "59", "59")
+
+    def test_retake_does_not_lower_a_higher_original_grade(self) -> None:
+        self._assert_retake_grade("80", "40", "80")
+
+    def test_retake_uses_its_score_when_original_has_no_decision(self) -> None:
+        self._assert_retake_grade(None, "52.50", "52.50")
+
+    def test_retake_registers_exactly_60(self) -> None:
+        self._assert_retake_grade("45", "60", "60")
 
     def test_scoring_uses_parent_cas_and_appends_events(self) -> None:
         stale_version = self.review.row_version

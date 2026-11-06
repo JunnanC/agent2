@@ -881,6 +881,15 @@ export const teachingApi = {
       method: "POST", body: {}, idempotencyKey: reuseKey ?? newIdempotencyKey(), ifMatch,
     }).then((r) => r.data),
 
+  createRetakePublication: (
+    courseId: string,
+    publicationId: string,
+    payload: { selected_enrollment_ids: string[]; window_start: string; window_end: string },
+    reuseKey?: string,
+  ) => request<Publication>(`/teaching/courses/${courseId}/experiments/${publicationId}/retakes`, {
+    method: "POST", body: payload, idempotencyKey: reuseKey ?? newIdempotencyKey(),
+  }).then((r) => r.data),
+
   withdrawPublication: (courseId: string, publicationId: string, ifMatch: string, reuseKey?: string) =>
     request<Publication>(`/teaching/courses/${courseId}/experiments/${publicationId}/withdraw`, {
       method: "POST", body: {}, idempotencyKey: reuseKey ?? newIdempotencyKey(), ifMatch,

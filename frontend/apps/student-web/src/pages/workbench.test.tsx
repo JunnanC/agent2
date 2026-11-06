@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { Link, MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ToastProvider } from "@edu/ui";
 import { reportApi, taskApi, workspaceApi } from "@edu/api-client";
@@ -68,6 +68,57 @@ describe("workbench regression", () => {
     fireEvent.click(await screen.findByRole("tab", { name: "文件编辑" }));
     expect(screen.getByTitle("实验文件编辑器")).toHaveAttribute("src", "/workspace/session-1/webide/");
     expect(screen.queryByText("/etc/resolv.conf")).not.toBeInTheDocument();
+    client.clear();
+  });
+
+  it.each([true, false])("resets task state on navigation (destination session: %s)", async (hasSession) => {
+    sessionStorage.removeItem("edu.workspace.task-2");
+    if (hasSession) sessionStorage.setItem("edu.workspace.task-2", JSON.stringify({
+      session_id: "session-2", token: "token-2", capabilities: { webide: true },
+    }));
+    vi.mocked(taskApi.detail).mockImplementation(async (taskId) => ({
+      public_id: taskId, status: "REPORT_DRAFT", allowed_actions: [], blockers: [],
+    } as never));
+    vi.mocked(workspaceApi.workbench).mockImplementation(async (taskId) => ({
+      chapters: [], tests: [], template_caps: { webide: true }, task: { public_id: taskId },
+    } as never));
+    vi.mocked(reportApi.draft).mockImplementation(async (taskId) => ({
+      public_id: `draft-${taskId}`,
+      task_id: taskId,
+      body_markdown: taskId === "task-1" ? "original" : "task 2 draft",
+      row_version: taskId === "task-1" ? "1" : "7",
+    } as never));
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(<QueryClientProvider client={client}><ToastProvider><MemoryRouter initialEntries={["/experiments/task-1/workbench"]}>
+      <Link to="/experiments/task-2/workbench">Open task 2</Link>
+      <Routes><Route path="/experiments/:taskId/workbench" element={<Workbench />} /></Routes>
+    </MemoryRouter></ToastProvider></QueryClientProvider>);
+
+    fireEvent.click(await screen.findByRole("tab", { name: "实验报告" }));
+    const taskOneEditor = await screen.findByRole("textbox", { name: "实验报告编辑器" });
+    await waitFor(() => expect(taskOneEditor).toHaveTextContent("original"));
+    fireEvent.click(screen.getByRole("tab", { name: "文件编辑" }));
+    expect(screen.getByTitle("实验文件编辑器")).toHaveAttribute("src", "/workspace/session-1/webide/");
+
+    fireEvent.click(screen.getByRole("link", { name: "Open task 2" }));
+    if (hasSession) {
+      await waitFor(() => expect(screen.getByTitle("实验文件编辑器")).toHaveAttribute(
+        "src", "/workspace/session-2/webide/",
+      ));
+    } else {
+      await waitFor(() => expect(screen.queryByTitle("实验文件编辑器")).not.toBeInTheDocument());
+    }
+    fireEvent.click(await screen.findByRole("tab", { name: "实验报告" }));
+    const taskTwoEditor = await screen.findByRole("textbox", { name: "实验报告编辑器" });
+    await waitFor(() => expect(taskTwoEditor).toHaveTextContent("task 2 draft"));
+    taskTwoEditor.innerHTML = "<p>task 2 changed</p>";
+    fireEvent.input(taskTwoEditor);
+    fireEvent.click(screen.getByRole("button", { name: "保存报告" }));
+    await waitFor(() => expect(reportApi.saveDraft).toHaveBeenCalledWith(
+      "task-2",
+      expect.objectContaining({ body_markdown: expect.stringContaining("task 2 changed") }),
+      "7",
+    ));
     client.clear();
   });
 

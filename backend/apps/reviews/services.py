@@ -1328,10 +1328,15 @@ def decide_review(
         }
         for item in criteria
     ]
+    from apps.experiments.grades import capped_retake_score
+    from apps.experiments.models import ExperimentRetakeLink
+
+    retake_link = ExperimentRetakeLink.objects.select_for_update().filter(retake_task=task).first()
+    registered_total = capped_retake_score(total) if retake_link else total
     decision_row = ReviewDecision.objects.create(
         review=review,
         decision=decision,
-        score=total,
+        score=registered_total,
         feedback=feedback.strip(),
         decided_by=actor,
         decided_by_staff=staff,
@@ -1339,6 +1344,13 @@ def decide_review(
         criterion_snapshot=snapshot,
         trace_id=context.trace_id,
     )
+    if retake_link:
+        compare_and_swap(
+            ExperimentRetakeLink,
+            pk=retake_link.pk,
+            expected_version=retake_link.row_version,
+            changes={"registered_score": registered_total},
+        )
     changed_review = compare_and_swap(
         Review,
         pk=review.pk,
@@ -1358,7 +1370,9 @@ def decide_review(
         trigger="REVIEW_DECIDED",
         reason=feedback.strip()[:255],
         context=context,
-        detail={"review_id": review.public_id, "decision": decision, "score": str(total)},
+        detail={
+            "review_id": review.public_id, "decision": decision, "score": str(registered_total)
+        },
     )
     if decision == ReviewDecision.Decision.APPROVE:
         from apps.experiments.ports import request_task_terminal
@@ -1401,7 +1415,7 @@ def decide_review(
         target_type="review",
         target_ref=review.public_id,
         course_ref=course.public_id,
-        after={"decision": decision, "score": str(total)},
+        after={"decision": decision, "score": str(registered_total)},
     )
     _event(
         context,

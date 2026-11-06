@@ -202,6 +202,7 @@ class SettingsTests(SimpleTestCase):
             "experiments_publication_audience",
             "experiments_publication_prerequisite",
             "experiments_experiment_task",
+            "experiments_experiment_retake_link",
             "experiments_task_state_transition",
             "experiments_task_extension_request",
             "experiments_task_extension_decision",

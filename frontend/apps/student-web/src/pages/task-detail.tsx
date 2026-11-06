@@ -305,7 +305,7 @@ export function TaskDetail() {
               <StatusBadge tone={reviewedRound?.decision?.decision === "APPROVE" ? "good" : "warn"}>
                 {reviewedRound?.decision?.decision === "APPROVE" ? "评审通过" : "退回修改"}
               </StatusBadge>
-              <strong>{reviewedRound?.decision?.score} 分</strong>
+              <strong>{reviewResult.data?.effective_score ?? reviewedRound?.decision?.score} 分</strong>
             </div>
             <dl>
               {reviewedRound?.scores?.criteria.map(criterion => (

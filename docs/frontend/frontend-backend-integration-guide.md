@@ -88,3 +88,15 @@ npx tsc -p e2e/tsconfig.json --noEmit
 7. 课程内验证工作台与学生个人汇总提供页面及接口缺口说明；后端交付教师会话、报告接口和稳定学生标识查询后继续联调。
 
 验证：教师端类型检查、生产构建、5 个测试文件共 11 项通过。真实环境登录、发布、AI 服务与教师工作台未完成联调，不以 HTML 演示代替正式功能验收。后端分析报告与实施任务见开发指南/后端开发.md。
+
+## bug-1：课程筛选与补做成绩契约（2026-11-06）
+
+以下为上述 teacher-web1 交付之后新增的实现：
+
+- `GET /api/v2/tasks` 使用 `course_id` 筛选课程；兼容旧 `course`，两者非空且不同时返回 400。
+- `POST /api/v2/teaching/courses/{course_id}/experiments/{publication_id}/retakes` 接收 `selected_enrollment_ids`、`window_start` 和 `window_end`，要求 `Idempotency-Key`。使用选课记录 ID，与已有普通发布契约保持一致；服务端验证当前有效选课和同一学生的原实验任务。
+- 空名单不创建批次；每个原实验任务只能关联一次补做；只能对已发布或已关闭的普通实验创建补做。开放时间必须在未来且早于截止时间。同步创建返回 201，异步分配返回 202，原任务和原发布保留。
+- 发布响应增加 `retake_of_publication_id`。教师任务列表增加 `score`（服务端有效成绩）、`retake_of_task_id`、`has_retake` 和 `retake_task_id`。异步分配未完成时 `has_retake` 已为 true，`retake_task_id` 可为空。
+- 评分细项保留原始分数；补做确认决定和关联记录中的登记分均封顶为 60。原实验有效成绩取原成绩与补做登记分的较高值。未评分的补做不替代原成绩；均未评分时 score 为空，页面汇总按 0 计。
+- 教师成绩页、课程进度成绩汇总和学生学习历史按原实验只计一次；操作任务列表仍保留补做任务。学生评审结果增加 `effective_score`，各轮历史评审决定保持原记录。
+- 数据库新增发布来源字段及 `ExperimentRetakeLink` 关联模型，迁移为 experiments `0004`、`0005`；上线代码前需要在目标数据库完成迁移。当前阶段验证使用项目 SQLite 测试设置，不代表实际 MySQL 或线上浏览器总体验收已完成。
