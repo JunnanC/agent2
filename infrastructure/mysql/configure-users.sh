@@ -2,6 +2,11 @@
 set -euo pipefail
 
 mode="${1:-}"
+if [[ "${mode}" != "prepare" && "${mode}" != "restrict" && "${mode}" != "verify" ]]; then
+  echo "Usage: configure-users.sh prepare|restrict|verify" >&2
+  exit 2
+fi
+
 required=(MYSQL_DATABASE MYSQL_ROOT_PASSWORD MYSQL_MIGRATION_USER MYSQL_MIGRATION_PASSWORD MYSQL_APP_USER MYSQL_APP_PASSWORD)
 for name in "${required[@]}"; do
   if [[ -z "${!name:-}" ]]; then
@@ -27,6 +32,7 @@ done
 export MYSQL_PWD="${MYSQL_ROOT_PASSWORD}"
 mysql=(mysql --protocol=tcp --host=mysql --user=root --batch --skip-column-names)
 
+if [[ "${mode}" != "verify" ]]; then
 "${mysql[@]}" <<SQL
 CREATE USER IF NOT EXISTS '${MYSQL_MIGRATION_USER}'@'%' IDENTIFIED BY '${MYSQL_MIGRATION_PASSWORD}';
 ALTER USER '${MYSQL_MIGRATION_USER}'@'%' IDENTIFIED BY '${MYSQL_MIGRATION_PASSWORD}';
@@ -35,15 +41,13 @@ ALTER USER '${MYSQL_APP_USER}'@'%' IDENTIFIED BY '${MYSQL_APP_PASSWORD}';
 GRANT ALL PRIVILEGES ON \`${MYSQL_DATABASE}\`.* TO '${MYSQL_MIGRATION_USER}'@'%';
 FLUSH PRIVILEGES;
 SQL
+fi
 
 if [[ "${mode}" == "prepare" ]]; then
   exit 0
 fi
-if [[ "${mode}" != "restrict" ]]; then
-  echo "Usage: configure-users.sh prepare|restrict" >&2
-  exit 2
-fi
 
+if [[ "${mode}" == "restrict" ]]; then
 "${mysql[@]}" <<SQL
 REVOKE ALL PRIVILEGES, GRANT OPTION FROM '${MYSQL_APP_USER}'@'%';
 GRANT SELECT, INSERT, UPDATE ON \`${MYSQL_DATABASE}\`.core_object_asset TO '${MYSQL_APP_USER}'@'%';
@@ -86,6 +90,11 @@ GRANT SELECT, INSERT, UPDATE ON \`${MYSQL_DATABASE}\`.courses_enrollment_import_
 GRANT SELECT, INSERT, UPDATE ON \`${MYSQL_DATABASE}\`.courses_copy_job TO '${MYSQL_APP_USER}'@'%';
 GRANT SELECT, INSERT ON \`${MYSQL_DATABASE}\`.courses_copy_item TO '${MYSQL_APP_USER}'@'%';
 GRANT SELECT, INSERT, UPDATE ON \`${MYSQL_DATABASE}\`.courses_academic_term TO '${MYSQL_APP_USER}'@'%';
+GRANT SELECT, INSERT ON \`${MYSQL_DATABASE}\`.courses_administrative_class TO '${MYSQL_APP_USER}'@'%';
+GRANT SELECT, INSERT, UPDATE ON \`${MYSQL_DATABASE}\`.courses_administrative_class_membership TO '${MYSQL_APP_USER}'@'%';
+GRANT SELECT, INSERT ON \`${MYSQL_DATABASE}\`.courses_course_schedule TO '${MYSQL_APP_USER}'@'%';
+GRANT SELECT, INSERT, UPDATE ON \`${MYSQL_DATABASE}\`.courses_timetable_import_job TO '${MYSQL_APP_USER}'@'%';
+GRANT SELECT, INSERT ON \`${MYSQL_DATABASE}\`.courses_student_schedule_entry TO '${MYSQL_APP_USER}'@'%';
 GRANT SELECT, INSERT, UPDATE ON \`${MYSQL_DATABASE}\`.governance_runtime_adapter TO '${MYSQL_APP_USER}'@'%';
 GRANT SELECT, INSERT, UPDATE ON \`${MYSQL_DATABASE}\`.governance_image_asset TO '${MYSQL_APP_USER}'@'%';
 GRANT SELECT, INSERT, UPDATE ON \`${MYSQL_DATABASE}\`.governance_resource_profile TO '${MYSQL_APP_USER}'@'%';
@@ -120,6 +129,7 @@ GRANT SELECT, INSERT, UPDATE ON \`${MYSQL_DATABASE}\`.experiments_task_publicati
 GRANT SELECT, INSERT ON \`${MYSQL_DATABASE}\`.experiments_publication_audience TO '${MYSQL_APP_USER}'@'%';
 GRANT SELECT, INSERT ON \`${MYSQL_DATABASE}\`.experiments_publication_prerequisite TO '${MYSQL_APP_USER}'@'%';
 GRANT SELECT, INSERT, UPDATE ON \`${MYSQL_DATABASE}\`.experiments_experiment_task TO '${MYSQL_APP_USER}'@'%';
+GRANT SELECT, INSERT, UPDATE ON \`${MYSQL_DATABASE}\`.experiments_experiment_retake_link TO '${MYSQL_APP_USER}'@'%';
 GRANT SELECT, INSERT ON \`${MYSQL_DATABASE}\`.experiments_task_state_transition TO '${MYSQL_APP_USER}'@'%';
 GRANT SELECT, INSERT ON \`${MYSQL_DATABASE}\`.experiments_publication_chapter TO '${MYSQL_APP_USER}'@'%';
 GRANT SELECT, INSERT ON \`${MYSQL_DATABASE}\`.experiments_publication_task TO '${MYSQL_APP_USER}'@'%';
@@ -184,3 +194,13 @@ GRANT SELECT, INSERT, UPDATE ON \`${MYSQL_DATABASE}\`.integrations_webhook_deliv
 GRANT SELECT, INSERT ON \`${MYSQL_DATABASE}\`.integrations_webhook_delivery_attempt TO '${MYSQL_APP_USER}'@'%';
 FLUSH PRIVILEGES;
 SQL
+fi
+
+privilege_count=$("${mysql[@]}" --execute="SELECT COUNT(DISTINCT PRIVILEGE_TYPE) FROM information_schema.TABLE_PRIVILEGES WHERE TABLE_SCHEMA='${MYSQL_DATABASE}' AND TABLE_NAME='experiments_experiment_retake_link' AND GRANTEE=CONCAT(CHAR(39), '${MYSQL_APP_USER}', CHAR(39), '@', CHAR(39), '%', CHAR(39)) AND PRIVILEGE_TYPE IN ('SELECT', 'INSERT', 'UPDATE');")
+if [[ "${privilege_count}" != "3" ]]; then
+  echo "Runtime database grants are incomplete for experiments_experiment_retake_link" >&2
+  exit 1
+fi
+
+app_mysql=(mysql --protocol=tcp --host=mysql --user="${MYSQL_APP_USER}" --database="${MYSQL_DATABASE}" --batch --skip-column-names)
+MYSQL_PWD="${MYSQL_APP_PASSWORD}" "${app_mysql[@]}" --execute="SELECT 1 FROM experiments_experiment_retake_link LIMIT 0;" >/dev/null
