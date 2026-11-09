@@ -5,8 +5,14 @@ from celery import shared_task
 from .services import (
     compensate_provisioning,
     execute_provisioning_job,
+    runtime_inventory_snapshot,
     warmup_publication_image,
 )
+
+
+@shared_task(queue="q_provision")
+def collect_runtime_inventory(trace_id: str = "") -> dict[str, Any]:
+    return runtime_inventory_snapshot(trace_id=trace_id)
 
 
 @shared_task(bind=True, max_retries=5, queue="q_provision", acks_late=True)

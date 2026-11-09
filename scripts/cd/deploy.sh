@@ -57,6 +57,7 @@ printf 'DOCKER_SOCKET_GID=%s\nCELERY_CONCURRENCY=1\nRUNTIME_WORKER_CONCURRENCY=1
 compose=(docker compose --project-directory "$release" --env-file "$release/.env" -p edu-platform
   -f "$release/docker-compose.dev.yml" -f "$release/server.yml" -f "$release/images.json")
 "${compose[@]}" --profile runtime config --format json > "$release/resolved.json"
+python3 "$release/scripts/cd/check-portal-origins.py" "$release/.env" "$release/resolved.json"
 python3 - "$release/resolved.json" <<'PY'
 import json, subprocess, sys
 c = json.load(open(sys.argv[1]))

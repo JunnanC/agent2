@@ -3,6 +3,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ToastProvider } from "@edu/ui";
+import { ApiError } from "@edu/auth-client";
 import type { Mock } from "vitest";
 
 vi.mock("@edu/api-client", () => ({
@@ -62,6 +63,23 @@ describe("TaskDetail 渲染", () => {
     expect(await screen.findByText("Linux 网络故障排查", { selector: "b" })).toBeInTheDocument();
     expect(await screen.findByRole("button", { name: "进入实验工作台" })).toBeInTheDocument();
     expect(screen.getAllByText("进行中").length).toBeGreaterThan(0);
+  });
+
+  it("进行中且无评审记录时不显示正在评审", async () => {
+    (reportApi.reviewResult as unknown as Mock).mockRejectedValue(new ApiError({
+      status: 404, url: "/review-result", method: "GET", kind: "validation",
+      payload: { code: "RESOURCE_NOT_FOUND", message: "not found" },
+    }));
+    renderTaskDetail();
+    expect(await screen.findByText("Linux 网络故障排查", { selector: "b" })).toBeInTheDocument();
+    await waitFor(() => expect(reportApi.reviewResult).toHaveBeenCalled());
+    expect(screen.queryByText("教师正在评审，评分与批注将在评审完成后显示。")).not.toBeInTheDocument();
+  });
+
+  it("已提交但尚无评审结果时显示等待提示", async () => {
+    (taskApi.detail as unknown as Mock).mockResolvedValue({ ...taskFixture, status: "SUBMITTED" });
+    renderTaskDetail();
+    expect(await screen.findByText("教师正在评审，评分与批注将在评审完成后显示。")).toBeInTheDocument();
   });
 
   it("已完成任务展示真实成绩、分项评分和教师批注", async () => {

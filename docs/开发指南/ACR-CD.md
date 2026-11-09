@@ -34,6 +34,7 @@ GitHub 托管 runner 消耗账号 Actions 配额；ACR 个人版是否可免费�
 - 注册仓库级 runner，标签 agent2-production，配置为 systemd 服务并确认在 GitHub 显示 Online。
 - 准备 /opt/agent2-cd/{releases,backups}，仅服务用户可写。
 - 准备 /etc/agent2-cd/.env、compose.override.yml、secrets/workspace_upstream_token，仅服务用户可读。保留原密码和业务密钥；不要复制模板占位值到生产。
+- `.env` 中 `DJANGO_TRUSTED_ORIGINS` 必须包含 `https://${STUDENT_HOST}`、`https://${TEACHER_HOST}`、`https://${ADMIN_HOST}` 的实际展开值。部署预检会检查解析后的 Django 配置，缺项时阻止发布；修改私有 `.env` 后需重新预检并用 HTTPS 门户登录验证。
 - server override 显式将 mysql-data、redis-data、mongo-data、mongo-keyfile、minio-data、clamav-data、fluent-bit-buffer 映射为原有 edu-platform_<卷名>，并设置 external: true。例如：
 
 ```yaml
