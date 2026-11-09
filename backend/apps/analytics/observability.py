@@ -7,7 +7,7 @@ from pymongo import MongoClient
 from apps.core.models import CompensationTask, OutboxDelivery
 from apps.governance.models import QuotaReservation, RuntimeAdapter
 from apps.provisioning.models import ProvisioningInstance
-from apps.provisioning.services import runtime_inventory_snapshot
+from apps.provisioning.tasks import collect_runtime_inventory
 
 from .metrics import RUNTIME_LOG_HEALTH, RUNTIME_LOG_QUERIES
 
@@ -50,7 +50,11 @@ def runtime_logs_health() -> dict[str, object]:
 
 
 def operations_summary(*, trace_id: str = "") -> dict[str, Any]:
-    inventory = runtime_inventory_snapshot(trace_id=trace_id)
+    try:
+        inventory = collect_runtime_inventory.delay(trace_id).get(timeout=15)
+    except Exception:
+        logger.exception("runtime inventory worker unavailable", extra={"trace_id": trace_id})
+        inventory = {"status": "UNAVAILABLE", "drivers": [], "inventory": {}, "orphans": {}}
     return {
         "outbox": {
             status: OutboxDelivery.objects.filter(status=status).count()

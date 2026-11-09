@@ -187,6 +187,7 @@ def test_local_runtime_docker_access_is_scoped_to_runtime_worker() -> None:
     compose = load_yaml("docker-compose.dev.yml")
     services = compose["services"]
     assert "/var/run/docker.sock:/var/run/docker.sock" in services["runtime-worker"]["volumes"]
+    assert "q_provision" in services["runtime-worker"]["command"][-1]
     for service, definition in services.items():
         if service in {"runtime-worker", "workspace-storage-worker"}:
             continue

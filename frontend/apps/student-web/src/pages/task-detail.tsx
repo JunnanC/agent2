@@ -296,7 +296,7 @@ export function TaskDetail() {
         </Panel>
       </div>
 
-      {hasReview ? (
+      {hasReview && (reviewedRound || ["SUBMITTED", "UNDER_REVIEW", "ARCHIVING", "DESTROYING", "COMPLETED"].includes(current.status)) ? (
         <Panel className="section" title={<h2>评审结果</h2>}>
           <RequestStateView loading={reviewResult.isLoading} error={reviewResult.error instanceof ApiError && reviewResult.error.status === 404 ? null : reviewResult.error}
             onRetry={() => void reviewResult.refetch()} empty={!reviewedRound}
