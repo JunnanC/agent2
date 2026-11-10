@@ -24,3 +24,27 @@ div.metric:hover { transform: none; border-color: var(--line); }
   .nav-backdrop { display: block; position: fixed; inset: 0; z-index: 5; border: 0; background: #15221d55; }
   .sidebar { z-index: 6; }
 }
+
+/* Match the student portal shell; scroll destinations, keep the account in view. */
+:root { --paper: #f7f8f7; --soft: #f4f6f5; --green: #2f7069; --green-soft: #e7f0ed; }
+.sidebar { background: var(--paper); overflow: visible; height: 100dvh; }
+.sidebar .brand { flex-shrink: 0; }
+.sidebar .brand-mark { background: var(--green); }
+.sidebar .sidebar-toggle { flex-shrink: 0; margin-bottom: 12px; }
+.sidebar-navigation { flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden; }
+.sidebar-bottom { flex-shrink: 0; }
+.topbar { background: var(--paper); backdrop-filter: none; }
+.panel, .metric { background: #fff; }
+@media (min-width: 721px) {
+  .sidebar-collapsed .sidebar { width: 80px; padding: 22px 16px 18px; }
+  .sidebar-collapsed .main { margin-left: 80px; }
+  .sidebar-collapsed .brand { padding: 0 0 20px; justify-content: center; }
+  .sidebar-collapsed .brand-copy, .sidebar-collapsed .nav-label, .sidebar-collapsed .nav-item-label, .sidebar-collapsed .operator-copy, .sidebar-collapsed .environment { display: none; }
+  .sidebar-collapsed .nav button { justify-content: center; min-height: 40px; }
+  .sidebar-collapsed .sidebar-navigation > div + div { margin-top: 12px; }
+  .sidebar-collapsed .sidebar-bottom { padding: 14px 0 0; }
+  .sidebar-collapsed .operator { justify-content: center; }
+}
+@media (max-width: 720px) {
+  .sidebar .sidebar-toggle { display: none; }
+}

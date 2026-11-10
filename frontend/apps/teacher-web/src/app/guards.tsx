@@ -3,21 +3,21 @@ import { useQuery } from "@tanstack/react-query";
 import { meApi } from "@edu/api-client";
 import { keys } from "@edu/query-keys";
 import { Outlet, useLocation, useNavigate, useParams } from "react-router-dom";
-import { AppShell, EmptyState, LoadingState } from "@edu/ui";
+import { AppShell, EmptyState, Icon, LoadingState } from "@edu/ui";
 import type { NavEntry } from "@edu/ui";
 import { useSession } from "./session";
 import { usePortalEvents } from "./providers";
 
 /** 一级扁平导航：不再使用下拉分组，点击即进入对应页面 */
 const TEACHER_NAV: Array<NavEntry> = [
-  { label: "教学概览", path: "/" },
-  { label: "我的课程", path: "/courses" },
-  { label: "选课管理", path: "/enrollments" },
-  { label: "实验设计", path: "/templates" },
-  { label: "实验发布", path: "/publishing" },
-  { label: "学生过程", path: "/students" },
-  { label: "评审中心", path: "/reviews" },
-  { label: "教学分析", path: "/analytics" },
+  { label: "教学概览", icon: "layers", path: "/" },
+  { label: "我的课程", icon: "book", path: "/courses" },
+  { label: "选课管理", icon: "users", path: "/enrollments" },
+  { label: "实验设计", icon: "flask", path: "/templates" },
+  { label: "实验发布", icon: "send", path: "/publishing" },
+  { label: "学生过程", icon: "activity", path: "/students" },
+  { label: "评审中心", icon: "file-check", path: "/reviews" },
+  { label: "教学分析", icon: "chart", path: "/analytics" },
 ];
 
 const TEACHER_SECTIONS = TEACHER_NAV.filter((entry) => !["/", "/courses"].includes(entry.path));
@@ -77,9 +77,9 @@ export function AuthGuard() {
   // 进入某门课程上下文时，导航直达该课程的各工作页；顶层则使用别名跳转路由
   const nav: Array<NavEntry> = courseId
     ? [
-      { label: "教学概览", path: "/" },
-      { label: "我的课程", path: `/courses/${courseId}` },
-      ...TEACHER_SECTIONS.map((entry) => ({ label: entry.label, path: `/courses/${courseId}${entry.path}` })),
+      { label: "教学概览", icon: "layers", path: "/" },
+      { label: "我的课程", icon: "book", path: `/courses/${courseId}` },
+      ...TEACHER_SECTIONS.map((entry) => ({ label: entry.label, icon: entry.icon, path: `/courses/${courseId}${entry.path}` })),
     ]
     : TEACHER_NAV;
   void location.pathname;
@@ -88,12 +88,15 @@ export function AuthGuard() {
     <div className="app-shell">
       <AppShell
         domainLabel="teacher.localhost"
+        navigationPosition="side"
+        collapsible
+        collapseStorageKey="edu.teacher.sidebar-collapsed"
         nav={nav}
         activePath={location.pathname}
         onNavigate={navigate}
         avatar={{ name: displayName, role: "教师", badge: displayName.slice(0, 1) }}
-        actions={<button type="button" className="btn sm" aria-label={`通知中心，${unread} 条未读`}
-          onClick={() => navigate("/notifications")}>通知中心{unread ? `（${unread}）` : ""}</button>}
+        actions={<button type="button" className="btn sm sidebar-notifications" title="通知中心" aria-label={`通知中心，${unread} 条未读`}
+          onClick={() => navigate("/notifications")}><Icon name="bell" size={18} /><span className="nav-label">通知中心{unread ? `（${unread}）` : ""}</span></button>}
         avatarItems={[
           { label: "退出登录", icon: "log-out", onClick: () => { void logout().then(() => navigate("/login", { replace: true })); } },
         ]}
