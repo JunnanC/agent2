@@ -54,7 +54,10 @@ def operations_summary(*, trace_id: str = "") -> dict[str, Any]:
         inventory = collect_runtime_inventory.delay(trace_id).get(timeout=15)
     except Exception:
         logger.exception("runtime inventory worker unavailable", extra={"trace_id": trace_id})
-        inventory = {"status": "UNAVAILABLE", "drivers": [], "inventory": {}, "orphans": {}}
+        inventory = {
+            "status": "UNAVAILABLE", "drivers": [], "inventory": {}, "orphans": {},
+            "error_code": "RUNTIME_INVENTORY_WORKER_UNAVAILABLE", "trace_id": trace_id,
+        }
     return {
         "outbox": {
             status: OutboxDelivery.objects.filter(status=status).count()

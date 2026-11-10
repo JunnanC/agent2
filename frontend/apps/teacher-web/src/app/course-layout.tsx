@@ -1,9 +1,11 @@
 import type { ReactNode } from "react";
 import { Link, NavLink, useParams, useLocation } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { teachingApi } from "@edu/api-client";
 import { keys } from "@edu/query-keys";
-import { Panel, RequestStateView, EmptyState } from "@edu/ui";
+import { Button, Panel, RequestStateView, EmptyState, useToast } from "@edu/ui";
+
+import { CourseMaterials } from "@/components/course-materials";
 
 export function CourseLayout({ children }: { children: ReactNode }) {
   const { courseId } = useParams();
@@ -14,8 +16,15 @@ export function CourseLayout({ children }: { children: ReactNode }) {
 export function CourseOverview() {
   const { courseId = "" } = useParams();
   const course = useQuery({ queryKey: keys.teachingCourse(courseId), queryFn: () => teachingApi.course(courseId) });
+  const client = useQueryClient();
+  const toast = useToast();
+  const publish = useMutation({
+    mutationFn: () => teachingApi.publishCourse(courseId, String(course.data?.row_version ?? "")),
+    onSuccess: () => { void client.invalidateQueries({ queryKey: keys.teachingCourses() }); void course.refetch(); toast.notify("课程已发布，学生可申请加入"); },
+    onError: (error) => toast.notify(error.message, "error"),
+  });
   const publications = useQuery({ queryKey: keys.publications(courseId, {}), queryFn: () => teachingApi.publications(courseId, {}) });
-  return <RequestStateView loading={course.isLoading || publications.isLoading} error={course.error ?? publications.error} onRetry={() => { void course.refetch(); void publications.refetch(); }} empty={false} emptyState={null}><div className="teacher-summary"><div><span>选课学生</span><strong>{course.data?.active_enrollment_count ?? "—"}</strong></div><div><span>实验发布</span><strong>{publications.data?.total ?? publications.data?.rows.length ?? "—"}</strong></div><div><span>课程容量</span><strong>{course.data?.capacity ?? "不限"}</strong></div></div><Panel title={<h2>课程实验</h2>}><div className="teacher-list">{(publications.data?.rows ?? []).map(p => <div className="item" key={p.public_id}><div><strong>{p.title}</strong><small>{p.status} · {p.audience_count ?? 0} 名学生</small></div><Link className="btn" to={`/courses/${courseId}/publishing/${p.public_id}/reviews`}>报告与评审</Link></div>)}{publications.data?.rows.length === 0 && <EmptyState title="尚未发布实验" action={<Link to={`/courses/${courseId}/templates`}>设计第一个实验</Link>} />}</div></Panel></RequestStateView>;
+  return <RequestStateView loading={course.isLoading || publications.isLoading} error={course.error ?? publications.error} onRetry={() => { void course.refetch(); void publications.refetch(); }} empty={false} emptyState={null}><div className="page-actions">{course.data?.status === "DRAFT" ? <Button variant="primary" disabled={publish.isPending} onClick={() => publish.mutate()}>{publish.isPending ? "发布中…" : "发布课程"}</Button> : <span>课程状态：{course.data?.status === "PUBLISHED" ? "已发布" : course.data?.status}</span>}</div><div className="teacher-summary"><div><span>选课学生</span><strong>{course.data?.active_enrollment_count ?? "—"}</strong></div><div><span>实验发布</span><strong>{publications.data?.total ?? publications.data?.rows.length ?? "—"}</strong></div><div><span>课程容量</span><strong>{course.data?.capacity ?? "不限"}</strong></div></div><Panel title={<h2>课程实验</h2>}><div className="teacher-list">{(publications.data?.rows ?? []).map(p => <div className="item" key={p.public_id}><div><strong>{p.title}</strong><small>{p.status} · {p.audience_count ?? 0} 名学生</small></div><Link className="btn" to={`/courses/${courseId}/publishing/${p.public_id}/reviews`}>报告与评审</Link></div>)}{publications.data?.rows.length === 0 && <EmptyState title="尚未发布实验" action={<Link to={`/courses/${courseId}/templates`}>设计第一个实验</Link>} />}</div></Panel><CourseMaterials key={courseId} courseId={courseId} /></RequestStateView>;
 }
 
 export function StudentDetail() {

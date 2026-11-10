@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { request, ApiError } from "@edu/auth-client";
 import { useSession } from "../app/session";
 import { useRecentAuthGuard } from "../lib/recent-auth";
@@ -45,7 +45,7 @@ const glyphs: Record<Page, string> = {
 const descriptions: Record<Page, string> = {
   overview: "关注教学实验的运行情况与需要处理的问题",
   courses: "每门课程对应一个教学班，教学内容与学生名单由任课教师维护",
-  students: "查看学生账号，管理账号使用状态",
+  students: "按班级查看学生名单，同一学生可以属于多个班级",
   teachers: "查看教师及所建课程，管理账号使用状态",
   images: "统一维护教师可选用的实验镜像",
   resources: "查看服务健康与实验资源占用，不提供运行控制操作",
@@ -103,8 +103,8 @@ export default function Console() {
   useEffect(() => {
     document.title = names[current] + " · 教学实验平台管理";
   }, [current]);
-  function go(page: Page) {
-    navigate(page === "overview" ? "/" : `/${page}`);
+  function go(page: Page, tab?: string) {
+    navigate(page === "overview" ? "/" : `/${page}${tab ? `?tab=${tab}` : ""}`);
     setMenu(false);
   }
   return (
@@ -211,7 +211,7 @@ function PageContent({
   go,
 }: {
   current: Page;
-  go: (page: Page) => void;
+  go: (page: Page, tab?: string) => void;
 }) {
   const client = useQueryClient(),
     recentAuth = useRecentAuthGuard();
@@ -219,8 +219,14 @@ function PageContent({
     [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
     [toast, setToast] = useState("");
-  const [resourceTab, setResourceTab] = useState("services"),
-    [courseTab, setCourseTab] = useState("info"),
+  const [params, setParams] = useSearchParams();
+  const resourceTab = params.get("tab") === "health" ? "health" : "usage";
+  const classId = params.get("class") ?? "";
+  const classType = params.get("type") === "teaching" ? "teaching" : "administrative";
+  const memberPath = classType === "teaching" ? `/platform/courses/${classId}/members` : `/platform/administrative-classes/${classId}/members`;
+  const classes = useQuery({ queryKey: qk("/platform/administrative-classes"), queryFn: ({ signal }) => request<Array<{ public_id: string; name: string; code: string; status: string }>>("/platform/administrative-classes", { signal }).then((r) => r.data), enabled: current === "students" });
+  const members = useQuery({ queryKey: qk(memberPath), queryFn: ({ signal }) => request<{ class: { name: string }; members: Array<{ public_id: string; student_id: string; student_name: string }> }>(memberPath, { signal }).then((r) => r.data), enabled: current === "students" && Boolean(classId) });
+  const [courseTab, setCourseTab] = useState("info"),
     [from, setFrom] = useState(""),
     [to, setTo] = useState("");
   const users = useList<Account>(accountsPath),
@@ -298,7 +304,7 @@ function PageContent({
   );
   const required =
     current === "students" || current === "teachers" || current === "overview"
-      ? [users, roles, admins, ...(current === "students" ? [] : [courses])]
+      ? [users, roles, admins, courses]
       : current === "courses"
         ? [courses]
         : current === "images"
@@ -315,7 +321,14 @@ function PageContent({
         正在加载{names[current]}
       </div>
     );
-  else if (current === "students" || current === "teachers") {
+  else if (current === "students") {
+    content = <>
+      {classId ? <><button className="link" onClick={() => setParams({})}>返回班级列表</button><h2>{members.data?.class.name ?? "班级学生名单"}</h2>
+        {members.isPending ? <p role="status">正在加载名单</p> : members.error ? <ErrorState error={members.error} retry={() => void members.refetch()} /> : <Table headings={["学生", "账号状态", "操作"]} empty={!members.data?.members.length}>
+          {(members.data?.members ?? []).map((member) => { const user = users.data?.find((item) => item.public_id === member.student_id); return <tr key={member.public_id}><td>{member.student_name}<span className="mono muted">{member.student_id}</span></td><td><Status value={user?.account_status} /></td><td>{user && action("详情", () => open({ kind: "person", account: user, teacher: false }))}</td></tr>; })}
+        </Table>}</> : classes.isPending ? <p role="status">正在加载班级</p> : classes.error ? <ErrorState error={classes.error} retry={() => void classes.refetch()} /> : <List rows={[...allCourses.filter((course) => ["PUBLISHED", "CLOSED"].includes(course.status)).map((course) => ({ public_id: course.public_id, name: course.title, code: course.code, type: "teaching" })), ...(classes.data ?? []).filter((item) => item.status === "ACTIVE").map((item) => ({ ...item, type: "administrative" }))]} text={(item) => `${item.name} ${item.code}`} placeholder="搜索班级名称或代码" headings={["班级", "代码", "类型", "操作"]} render={(item) => <tr key={`${item.type}-${item.public_id}`}><td>{item.name}</td><td>{item.code}</td><td>{item.type === "teaching" ? "教学班" : "行政班"}</td><td>{action("查看学生名单", () => setParams({ class: item.public_id, type: item.type }))}</td></tr>} />}
+    </>;
+  } else if (current === "teachers") {
     const isTeacher = current === "teachers",
       data = isTeacher ? people.teachers : people.students;
     content = (
@@ -552,20 +565,10 @@ function PageContent({
     content = (
       <>
         <div className="tabs">
-          <button
-            className={resourceTab === "services" ? "active" : ""}
-            onClick={() => setResourceTab("services")}
-          >
-            服务状态
-          </button>
-          <button
-            className={resourceTab === "nodes" ? "active" : ""}
-            onClick={() => setResourceTab("nodes")}
-          >
-            资源占用
-          </button>
+          <button className={resourceTab === "usage" ? "active" : ""} onClick={() => setParams({ tab: "usage" })}>资源占用</button>
+          <button className={resourceTab === "health" ? "active" : ""} onClick={() => setParams({ tab: "health" })}>健康状态</button>
         </div>
-        {resourceTab === "services" ? (
+        {resourceTab === "health" ? (
           <>
             <Table
               headings={[
@@ -597,8 +600,10 @@ function PageContent({
               ))}
             </Table>
             <p className="footer-note">
-              当前展示运行时健康；数据库、缓存等服务的独立健康检查尚未接入
+              当前展示运行适配器健康；数据库、缓存等服务的独立健康检查尚未接入
             </p>
+            {overview.data?.runtime?.error_code && <p role="alert">采集失败：{overview.data.runtime.error_code} · Trace：{overview.data.runtime.trace_id}</p>}
+            {overview.data?.runtime?.drivers?.map((driver, index) => <p key={`${driver.code}-${index}`}>{driver.code} · {driver.driver} · {driver.status}{driver.error_code ? ` · ${driver.error_code}` : ""}</p>)}
             {overview.data?.alerts?.map((a) => (
               <div key={a.code} className="notice">
                 {a.message}
@@ -709,8 +714,8 @@ function PageContent({
         <div className="grid">
           <section className="panel">
             <div className="panel-head">
-              <h2>实验运行环境资源占用</h2>
-              <button className="link" onClick={() => go("resources")}>
+              <h2>资源占用</h2>
+              <button className="link" onClick={() => go("resources", "usage")}>
                 查看资源 →
               </button>
             </div>
@@ -741,12 +746,12 @@ function PageContent({
                 </div>
               ))
             )}
-            <p className="muted">展示当前资源快照，历史使用率采样尚未接入</p>
+            <p className="muted">显示运行适配器配置的容量与可用量，不代表独立物理服务器或实时 CPU 利用率；历史采样尚未接入</p>
           </section>
           <section className="panel">
             <div className="panel-head">
-              <h2>运行环境健康</h2>
-              <button className="link" onClick={() => go("resources")}>
+              <h2>健康状态</h2>
+              <button className="link" onClick={() => go("resources", "health")}>
                 全部 →
               </button>
             </div>

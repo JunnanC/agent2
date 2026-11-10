@@ -4,7 +4,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { teachingApi } from "@edu/api-client";
 import { keys } from "@edu/query-keys";
 import {
-  DataTable, Metric, Breadcrumbs, Drawer, Modal, Panel, RequestStateView, StatusBadge, useToast, EmptyState,
+  DataTable, Metric, Drawer, Modal, Panel, RequestStateView, StatusBadge, useToast, EmptyState,
 } from "@edu/ui";
 import { apiErrorMessage } from "@/lib/format";
 import { formatDateTime } from "@/lib/task-format";
@@ -49,7 +49,6 @@ export function Students() {
   const [search, setSearch] = useState("");
   const [detail, setDetail] = useState<ProgressRow | null>(null);
 
-  const courses = useQuery({ queryKey: keys.teachingCourses(), queryFn: () => teachingApi.courses({ page_size: 50 }) });
   const progress = useQuery({
     queryKey: keys.teachingProgress(courseId, {}),
     queryFn: () => teachingApi.progress(courseId, { page_size: 100 }),
@@ -96,15 +95,7 @@ export function Students() {
 
   return (
     <>
-      <Breadcrumbs items={[{ label: "教师门户" }, { label: "课程" }]} current="学生过程" />
       <div className="page-actions align-end">
-        <select className="field" style={{ width: 170 }} aria-label="选择课程"
-          value={courseId}
-          onChange={(event) => navigate(`/courses/${event.target.value}/students`)}>
-          {(courses.data?.rows ?? []).map((course) => (
-            <option key={course.public_id} value={course.public_id}>{course.title}</option>
-          ))}
-        </select>
         <button type="button" className="btn primary" onClick={() => navigate(`/courses/${courseId}/reviews`)} aria-label="进入评审中心">
           进入评审
         </button>

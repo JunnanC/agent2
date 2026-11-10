@@ -277,6 +277,25 @@ def _membership_data(item: AdministrativeClassMembership) -> dict[str, Any]:
     }
 
 
+class PlatformTeachingClassMembersView(APIView):
+    permission_classes = [IsPlatformPortal]
+
+    @extend_schema(responses={200: GenericTimetableResponseSerializer})
+    def get(self, request: HttpRequest, course_id: str) -> Response:
+        course = visible_course(actor=request.user, portal="PLATFORM", course_id=course_id)
+        enrollments = Enrollment.objects.filter(
+            course=course, status=Enrollment.Status.ACTIVE,
+        ).select_related("student").order_by("student__display_name", "pk")
+        return _response(request, {
+            "class": {"public_id": course.public_id, "name": course.title},
+            "members": [{
+                "public_id": item.public_id,
+                "student_id": item.student.public_id,
+                "student_name": item.student.display_name,
+            } for item in enrollments],
+        })
+
+
 class AdministrativeClassCollectionView(APIView):
     permission_classes = [IsPlatformPortal]
 

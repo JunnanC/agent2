@@ -41,6 +41,8 @@ class AnalyticsProjectionTests(TestCase):
         with self.assertLogs("runtime.inventory", level="ERROR"):
             summary = operations_summary(trace_id="runtime-trace")
         self.assertEqual(summary["runtime"]["status"], "UNAVAILABLE")
+        self.assertEqual(summary["runtime"]["error_code"], "RUNTIME_INVENTORY_WORKER_UNAVAILABLE")
+        self.assertEqual(summary["runtime"]["trace_id"], "runtime-trace")
         self.assertIn("RUNTIME_ENGINE_UNAVAILABLE", [alert["code"] for alert in summary["alerts"]])
 
     def test_audit_endpoint_uses_business_audit_fields_and_pagination(self) -> None:

@@ -100,12 +100,13 @@ describe("课程加入策略", () => {
     expect(studentApi.withdrawEnrollment).toHaveBeenCalledWith("en-1", "7");
   });
 
-  it("我的申请中已加入的课程提供退出按钮", async () => {
+  it("我的申请不再显示已加入的课程", async () => {
     vi.mocked(studentApi.myEnrollments).mockResolvedValue({ rows: [enrollment("ACTIVE")], total: 1, page: 1, pageSize: 100 });
     show();
     fireEvent.click(screen.getByRole("tab", { name: /我的申请/ }));
-    expect(await screen.findByRole("button", { name: "退出课程" })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "进入课程" }));
-    expect(await screen.findByText("课程页面 course-1")).toBeInTheDocument();
+    expect(await screen.findByText("暂无申请记录")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "退出课程" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "进入课程" })).not.toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /我的申请/ })).toHaveTextContent("我的申请 0");
   });
 });
