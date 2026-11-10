@@ -1,3 +1,5 @@
+prototypes/
+unslop-preview/
 .env
 .env.*
 !.env.example
