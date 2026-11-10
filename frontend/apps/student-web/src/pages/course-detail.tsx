@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { fileApi, studentApi, taskApi } from "@edu/api-client";
 import type { Material } from "@edu/api-client";
 import { keys } from "@edu/query-keys";
@@ -11,23 +11,26 @@ import { CourseAgent } from "@/components/course-agent";
 import { EnrollmentExit } from "@/components/enrollment-exit";
 import { ApiError } from "@edu/auth-client";
 
-export function CourseDetail() {
+export function CourseDetail({ discussionPage = false }: { discussionPage?: boolean }) {
   const { courseId = "" } = useParams();
   const toast = useToast();
   const navigate = useNavigate();
+  const location = useLocation();
   const [activeChapterId, setActiveChapterId] = useState<string | null>(null);
+  const chapterNavRef = useRef<HTMLElement>(null);
   const [openTextMaterialId, setOpenTextMaterialId] = useState<string | null>(null);
   const detail = useQuery({ queryKey: keys.course(courseId), queryFn: () => studentApi.courseDetail(courseId),
     staleTime: 0, refetchOnMount: "always", retry: false });
   const canRead = detail.isSuccess && !detail.isFetching;
+  const loadOverview = canRead && !discussionPage;
   const enrollments = useQuery({ queryKey: keys.enrollments({ status: "ACTIVE" }),
-    queryFn: () => studentApi.myEnrollments({ page_size: 100, status: "ACTIVE" }), enabled: canRead });
+    queryFn: () => studentApi.myEnrollments({ page_size: 100, status: "ACTIVE" }), enabled: loadOverview });
   const enrollment = enrollments.data?.rows.find((row) => row.course_id === courseId && row.status === "ACTIVE");
   const chapters = useQuery({ queryKey: keys.courseResource(courseId, "chapters"), queryFn: () => studentApi.courseChapters(courseId), enabled: canRead });
-  const materials = useQuery({ queryKey: keys.courseResource(courseId, "materials"), queryFn: () => studentApi.courseMaterials(courseId), enabled: canRead });
-  const announcements = useQuery({ queryKey: keys.courseResource(courseId, "announcements"), queryFn: () => studentApi.courseAnnouncements(courseId), enabled: canRead });
-  const events = useQuery({ queryKey: keys.courseResource(courseId, "calendar-events"), queryFn: () => studentApi.courseCalendarEvents(courseId), enabled: canRead });
-  const tasks = useQuery({ queryKey: keys.tasks({ course_id: courseId }), queryFn: () => taskApi.list({ course_id: courseId }), enabled: canRead });
+  const materials = useQuery({ queryKey: keys.courseResource(courseId, "materials"), queryFn: () => studentApi.courseMaterials(courseId), enabled: loadOverview });
+  const announcements = useQuery({ queryKey: keys.courseResource(courseId, "announcements"), queryFn: () => studentApi.courseAnnouncements(courseId), enabled: loadOverview });
+  const events = useQuery({ queryKey: keys.courseResource(courseId, "calendar-events"), queryFn: () => studentApi.courseCalendarEvents(courseId), enabled: loadOverview });
+  const tasks = useQuery({ queryKey: keys.tasks({ course_id: courseId }), queryFn: () => taskApi.list({ course_id: courseId }), enabled: loadOverview });
   const openFile = useMutation({
     mutationFn: (material: Material) => {
       if (!material.object_asset_id) throw new Error("该材料暂时没有可打开的文件");
@@ -42,7 +45,61 @@ export function CourseDetail() {
   });
   const chapterRows = chapters.data?.rows ?? [];
   const currentChapterId = activeChapterId ?? chapterRows[0]?.public_id ?? null;
+  useEffect(() => {
+    if (!canRead || discussionPage || !chapters.data?.rows.length) return;
+    const rows = chapters.data.rows;
+    const firstChapterId = rows[0]?.public_id;
+    if (!firstChapterId) return;
+    let frame = 0;
+    const updateChapter = () => {
+      frame = 0;
+      let current = firstChapterId;
+      for (const chapter of rows) {
+        const panel = document.getElementById(`course-chapter-${chapter.public_id}`);
+        if (!panel) continue;
+        const offset = parseFloat(window.getComputedStyle(panel).scrollMarginTop) || 0;
+        if (panel.getBoundingClientRect().top <= offset + 1) current = chapter.public_id;
+        else break;
+      }
+      setActiveChapterId(current);
+    };
+    const scheduleUpdate = () => {
+      if (!frame) frame = window.requestAnimationFrame(updateChapter);
+    };
+    updateChapter();
+    window.addEventListener("scroll", scheduleUpdate, { passive: true });
+    window.addEventListener("resize", scheduleUpdate);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener("scroll", scheduleUpdate);
+      window.removeEventListener("resize", scheduleUpdate);
+    };
+  }, [canRead, chapters.data, courseId, discussionPage]);
+
+  useEffect(() => {
+    if (!canRead || discussionPage || !chapters.isSuccess || !location.hash) return;
+    const id = decodeURIComponent(location.hash.slice(1));
+    const frame = window.requestAnimationFrame(() => {
+      document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [canRead, discussionPage, chapters.isSuccess, location.hash]);
+
+  useEffect(() => {
+    const nav = chapterNavRef.current;
+    const active = nav?.querySelector<HTMLElement>('[aria-current="location"]');
+    if (!nav || !active || nav.scrollHeight <= nav.clientHeight) return;
+    const bounds = nav.getBoundingClientRect();
+    const row = active.getBoundingClientRect();
+    if (row.top < bounds.top) nav.scrollTop += row.top - bounds.top;
+    else if (row.bottom > bounds.bottom) nav.scrollTop += row.bottom - bounds.bottom;
+  }, [currentChapterId, discussionPage]);
+
   const scrollToChapter = (chapterId: string) => {
+    if (discussionPage) {
+      navigate(`/courses/${courseId}#${encodeURIComponent(`course-chapter-${chapterId}`)}`);
+      return;
+    }
     setActiveChapterId(chapterId);
     document.getElementById(`course-chapter-${chapterId}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
@@ -60,10 +117,10 @@ export function CourseDetail() {
     <>
       <Breadcrumbs
         items={[{ label: "学生门户", onClick: () => { window.location.assign("/"); } }, { label: "我的课程", onClick: () => { window.location.assign("/courses"); } }]}
-        current={detail.data?.title ?? "课程详情"}
+        current={discussionPage ? `${detail.data.title} · 课程问答` : detail.data.title}
       />
       <div className="course-learning-shell">
-        <aside className="panel course-chapter-nav">
+        <aside ref={chapterNavRef} className="panel course-chapter-nav">
           <div className="panel-title">
             <h2 style={{ fontSize: 15 }}>课程章节</h2>
             <StatusBadge tone="good">已加入</StatusBadge>
@@ -75,8 +132,8 @@ export function CourseDetail() {
             <div>
               {chapterRows.map((chapter, index) => (
                 <button type="button" key={chapter.public_id}
-                  className={`course-chapter-row${chapter.public_id === currentChapterId ? " active" : ""}`}
-                  aria-current={chapter.public_id === currentChapterId ? "location" : undefined}
+                  className={`course-chapter-row${!discussionPage && chapter.public_id === currentChapterId ? " active" : ""}`}
+                  aria-current={!discussionPage && chapter.public_id === currentChapterId ? "location" : undefined}
                   onClick={() => scrollToChapter(chapter.public_id)}>
                   <span>{index + 1}</span>
                   <strong>{chapter.title}</strong>
@@ -85,9 +142,15 @@ export function CourseDetail() {
               ))}
             </div>
           </RequestStateView>
+          {chapters.isSuccess ? <Link to={`/courses/${courseId}/questions`}
+            className={`course-chapter-row${discussionPage ? " active" : ""}`}
+            aria-current={discussionPage ? "page" : undefined}>
+            <span>{chapterRows.length + 1}</span><strong>课程问答</strong>
+          </Link> : null}
         </aside>
 
         <section className="course-learning-main">
+          {discussionPage ? <CourseDiscussion key={courseId} courseId={courseId} /> : <>
           <Panel title={<><h2>课程信息</h2></>} actions={enrollment ? <EnrollmentExit enrollment={enrollment} onExited={() => navigate("/courses", { replace: true })} /> : undefined}>
             <div className="grid equal section" style={{ marginTop: 0 }}>
               <div>
@@ -184,7 +247,6 @@ export function CourseDetail() {
             </Panel>
           </div>
 
-          <div className="grid two">
             <Panel title={<><h2>课程日历</h2><span className="subtle">截止与关键时间</span></>}>
               <RequestStateView loading={events.isLoading} error={events.error}
                 onRetry={() => void events.refetch()}
@@ -200,9 +262,8 @@ export function CourseDetail() {
                 </div>
               </RequestStateView>
             </Panel>
-            <CourseDiscussion key={courseId} courseId={courseId} />
-          </div>
           <CourseAgent key={courseId} courseId={courseId} />
+          </>}
         </section>
       </div>
     </>
