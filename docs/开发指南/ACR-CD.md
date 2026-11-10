@@ -35,6 +35,8 @@ GitHub 托管 runner 消耗账号 Actions 配额；ACR 个人版是否可免费�
 - 准备 /opt/agent2-cd/{releases,backups}，仅服务用户可写。
 - 准备 /etc/agent2-cd/.env、compose.override.yml、secrets/workspace_upstream_token，仅服务用户可读。保留原密码和业务密钥；不要复制模板占位值到生产。
 - `.env` 中 `DJANGO_TRUSTED_ORIGINS` 必须包含 `https://${STUDENT_HOST}`、`https://${TEACHER_HOST}`、`https://${ADMIN_HOST}` 的实际展开值。部署预检会检查解析后的 Django 配置，缺项时阻止发布；修改私有 `.env` 后需重新预检并用 HTTPS 门户登录验证。
+- `.env` 还须显式设置 `STUDENT_HOST`、`TEACHER_HOST`、`ADMIN_HOST` 为真实门户域名。若服务器 override 覆盖 `DJANGO_TRUSTED_ORIGINS`，应引用 `${DJANGO_TRUSTED_ORIGINS:?DJANGO_TRUSTED_ORIGINS is required}`，避免旧的固定列表覆盖 `.env` 中新增的 HTTPS 来源。
+- 若工作区网关已接入 Swarm mesh，服务器 override 可额外声明 `runtime-mesh: {external: true, name: agent2_runtime_mesh}`，并为 `workspace-gateway` 保留此网络。预检要求该网络已存在且为可附加的 Swarm overlay；不创建或替换网络。未使用 mesh 的服务器无需声明它，其余网络仍严格使用 `edu-platform_<网络键>`。
 - server override 显式将 mysql-data、redis-data、mongo-data、mongo-keyfile、minio-data、clamav-data、fluent-bit-buffer 映射为原有 edu-platform_<卷名>，并设置 external: true。例如：
 
 ```yaml

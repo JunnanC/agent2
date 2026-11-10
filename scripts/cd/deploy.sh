@@ -58,6 +58,7 @@ compose=(docker compose --project-directory "$release" --env-file "$release/.env
   -f "$release/docker-compose.dev.yml" -f "$release/server.yml" -f "$release/images.json")
 "${compose[@]}" --profile runtime config --format json > "$release/resolved.json"
 python3 "$release/scripts/cd/check-portal-origins.py" "$release/.env" "$release/resolved.json"
+python3 "$release/scripts/cd/check-existing-networks.py" "$release/resolved.json"
 python3 - "$release/resolved.json" <<'PY'
 import json, subprocess, sys
 c = json.load(open(sys.argv[1]))
@@ -67,11 +68,6 @@ for key in ('mysql-data', 'redis-data', 'mongo-data', 'mongo-keyfile', 'minio-da
     if not v.get('external') or v.get('name') != expected:
         raise SystemExit('Existing volume must be explicitly mapped: ' + expected)
     subprocess.run(['docker', 'volume', 'inspect', expected], check=True, stdout=subprocess.DEVNULL)
-for key, net in c['networks'].items():
-    expected = 'edu-platform_' + key
-    if net.get('name') != expected:
-        raise SystemExit('Existing network must be explicitly mapped: ' + expected)
-    subprocess.run(['docker', 'network', 'inspect', expected], check=True, stdout=subprocess.DEVNULL)
 for name in ('mysql', 'redis', 'mongodb', 'minio', 'fluent-bit'):
     ids = subprocess.check_output(['docker', 'ps', '-q', '--filter', 'label=com.docker.compose.project=edu-platform',
                                    '--filter', 'label=com.docker.compose.service=' + name], text=True).split()

@@ -39,6 +39,8 @@ jobs:
       - name: Ruff check
         working-directory: backend
         run: ruff check .
+      - name: 部署预检回归测试
+        run: python -m unittest discover -s scripts/cd -p 'test_*.py'
 
   test:
     name: 单元测试
