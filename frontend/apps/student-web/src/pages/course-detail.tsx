@@ -12,7 +12,7 @@ import { EnrollmentExit } from "@/components/enrollment-exit";
 import { ApiError } from "@edu/auth-client";
 
 export function CourseDetail({ discussionPage = false }: { discussionPage?: boolean }) {
-  const { courseId = "" } = useParams();
+  const { courseId = "", chapterId } = useParams();
   const toast = useToast();
   const navigate = useNavigate();
   const location = useLocation();
@@ -22,7 +22,7 @@ export function CourseDetail({ discussionPage = false }: { discussionPage?: bool
   const detail = useQuery({ queryKey: keys.course(courseId), queryFn: () => studentApi.courseDetail(courseId),
     staleTime: 0, refetchOnMount: "always", retry: false });
   const canRead = detail.isSuccess && !detail.isFetching;
-  const loadOverview = canRead && !discussionPage;
+  const loadOverview = canRead && !discussionPage && !chapterId;
   const enrollments = useQuery({ queryKey: keys.enrollments({ status: "ACTIVE" }),
     queryFn: () => studentApi.myEnrollments({ page_size: 100, status: "ACTIVE" }), enabled: loadOverview });
   const enrollment = enrollments.data?.rows.find((row) => row.course_id === courseId && row.status === "ACTIVE");
@@ -44,7 +44,7 @@ export function CourseDetail({ discussionPage = false }: { discussionPage?: bool
     onError: (error) => toast.notify(error.message, "error"),
   });
   const chapterRows = chapters.data?.rows ?? [];
-  const currentChapterId = activeChapterId ?? chapterRows[0]?.public_id ?? null;
+  const currentChapterId = chapterId ?? activeChapterId ?? chapterRows[0]?.public_id ?? null;
   useEffect(() => {
     if (!canRead || discussionPage || !chapters.data?.rows.length) return;
     const rows = chapters.data.rows;
@@ -96,12 +96,7 @@ export function CourseDetail({ discussionPage = false }: { discussionPage?: bool
   }, [currentChapterId, discussionPage]);
 
   const scrollToChapter = (chapterId: string) => {
-    if (discussionPage) {
-      navigate(`/courses/${courseId}#${encodeURIComponent(`course-chapter-${chapterId}`)}`);
-      return;
-    }
-    setActiveChapterId(chapterId);
-    document.getElementById(`course-chapter-${chapterId}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    navigate(`/courses/${courseId}/chapters/${encodeURIComponent(chapterId)}`);
   };
 
   if (detail.error instanceof ApiError && ["ACTIVE_ENROLLMENT_REQUIRED", "RESOURCE_NOT_FOUND"].includes(detail.error.payload?.code ?? "")) {
@@ -150,7 +145,7 @@ export function CourseDetail({ discussionPage = false }: { discussionPage?: bool
         </aside>
 
         <section className="course-learning-main">
-          {discussionPage ? <CourseDiscussion key={courseId} courseId={courseId} /> : <>
+          {chapterId ? <><Link className="btn" to={`/courses/${courseId}`}>返回课程介绍</Link><RequestStateView loading={chapters.isLoading} error={chapters.error} onRetry={() => void chapters.refetch()} empty={!chapterRows.some((chapter) => chapter.public_id === chapterId)} emptyState={<EmptyState title="章节不存在或尚未发布" />} >{chapterRows.filter((chapter) => chapter.public_id === chapterId).map((chapter) => <Panel key={chapter.public_id} title={<h2>{chapter.title}</h2>}><p className="course-chapter-description">{chapter.description || "本章节暂未提供说明。"}</p></Panel>)}</RequestStateView></> : discussionPage ? <CourseDiscussion key={courseId} courseId={courseId} /> : <>
           <Panel title={<><h2>课程信息</h2></>} actions={enrollment ? <EnrollmentExit enrollment={enrollment} onExited={() => navigate("/courses", { replace: true })} /> : undefined}>
             <div className="grid equal section" style={{ marginTop: 0 }}>
               <div>

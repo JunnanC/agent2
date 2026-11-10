@@ -75,7 +75,7 @@ export function JoinCourses() {
     return (catalog.data?.rows ?? [])
       .filter((course) => tab === "discover"
         ? !joinedCourseIds.has(course.public_id)
-        : joinedCourseIds.has(course.public_id))
+        : joinedCourseIds.get(course.public_id) === "PENDING")
       .filter((course) => !query || `${course.title} ${course.code} ${course.summary ?? ""}`.toLowerCase().includes(query));
   }, [catalog.data, tab, search, joinedCourseIds]);
 
@@ -98,7 +98,7 @@ export function JoinCourses() {
         </button>
         <button type="button" role="tab" aria-selected={tab === "enrollments"}
           className={`join-course-tab${tab === "enrollments" ? " active" : ""}`} onClick={() => setTab("enrollments")}>
-          我的申请 <span>{joinedCourseIds.size}</span>
+          我的申请 <span>{[...joinedCourseIds.values()].filter((status) => status === "PENDING").length}</span>
         </button>
       </div>
 

@@ -64,7 +64,7 @@ export function TemplateEditor() {
   const refetchVersions = versions.refetch;
 
   const currentVersion = versions.data?.rows
-    .find((version) => version.public_id === selectedVersion || version.status === "DRAFT")
+    .find((version) => selectedVersion ? version.public_id === selectedVersion : version.status === "DRAFT")
     ?? versions.data?.rows?.[0];
 
   const versionId = currentVersion?.public_id ?? "";
@@ -145,6 +145,7 @@ export function TemplateEditor() {
       courseId,
       versionId,
       {
+        runtime_adapter_id: selectedAdapterId,
         image_id: selectedImageId,
         resource_profile_id: selectedProfileId,
       },
@@ -514,7 +515,7 @@ export function TemplateEditor() {
                 <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
                   {versionId ? (
                     <Button size="sm" variant="primary"
-                      disabled={!selectedImageId || !selectedProfileId || saveEnvironment.isPending}
+                      disabled={!selectedAdapterId || !selectedImageId || !selectedProfileId || !canEditDraft || saveEnvironment.isPending}
                       onClick={() => saveEnvironment.mutate()}>
                       {saveEnvironment.isPending ? "保存中…" : "保存运行环境"}
                     </Button>

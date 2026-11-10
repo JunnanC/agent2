@@ -35,7 +35,7 @@ beforeEach(() => {
 afterEach(() => { cleanup(); client.clear(); vi.restoreAllMocks(); Reflect.deleteProperty(HTMLElement.prototype, "scrollIntoView"); });
 function show(path = "/courses/course-1") {
   render(<QueryClientProvider client={client}><ToastProvider><MemoryRouter initialEntries={[path]}>
-    <Routes><Route path="/courses/:courseId" element={<CourseDetail />} /><Route path="/courses/:courseId/questions" element={<CourseDetail discussionPage />} /><Route path="/courses" element={<p>我的课程列表</p>} /></Routes>
+    <Routes><Route path="/courses/:courseId/chapters/:chapterId" element={<CourseDetail />} /><Route path="/courses/:courseId" element={<CourseDetail />} /><Route path="/courses/:courseId/questions" element={<CourseDetail discussionPage />} /><Route path="/courses" element={<p>我的课程列表</p>} /></Routes>
   </MemoryRouter></ToastProvider></QueryClientProvider>);
 }
 
@@ -63,7 +63,7 @@ it("右侧滚动到章节时同步左侧高亮，向上滚动时也恢复对应�
   await waitFor(() => expect(first).toHaveAttribute("aria-current", "location"));
 });
 
-it("三个章节后追加第四项问答入口，问答独立展示并能返回章节", async () => {
+it("三个章节后追加第四项问答入口，问答独立展示并能进入章节独立页", async () => {
   vi.mocked(studentApi.courseDetail).mockResolvedValue(course);
   vi.mocked(studentApi.courseChapters).mockResolvedValue({ ...empty, total: 3, rows:
     [1, 2, 3].map((index) => ({ public_id: `chapter-${index}`, course_id: "course-1", title: `第${index}章`, description: null, sort_order: index, status: "PUBLISHED", row_version: "1" })) });
@@ -77,8 +77,10 @@ it("三个章节后追加第四项问答入口，问答独立展示并能返回�
   expect(screen.getByRole("link", { name: /4.*课程问答/ })).toHaveAttribute("aria-current", "page");
   expect(screen.queryByRole("heading", { name: "课程日历" })).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: /第3章/ }));
-  expect(await screen.findByRole("heading", { name: "课程日历" })).toBeInTheDocument();
-  await waitFor(() => expect(scrollIntoView).toHaveBeenCalled());
+  expect(await screen.findByRole("heading", { name: "第3章" })).toBeInTheDocument();
+  expect(screen.queryByRole("heading", { name: "课程日历" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("heading", { name: "第1章" })).not.toBeInTheDocument();
+  expect(screen.getByRole("link", { name: "返回课程介绍" })).toHaveAttribute("href", "/courses/course-1");
 });
 
 it("零章节时问答编号为一，独立访问不加载日历", async () => {

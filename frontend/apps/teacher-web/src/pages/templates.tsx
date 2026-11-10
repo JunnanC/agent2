@@ -4,7 +4,7 @@ import { Link, useParams, useNavigate } from "react-router-dom";
 import { teachingApi } from "@edu/api-client";
 import { keys } from "@edu/query-keys";
 import {
-  Modal, Button, Breadcrumbs, ConfirmDialog, Panel, RequestStateView, StatusBadge, useToast,
+  Modal, Button, ConfirmDialog, Panel, RequestStateView, StatusBadge, useToast,
 } from "@edu/ui";
 import { apiErrorMessage } from "@/lib/format";
 
@@ -80,10 +80,6 @@ export function Templates() {
 
   return (
     <>
-      <Breadcrumbs
-        items={[{ label: "教师门户", onClick: () => { window.location.assign("/"); } }]}
-        current="实验设计"
-      />
       <div className="page-actions align-end">
         <Button variant="primary" onClick={() => setCreateOpen(true)}>新建实验模板</Button>
       </div>
@@ -139,7 +135,6 @@ export function Templates() {
                           to={`/courses/${courseId}/templates/${row.public_id}/edit`}>
                           {actionLabel}
                         </Link>
-                        <Link className="btn sm" to={`/courses/${courseId}/templates/${row.public_id}/validate?version=${row.current_version_id ?? ""}`}>验证实验</Link>
                         <Link className="btn sm" to={`/courses/${courseId}/publishing?template=${row.public_id}`}>配置发布</Link>
                         {isDraft ? (
                           <Button size="sm" variant="danger"

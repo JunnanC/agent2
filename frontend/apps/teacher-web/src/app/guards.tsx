@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { meApi } from "@edu/api-client";
 import { keys } from "@edu/query-keys";
 import { Outlet, useLocation, useNavigate, useParams } from "react-router-dom";
-import { AppShell, EmptyState, LoadingState } from "@edu/ui";
+import { AppShell, EmptyState, Icon, LoadingState } from "@edu/ui";
 import type { NavEntry } from "@edu/ui";
 import { useSession } from "./session";
 import { usePortalEvents } from "./providers";
@@ -82,7 +82,7 @@ export function AuthGuard() {
         onNavigate={(path) => navigate(path === "/courses" ? "/courses" : path)}
         avatar={{ name: displayName, role: "教师", badge: displayName.slice(0, 1) }}
         actions={<button type="button" className="btn sm" aria-label={`通知中心，${unread} 条未读`}
-          onClick={() => navigate("/notifications")}>通知中心{unread ? `（${unread}）` : ""}</button>}
+          onClick={() => navigate("/notifications")}><Icon name="bell" size={18} /><span className="notification-label">通知中心{unread ? `（${unread}）` : ""}</span></button>}
         avatarItems={[
           { label: "退出登录", icon: "log-out", onClick: () => { void logout().then(() => navigate("/login", { replace: true })); } },
         ]}

@@ -5,8 +5,9 @@ import { teachingApi } from "@edu/api-client";
 import type { Publication, Template } from "@edu/api-client";
 import { keys } from "@edu/query-keys";
 import {
-  ConfirmDialog, EmptyState, Breadcrumbs, Modal, Panel, RequestStateView, StatusBadge, useToast,
+  ConfirmDialog, EmptyState, Modal, Panel, RequestStateView, StatusBadge, useToast,
 } from "@edu/ui";
+import { RubricCreate } from "@/components/rubric-create";
 import { PUBLICATION_STATUS_LABEL, apiErrorMessage, formatDateTime } from "@/lib/format";
 
 interface PrecheckStage {
@@ -112,9 +113,10 @@ export function Publishing() {
     mutationFn: async (versionId: string) => {
       // The precheck endpoint requires If-Match; refresh the version row first.
       const version = await teachingApi.templateVersion(courseId, versionId);
+      if (["PUBLISHED", "PRECHECK_PASSED"].includes(version.status)) return { reused: true };
       return teachingApi.precheck(courseId, versionId, version.row_version);
     },
-    onSuccess: () => { toast.notify("预检作业已提交，进度见预检状态"); void precheckRuns.refetch(); },
+    onSuccess: (result) => { toast.notify("reused" in result ? "该模板版本已通过预检，可直接发布实验" : "预检作业已提交，进度见预检状态"); void precheckRuns.refetch(); },
     onError: (error) => toast.notify(apiErrorMessage(error), "error"),
   });
 
@@ -156,8 +158,8 @@ export function Publishing() {
 
   return (
     <>
-      <Breadcrumbs items={[{ label: "教师门户" }, { label: "课程" }]} current="实验发布" />
       <div className="page-actions align-end">
+        <RubricCreate key={courseId} courseId={courseId} onCreated={() => void rubrics.refetch()} />
         <button type="button" className="btn primary" onClick={() => { setCreateForm({ ...initialCreateForm }); setCreateOpen(true); }}>配置新发布</button>
       </div>
 
@@ -217,7 +219,7 @@ export function Publishing() {
                         {row.status === "DRAFT" ? (
                           <button type="button" className="btn sm" disabled={runPrecheck.isPending}
                             onClick={() => row.template_version_id && runPrecheck.mutate(row.template_version_id)}>
-                            {runPrecheck.isPending ? "提交中…" : "运行预检"}
+                            {runPrecheck.isPending ? "提交中…" : "检查预检状态"}
                           </button>
                         ) : null}
                         {allowed.includes("publish") ? (

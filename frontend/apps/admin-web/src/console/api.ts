@@ -70,7 +70,7 @@ export interface Audit {
   trace_id: string;
 }
 export interface Overview {
-  runtime?: { status?: string };
+  runtime?: { status?: string; error_code?: string; trace_id?: string; drivers?: Array<{ code: string; driver: string; status: string; error_code?: string }> };
   logs?: { status?: string };
   alerts?: { code: string; message: string; severity: string }[];
   instances?: Record<string, number>;

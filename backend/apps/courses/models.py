@@ -484,7 +484,8 @@ class AdministrativeClassMembership(VersionedModel):
         db_table = "courses_administrative_class_membership"
         constraints = [
             models.UniqueConstraint(
-                fields=("student", "active_slot"), name="courses_admin_member_active_uniq"
+                fields=("student", "administrative_class", "active_slot"),
+                name="courses_admin_member_active_uniq"
             ),
             models.CheckConstraint(
                 condition=models.Q(ends_on__isnull=True)

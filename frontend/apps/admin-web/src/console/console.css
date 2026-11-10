@@ -930,3 +930,6 @@
 .admin-console.nav-collapsed .sheet{margin-left:80px}
 }
 @media(max-width:720px){.admin-console .nav-collapse{display:none}}
+
+.admin-console .status.bad{background:transparent;border:0;border-radius:0;padding:0}
+.admin-console .status.bad:before{background:#c83b38;flex-shrink:0}

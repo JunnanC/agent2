@@ -1469,7 +1469,11 @@ def runtime_inventory_snapshot(*, trace_id: str = "") -> dict[str, Any]:
             )
             health = dict(adapter.health())
             health_status = str(health.get("status", "UNKNOWN"))
-            drivers.append({"driver": driver, "code": config.code, "status": health_status})
+            drivers.append({
+                "driver": driver, "code": config.code, "status": health_status,
+                **({"error_code": str(health.get("error_code", "RUNTIME_UNAVAILABLE"))[:64]}
+                   if health_status == "UNAVAILABLE" else {}),
+            })
             RUNTIME_ENGINE_HEALTH.labels(driver=driver).set(1 if health_status == "HEALTHY" else 0)
             if health_status == "UNAVAILABLE":
                 RUNTIME_ENGINE_UNAVAILABLE_TOTAL.labels(driver=driver).inc()
