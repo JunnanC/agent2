@@ -6,14 +6,14 @@ import { useSession } from "./session";
 import { usePortalEvents } from "./providers";
 
 const ADMIN_NAV: Array<NavEntry | NavGroupEntry> = [
-  { label: "平台概览", path: "/" },
-  { label: "用户与授权", path: "/users" },
-  { label: "治理工作", path: "/governance" },
-  { label: "资源治理", path: "/resources" },
-  { label: "镜像目录", path: "/images" },
-  { label: "Agent 治理", path: "/agents" },
-  { label: "异常中心", path: "/incidents" },
-  { label: "异常与审计", path: "/audit" },
+  { label: "平台概览", icon: "layers", path: "/" },
+  { label: "用户与授权", icon: "users", path: "/users" },
+  { label: "治理工作", icon: "shield", path: "/governance" },
+  { label: "资源治理", icon: "server", path: "/resources" },
+  { label: "镜像目录", icon: "boxes", path: "/images" },
+  { label: "Agent 治理", icon: "settings", path: "/agents" },
+  { label: "异常中心", icon: "alert-triangle", path: "/incidents" },
+  { label: "异常与审计", icon: "file-text", path: "/audit" },
 ];
 
 export function PortalSSEBridge() {
@@ -65,6 +65,9 @@ export function AuthGuard({ shell = true }: { shell?: boolean }) {
     <div className="app-shell">
       <AppShell
         domainLabel="admin.localhost"
+        navigationPosition="side"
+        collapsible
+        collapseStorageKey="edu.admin.sidebar-collapsed"
         nav={ADMIN_NAV}
         activePath={location.pathname}
         onNavigate={navigate}

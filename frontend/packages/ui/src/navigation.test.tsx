@@ -10,6 +10,9 @@ it("折叠后保留导航与个人菜单，并记住状态", () => {
  expect(container.querySelector(".nav-collapsed")).toBeInTheDocument();
  expect(screen.getByRole("button", { name: "展开导航" })).toHaveAttribute("aria-expanded", "false");
  expect(localStorage.getItem("test-sidebar")).toBe("true");
+ expect(container.querySelector(".sidebar-toggle")).not.toBeInTheDocument();
+ expect(screen.getByRole("button", { name: "展开导航" })).toHaveClass("brand-mark");
+ expect(screen.getByRole("button", { name: "展开导航" }).querySelector("svg")).toBeInTheDocument();
  fireEvent.click(screen.getByRole("button", { name: "我的课程" }));
  expect(props.onNavigate).toHaveBeenCalledWith("/courses");
  fireEvent.click(screen.getByRole("button", { name: "打开个人菜单" }));
