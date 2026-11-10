@@ -31,6 +31,7 @@ export function App(): JSX.Element {
               <Route path="/courses" element={<Courses />} />
               <Route path="/courses/join" element={<JoinCourses />} />
               <Route path="/courses/:courseId" element={<CourseDetail />} />
+              <Route path="/courses/:courseId/questions" element={<CourseDetail discussionPage />} />
               <Route path="/experiments" element={<Experiments />} />
               <Route path="/experiments/:taskId" element={<TaskDetail />} />
               <Route path="/notifications" element={<Notifications />} />

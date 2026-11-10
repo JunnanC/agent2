@@ -14,7 +14,7 @@ vi.mock("@edu/api-client", () => ({
     courseAnnouncements: vi.fn(), courseCalendarEvents: vi.fn(), enrollment: vi.fn(), dropCheck: vi.fn(), dropEnrollment: vi.fn() },
   taskApi: { list: vi.fn() }, fileApi: { createDownloadGrant: vi.fn() },
 }));
-vi.mock("@/components/course-discussion", () => ({ CourseDiscussion: () => null }));
+vi.mock("@/components/course-discussion", () => ({ CourseDiscussion: ({ courseId }: { courseId: string }) => <h2>课程问答内容 {courseId}</h2> }));
 vi.mock("@/components/course-agent", () => ({ CourseAgent: () => null }));
 
 const course: Course = { public_id: "course-1", code: "CS101", title: "编程基础", status: "PUBLISHED",
@@ -32,12 +32,70 @@ beforeEach(() => {
   vi.mocked(studentApi.courseCalendarEvents).mockResolvedValue(empty);
   vi.mocked(taskApi.list).mockResolvedValue(empty);
 });
-afterEach(() => { cleanup(); client.clear(); });
-function show() {
-  render(<QueryClientProvider client={client}><ToastProvider><MemoryRouter initialEntries={["/courses/course-1"]}>
-    <Routes><Route path="/courses/:courseId" element={<CourseDetail />} /><Route path="/courses" element={<p>我的课程列表</p>} /></Routes>
+afterEach(() => { cleanup(); client.clear(); vi.restoreAllMocks(); Reflect.deleteProperty(HTMLElement.prototype, "scrollIntoView"); });
+function show(path = "/courses/course-1") {
+  render(<QueryClientProvider client={client}><ToastProvider><MemoryRouter initialEntries={[path]}>
+    <Routes><Route path="/courses/:courseId" element={<CourseDetail />} /><Route path="/courses/:courseId/questions" element={<CourseDetail discussionPage />} /><Route path="/courses" element={<p>我的课程列表</p>} /></Routes>
   </MemoryRouter></ToastProvider></QueryClientProvider>);
 }
+
+it("右侧滚动到章节时同步左侧高亮，向上滚动时也恢复对应章节", async () => {
+  vi.mocked(studentApi.courseDetail).mockResolvedValue(course);
+  vi.mocked(studentApi.courseChapters).mockResolvedValue({ ...empty, total: 3, rows:
+    [1, 2, 3].map((index) => ({ public_id: `chapter-${index}`, course_id: "course-1", title: `第${index}章`, description: null, sort_order: index, status: "PUBLISHED", row_version: "1" })) });
+  let scroll = 0;
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+    const index = Number(this.id.match(/^course-chapter-chapter-(\d)$/)?.[1]);
+    return { top: index ? 200 + (index - 1) * 400 - scroll : 0, bottom: 0, left: 0, right: 0,
+      width: 0, height: 0, x: 0, y: 0, toJSON: () => ({}) };
+  });
+  show();
+  const first = await screen.findByRole("button", { name: /第1章/ });
+  await waitFor(() => expect(first).toHaveAttribute("aria-current", "location"));
+  scroll = 610;
+  fireEvent.scroll(window);
+  await waitFor(() => expect(screen.getByRole("button", { name: /第2章/ })).toHaveAttribute("aria-current", "location"));
+  scroll = 1010;
+  fireEvent.scroll(window);
+  await waitFor(() => expect(screen.getByRole("button", { name: /第3章/ })).toHaveAttribute("aria-current", "location"));
+  scroll = 210;
+  fireEvent.scroll(window);
+  await waitFor(() => expect(first).toHaveAttribute("aria-current", "location"));
+});
+
+it("三个章节后追加第四项问答入口，问答独立展示并能返回章节", async () => {
+  vi.mocked(studentApi.courseDetail).mockResolvedValue(course);
+  vi.mocked(studentApi.courseChapters).mockResolvedValue({ ...empty, total: 3, rows:
+    [1, 2, 3].map((index) => ({ public_id: `chapter-${index}`, course_id: "course-1", title: `第${index}章`, description: null, sort_order: index, status: "PUBLISHED", row_version: "1" })) });
+  const scrollIntoView = vi.fn();
+  Object.defineProperty(HTMLElement.prototype, "scrollIntoView", { configurable: true, value: scrollIntoView });
+  show();
+  const entry = await screen.findByRole("link", { name: /4.*课程问答/ });
+  expect(screen.queryByRole("heading", { name: /课程问答内容/ })).not.toBeInTheDocument();
+  fireEvent.click(entry);
+  expect(await screen.findByRole("heading", { name: "课程问答内容 course-1" })).toBeInTheDocument();
+  expect(screen.getByRole("link", { name: /4.*课程问答/ })).toHaveAttribute("aria-current", "page");
+  expect(screen.queryByRole("heading", { name: "课程日历" })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: /第3章/ }));
+  expect(await screen.findByRole("heading", { name: "课程日历" })).toBeInTheDocument();
+  await waitFor(() => expect(scrollIntoView).toHaveBeenCalled());
+});
+
+it("零章节时问答编号为一，独立访问不加载日历", async () => {
+  vi.mocked(studentApi.courseDetail).mockResolvedValue(course);
+  show("/courses/course-1/questions");
+  expect(await screen.findByRole("link", { name: /1.*课程问答/ })).toHaveAttribute("aria-current", "page");
+  expect(await screen.findByRole("heading", { name: "课程问答内容 course-1" })).toBeInTheDocument();
+  expect(studentApi.courseCalendarEvents).not.toHaveBeenCalled();
+});
+
+it("无课程权限时问答页面不挂载问答内容", async () => {
+  vi.mocked(studentApi.courseDetail).mockRejectedValue(new ApiError({ status: 403, url: "/courses/course-1", method: "GET",
+    kind: "forbidden", payload: { code: "ACTIVE_ENROLLMENT_REQUIRED", message: "需要有效选课" } }));
+  show("/courses/course-1/questions");
+  expect(await screen.findByText("暂时无法进入课程")).toBeInTheDocument();
+  expect(screen.queryByRole("heading", { name: /课程问答内容/ })).not.toBeInTheDocument();
+});
 
 it("待审核或退出后手动访问课程时阻止加载内容，即使本地曾缓存课程", async () => {
   client.setQueryData(keys.course("course-1"), course);
