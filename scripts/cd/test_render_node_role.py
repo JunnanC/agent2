@@ -28,6 +28,16 @@ def fixture():
 
 
 class RoleTests(unittest.TestCase):
+    def test_api_trusts_both_ingress_paths_without_trusting_public_ranges(self):
+        config = fixture()
+        config['services']['django']['environment']['TRUSTED_PROXY_CIDRS'] = '172.29.20.0/24'
+        manifest = roles.render(config, 'A')
+        self.assertEqual(manifest['services']['django']['environment']['TRUSTED_PROXY_CIDRS'], '172.29.20.0/24,10.253.73.0/24')
+        self.assertEqual(config['services']['django']['environment']['TRUSTED_PROXY_CIDRS'], '172.29.20.0/24')
+        config['services']['django']['environment']['TRUSTED_PROXY_CIDRS'] += ',10.253.73.0/24'
+        again = roles.render(config, 'A')['services']['django']['environment']['TRUSTED_PROXY_CIDRS']
+        self.assertEqual(again.count('10.253.73.0/24'), 1)
+
     def test_historical_config_refs_keep_their_host_on_every_node(self):
         expected = {
             'A': ['unix:///var/run/docker.sock', 'tcp://172.29.20.1:23750', 'tcp://172.29.20.1:23752'],

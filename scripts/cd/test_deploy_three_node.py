@@ -10,6 +10,14 @@ spec.loader.exec_module(deploy)
 
 
 class DeploymentTests(unittest.TestCase):
+    def test_resolved_release_mounts_follow_new_source_and_secret(self):
+        old = '/opt/agent2-cd/releases/old'
+        volumes = [{'type':'bind','source':old,'target':'/workspace'},
+                   {'type':'bind','source':old+'/secrets/workspace_upstream_token','target':'/run/secrets/token'}]
+        result = deploy.render_release({'services':{'django':{'volumes':volumes}}}, 'A', 'new', '/opt/agent2-cd/releases/new', {'backend':'new-image'})
+        self.assertEqual([v['source'] for v in result['services']['django']['volumes']],
+                         ['/opt/agent2-cd/releases/new','/opt/agent2-cd/releases/new/secrets/workspace_upstream_token'])
+
     def test_release_changes_executable_images_but_preserves_frozen_adapters(self):
         adapters = {'runtime/local-docker': {'image': 'sha256:historical-A'},
                     'runtime/remote-121-43-28-192': {'image': 'sha256:historical-B'},
