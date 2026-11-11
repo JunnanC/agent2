@@ -25,7 +25,7 @@ GitHub 托管 runner 消耗账号 Actions 配额；ACR 个人版是否可免费�
 
 ## 现有 ECS 的首次迁移
 
-检查时 ECS 为 Ubuntu 24.04 x86_64，旧项目为 /opt/agent2、Compose project 为 edu-platform。旧配置不是 Git checkout。宿主机 Nginx 已配置 80/443 → 8080，并通过 portal cookie 切换三个门户。不要覆盖宿主机 Nginx，也不要改用新的 Compose project 名。
+检查时 ECS 为 Ubuntu 24.04 x86_64，旧项目为 /opt/agent2、Compose project 为 edu-platform。旧配置不是 Git checkout。宿主机 Nginx 已配置 80/443 → 8080；旧的 portal cookie 切换方式会造成同一浏览器三端互相覆盖，必须按[三门户域名入口](三门户域名入口.md)迁移成独立 hostname。部署脚本不会自动覆盖宿主机 Nginx，不要改用新的 Compose project 名。
 
 **已发现的数据差异**：旧数据卷是 edu-platform_mysql-data 等下划线名称，新版默认是 edu-platform-mysql-data 等连字符名称。仅设置 project 名不能保留这些卷的绑定，必须设置 external 映射。新版还改变了网络、容器名、服务、运行时密钥和环境变量，需对比旧配置，先完成一次人工引导迁移，不能直接把全新默认 Compose 覆盖线上。
 
