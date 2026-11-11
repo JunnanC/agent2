@@ -7,6 +7,9 @@ umask 077
 [[ "$ACR_REGISTRY" =~ ^[a-zA-Z0-9.-]+(:[0-9]+)?$ ]] || exit 2
 [[ "$ACR_NAMESPACE" =~ ^[a-z0-9_-]+$ ]] || exit 2
 [[ "$(git rev-parse HEAD)" == "$RELEASE_SHA" ]] || exit 2
+if [[ -f /etc/agent2-cd/topology.json ]]; then
+  exec python3 scripts/cd/deploy-three-node.py
+fi
 root=/opt/agent2-cd
 config=/etc/agent2-cd
 # This host's old volumes have underscores; defaults in new Compose use hyphens.
