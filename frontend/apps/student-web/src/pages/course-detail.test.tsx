@@ -83,12 +83,17 @@ it("三个章节后追加第四项问答入口，问答独立展示并能进入�
   expect(screen.getByRole("link", { name: "返回课程介绍" })).toHaveAttribute("href", "/courses/course-1");
 });
 
-it("零章节时问答编号为一，独立访问不加载日历", async () => {
+it("零章节时问答可直接返回课程介绍，进入问答不加载日历", async () => {
   vi.mocked(studentApi.courseDetail).mockResolvedValue(course);
   show("/courses/course-1/questions");
   expect(await screen.findByRole("link", { name: /1.*课程问答/ })).toHaveAttribute("aria-current", "page");
   expect(await screen.findByRole("heading", { name: "课程问答内容 course-1" })).toBeInTheDocument();
   expect(studentApi.courseCalendarEvents).not.toHaveBeenCalled();
+  const back = screen.getByRole("link", { name: "返回课程介绍" });
+  expect(back).toHaveAttribute("href", "/courses/course-1");
+  fireEvent.click(back);
+  expect(await screen.findByRole("heading", { name: "课程信息" })).toBeInTheDocument();
+  expect(screen.queryByRole("heading", { name: "课程问答内容 course-1" })).not.toBeInTheDocument();
 });
 
 it("无课程权限时问答页面不挂载问答内容", async () => {
