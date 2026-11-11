@@ -273,7 +273,7 @@ if DATA['role']=='A':
     nodes['A'].python('''
 import urllib.request
 for host in ['student.edutech-lab.top','teacher.edutech-lab.top','platform.edutech-lab.top']:
- request=urllib.request.Request('http://127.0.0.1:8080/api/v2/health',headers={'Host':host})
+ request=urllib.request.Request('http://127.0.0.1/api/v2/health',headers={'Host':host})
  data=json.loads(urllib.request.urlopen(request,timeout=10).read())
  if data['data']['git_revision']!=DATA:raise SystemExit('Entry release differs')
 print('All three A portal entries report the release revision.')

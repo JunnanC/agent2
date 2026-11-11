@@ -50,6 +50,11 @@ def render(config, role, *, staging=False):
             env['LOCAL_DOCKER_HOST'] = 'unix:///var/run/docker.sock'
             env['WORKSPACE_AUTHORITY_URL'] = 'http://django:8000'
         if role == 'A':
+            if 'TRUSTED_PROXY_CIDRS' in env:
+                cidrs = [v.strip() for v in env['TRUSTED_PROXY_CIDRS'].split(',') if v.strip()]
+                if '10.253.73.0/24' not in cidrs:
+                    cidrs.append('10.253.73.0/24')
+                env['TRUSTED_PROXY_CIDRS'] = ','.join(cidrs)
             service['networks'] = {'app': None, 'data-mesh': None}
             if name == 'django':
                 service['networks']['data-mesh'] = {'aliases': ['django', 'agent2-api-a']}
