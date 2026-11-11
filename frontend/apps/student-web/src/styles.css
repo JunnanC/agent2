@@ -43,11 +43,17 @@
 .student-portal .profile-trigger-text small{font-size:12px}
 .student-portal .btn{gap:8px;padding:8px 16px;min-height:36px}
 @media(min-width:1051px){
-.student-portal .side-nav-shell>.topbar{display:flex;flex-direction:column;height:100dvh;min-height:100dvh}
+.student-portal .side-nav-shell>.topbar{display:grid;grid-template-areas:"brand" "toggle" "navigation" "account";grid-template-rows:auto auto minmax(0,1fr) auto;align-items:stretch;height:100dvh;min-height:0}
+.student-portal .side-nav-shell .brand-lockup{grid-area:brand}
+.student-portal .side-nav-shell .sidebar-toggle{grid-area:toggle}
+.student-portal .side-nav-shell .primary-nav{grid-area:navigation}
+.student-portal .side-nav-shell .topbar-actions{grid-area:account}
+.student-portal .nav-collapsed>.topbar{grid-template-areas:"brand" "navigation" "account";grid-template-rows:auto minmax(0,1fr) auto}
 .student-portal .side-nav-shell .primary-nav{flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden}
-.student-portal .side-nav-shell .topbar-actions{margin-top:auto;flex-shrink:0;width:100%}
+.student-portal .side-nav-shell .topbar-actions{margin-top:0;flex-shrink:0;width:100%}
 .student-portal .nav-collapsed{grid-template-columns:80px minmax(0,1fr)}
-.student-portal .nav-collapsed>.topbar{padding:32px 16px;align-items:center}
+.student-portal .nav-collapsed>.topbar{padding:32px 16px;align-items:stretch}
+.student-portal .nav-collapsed .brand-lockup{justify-self:center}
 .student-portal .nav-collapsed .brand-name,.student-portal .nav-collapsed .nav-label,.student-portal .nav-collapsed .profile-trigger-text,.student-portal .nav-collapsed .profile-trigger>svg{display:none}
 .student-portal .nav-collapsed .primary-nav,.student-portal .nav-collapsed .topbar-actions{width:100%}
 .student-portal .nav-collapsed .nav-item,.student-portal .nav-collapsed .sidebar-toggle,.student-portal .nav-collapsed .profile-trigger{width:48px;justify-content:center;padding:8px}
