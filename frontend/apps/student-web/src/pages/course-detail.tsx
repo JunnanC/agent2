@@ -145,7 +145,8 @@ export function CourseDetail({ discussionPage = false }: { discussionPage?: bool
         </aside>
 
         <section className="course-learning-main">
-          {chapterId ? <><Link className="btn" to={`/courses/${courseId}`}>返回课程介绍</Link><RequestStateView loading={chapters.isLoading} error={chapters.error} onRetry={() => void chapters.refetch()} empty={!chapterRows.some((chapter) => chapter.public_id === chapterId)} emptyState={<EmptyState title="章节不存在或尚未发布" />} >{chapterRows.filter((chapter) => chapter.public_id === chapterId).map((chapter) => <Panel key={chapter.public_id} title={<h2>{chapter.title}</h2>}><p className="course-chapter-description">{chapter.description || "本章节暂未提供说明。"}</p></Panel>)}</RequestStateView></> : discussionPage ? <CourseDiscussion key={courseId} courseId={courseId} /> : <>
+          {chapterId || discussionPage ? <Link className="btn" to={`/courses/${courseId}`}>返回课程介绍</Link> : null}
+          {chapterId ? <><RequestStateView loading={chapters.isLoading} error={chapters.error} onRetry={() => void chapters.refetch()} empty={!chapterRows.some((chapter) => chapter.public_id === chapterId)} emptyState={<EmptyState title="章节不存在或尚未发布" />} >{chapterRows.filter((chapter) => chapter.public_id === chapterId).map((chapter) => <Panel key={chapter.public_id} title={<h2>{chapter.title}</h2>}><p className="course-chapter-description">{chapter.description || "本章节暂未提供说明。"}</p></Panel>)}</RequestStateView></> : discussionPage ? <CourseDiscussion key={courseId} courseId={courseId} /> : <>
           <Panel title={<><h2>课程信息</h2></>} actions={enrollment ? <EnrollmentExit enrollment={enrollment} onExited={() => navigate("/courses", { replace: true })} /> : undefined}>
             <div className="grid equal section" style={{ marginTop: 0 }}>
               <div>

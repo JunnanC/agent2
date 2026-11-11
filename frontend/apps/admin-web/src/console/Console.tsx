@@ -80,6 +80,14 @@ type Dialog =
   | { kind: "audit"; audit: Audit }
   | { kind: "runtime"; runtime: Runtime };
 
+function BrandIcon() {
+  return (
+    <svg viewBox="0 0 28 28" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+      <path d="M4 5h8v18H4zM16 5h8v18h-8zM8 9v10M20 9v10M12 14h4" />
+    </svg>
+  );
+}
+
 export default function Console() {
   const location = useLocation(),
     navigate = useNavigate(),
@@ -121,21 +129,17 @@ export default function Console() {
       )}
       <aside className={`sidebar ${menu ? "open" : ""}`}>
         <div className="brand">
-          <svg
-            viewBox="0 0 28 28"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.5"
-            aria-hidden="true"
-          >
-            <path d="M4 5h8v18H4zM16 5h8v18h-8zM8 9v10M20 9v10M12 14h4" />
-          </svg>
+          {collapsed ? (
+            <button type="button" className="brand-expand" aria-label="展开导航栏"
+              title="展开导航栏" aria-expanded={false} aria-controls="admin-primary-nav"
+              onClick={() => setCollapsed(false)}><BrandIcon /></button>
+          ) : <BrandIcon />}
           <div>
             教学实验平台<small>运维管理控制台</small>
           </div>
-          <button type="button" className="nav-collapse" aria-label={collapsed ? "展开导航栏" : "收起导航栏"} title={collapsed ? "展开导航栏" : "收起导航栏"} aria-expanded={!collapsed} aria-controls="admin-primary-nav" onClick={() => setCollapsed(value => !value)}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path d={collapsed ? "m10 6 6 6-6 6" : "m14 6-6 6 6 6"} /></svg>
-          </button>
+          {!collapsed && <button type="button" className="nav-collapse" aria-label="收起导航栏" title="收起导航栏" aria-expanded={true} aria-controls="admin-primary-nav" onClick={() => setCollapsed(true)}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path d="m14 6-6 6 6 6" /></svg>
+          </button>}
         </div>
         <div className="nav-label">平台管理</div>
         <nav id="admin-primary-nav" className="nav" aria-label="平台管理">

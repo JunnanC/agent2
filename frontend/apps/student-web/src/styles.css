@@ -142,3 +142,14 @@
 .student-portal .nav-collapsed>.topbar{display:flex;align-items:center;padding:28px 16px}
 .student-portal .nav-collapsed .sidebar-toggle{width:28px}
 }
+
+/* Keep the account in the last row of the current two-column sidebar header. */
+@media(min-width:1051px){
+.student-portal .side-nav-shell>.topbar{grid-template-areas:"brand toggle" "navigation navigation" "account account";grid-template-rows:auto minmax(0,1fr) auto;align-content:stretch;height:100dvh;min-height:0}
+.student-portal .side-nav-shell .brand-lockup{grid-area:brand}
+.student-portal .side-nav-shell .sidebar-toggle{grid-area:toggle}
+.student-portal .side-nav-shell .primary-nav{grid-area:navigation;min-height:0;overflow-y:auto;overflow-x:hidden}
+.student-portal .side-nav-shell .topbar-actions{grid-area:account;margin-top:0}
+.student-portal .nav-collapsed>.topbar{display:grid;grid-template-columns:minmax(0,1fr);grid-template-areas:"brand" "navigation" "account";grid-template-rows:auto minmax(0,1fr) auto;align-items:stretch}
+.student-portal .nav-collapsed .brand-lockup{justify-self:center}
+}
