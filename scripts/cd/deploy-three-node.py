@@ -102,10 +102,12 @@ def render_release(manifest, role, revision, release, images):
         for volume in service.get('volumes', []):
             if volume['type'] == 'bind' and volume['source'].startswith('/opt/agent2-cd/'):
                 source = volume['source']
-                if source == '/opt/agent2-cd/current':
+                if volume['target'] == '/workspace' or source == '/opt/agent2-cd/current':
                     volume['source'] = release
                 elif '/infrastructure/' in source:
                     volume['source'] = release + '/infrastructure/' + source.split('/infrastructure/', 1)[1]
+                elif '/secrets/' in source:
+                    volume['source'] = release + '/secrets/' + source.split('/secrets/', 1)[1]
         if role == 'A' and name == 'kong':
             for volume in service.get('volumes', []):
                 if volume['target'] == '/kong/declarative/kong.yml':
@@ -216,7 +218,7 @@ def main():
     candidates = {}
     for role, node in nodes.items():
         node.python('from pathlib import Path\np=Path(DATA);p.mkdir(parents=True,mode=0o755);p.chmod(0o755)\n', release)
-        subprocess.run(node.command(['tar', '-xf', '-', '-C', release]), input=archive, check=True)
+        subprocess.run(node.command(['bash', '-c', 'umask 022; exec tar -xf - -C "$1"', 'agent2-extract', release]), input=archive, check=True)
         candidate = render_release(manifests[role], role, revision, release, images)
         candidates[role] = release + '/node.compose.json'
         node.python('''
