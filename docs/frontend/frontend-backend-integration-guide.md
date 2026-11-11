@@ -23,7 +23,7 @@
 .\scripts\frontend-dev-up.ps1 -SkipBackend
 ```
 
-学生、教师、管理入口分别为 `http://student.localhost:5173`、`http://teacher.localhost:5174`、`http://admin.localhost:5176`。源码以只读卷挂载，依赖卷单独管理。
+学生、教师、管理入口分别为 `http://student.localhost:8081`、`http://teacher.localhost:8082`、`http://admin.localhost:8083`。源码以只读卷挂载，依赖卷单独管理。
 
 已有标准 Compose 后端时使用 `-SkipBackend`；省略该参数会按 `.env` 选择的 Compose 配置和 `runtime` profile 构建并启动标准后端。脚本的端口检查要求与实际映射一致；不要仅修改访问 URL。
 
@@ -73,3 +73,30 @@ npx tsc -p e2e/tsconfig.json --noEmit
 ## 七、共享资源类型
 
 [types.ts](../../frontend/packages/api-client/src/types.ts)表达前端业务资源类型，[生成类型](../../frontend/packages/api-client/src/generated/schema.d.ts)来自 OpenAPI；两者都需要与当前 serializer 保持一致。资源标识、任务与审核状态、运行证据和工具链字段以当前实现为准，页面不能自行扩展后端枚举或假定所有列表响应相同。
+
+
+## teacher-web1 教师端开发计划与交付（2026-11-06）
+
+依据 prototypes/teacher，保留现有 React 技术栈和业务接口，仅修改前端，不修改后端。
+
+1. 左侧导航为教学概览、我的课程、通知；收起按钮放产品名称右侧，记忆折叠状态。
+2. 我的课程使用搜索与卡片；课程内部统一上下文及概况、成员申请、实验进度、设计、发布、分析页签。
+3. 新建模板后进入编辑；配置发布携带模板 ID 并打开真实发布表单，沿用创建、预检与发布接口。
+4. 发布内进入评审，按 publication_id 隔离；全量分页读取后筛选，全选覆盖全部筛选结果。现有 AI 接口对整个发布评分，采纳与最终教师确认分开，逐份反馈部分失败。
+5. 教学分析增加实验筛选，全量已分配任务作为分母，未提交计 0；待教师确认暂计 0 并标注。真实成绩从评审详情的教师决定读取。
+6. 重做公式 max(first, min(second, 60)) 有单测。当前接口缺少关联与去重，普通发布统计不冒充已支持重做；安排重做入口明确待接入。
+7. 课程内验证工作台与学生个人汇总提供页面及接口缺口说明；后端交付教师会话、报告接口和稳定学生标识查询后继续联调。
+
+验证：教师端类型检查、生产构建、5 个测试文件共 11 项通过。真实环境登录、发布、AI 服务与教师工作台未完成联调，不以 HTML 演示代替正式功能验收。后端分析报告与实施任务见开发指南/后端开发.md。
+
+## bug-1：课程筛选与补做成绩契约（2026-11-06）
+
+以下为上述 teacher-web1 交付之后新增的实现：
+
+- `GET /api/v2/tasks` 使用 `course_id` 筛选课程；兼容旧 `course`，两者非空且不同时返回 400。
+- `POST /api/v2/teaching/courses/{course_id}/experiments/{publication_id}/retakes` 接收 `selected_enrollment_ids`、`window_start` 和 `window_end`，要求 `Idempotency-Key`。使用选课记录 ID，与已有普通发布契约保持一致；服务端验证当前有效选课和同一学生的原实验任务。
+- 空名单不创建批次；每个原实验任务只能关联一次补做；只能对已发布或已关闭的普通实验创建补做。开放时间必须在未来且早于截止时间。同步创建返回 201，异步分配返回 202，原任务和原发布保留。
+- 发布响应增加 `retake_of_publication_id`。教师任务列表增加 `score`（服务端有效成绩）、`retake_of_task_id`、`has_retake` 和 `retake_task_id`。异步分配未完成时 `has_retake` 已为 true，`retake_task_id` 可为空。
+- 评分细项保留原始分数；补做确认决定和关联记录中的登记分均封顶为 60。原实验有效成绩取原成绩与补做登记分的较高值。未评分的补做不替代原成绩；均未评分时 score 为空，页面汇总按 0 计。
+- 教师成绩页、课程进度成绩汇总和学生学习历史按原实验只计一次；操作任务列表仍保留补做任务。学生评审结果增加 `effective_score`，各轮历史评审决定保持原记录。
+- 数据库新增发布来源字段及 `ExperimentRetakeLink` 关联模型，迁移为 experiments `0004`、`0005`；上线代码前需要在目标数据库完成迁移。当前阶段验证使用项目 SQLite 测试设置，不代表实际 MySQL 或线上浏览器总体验收已完成。

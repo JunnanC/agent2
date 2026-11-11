@@ -88,6 +88,19 @@ class PublicationPublishSerializer(serializers.Serializer):
     )
 
 
+class RetakePublicationWriteSerializer(serializers.Serializer):
+    selected_enrollment_ids = serializers.ListField(
+        child=serializers.CharField(max_length=26), allow_empty=False
+    )
+    window_start = serializers.DateTimeField()
+    window_end = serializers.DateTimeField()
+
+    def validate(self, attrs: dict[str, object]) -> dict[str, object]:
+        if cast(datetime, attrs["window_end"]) <= cast(datetime, attrs["window_start"]):
+            raise serializers.ValidationError({"window_end": "必须晚于 window_start"})
+        return attrs
+
+
 class PublicationTaskSnapshotSerializer(serializers.Serializer):
     public_id = serializers.CharField()
     source_task_id = serializers.CharField()
@@ -127,6 +140,7 @@ class TaskExtensionDecisionSerializer(serializers.Serializer):
 class PublicationDataSerializer(serializers.Serializer):
     public_id = serializers.CharField()
     course_id = serializers.CharField()
+    retake_of_publication_id = serializers.CharField(allow_null=True)
     template_version_id = serializers.CharField()
     rubric_version_id = serializers.CharField()
     template_spec_digest = serializers.CharField(allow_null=True)
@@ -166,6 +180,10 @@ class TaskDataSerializer(serializers.Serializer):
     enrollment_id = serializers.CharField()
     student_id = serializers.CharField()
     student_name = serializers.CharField(required=False)
+    score = serializers.CharField(allow_null=True, required=False)
+    retake_of_task_id = serializers.CharField(allow_null=True, required=False)
+    has_retake = serializers.BooleanField(required=False)
+    retake_task_id = serializers.CharField(allow_null=True, required=False)
     title = serializers.CharField()
     template_version_id = serializers.CharField()
     template_name = serializers.CharField()
@@ -271,6 +289,9 @@ def publication_data(item: TaskPublication) -> dict[str, Any]:
     return {
         "public_id": item.public_id,
         "course_id": item.course.public_id,
+        "retake_of_publication_id": (
+            item.retake_of.public_id if item.retake_of_id else None
+        ),
         "template_version_id": item.template_version.public_id,
         "rubric_version_id": item.rubric_version.public_id,
         "template_spec_digest": template_spec_digest,

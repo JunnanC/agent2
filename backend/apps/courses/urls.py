@@ -24,6 +24,7 @@ from .timetable_views import (
     AdministrativeClassCollectionView,
     AdministrativeClassMemberEndView,
     AdministrativeClassMembersView,
+    PlatformTeachingClassMembersView,
     StudentTimetableImportConfirmView,
     StudentTimetableImportDetailView,
     StudentTimetableImportMappingView,
@@ -240,6 +241,11 @@ urlpatterns = [
         name="teaching-enrollment-remove",
     ),
     path("platform/courses", PlatformCourseListView.as_view(), name="platform-courses"),
+    path(
+        "platform/courses/<str:course_id>/members",
+        PlatformTeachingClassMembersView.as_view(),
+        name="platform-teaching-class-members",
+    ),
     path(
         "platform/courses/<str:course_id>",
         PlatformCourseDetailView.as_view(),

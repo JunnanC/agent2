@@ -275,6 +275,10 @@ export interface Task {
   enrollment_id?: string;
   student_id?: string;
   student_name?: string;
+  score?: string | null;
+  retake_of_task_id?: string | null;
+  has_retake?: boolean;
+  retake_task_id?: string | null;
   title: string;
   template_name?: string;
   template_version_id?: string;
@@ -395,6 +399,7 @@ export interface ReportDraft {
 }
 
 export interface ReviewResult {
+  effective_score?: string | null;
   task_id: string;
   task_status: string;
   score: number | null;
@@ -537,12 +542,13 @@ export interface PrecheckRun {
 export interface Publication {
   public_id: string;
   course_id: string;
+  retake_of_publication_id?: string | null;
   template_version_id: string;
   template_name?: string;
   version_no?: number;
   title: string;
   description?: string | null;
-  status: "DRAFT" | "PRECHECK" | "READY" | "PUBLISHED" | "WITHDRAWN" | "CLOSED" | "FAILED";
+  status: "DRAFT" | "PRECHECK" | "READY" | "PUBLISHING" | "PUBLISHED" | "WITHDRAWN" | "CLOSED" | "FAILED";
   audience_mode?: string;
   window_start?: Iso8601 | null;
   window_end?: Iso8601 | null;

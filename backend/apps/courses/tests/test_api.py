@@ -2,6 +2,7 @@ from datetime import timedelta
 from unittest.mock import patch
 
 import yaml
+from django.http import HttpResponse
 from django.test import Client, TestCase
 from django.utils import timezone
 
@@ -19,6 +20,40 @@ PROXY_HEADERS = {
 
 class CourseApiTests(TestCase):
     password = "ValidPassword!234"
+
+    def test_platform_can_read_teaching_class_rosters_without_changing_enrollments(self) -> None:
+        from .helpers import create_draft_course
+
+        courses = [create_draft_course(self.teacher, code=f"ROSTER-{index}") for index in (1, 2)]
+        for course in courses:
+            Course.objects.filter(pk=course.pk).update(status="PUBLISHED")
+            Enrollment.objects.create(
+                course=course, student=self.student, cycle_no=1,
+                status="ACTIVE", applied_at=timezone.now(),
+            )
+        admin_client = Client()
+        self._login(admin_client, portal="PLATFORM", identifier=self.admin.email)
+        for course in courses:
+            response = admin_client.get(
+                f"/api/v2/platform/courses/{course.public_id}/members",
+                HTTP_X_PORTAL="PLATFORM", **PROXY_HEADERS,
+            )
+            self.assertEqual(response.status_code, 200, response.content)
+            self.assertEqual(response.json()["data"]["class"]["public_id"], course.public_id)
+            self.assertEqual(
+                [item["student_id"] for item in response.json()["data"]["members"]],
+                [self.student.public_id],
+            )
+        student_client = Client()
+        self._login(student_client, portal="USER", identifier=self.student.email)
+        response = student_client.get(
+            f"/api/v2/platform/courses/{courses[0].public_id}/members",
+            HTTP_X_PORTAL="USER", **PROXY_HEADERS,
+        )
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(
+            Enrollment.objects.filter(student=self.student, status="ACTIVE").count(), 2,
+        )
 
     def setUp(self) -> None:
         self.teacher = create_user(
@@ -174,7 +209,10 @@ class CourseApiTests(TestCase):
         student_client = Client(enforce_csrf_checks=True)
         student_csrf = self._login(student_client, portal="USER", identifier=self.student.email)
 
-        def post(client, portal, csrf, path, payload, key, version=None):
+        def post(
+            client: Client, portal: str, csrf: str, path: str,
+            payload: dict[str, object], key: str, version: int | None = None,
+        ) -> HttpResponse:
             headers = {
                 "HTTP_X_CSRFTOKEN": csrf, "HTTP_X_PORTAL": portal,
                 "HTTP_IDEMPOTENCY_KEY": key, **PROXY_HEADERS,
@@ -183,7 +221,7 @@ class CourseApiTests(TestCase):
                 headers["HTTP_IF_MATCH"] = f'"{version}"'
             return client.post(path, payload, content_type="application/json", **headers)
 
-        def assert_access(allowed):
+        def assert_access(allowed: bool) -> None:
             for suffix in (
                 "", "/chapters", "/materials", "/announcements", "/calendar", "/questions"
             ):

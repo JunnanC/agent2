@@ -25,16 +25,21 @@ export function RichTextEditor({
 }: RichTextEditorProps) {
   const editorRef = useRef<HTMLDivElement>(null);
   const dirtyRef = useRef(false);
+  const lastHtmlRef = useRef(initialHtml);
 
   useEffect(() => {
     if (editorRef.current && !dirtyRef.current) {
       editorRef.current.innerHTML = initialHtml;
+      lastHtmlRef.current = editorRef.current.innerHTML;
     }
   }, [initialHtml]);
 
   const emit = useCallback(() => {
+    const html = editorRef.current?.innerHTML ?? "";
+    if (html === lastHtmlRef.current) return;
+    lastHtmlRef.current = html;
     dirtyRef.current = true;
-    onChange?.(editorRef.current?.innerHTML ?? "");
+    onChange?.(html);
     onDirty?.();
   }, [onChange, onDirty]);
 
@@ -69,6 +74,24 @@ export function RichTextEditor({
       <div ref={editorRef} className="rich-report-editor" role="textbox" aria-label={ariaLabel}
         aria-multiline="true" contentEditable tabIndex={0} data-placeholder={placeholder}
         onInput={emit} onBlur={emit}
+        onPaste={(event) => {
+          event.preventDefault();
+          const text = event.clipboardData.getData("text/plain");
+          const selection = window.getSelection();
+          if (!selection?.rangeCount) return;
+          const range = selection.getRangeAt(0);
+          if (!editorRef.current?.contains(range.commonAncestorContainer)) return;
+          range.deleteContents();
+          const fragment = document.createDocumentFragment();
+          text.replace(/\r\n?/g, "\n").split("\n").forEach((line, index) => {
+            if (index) fragment.append(document.createElement("br"));
+            fragment.append(document.createTextNode(line));
+          });
+          const last = fragment.lastChild;
+          range.insertNode(fragment);
+          if (last) { range.setStartAfter(last); range.collapse(true); selection.removeAllRanges(); selection.addRange(range); }
+          emit();
+        }}
         onKeyDown={(event) => {
           if ((event.ctrlKey || event.metaKey) && event.key === "s") {
             event.preventDefault();

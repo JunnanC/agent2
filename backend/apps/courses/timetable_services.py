@@ -459,19 +459,12 @@ def assign_administrative_class_member(
         raise ResourceNotFound() from exc
     current = (
         AdministrativeClassMembership.objects.select_for_update()
-        .filter(student=student, ends_on__isnull=True)
+        .filter(student=student, administrative_class=administrative_class, ends_on__isnull=True)
         .first()
     )
     today = timezone.localdate()
-    if current and current.administrative_class_id == administrative_class.pk:
-        return current
     if current:
-        compare_and_swap(
-            AdministrativeClassMembership,
-            pk=current.pk,
-            expected_version=current.row_version,
-            changes={"ends_on": today},
-        )
+        return current
     return AdministrativeClassMembership.objects.create(
         administrative_class=administrative_class,
         student=student,

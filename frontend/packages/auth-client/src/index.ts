@@ -317,6 +317,12 @@ export const authFlow = {
     });
     return response;
   },
+  register: async (values: { email: string; username: string; display_name: string; password: string }): Promise<void> => {
+    await request("/auth/register", { method: "POST", body: values });
+  },
+  verifyEmail: async (token: string): Promise<void> => {
+    await request("/auth/verify-email", { method: "POST", body: { token } });
+  },
   logout: async (all = false): Promise<void> => {
     await request(`/auth/logout${all ? "-all" : ""}`, { method: "POST" });
   },

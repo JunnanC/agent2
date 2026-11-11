@@ -57,6 +57,19 @@ class UserCreateSerializer(serializers.Serializer):
     password = serializers.CharField(max_length=256, trim_whitespace=False, write_only=True)
 
 
+class VerifyEmailSerializer(serializers.Serializer):
+    token = serializers.CharField(max_length=256, trim_whitespace=False)
+
+
+class RegistrationStatusSerializer(serializers.Serializer):
+    status = serializers.CharField()
+
+
+class RegistrationResponseSerializer(serializers.Serializer):
+    data = RegistrationStatusSerializer()
+    meta = AccountTraceMetaSerializer()
+
+
 class UserStatusUpdateSerializer(serializers.Serializer):
     account_status = serializers.ChoiceField(choices=User.AccountStatus.choices)
     reason = serializers.CharField(max_length=255)
@@ -68,7 +81,11 @@ class QualificationGrantSerializer(serializers.Serializer):
 
 class TeacherQualificationUpdateSerializer(serializers.Serializer):
     status = serializers.ChoiceField(
-        choices=(TeacherQualification.Status.SUSPENDED, TeacherQualification.Status.REVOKED)
+        choices=(
+            TeacherQualification.Status.SUSPENDED,
+            TeacherQualification.Status.REVOKED,
+            TeacherQualification.Status.REJECTED,
+        )
     )
     reason = serializers.CharField(max_length=255)
 
@@ -131,10 +148,11 @@ class VerificationDataSerializer(serializers.Serializer):
 class QualificationDataSerializer(serializers.Serializer):
     public_id = serializers.CharField()
     user_id = serializers.CharField()
+    user_row_version = serializers.IntegerField()
     display_name = serializers.CharField()
     status = serializers.CharField()
     reason = serializers.CharField()
-    granted_at = serializers.DateTimeField()
+    granted_at = serializers.DateTimeField(allow_null=True)
     suspended_at = serializers.DateTimeField(allow_null=True)
     revoked_at = serializers.DateTimeField(allow_null=True)
     row_version = serializers.IntegerField()
@@ -229,6 +247,7 @@ def qualification_data(qualification: TeacherQualification) -> dict[str, object]
     return {
         "public_id": qualification.public_id,
         "user_id": qualification.user.public_id,
+        "user_row_version": qualification.user.row_version,
         "display_name": qualification.user.display_name,
         "status": qualification.status,
         "reason": qualification.reason,

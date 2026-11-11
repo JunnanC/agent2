@@ -116,6 +116,7 @@ class SettingsTests(SimpleTestCase):
         }
         assert {model._meta.db_table for model in apps.get_app_config("accounts").get_models()} == {
             "accounts_user",
+            "accounts_pending_registration",
             "accounts_identity_verification",
             "accounts_teacher_qualification",
             "accounts_teacher_qualification_event",
@@ -201,6 +202,7 @@ class SettingsTests(SimpleTestCase):
             "experiments_publication_audience",
             "experiments_publication_prerequisite",
             "experiments_experiment_task",
+            "experiments_experiment_retake_link",
             "experiments_task_state_transition",
             "experiments_task_extension_request",
             "experiments_task_extension_decision",

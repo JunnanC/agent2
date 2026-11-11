@@ -1,10 +1,11 @@
+import { GradeAnalysis } from "./grade-analysis";
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { teachingApi } from "@edu/api-client";
 import { keys } from "@edu/query-keys";
 import {
-  Breadcrumbs, LineChart, Metric, Panel, RequestStateView, StatusBadge,
+  LineChart, Metric, Panel, RequestStateView, StatusBadge,
 } from "@edu/ui";
 import type { ChartSeries } from "@edu/ui";
 
@@ -22,6 +23,8 @@ function completionRateOf(row: DailyMetricRow): number | null {
 
 export function Analytics() {
   const { courseId = "" } = useParams();
+  const navigate = useNavigate();
+  const courses = useQuery({ queryKey: keys.teachingCourses(), queryFn: () => teachingApi.courses({ page_size: 100 }) });
   const [period, setPeriod] = useState<"term" | "month">("term");
   const days = PERIOD_DAYS[period] ?? 28;
 
@@ -90,7 +93,8 @@ export function Analytics() {
 
   return (
     <>
-      <Breadcrumbs items={[{ label: "教师门户" }, { label: "课程" }]} current="教学分析" />
+      <RequestStateView loading={courses.isLoading} error={courses.error} onRetry={() => void courses.refetch()} empty={false}><label className="form-label">选择课程<select className="field" aria-label="选择课程" value={courseId} onChange={(event) => navigate(`/courses/${event.target.value}/analytics`)}>{(courses.data?.rows ?? []).map((course) => <option key={course.public_id} value={course.public_id}>{course.title}</option>)}</select></label></RequestStateView>
+      <GradeAnalysis key={courseId} courseId={courseId} />
       <div className="page-actions align-end">
         <select className="field" style={{ width: 130 }} aria-label="统计周期" value={period}
           onChange={(event) => setPeriod(event.target.value === "month" ? "month" : "term")}>

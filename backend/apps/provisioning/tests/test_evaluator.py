@@ -1,7 +1,7 @@
 from apps.provisioning.evaluator import outputs_match, public_report
 
 
-def test_numeric_comparison_supports_tolerance_and_zero():
+def test_numeric_comparison_supports_tolerance_and_zero() -> None:
     assert outputs_match("1.000001", "1", comparator="numeric")
     assert not outputs_match(
         "1.000001", "1", comparator="numeric", absolute_tolerance=0, relative_tolerance=0
@@ -9,7 +9,7 @@ def test_numeric_comparison_supports_tolerance_and_zero():
     assert not outputs_match("NaN", "NaN", comparator="numeric")
 
 
-def test_hidden_results_are_redacted():
+def test_hidden_results_are_redacted() -> None:
     report = public_report({"status": "FAILED", "results": [
         {"status": "PASSED", "stdout": "ok", "stderr": "", "input": "a"},
         {"status": "FAILED", "stdout": "secret", "stderr": "trace", "expected": "secret"},

@@ -1,18 +1,21 @@
 import hashlib
 import io
 from types import SimpleNamespace
+from typing import cast
 from unittest.mock import patch
 
 from django.test import SimpleTestCase, override_settings
+
+from apps.core.models import ObjectAsset
 
 from ..storage import WorkspaceStorageFailure, _read_object
 
 
 class WorkspaceObjectReadTests(SimpleTestCase):
     @override_settings(WORKSPACE_SNAPSHOT_MAX_BYTES=16)
-    def test_closes_object_stream_on_success_and_failure(self):
+    def test_closes_object_stream_on_success_and_failure(self) -> None:
         class BrokenStream(io.BytesIO):
-            def read(self, size=-1):
+            def read(self, size: int | None = -1) -> bytes:
                 raise OSError("storage connection failed")
 
         cases = [
@@ -23,10 +26,10 @@ class WorkspaceObjectReadTests(SimpleTestCase):
         ]
         for stream, error, expected in cases:
             with self.subTest(error=error):
-                asset = SimpleNamespace(
+                asset = cast(ObjectAsset, SimpleNamespace(
                     bucket="test", object_key="code", object_version="v1",
                     size_bytes=len(expected), digest_sha256=hashlib.sha256(expected).hexdigest(),
-                )
+                ))
                 with patch("apps.workspaces.storage.object_storage") as storage:
                     storage.return_value.open_object.return_value = SimpleNamespace(body=stream)
                     if error:

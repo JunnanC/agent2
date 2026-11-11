@@ -26,6 +26,15 @@ x-app-environment: &app-environment
   COURSE_INVITATION_HMAC_KEY: ${COURSE_INVITATION_HMAC_KEY:-unsafe-local-course-invitation-hmac-key-change-me}
   DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1,django,student.localhost,teacher.localhost,admin.localhost,api.localhost,student.example.edu,teacher.example.edu,admin.example.edu,api.example.edu
   DJANGO_TRUSTED_ORIGINS: http://student.localhost:${ENTRY_PORT:-8080},http://teacher.localhost:${ENTRY_PORT:-8080},http://admin.localhost:${ENTRY_PORT:-8080}
+  EMAIL_BACKEND: ${EMAIL_BACKEND:-django.core.mail.backends.smtp.EmailBackend}
+  EMAIL_HOST: ${EMAIL_HOST:-}
+  EMAIL_PORT: ${EMAIL_PORT:-587}
+  EMAIL_HOST_USER: ${EMAIL_HOST_USER:-}
+  EMAIL_HOST_PASSWORD: ${EMAIL_HOST_PASSWORD:-}
+  EMAIL_USE_TLS: ${EMAIL_USE_TLS:-true}
+  DEFAULT_FROM_EMAIL: ${DEFAULT_FROM_EMAIL:-no-reply@example.edu}
+  STUDENT_PUBLIC_URL: ${STUDENT_PUBLIC_URL:-http://student.localhost:8080}
+  TEACHER_PUBLIC_URL: ${TEACHER_PUBLIC_URL:-http://teacher.localhost:8080}
   WORKSPACE_ALLOWED_ORIGINS: http://student.localhost:${ENTRY_PORT:-8080}
   WORKSPACE_INTERNAL_KEY: ${WORKSPACE_INTERNAL_KEY:-unsafe-local-workspace-internal-key}
   WORKSPACE_UPSTREAM_HMAC_KEY: ${WORKSPACE_UPSTREAM_HMAC_KEY:-unsafe-local-workspace-upstream-hmac-key}

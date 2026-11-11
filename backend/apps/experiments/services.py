@@ -2,6 +2,7 @@ import hashlib
 import json
 import re
 from collections.abc import Iterable, Mapping
+from datetime import datetime
 from typing import Any
 
 from django.conf import settings
@@ -33,6 +34,7 @@ from .errors import (
     TaskExtensionConflict,
     TaskStateConflict,
 )
+from .grades import task_grades
 from .metrics import (
     PUBLICATION_ASSIGNMENT_DURATION,
     PUBLICATION_DECISIONS_TOTAL,
@@ -40,6 +42,7 @@ from .metrics import (
     TASK_TRANSITIONS_TOTAL,
 )
 from .models import (
+    ExperimentRetakeLink,
     ExperimentTask,
     PublicationAudience,
     PublicationChapter,
@@ -827,6 +830,34 @@ def _transition_row(
     )
 
 
+def _link_retake_task(
+    *, publication: TaskPublication, task: ExperimentTask, enrollment: Enrollment
+) -> None:
+    if publication.retake_of_id is None:
+        return
+    source_task = ExperimentTask.objects.select_for_update().filter(
+        publication_id=publication.retake_of_id, student=enrollment.student
+    ).first()
+    if source_task is None:
+        raise PublicationValidationError(detail={"retake_source_task": "原实验任务不存在"})
+    try:
+        link = ExperimentRetakeLink.objects.select_for_update().get(
+            source_task=source_task, retake_publication=publication
+        )
+    except ExperimentRetakeLink.DoesNotExist as exc:
+        raise PublicationValidationError(detail={"retake_link": "补做任务关联记录不存在"}) from exc
+    if link.retake_task_id == task.pk:
+        return
+    if link.retake_task_id is not None:
+        raise PublicationValidationError(detail={"retake_link": "补做任务已关联其他任务"})
+    compare_and_swap(
+        ExperimentRetakeLink,
+        pk=link.pk,
+        expected_version=link.row_version,
+        changes={"retake_task": task},
+    )
+
+
 def _create_task(
     *, publication: TaskPublication, enrollment: Enrollment, actor: User | None, context: Any
 ) -> ExperimentTask:
@@ -872,7 +903,9 @@ def _create_task(
     except IntegrityError:
         task = ExperimentTask.objects.get(publication=publication, student=enrollment.student)
         TASK_ASSIGNMENTS_TOTAL.labels(result="duplicate").inc()
+        _link_retake_task(publication=publication, task=task, enrollment=enrollment)
         return task
+    _link_retake_task(publication=publication, task=task, enrollment=enrollment)
     _transition_row(
         task=task,
         from_status="",
@@ -952,7 +985,7 @@ def publish_publication(
         course = Course.objects.select_for_update().get(public_id=course_id)
         publication = (
             TaskPublication.objects.select_for_update()
-            .select_related("course", "rubric_version__rubric")
+            .select_related("course", "rubric_version__rubric", "retake_of")
             .get(public_id=publication_id, course=course)
         )
     except (Course.DoesNotExist, TaskPublication.DoesNotExist) as exc:
@@ -976,6 +1009,9 @@ def publish_publication(
     enrollments = _freeze_audience(publication=publication, selected_ids=selected_ids)
     publication_digest = _json_digest({
         "course_id": course.public_id,
+        "retake_of_publication_id": (
+            publication.retake_of.public_id if publication.retake_of_id else None
+        ),
         "template_digest": content["template_digest"],
         "audience_mode": publication.audience_mode,
         "audience_enrollment_ids": sorted(item.public_id for item in enrollments),
@@ -1049,6 +1085,116 @@ def publish_publication(
             )
         )
     return published, 202 if async_assignment else 201
+
+
+@transaction.atomic
+def create_retake_publication(
+    *,
+    course_id: str,
+    publication_id: str,
+    selected_enrollment_ids: list[str],
+    window_start: datetime,
+    window_end: datetime,
+    actor: User,
+    context: Any,
+) -> tuple[TaskPublication, int]:
+    from apps.courses.models import Course
+
+    try:
+        course = Course.objects.select_for_update().get(public_id=course_id)
+        source = (
+            TaskPublication.objects.select_for_update()
+            .select_related("course", "template_version", "rubric_version")
+            .get(public_id=publication_id, course=course)
+        )
+    except (Course.DoesNotExist, TaskPublication.DoesNotExist) as exc:
+        raise ResourceNotFound() from exc
+    require_course_capability(
+        course=course, actor=actor, capability=CourseStaffGrant.Capability.PUBLISH_EXPERIMENT
+    )
+    if source.retake_of_id is not None:
+        raise PublicationValidationError(detail={"publication_id": "不能对补做实验再次创建补做"})
+    if source.status not in {TaskPublication.Status.PUBLISHED, TaskPublication.Status.CLOSED}:
+        raise PublicationValidationError(detail={"publication_status": source.status})
+    if window_end <= window_start or window_start <= timezone.now():
+        raise PublicationValidationError(
+            detail={"window_start": "补做开放时间必须在未来且早于截止时间"}
+        )
+    if not selected_enrollment_ids:
+        raise PublicationValidationError(detail={"selected_enrollment_ids": "至少选择一名学生"})
+    if len(selected_enrollment_ids) != len(set(selected_enrollment_ids)):
+        raise PublicationValidationError(detail={"selected_enrollment_ids": "不能包含重复选课记录"})
+
+    enrollments = list(
+        Enrollment.objects.select_for_update()
+        .filter(
+            course=course,
+            status=Enrollment.Status.ACTIVE,
+            public_id__in=selected_enrollment_ids,
+        )
+        .select_related("student")
+        .order_by("id")
+    )
+    if len(enrollments) != len(selected_enrollment_ids):
+        raise PublicationValidationError(
+            detail={"selected_enrollment_ids": "只能选择本课程有效选课学生"}
+        )
+    source_tasks = list(
+        ExperimentTask.objects.select_for_update()
+        .filter(publication=source, student_id__in=[item.student_id for item in enrollments])
+        .select_related("enrollment")
+        .order_by("id")
+    )
+    if len(source_tasks) != len(enrollments):
+        raise PublicationValidationError(
+            detail={"selected_enrollment_ids": "所选学生没有对应的原实验任务"}
+        )
+    if ExperimentRetakeLink.objects.filter(source_task__in=source_tasks).exists():
+        raise PublicationValidationError(
+            detail={"selected_enrollment_ids": "所选学生已有该实验的补做任务"}
+        )
+
+    retake = create_publication(
+        course_id=course.public_id,
+        actor=actor,
+        data={
+            "template_version_id": source.template_version.public_id,
+            "rubric_version_id": source.rubric_version.public_id,
+            "title": source.title,
+            "description": source.description,
+            "audience_mode": TaskPublication.AudienceMode.SELECTED,
+            "late_enrollment_policy": TaskPublication.LateEnrollmentPolicy.DO_NOT_ASSIGN,
+            "window_start": window_start,
+            "window_end": window_end,
+            "assignment_deadline": window_end,
+            "report_required": source.report_required,
+            "review_mode": source.review_mode,
+            "prerequisites": [],
+        },
+        context=context,
+    )
+    retake = compare_and_swap(
+        TaskPublication,
+        pk=retake.pk,
+        expected_version=retake.row_version,
+        changes={"retake_of": source},
+    )
+    ExperimentRetakeLink.objects.bulk_create([
+        ExperimentRetakeLink(
+            source_task=source_task,
+            retake_publication=retake,
+            created_by=actor,
+        )
+        for source_task in source_tasks
+    ])
+    return publish_publication(
+        course_id=course.public_id,
+        publication_id=retake.public_id,
+        actor=actor,
+        expected_version=retake.row_version,
+        selected_ids=selected_enrollment_ids,
+        context=context,
+    )
 
 
 def publication_audience_enrollment_ids(publication: TaskPublication) -> list[str]:
@@ -1714,13 +1860,15 @@ def teaching_progress(*, course_id: str, actor: User) -> dict[str, Any]:
     )
     counts = {
         item["status"]: item["count"]
-        for item in ExperimentTask.objects.filter(course=course)
+        for item in ExperimentTask.objects.filter(
+            course=course, publication__retake_of__isnull=True
+        )
         .values("status")
         .annotate(count=Count("id"))
     }
     experiments: dict[str, dict[str, Any]] = {}
     for item in (
-        ExperimentTask.objects.filter(course=course)
+        ExperimentTask.objects.filter(course=course, publication__retake_of__isnull=True)
         .values("publication__public_id", "publication__title", "status")
         .annotate(count=Count("id"))
     ):
@@ -1737,7 +1885,7 @@ def teaching_progress(*, course_id: str, actor: User) -> dict[str, Any]:
         progress["task_counts"][item["status"]] = item["count"]
         progress["total"] += item["count"]
     course_tasks = list(
-        ExperimentTask.objects.filter(course=course)
+        ExperimentTask.objects.filter(course=course, publication__retake_of__isnull=True)
         .select_related("publication", "student")
         .order_by("publication__created_at", "student__display_name", "id")
     )
@@ -1746,6 +1894,7 @@ def teaching_progress(*, course_id: str, actor: User) -> dict[str, Any]:
         "review"
     ).order_by("review__task_id", "-review__round_no"):
         latest_decisions.setdefault(decision.review.task_id, decision)
+    grades = task_grades(course_tasks)
     for task in course_tasks:
         progress = experiments[task.publication.public_id]
         progress.setdefault("students", []).append(
@@ -1759,11 +1908,7 @@ def teaching_progress(*, course_id: str, actor: User) -> dict[str, Any]:
                 "decision": (
                     latest_decisions[task.pk].decision if task.pk in latest_decisions else None
                 ),
-                "score": (
-                    str(latest_decisions[task.pk].score)
-                    if task.pk in latest_decisions
-                    else None
-                ),
+                **grades[task.pk],
             }
         )
     return {
@@ -1792,7 +1937,9 @@ def student_learning_history(*, actor: User) -> dict[str, Any]:
         .order_by("course__term__starts_at", "course__title", "cycle_no")
     )
     tasks = list(
-        ExperimentTask.objects.filter(enrollment__in=enrollments)
+        ExperimentTask.objects.filter(
+            enrollment__in=enrollments, publication__retake_of__isnull=True
+        )
         .select_related("publication", "enrollment", "course__term")
         .order_by("created_at", "id")
     )
@@ -1801,6 +1948,7 @@ def student_learning_history(*, actor: User) -> dict[str, Any]:
         "review"
     ).order_by("review__task_id", "-review__round_no"):
         latest_decisions.setdefault(decision.review.task_id, decision)
+    grades = task_grades(tasks)
     tasks_by_enrollment: dict[int, list[ExperimentTask]] = {}
     for task in tasks:
         tasks_by_enrollment.setdefault(task.enrollment_id, []).append(task)
@@ -1861,11 +2009,7 @@ def student_learning_history(*, actor: User) -> dict[str, Any]:
                             if task.pk in latest_decisions
                             else None
                         ),
-                        "score": (
-                            str(latest_decisions[task.pk].score)
-                            if task.pk in latest_decisions
-                            else None
-                        ),
+                        **grades[task.pk],
                     }
                     for task in course_tasks
                 ],

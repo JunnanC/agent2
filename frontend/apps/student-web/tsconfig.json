@@ -2,7 +2,6 @@
   "extends": "../../packages/config/tsconfig.base.json",
   "compilerOptions": {
     "types": ["vite/client"],
-    "baseUrl": ".",
     "paths": {
       "@edu/ui": ["../../packages/ui/src/index.tsx"],
       "@edu/api-client": ["../../packages/api-client/src/index.ts"],

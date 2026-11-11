@@ -60,6 +60,13 @@ class TaskPublication(VersionedModel):
 
     public_id = public_id_field()
     course = models.ForeignKey(Course, on_delete=models.PROTECT, related_name="task_publications")
+    retake_of = models.ForeignKey(
+        "self",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="retake_publications",
+    )
     template_version = models.ForeignKey(
         TemplateVersion, on_delete=models.PROTECT, related_name="task_publications"
     )
@@ -457,6 +464,43 @@ class ExperimentTask(VersionedModel):
             ),
             models.Index(fields=("publication", "status"), name="experiments_task_pub_idx"),
             models.Index(fields=("status", "updated_at"), name="experiments_task_status_idx"),
+        ]
+
+
+class ExperimentRetakeLink(VersionedModel):
+    public_id = public_id_field()
+    source_task = models.OneToOneField(
+        ExperimentTask, on_delete=models.PROTECT, related_name="retake_link"
+    )
+    retake_publication = models.ForeignKey(
+        TaskPublication, on_delete=models.PROTECT, related_name="retake_links"
+    )
+    retake_task = models.OneToOneField(
+        ExperimentTask,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="source_retake_link",
+    )
+    created_by = models.ForeignKey(User, on_delete=models.PROTECT)
+    registered_score = models.DecimalField(
+        max_digits=7, decimal_places=2, null=True, blank=True
+    )
+
+    class Meta:
+        db_table = "experiments_experiment_retake_link"
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(registered_score__isnull=True)
+                | (models.Q(registered_score__gte=0) & models.Q(registered_score__lte=60)),
+                name="experiments_retake_score_ck",
+            )
+        ]
+        indexes = [
+            models.Index(
+                fields=("retake_publication", "created_at"),
+                name="experiments_retake_pub_idx",
+            )
         ]
 
 

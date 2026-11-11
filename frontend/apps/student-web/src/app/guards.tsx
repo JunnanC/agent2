@@ -61,7 +61,8 @@ export function AuthGuard({ fullscreen }: { fullscreen?: boolean }) {
   return (
     <div className="app-shell">
       <AppShell
-        domainLabel="student.localhost"
+        brand="教学实验平台"
+        domainLabel="学生学习空间"
         nav={STUDENT_NAV}
         activePath={location.pathname}
         onNavigate={navigate}

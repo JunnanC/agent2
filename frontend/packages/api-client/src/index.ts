@@ -641,6 +641,12 @@ function normalizeReviewDetail(raw: unknown): ReviewDetail {
   const annotations = (base["annotations"] ?? []) as Array<Record<string, unknown>>;
   return {
     ...(base as unknown as ReviewDetail),
+    decision: typeof base["decision"] === "object" && base["decision"] !== null
+      ? String((base["decision"] as Record<string, unknown>)["decision"] ?? "")
+      : typeof base["decision"] === "string" ? base["decision"] : null,
+    score: typeof base["decision"] === "object" && base["decision"] !== null && (base["decision"] as Record<string, unknown>)["score"] != null
+      ? Number((base["decision"] as Record<string, unknown>)["score"])
+      : null,
     rubric: {
       criteria: criteria.map((row) => ({
         public_id: String(row["public_id"] ?? ""),
@@ -875,6 +881,15 @@ export const teachingApi = {
       method: "POST", body: {}, idempotencyKey: reuseKey ?? newIdempotencyKey(), ifMatch,
     }).then((r) => r.data),
 
+  createRetakePublication: (
+    courseId: string,
+    publicationId: string,
+    payload: { selected_enrollment_ids: string[]; window_start: string; window_end: string },
+    reuseKey?: string,
+  ) => request<Publication>(`/teaching/courses/${courseId}/experiments/${publicationId}/retakes`, {
+    method: "POST", body: payload, idempotencyKey: reuseKey ?? newIdempotencyKey(),
+  }).then((r) => r.data),
+
   withdrawPublication: (courseId: string, publicationId: string, ifMatch: string, reuseKey?: string) =>
     request<Publication>(`/teaching/courses/${courseId}/experiments/${publicationId}/withdraw`, {
       method: "POST", body: {}, idempotencyKey: reuseKey ?? newIdempotencyKey(), ifMatch,
@@ -923,7 +938,7 @@ export const teachingApi = {
     request<Array<Record<string, unknown>>>(`/teaching/courses/${courseId}/tasks/${taskId}/operation-replay`).then(toList),
 
   // 评审
-  reviews: (courseId: string, query?: { status?: string; page?: number }) =>
+  reviews: (courseId: string, query?: { status?: string; page?: number; publication_id?: string; page_size?: number }) =>
     request<ReviewSummary[]>(`/teaching/courses/${courseId}/reviews`, { query }).then(toList),
 
   rubrics: (courseId: string) =>

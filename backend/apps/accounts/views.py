@@ -21,12 +21,14 @@ from .authentication import (
     portal_admission,
     refresh_current_session_security,
 )
-from .errors import InvalidCredentials
+from .errors import InvalidCredentials, PortalAccessDenied
 from .metrics import PORTAL_LOGIN_TOTAL
 from .models import IdentityVerification, PlatformAdminAssignment, TeacherQualification, User
 from .permissions import IsAuthenticatedAccount, IsPlatformPortal, IsUserPortal
+from .registration import complete_registration, start_registration
 from .security import (
     check_login_rate_limit,
+    check_registration_rate_limit,
     clear_login_rate_limit,
     client_ip,
     opaque_login_subject,
@@ -53,6 +55,7 @@ from .serializers import (
     QualificationGrantSerializer,
     QualificationListResponseSerializer,
     QualificationResponseSerializer,
+    RegistrationResponseSerializer,
     SessionStepUpInputSerializer,
     SessionStepUpResponseSerializer,
     TeacherQualificationUpdateSerializer,
@@ -62,6 +65,7 @@ from .serializers import (
     UserStatusUpdateSerializer,
     VerificationListResponseSerializer,
     VerificationResponseSerializer,
+    VerifyEmailSerializer,
     admin_assignment_data,
     qualification_data,
     user_data,
@@ -73,7 +77,6 @@ from .services import (
     change_password,
     change_teacher_qualification,
     create_user,
-    grant_platform_admin,
     grant_teacher_qualification,
     record_login,
     review_identity_verification,
@@ -181,6 +184,62 @@ class CsrfView(APIView):
     def get(self, request: HttpRequest) -> Response:
         get_token(request)
         return _response(request, {"csrf": "ready"})
+
+
+class RegisterView(APIView):
+    authentication_classes: list = []
+    permission_classes: list = []
+
+    @extend_schema(
+        request=UserCreateSerializer,
+        responses={202: RegistrationResponseSerializer},
+        tags=["auth"],
+        extensions={"x-portals": ["USER", "TEACHING"]},
+    )
+    def post(self, request: HttpRequest) -> Response:
+        enforce_csrf(request)
+        portal = str(request.portal)
+        if portal not in {"USER", "TEACHING"}:
+            raise PortalAccessDenied()
+        serializer = UserCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        values = serializer.validated_data
+        check_registration_rate_limit(email=values["email"], ip_address=client_ip(request))
+        role = User.RegistrationRole.STUDENT if portal == "USER" else User.RegistrationRole.TEACHER
+        start_registration(
+            **values,
+            role=role,
+            verification_url=(
+                settings.STUDENT_PUBLIC_URL if portal == "USER" else settings.TEACHER_PUBLIC_URL
+            ).rstrip("/") + "/verify-email",
+        )
+        return _response(request, {"status": "email_sent_if_available"}, status=202)
+
+
+class VerifyEmailView(APIView):
+    authentication_classes: list = []
+    permission_classes: list = []
+
+    @extend_schema(
+        request=VerifyEmailSerializer,
+        responses={200: RegistrationResponseSerializer},
+        tags=["auth"],
+        extensions={"x-portals": ["USER", "TEACHING"]},
+    )
+    def post(self, request: HttpRequest) -> Response:
+        enforce_csrf(request)
+        portal = str(request.portal)
+        if portal not in {"USER", "TEACHING"}:
+            raise PortalAccessDenied()
+        serializer = VerifyEmailSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        role = User.RegistrationRole.STUDENT if portal == "USER" else User.RegistrationRole.TEACHER
+        complete_registration(
+            token=serializer.validated_data["token"],
+            role=role,
+            context=_context(request),
+        )
+        return _response(request, {"status": "verified"})
 
 
 class LoginView(APIView):
@@ -656,34 +715,6 @@ class AdminAssignmentsView(APIView):
         return _page_response(
             request, [admin_assignment_data(item) for item in values], spec=spec, total=total
         )
-
-
-class GrantAdminAssignmentView(APIView):
-    permission_classes = [IsPlatformPortal]
-
-    @extend_schema(
-        request=QualificationGrantSerializer,
-        responses={201: AdminAssignmentResponseSerializer},
-        tags=["platform-accounts"],
-        extensions={"x-portals": ["PLATFORM"]},
-    )
-    def post(self, request: HttpRequest, user_id: str) -> Response:
-        serializer = QualificationGrantSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        expected_version = parse_if_match(request.headers.get("If-Match"))
-
-        def operation() -> StoredResponse:
-            value = grant_platform_admin(
-                user_public_id=user_id,
-                reason=serializer.validated_data["reason"],
-                expected_user_version=expected_version,
-                actor=request.user,
-                context=_context(request),
-            )
-            body = {"data": admin_assignment_data(value), "meta": _meta(request)}
-            return StoredResponse(201, body, {"ETag": etag_for_version(value.row_version)})
-
-        return _idempotent_response(request, payload=serializer.validated_data, operation=operation)
 
 
 class AdminAssignmentDetailView(APIView):

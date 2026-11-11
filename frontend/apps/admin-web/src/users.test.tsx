@@ -25,6 +25,7 @@ it("refreshes the user list after an asynchronous successful create", async () =
   fireEvent.change(screen.getByLabelText("初始密码"), { target: { value: "ValidPassword!234" } });
   fireEvent.click(screen.getByRole("button", { name: "创建" }));
   await waitFor(() => expect(screen.getByText("qa@example.edu")).toBeInTheDocument());
+  expect(screen.queryByRole("button", { name: "授予管理员" })).not.toBeInTheDocument();
   expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "创建" })).not.toBeInTheDocument();
   client.clear();

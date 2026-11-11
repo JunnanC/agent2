@@ -36,7 +36,7 @@ try {
     $requiredEnvironment = @(
         'DJANGO_ALLOWED_HOSTS', 'DJANGO_TRUSTED_ORIGINS', 'WORKSPACE_ALLOWED_ORIGINS',
         'TRUSTED_PROXY_CIDRS', 'APP_NETWORK_SUBNET', 'STUDENT_HOST', 'TEACHER_HOST',
-        'ADMIN_HOST', 'API_HOST', 'KONG_IMAGE',
+        'ADMIN_HOST', 'API_HOST', 'EMAIL_HOST', 'EMAIL_HOST_USER', 'DEFAULT_FROM_EMAIL', 'KONG_IMAGE',
         'FLUENT_BIT_IMAGE', 'OTEL_COLLECTOR_IMAGE', 'MYSQL_HOST', 'REDIS_URL',
         'CELERY_BROKER_URL', 'CELERY_RESULT_BACKEND', 'MINIO_ENDPOINT', 'CLAMAV_HOST',
         'SWARM_DOCKER_HOST'
@@ -49,7 +49,7 @@ try {
     }
 
     $requiredConfigs = @('kong_config_v1', 'fluent_bit_config_v1', 'fluent_bit_redact_v1', 'otel_config_v1')
-    $requiredSecrets = @('django_secret_key', 'identity_hmac_key', 'course_invitation_hmac_key', 'mysql_app_password', 'mongodb_uri', 'minio_app_access_key', 'minio_app_secret_key', 'workspace_internal_key', 'swarm_docker_ca', 'swarm_docker_cert', 'swarm_docker_key', 'tls_certificate', 'tls_private_key')
+    $requiredSecrets = @('django_secret_key', 'identity_hmac_key', 'course_invitation_hmac_key', 'mysql_app_password', 'email_host_password', 'mongodb_uri', 'minio_app_access_key', 'minio_app_secret_key', 'workspace_internal_key', 'swarm_docker_ca', 'swarm_docker_cert', 'swarm_docker_key', 'tls_certificate', 'tls_private_key')
     foreach ($config in $requiredConfigs) {
         docker config inspect $config *> $null
         if ($LASTEXITCODE -ne 0) { throw "Missing external Swarm config: $config" }

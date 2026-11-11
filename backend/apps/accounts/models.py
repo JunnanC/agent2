@@ -5,6 +5,10 @@ from apps.core.models import AppendOnlyModel, ObjectAsset, VersionedModel
 
 
 class User(VersionedModel):
+    class RegistrationRole(models.TextChoices):
+        STUDENT = "STUDENT"
+        TEACHER = "TEACHER"
+
     class AccountStatus(models.TextChoices):
         ACTIVE = "ACTIVE"
         DISABLED = "DISABLED"
@@ -19,6 +23,9 @@ class User(VersionedModel):
     email = models.EmailField(max_length=254, unique=True)
     username = models.CharField(max_length=32, unique=True)
     display_name = models.CharField(max_length=64)
+    registration_role = models.CharField(
+        max_length=16, choices=RegistrationRole.choices, default=RegistrationRole.STUDENT
+    )
     account_status = models.CharField(
         max_length=16,
         choices=AccountStatus.choices,
@@ -131,7 +138,9 @@ class IdentityVerification(VersionedModel):
 
 class TeacherQualification(VersionedModel):
     class Status(models.TextChoices):
+        PENDING = "PENDING"
         ACTIVE = "ACTIVE"
+        REJECTED = "REJECTED"
         SUSPENDED = "SUSPENDED"
         REVOKED = "REVOKED"
 
@@ -154,7 +163,7 @@ class TeacherQualification(VersionedModel):
         null=True,
         related_name="granted_teacher_qualifications",
     )
-    granted_at = models.DateTimeField()
+    granted_at = models.DateTimeField(null=True, blank=True)
     suspended_by = models.ForeignKey(
         User,
         on_delete=models.SET_NULL,
@@ -177,7 +186,9 @@ class TeacherQualification(VersionedModel):
         db_table = "accounts_teacher_qualification"
         constraints = [
             models.CheckConstraint(
-                condition=models.Q(status__in=("ACTIVE", "SUSPENDED", "REVOKED")),
+                condition=models.Q(
+                    status__in=("PENDING", "ACTIVE", "REJECTED", "SUSPENDED", "REVOKED")
+                ),
                 name="accounts_teacher_status_ck",
             ),
         ]
@@ -272,3 +283,17 @@ class PlatformAdminAssignmentEvent(AppendOnlyModel):
                 name="accounts_admin_event_idx",
             ),
         ]
+
+
+class PendingRegistration(models.Model):
+    email = models.EmailField(max_length=254, unique=True)
+    username = models.CharField(max_length=32)
+    display_name = models.CharField(max_length=64)
+    password_hash = models.CharField(max_length=128)
+    role = models.CharField(max_length=16, choices=User.RegistrationRole.choices)
+    token_hash = models.CharField(max_length=64, unique=True)
+    expires_at = models.DateTimeField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "accounts_pending_registration"

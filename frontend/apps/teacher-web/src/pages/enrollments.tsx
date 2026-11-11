@@ -5,9 +5,10 @@ import { teachingApi } from "@edu/api-client";
 import type { Enrollment, Invitation } from "@edu/api-client";
 import { keys } from "@edu/query-keys";
 import {
-  AsyncJobProgress, Button, ConfirmDialog, DataTable, Metric, Modal, Breadcrumbs, Panel,
+  AsyncJobProgress, Button, ConfirmDialog, DataTable, Metric, Modal, Panel,
   RequestStateView, StatusBadge, useToast,
 } from "@edu/ui";
+import { copyText } from "@/lib/clipboard";
 import { ENROLLMENT_STATUS_LABEL, apiErrorMessage, formatDateTime } from "@/lib/format";
 
 const isActiveInvitation = (invitation: Invitation) =>
@@ -16,6 +17,7 @@ const isActiveInvitation = (invitation: Invitation) =>
 export function Enrollments() {
   const { courseId = "" } = useParams();
   const toast = useToast();
+  const [plainInvitation, setPlainInvitation] = useState<Invitation | null>(null);
   const [status, setStatus] = useState("PENDING");
   const [search, setSearch] = useState("");
   const [reviewTarget, setReviewTarget] = useState<Enrollment | null>(null);
@@ -62,7 +64,7 @@ export function Enrollments() {
   const capacity = course.data?.capacity ?? null;
   const used = course.data?.active_enrollment_count ?? approvedCount;
 
-  const activeInvitation = (invitations.data?.rows ?? []).find(isActiveInvitation);
+  const activeInvitation = (plainInvitation?.course_id === courseId ? plainInvitation : null) ?? (invitations.data?.rows ?? []).find(isActiveInvitation);
 
   const review = useMutation({
     mutationFn: (input: { target: Enrollment; decision: "approve" | "reject" }) =>
@@ -93,22 +95,23 @@ export function Enrollments() {
 
   const createInvitation = useMutation({
     mutationFn: () => teachingApi.createInvitation(courseId, { valid_days: 30 }),
-    onSuccess: () => { toast.notify("已生成新的课程邀请码"); void invitations.refetch(); },
+    onSuccess: async (invitation) => {
+      setPlainInvitation({ ...invitation, course_id: courseId, status: "ACTIVE" });
+      const copied = await copyText(invitation.code);
+      toast.notify(copied ? "新邀请码已生成并复制" : "新邀请码已生成，请在下方手动复制", copied ? "default" : "error");
+      void invitations.refetch();
+    },
     onError: (error) => toast.notify(apiErrorMessage(error), "error"),
   });
 
   const copyInvitation = async () => {
-    const code = activeInvitation?.code;
+    const code = plainInvitation?.course_id === courseId ? plainInvitation.code : undefined;
     if (!code) {
       createInvitation.mutate();
       return;
     }
-    try {
-      await navigator.clipboard.writeText(code);
-      toast.notify("邀请码已复制");
-    } catch {
-      toast.notify("浏览器未允许复制，请手动复制邀请码", "error");
-    }
+    const copied = await copyText(code);
+    toast.notify(copied ? "邀请码已复制" : "浏览器未允许复制，请选中下方邀请码手动复制", copied ? "default" : "error");
   };
 
   const runImportPrecheck = useMutation({
@@ -144,7 +147,6 @@ export function Enrollments() {
 
   return (
     <>
-      <Breadcrumbs items={[{ label: "教师门户" }, { label: "课程" }]} current="选课管理" />
       <div className="page-actions align-end">
         <Button onClick={() => fileInputRef.current?.click()}>批量导入</Button>
         <Button variant="primary" disabled={createInvitation.isPending} onClick={() => { void copyInvitation(); }}>
@@ -240,13 +242,14 @@ export function Enrollments() {
               <div style={{
                 fontSize: 26, fontWeight: 700, letterSpacing: "0.02em",
                 color: "var(--teal)", margin: "8px 0 6px", wordBreak: "break-all",
-              }}>{activeInvitation.code}</div>
+              }}>{plainInvitation?.course_id === courseId ? plainInvitation.code : "邀请码已隐藏"}</div>
+              {!plainInvitation && <p className="subtle">明文仅生成时显示一次。点击“复制邀请码”将生成可分享的新码；已有邀请码保持原有效期。</p>}
               <small>
                 仅可用于{course.data?.title ?? "本课程"}课程
                 {activeInvitation.expires_at ? `，${formatDateTime(activeInvitation.expires_at)}失效` : "，长期有效"}
               </small>
               <div className="section" style={{ display: "flex", gap: 8, marginTop: 12 }}>
-                <Button size="sm" onClick={() => { navigator.clipboard.writeText(activeInvitation.code).then(() => toast.notify("邀请码已复制")).catch(() => toast.notify("复制失败", "error")); }}>复制</Button>
+                <Button size="sm" onClick={() => { void copyInvitation(); }}>复制</Button>
                 <Button size="sm" disabled={createInvitation.isPending} onClick={() => createInvitation.mutate()}>重新生成</Button>
               </div>
             </>
@@ -260,7 +263,7 @@ export function Enrollments() {
             </div>
           )}
         </Panel>
-        <Panel title={<><h2>批量导入作业</h2>
+        <Panel title={<><h2>学生导入任务</h2><span className="subtle">导入 CSV 学生名单的处理进度，不是实验作业</span>
           <span className={`status ${jobRunning ? "blue" : "neutral"}`}>{jobRunning ? "进行中" : "无进行中作业"}</span>
         </>}>
           {!importJobId || !importJob.data ? (

@@ -81,3 +81,25 @@ def clear_login_rate_limit(key: str, *, client: Redis | None = None) -> None:
         redis_client.delete(key)
     except Exception:
         return
+
+
+def check_registration_rate_limit(*, email: str, ip_address: str) -> None:
+    client = _redis_client()
+    keys = [
+        ("ip", ip_address, 10),
+        ("email", normalize_email(email), 3),
+    ]
+    try:
+        pipeline = client.pipeline(transaction=True)
+        for kind, value, _limit in keys:
+            digest = hmac.new(
+                settings.AUDIT_IP_HASH_SALT.encode(), value.encode(), hashlib.sha256
+            ).hexdigest()
+            key = f"auth:register:{kind}:{digest}"
+            pipeline.incr(key)
+            pipeline.expire(key, 3600)
+        results = pipeline.execute()
+    except Exception as exc:
+        raise AuthenticationServiceUnavailable() from exc
+    if any(int(results[index * 2]) > limit for index, (_, _, limit) in enumerate(keys)):
+        raise RateLimited(detail={"retry_after": 3600})

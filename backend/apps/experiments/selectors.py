@@ -66,6 +66,7 @@ def publication_for_course(*, actor: User, course_id: str, publication_id: str) 
                 "runtime_adapter",
                 "image",
                 "resource_profile",
+                "retake_of",
             )
             .prefetch_related(*publication_response_prefetches())
             .get(public_id=publication_id, course=course)
@@ -89,6 +90,7 @@ def publications_for_course(*, actor: User, course_id: str) -> QuerySet[TaskPubl
             "runtime_adapter",
             "image",
             "resource_profile",
+            "retake_of",
         )
         .prefetch_related(*publication_response_prefetches())
         .order_by("-created_at", "-id")

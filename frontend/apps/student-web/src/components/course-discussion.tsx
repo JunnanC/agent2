@@ -21,6 +21,7 @@ export function CourseDiscussion({ courseId }: { courseId: string }) {
     onError: (error) => toast.notify(error.message, "error"),
   });
   return <Panel title={<h2>课程问答</h2>}>
+    <p className="subtle">课程公开问答：本课程师生均可查看和回复，同一问题可以有多条回答。</p>
     <form onSubmit={(event) => { event.preventDefault(); if (title.trim() && body.trim()) create.mutate(); }}>
       <label className="form-label" htmlFor="question-title">问题标题</label>
       <input id="question-title" className="field" value={title} maxLength={180} required onChange={(event) => setTitle(event.target.value)} />

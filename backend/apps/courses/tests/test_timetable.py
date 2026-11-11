@@ -152,7 +152,7 @@ class TimetableImportTests(TestCase):
         self.assertEqual(job.status, TimetableImportJob.Status.READY)
         self.assertEqual(job.row_errors, [{"row_no": 2, "code": "weekday_required"}])
 
-    def test_administrative_class_transfer_preserves_membership_history(self) -> None:
+    def test_student_can_join_multiple_classes_without_losing_membership(self) -> None:
         first = create_administrative_class(
             actor=self.teacher,
             code="CS-2026-A",
@@ -179,7 +179,7 @@ class TimetableImportTests(TestCase):
 
         membership.refresh_from_db()
         self.assertEqual(membership.administrative_class, first)
-        self.assertIsNotNone(membership.ends_on)
+        self.assertIsNone(membership.ends_on)
         self.assertEqual(current.administrative_class, second)
         self.assertEqual(repeated.pk, membership.pk)
         self.assertEqual(

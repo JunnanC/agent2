@@ -2,6 +2,7 @@ import hashlib
 import json
 from datetime import timedelta
 from types import SimpleNamespace
+from typing import Any, cast
 from unittest.mock import patch
 
 from django.core.management import call_command
@@ -837,10 +838,10 @@ class WorkspaceSessionServiceTests(TestCase):
                 task_id=self.task.public_id, actor=self.task.student,
                 expected_version=self.task.row_version, context=self.context,
             )
-        state = {"content": _project_archive({})}
-        objects = {}
+        state: dict[str, bytes] = {"content": _project_archive({})}
+        objects: dict[int, bytes] = {}
 
-        def put_asset(*, job, content):
+        def put_asset(*, job: WorkspaceStorageJob, content: _Content) -> ObjectAsset:
             asset = ObjectAsset.objects.create(
                 bucket="test", object_key=f"{job.public_id}/{content.digest}",
                 digest_sha256=content.digest, size_bytes=content.size,
@@ -850,15 +851,17 @@ class WorkspaceSessionServiceTests(TestCase):
             objects[asset.pk] = content.value
             return asset
 
-        def restore(**kwargs):
+        def restore(**kwargs: Any) -> None:
             state["content"] = kwargs["content"]
 
-        def raise_failure(job_id, exc, trace_id, claim_version):
+        def raise_failure(
+            job_id: str, exc: Exception, trace_id: str, claim_version: int
+        ) -> None:
             raise exc
 
         adapter = SimpleNamespace(restore_workspace=restore)
 
-        def run(kind, language=""):
+        def run(kind: str, language: str = "") -> None:
             session.refresh_from_db()
             job = WorkspaceStorageJob.objects.create(
                 kind=kind, target_language=language, task=self.task, session=session,
@@ -915,7 +918,9 @@ class WorkspaceSessionServiceTests(TestCase):
         with self.assertRaises(WorkspaceStorageFailure):
             _project_files(unsafe.getvalue())
 
-    def test_initial_project_keeps_json_data_adds_entrypoint_and_excludes_hidden_source(self):
+    def test_initial_project_keeps_json_data_adds_entrypoint_and_excludes_hidden_source(
+        self,
+    ) -> None:
         from ..storage import _initial_project
 
         asset = ObjectAsset.objects.create(
@@ -932,7 +937,9 @@ class WorkspaceSessionServiceTests(TestCase):
             ]},
         }
         with patch("apps.workspaces.storage._read_object", return_value=b'{"x":1}') as read:
-            content = _initial_project(SimpleNamespace(task=self.task), "python")
+            content = _initial_project(
+                cast(WorkspaceStorageJob, SimpleNamespace(task=self.task)), "python"
+            )
         self.assertEqual(read.call_count, 1)
         files = _project_files(content.value)
         self.assertEqual(files["data.json"], b'{"x":1}')
@@ -941,7 +948,7 @@ class WorkspaceSessionServiceTests(TestCase):
 
         self.task.execution_spec["_runtime"]["material_assets"][0]["object_version"] = "changed"
         with self.assertRaises(WorkspaceStorageFailure):
-            _initial_project(SimpleNamespace(task=self.task), "python")
+            _initial_project(cast(WorkspaceStorageJob, SimpleNamespace(task=self.task)), "python")
 
     def test_non_report_submission_requires_a_clean_workspace_snapshot(self) -> None:
         TaskPublication.objects.filter(pk=self.publication.pk).update(report_required=False)

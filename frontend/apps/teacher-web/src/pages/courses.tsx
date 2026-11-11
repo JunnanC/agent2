@@ -3,12 +3,13 @@ import { Link, useNavigate } from "react-router-dom";
 import { useState } from "react";
 import { teachingApi } from "@edu/api-client";
 import { keys } from "@edu/query-keys";
-import { Button, Modal, Breadcrumbs, Panel, RequestStateView, StatusBadge, useToast } from "@edu/ui";
+import { Button, Modal, Breadcrumbs, Panel, RequestStateView, useToast } from "@edu/ui";
 import { apiErrorMessage } from "@/lib/format";
 
 export function Courses() {
   const toast = useToast();
   const navigate = useNavigate();
+  const [search, setSearch] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
   const [title, setTitle] = useState("");
   const [code, setCode] = useState("");
@@ -25,7 +26,7 @@ export function Courses() {
       setCreateOpen(false);
       setTitle(""); setCode(""); setSummary("");
       void courses.refetch();
-      navigate(`/courses/${course.public_id}/enrollments`);
+      navigate(`/courses/${course.public_id}`);
     },
     onError: (error) => toast.notify(apiErrorMessage(error), "error"),
   });
@@ -50,28 +51,8 @@ export function Courses() {
             </div>
           )}
         >
-          <div className="table-wrap">
-            <table className="table">
-              <thead>
-                <tr><th>课程</th><th>选课方式</th><th>学生</th><th>状态</th><th /></tr>
-              </thead>
-              <tbody>
-                {(courses.data?.rows ?? []).map((course) => (
-                  <tr key={course.public_id}>
-                    <td><strong>{course.title}</strong><small style={{ display: "block" }}>{course.code} · {course.owner_name ?? ""}</small></td>
-                    <td>{course.enrollment_mode === "OPEN" ? "直接加入" : "需要审核"}</td>
-                    <td>{course.active_enrollment_count}{course.capacity ? ` / ${course.capacity}` : ""}</td>
-                    <td><StatusBadge tone={course.status === "ACTIVE" ? "good" : course.status === "FROZEN" ? "bad" : "neutral"}>{course.status === "ACTIVE" ? "进行中" : course.status}</StatusBadge></td>
-                    <td className="table-actions">
-                      <Link className="btn sm" to={`/courses/${course.public_id}/enrollments`}>选课管理</Link>
-                      <Link className="btn sm" to={`/courses/${course.public_id}/templates`}>实验设计</Link>
-                      <Link className="btn sm" to={`/courses/${course.public_id}/publishing`}>实验发布</Link>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <div className="page-actions"><input className="field" aria-label="搜索课程" placeholder="搜索课程" value={search} onChange={e => setSearch(e.target.value)} /></div>
+          <div className="teacher-courses">{(courses.data?.rows ?? []).filter(course => `${course.title} ${course.code}`.includes(search.trim())).map(course => <article className="teacher-course" key={course.public_id}><small>{course.code} · {course.status === "ACTIVE" ? "进行中" : course.status}</small><h2>{course.title}</h2><p className="subtle">{course.summary || "管理课程实验、学生与教学数据"}</p><p>{course.active_enrollment_count} 名学生 · {course.enrollment_mode === "OPEN" ? "直接加入" : "申请审核"}</p><footer><Link to={`/courses/${course.public_id}/analytics`}>教学分析</Link><Link className="btn primary" to={`/courses/${course.public_id}`}>进入课程</Link></footer></article>)}</div>
         </RequestStateView>
       </Panel>
 

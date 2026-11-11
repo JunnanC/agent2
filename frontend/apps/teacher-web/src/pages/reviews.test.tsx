@@ -19,7 +19,7 @@ const suggestion = { public_id: "suggestion", review_row_version: 7, status: "RE
 let client: QueryClient;
 beforeEach(() => {
   vi.resetAllMocks();
-  api.reviews.mockResolvedValue({ rows: [summary] });
+  api.reviews.mockResolvedValue({ total: 1, rows: [summary] });
   api.review.mockResolvedValue({ ...summary, rubric: { criteria: [
     { public_id: "correct", title: "Correctness", max_score: "60", score: null },
   ] }, project: { language: "python", snapshot_id: "frozen", guidance: {}, files: [

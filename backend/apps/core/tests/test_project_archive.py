@@ -11,7 +11,7 @@ from apps.core.project_archive import MANIFEST, ProjectArchiveError, bundle, unp
 LIMIT = 1024 * 1024
 
 
-def test_roundtrip_is_deterministic_and_student_owned():
+def test_roundtrip_is_deterministic_and_student_owned() -> None:
     files = {"Main.java": b"class Main {}", "model/Person.java": b"class Person {}", "empty/": b""}
     value = bundle(files, max_bytes=LIMIT)
     assert value == bundle(dict(reversed(list(files.items()))), max_bytes=LIMIT)
@@ -22,7 +22,7 @@ def test_roundtrip_is_deterministic_and_student_owned():
 
 
 @pytest.mark.parametrize("name", ["../x", "/x", "C:/x", "a/../b", "a\x01b"])
-def test_unsafe_zip_paths_are_rejected(name):
+def test_unsafe_zip_paths_are_rejected(name: str) -> None:
     stream = io.BytesIO()
     with zipfile.ZipFile(stream, "w") as archive:
         archive.writestr(name, b"payload")
@@ -30,7 +30,7 @@ def test_unsafe_zip_paths_are_rejected(name):
         unpack(stream.getvalue(), max_bytes=LIMIT)
 
 
-def test_manifest_must_match_and_runtime_root_is_stripped_once():
+def test_manifest_must_match_and_runtime_root_is_stripped_once() -> None:
     stream = io.BytesIO()
     with tarfile.open(fileobj=stream, mode="w") as archive:
         for name, content in {
@@ -51,7 +51,7 @@ def test_manifest_must_match_and_runtime_root_is_stripped_once():
         unpack(bad.getvalue(), max_bytes=LIMIT, require_manifest=True)
 
 
-def test_bombs_duplicates_links_and_file_directory_collisions_are_rejected():
+def test_bombs_duplicates_links_and_file_directory_collisions_are_rejected() -> None:
     with pytest.raises(ProjectArchiveError):
         bundle({"a/": b"", "a/b": b"x"}, max_bytes=LIMIT)
     with pytest.raises(ProjectArchiveError):

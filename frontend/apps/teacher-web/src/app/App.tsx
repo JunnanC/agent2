@@ -1,3 +1,4 @@
+import { CourseOverview, StudentDetail, ValidationWorkspace } from "./course-layout";
 import { useEffect } from "react";
 import { BrowserRouter, Navigate, Route, Routes, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
@@ -8,6 +9,7 @@ import { AppProviders, queryClient } from "./providers";
 import { keys } from "@edu/query-keys";
 import { AuthGuard, PortalSSEBridge } from "./guards";
 import { Login } from "@/pages/login";
+import { Register } from "@/pages/register";
 import { Home } from "@/pages/home";
 import { Courses } from "@/pages/courses";
 import { Enrollments } from "@/pages/enrollments";
@@ -27,9 +29,15 @@ export function App(): JSX.Element {
         <PortalSSEBridge />
         <Routes>
           <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
+          <Route path="/verify-email" element={<Register />} />
           <Route element={<AuthGuard />}>
             <Route path="/" element={<Home />} />
             <Route path="/courses" element={<Courses />} />
+            <Route path="/courses/:courseId" element={<CourseOverview />} />
+            <Route path="/courses/:courseId/students/:studentId" element={<StudentDetail />} />
+            <Route path="/courses/:courseId/templates/:templateId/validate" element={<ValidationWorkspace />} />
+            <Route path="/courses/:courseId/publishing/:publicationId/reviews" element={<Reviews />} />
             <Route path="/notifications" element={<Notifications />} />
             <Route path="/courses/:courseId/enrollments" element={<Enrollments />} />
             <Route path="/courses/:courseId/templates" element={<Templates />} />
@@ -65,7 +73,7 @@ function CourseGate({ section }: { section: string }): JSX.Element {
   if (courses.isPending) return <div className="app-shell"><LoadingState label="正在定位课程" /></div>;
   const first = courses.data?.rows[0];
   if (first) {
-    return <Navigate to={`/courses/${first.public_id}/${section}`} replace />;
+    return <Navigate to="/courses" replace />;
   }
   return (
     <div className="app-shell">

@@ -2,10 +2,12 @@ import hashlib
 import io
 import json
 from types import SimpleNamespace
+from typing import cast
 from unittest.mock import patch
 
 from django.test import SimpleTestCase
 
+from apps.core.models import ObjectAsset
 from apps.provisioning.evaluator import public_report
 from apps.workspaces.presentation import asset_text, public_examples
 
@@ -13,11 +15,11 @@ from apps.workspaces.presentation import asset_text, public_examples
 class StudentPresentationTests(SimpleTestCase):
     def test_asset_read_is_bounded_verified_and_closes_the_stream(self) -> None:
         value = b"# Manual\n"
-        asset = SimpleNamespace(
+        asset = cast(ObjectAsset, SimpleNamespace(
             status="ACTIVE", scan_status="CLEAN", size_bytes=len(value),
             digest_sha256=hashlib.sha256(value).hexdigest(), bucket="private",
             object_key="private/manual", object_version="frozen-version",
-        )
+        ))
         with patch("apps.workspaces.presentation.S3ObjectStorage") as storage:
             stream = io.BytesIO(value)
             storage.return_value.open_object.return_value = SimpleNamespace(body=stream)

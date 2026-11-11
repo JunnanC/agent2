@@ -3,6 +3,7 @@ import os
 from pathlib import Path
 
 import yaml
+from django.apps import apps
 
 ROOT = (
     Path(os.environ["PROJECT_ROOT"])
@@ -13,6 +14,20 @@ ROOT = (
 
 def load_yaml(relative_path: str) -> dict:
     return yaml.safe_load((ROOT / relative_path).read_text(encoding="utf-8"))
+
+
+def runtime_table_grants() -> dict[str, set[str]]:
+    grants: dict[str, set[str]] = {}
+    prefix = r"\`${MYSQL_DATABASE}\`."
+    script = (ROOT / "infrastructure/mysql/configure-users.sh").read_text(encoding="utf-8")
+    for line in script.splitlines():
+        if not line.startswith("GRANT ") or "${MYSQL_APP_USER}" not in line:
+            continue
+        privileges, _, target = line.removeprefix("GRANT ").partition(" ON ")
+        table = target.removeprefix(prefix).partition(" TO ")[0]
+        if table != target:
+            grants.setdefault(table, set()).update(item.strip() for item in privileges.split(","))
+    return grants
 
 
 def server_block(text: str, server_name: str) -> str:
@@ -172,6 +187,7 @@ def test_local_runtime_docker_access_is_scoped_to_runtime_worker() -> None:
     compose = load_yaml("docker-compose.dev.yml")
     services = compose["services"]
     assert "/var/run/docker.sock:/var/run/docker.sock" in services["runtime-worker"]["volumes"]
+    assert "q_provision" in services["runtime-worker"]["command"][-1]
     for service, definition in services.items():
         if service in {"runtime-worker", "workspace-storage-worker"}:
             continue
@@ -380,6 +396,45 @@ def test_workbench_new_experiment_tables_are_available_to_the_application_user()
         assert rf"GRANT SELECT, INSERT, UPDATE ON \`${{MYSQL_DATABASE}}\`.{table}" in bootstrap
     for table in append_only_tables:
         assert rf"GRANT SELECT, INSERT ON \`${{MYSQL_DATABASE}}\`.{table}" in bootstrap
+
+
+def test_every_first_party_model_table_has_runtime_grants() -> None:
+    first_party_labels = {
+        config.label for config in apps.get_app_configs() if config.name.startswith("apps.")
+    }
+    model_tables = {
+        model._meta.db_table
+        for model in apps.get_models(include_auto_created=True)
+        if model._meta.managed
+        and not model._meta.proxy
+        and model._meta.app_label in first_party_labels
+    }
+    grants = runtime_table_grants()
+
+    missing_tables = model_tables - grants.keys()
+    assert not missing_tables, (
+        "First-party model tables missing runtime grants: " f"{sorted(missing_tables)}"
+    )
+    expected_grants = {
+        "experiments_experiment_retake_link": {"SELECT", "INSERT", "UPDATE"},
+        "courses_administrative_class": {"SELECT", "INSERT"},
+        "courses_administrative_class_membership": {"SELECT", "INSERT", "UPDATE"},
+        "courses_course_schedule": {"SELECT", "INSERT"},
+        "courses_timetable_import_job": {"SELECT", "INSERT", "UPDATE"},
+        "courses_student_schedule_entry": {"SELECT", "INSERT"},
+    }
+    for table, privileges in expected_grants.items():
+        assert grants[table] == privileges
+
+
+def test_mysql_grants_verify_runtime_permissions_and_application_read() -> None:
+    script = (ROOT / "infrastructure/mysql/configure-users.sh").read_text(encoding="utf-8")
+
+    assert "configure-users.sh prepare|restrict|verify" in script
+    assert "information_schema.TABLE_PRIVILEGES" in script
+    assert "Runtime database grants are incomplete for experiments_experiment_retake_link" in script
+    assert '"${MYSQL_APP_PASSWORD}" "${app_mysql[@]}"' in script
+    assert "SELECT 1 FROM experiments_experiment_retake_link LIMIT 0;" in script
 
 
 def test_workspaces_minio_policy_scopes_versioned_workspace_objects() -> None:

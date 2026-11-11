@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { authFlow } from "@edu/auth-client";
 import { meApi } from "@edu/api-client";
 import { queryClient } from "@/app/providers";
@@ -32,8 +32,11 @@ export function Login() {
       queryClient.setQueryData([...keys.me(), "current"], me);
       queryClient.invalidateQueries();
       navigate("/", { replace: true });
-    } catch {
-      setError("登录失败，请确认账号密码或稍后重试。");
+    } catch (caught) {
+      const status = (caught as { status?: number }).status;
+      setError(status === 403
+        ? "教师资格仍在审核中或未获批准。"
+        : "登录失败，请确认账号密码或稍后重试。");
     } finally {
       setSubmitting(false);
     }
@@ -62,7 +65,8 @@ export function Login() {
         <button type="submit" className="btn primary" style={{ marginTop: 10, justifyContent: "center" }} disabled={submitting}>
           {submitting ? "登录中…" : "登录教师门户"}
         </button>
-        <small>需要教师资格认证通过后才能登录；认证状态查看联系平台管理员。</small>
+        <Link to="/register">注册教师账号</Link>
+        <small>完成邮箱验证后，教师资格需经管理员审核。</small>
       </form>
     </div>
   );

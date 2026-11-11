@@ -7,6 +7,13 @@ x-app-environment: &app-environment
   DJANGO_SETTINGS_MODULE: education_experiment_platform.settings.prod
   DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS}
   DJANGO_TRUSTED_ORIGINS: ${DJANGO_TRUSTED_ORIGINS}
+  EMAIL_HOST: ${EMAIL_HOST}
+  EMAIL_PORT: ${EMAIL_PORT:-587}
+  EMAIL_HOST_USER: ${EMAIL_HOST_USER}
+  EMAIL_USE_TLS: ${EMAIL_USE_TLS:-true}
+  DEFAULT_FROM_EMAIL: ${DEFAULT_FROM_EMAIL}
+  STUDENT_PUBLIC_URL: https://${STUDENT_HOST}
+  TEACHER_PUBLIC_URL: https://${TEACHER_HOST}
   WORKSPACE_ALLOWED_ORIGINS: ${WORKSPACE_ALLOWED_ORIGINS}
   STUDENT_HOST: ${STUDENT_HOST}
   TEACHER_HOST: ${TEACHER_HOST}
@@ -126,7 +133,8 @@ services:
       WORKSPACE_INTERNAL_KEY_FILE: /run/secrets/workspace_internal_key
       WORKSPACE_UPSTREAM_HMAC_KEY_FILE: /run/secrets/workspace_upstream_hmac_key
       MYSQL_PASSWORD_FILE: /run/secrets/mysql_app_password
-    secrets: [django_secret_key, identity_hmac_key, course_invitation_hmac_key, workspace_internal_key, workspace_upstream_hmac_key, mysql_app_password, minio_app_access_key, minio_app_secret_key]
+      EMAIL_HOST_PASSWORD_FILE: /run/secrets/email_host_password
+    secrets: [django_secret_key, identity_hmac_key, course_invitation_hmac_key, workspace_internal_key, workspace_upstream_hmac_key, mysql_app_password, minio_app_access_key, minio_app_secret_key, email_host_password]
     networks: [app, data]
     logging: *fluentd-logging
     healthcheck:
@@ -315,6 +323,8 @@ secrets:
   course_invitation_hmac_key:
     external: true
   mysql_app_password:
+    external: true
+  email_host_password:
     external: true
   mongodb_uri:
     external: true

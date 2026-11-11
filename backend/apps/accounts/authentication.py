@@ -10,6 +10,7 @@ from .errors import (
     AccountStateConflict,
     CsrfFailed,
     PlatformAccessRequired,
+    PortalAccessDenied,
     SessionExpired,
     SessionPortalMismatch,
     TeacherQualificationRequired,
@@ -64,6 +65,8 @@ def refresh_current_session_security(request: HttpRequest, *, user: User) -> Non
 def portal_admission(user: User, portal: str) -> None:
     if user.account_status != User.AccountStatus.ACTIVE:
         raise AccountStateConflict(detail={"status": user.account_status})
+    if portal == "USER" and user.registration_role == User.RegistrationRole.TEACHER:
+        raise PortalAccessDenied(detail={"required_portal": "TEACHING"})
     if (
         portal == "TEACHING"
         and not TeacherQualification.objects.filter(
@@ -122,7 +125,12 @@ class PortalSessionAuthentication(BaseAuthentication):
             raise SessionExpired()
         try:
             portal_admission(user, portal)
-        except (AccountStateConflict, TeacherQualificationRequired, PlatformAccessRequired) as exc:
+        except (
+            AccountStateConflict,
+            TeacherQualificationRequired,
+            PlatformAccessRequired,
+            PortalAccessDenied,
+        ) as exc:
             _audit_session_denial(request, user, exc.code)
             PORTAL_ACCESS_DENIED_TOTAL.labels(portal=portal, reason=exc.code.lower()).inc()
             request.session.flush()

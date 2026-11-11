@@ -482,6 +482,7 @@ class FakeRuntimeAdapter:
         cpu_millicores: int,
         network_mode: str,
         tests: bytes = b"",
+        execution_plan: Mapping[str, list[str]] | None = None,
     ) -> RuntimeExecutionResult:
         """Return deterministic execution results for legacy simulated workspaces.
 
@@ -490,6 +491,7 @@ class FakeRuntimeAdapter:
         """
 
         del spec, command, source, timeout_seconds, memory_mb, cpu_millicores, network_mode, tests
+        del execution_plan
         return RuntimeExecutionResult(
             status="PASSED",
             stdout="FakeRuntime execution accepted",
@@ -623,8 +625,10 @@ class DockerLocalProtocolStub(FakeRuntimeAdapter):
         cpu_millicores: int,
         network_mode: str,
         tests: bytes = b"",
+        execution_plan: Mapping[str, list[str]] | None = None,
     ) -> RuntimeExecutionResult:
         del spec, command, source, timeout_seconds, memory_mb, cpu_millicores, network_mode, tests
+        del execution_plan
         return RuntimeExecutionResult(
             status="PASSED",
             stdout="DockerLocal protocol stub execution accepted",
@@ -2046,9 +2050,10 @@ print(
                     result_summary="Execution timed out",
                     duration_ms=int((time.monotonic() - started) * 1000),
                 )
+            report_results = report.get("results", [])
             if report.get("status") == "OUTPUT_LIMIT" or any(
                 isinstance(item, Mapping) and item.get("status") == "OUTPUT_LIMIT"
-                for item in report.get("results", [])
+                for item in (report_results if isinstance(report_results, list) else [])
             ):
                 return RuntimeExecutionResult(
                     status="RESOURCE_EXCEEDED",
@@ -3098,6 +3103,7 @@ class DockerSwarmAdapter:
         cpu_millicores: int,
         network_mode: str,
         tests: bytes = b"",
+        execution_plan: Mapping[str, list[str]] | None = None,
     ) -> RuntimeExecutionResult:
         """One-shot judging is unavailable for this Swarm adapter.
 
@@ -3106,6 +3112,7 @@ class DockerSwarmAdapter:
         """
 
         del spec, command, source, timeout_seconds, memory_mb, cpu_millicores, network_mode, tests
+        del execution_plan
         raise RuntimeAdapterFailure("RUNTIME_EXECUTION_NOT_IMPLEMENTED", retryable=False)
 
 

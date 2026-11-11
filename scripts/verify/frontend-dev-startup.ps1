@@ -15,7 +15,7 @@ if ($global:frontendDevDockerCalls.Count -ne 2) { throw '默认启动应分别�
 if ($global:frontendDevDockerCalls[0] -ne 'compose --profile runtime --env-file .env up -d --build') {
     throw "后端启动应沿用 .env 中的 Compose 配置，实际调用：$($global:frontendDevDockerCalls[0])"
 }
-$frontendCommand = "compose --project-name edu-platform-frontend-dev -f $frontendCompose up -d"
+$frontendCommand = "compose --project-name experimental-platform-frontend -f $frontendCompose up -d"
 if ($global:frontendDevDockerCalls[1] -ne $frontendCommand) { throw '前端应使用独立热更新配置。' }
 
 $global:frontendDevDockerCalls.Clear()
