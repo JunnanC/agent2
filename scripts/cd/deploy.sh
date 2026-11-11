@@ -110,9 +110,10 @@ done
 "${compose[@]}" --profile runtime up -d --no-deps --no-build --wait --wait-timeout 600 \
   "${managed[@]}" runtime-reference kong nginx
 "${compose[@]}" restart kong nginx
-curl --fail --silent --show-error --retry 12 --retry-connrefused --retry-delay 5 http://127.0.0.1/api/v2/health >/dev/null
-for portal in student teacher admin; do
-  curl --fail --silent --show-error -H "Cookie: portal=$portal" http://127.0.0.1/ >/dev/null
+for attempt in {1..12}; do
+  if python3 "$release/scripts/cd/check-portal-entry.py" "$release/.env"; then break; fi
+  (( attempt < 12 )) || exit 1
+  sleep 5
 done
 ln -s "$release" "$root/current.next"
 mv -Tf "$root/current.next" "$root/current"
