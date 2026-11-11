@@ -1,3 +1,0 @@
-# Backend compatibility baseline
-
-文档正文已集中到 [后端开发](../docs/开发指南/后端开发.md)。
