@@ -933,3 +933,8 @@
 
 .admin-console .status.bad{background:transparent;border:0;border-radius:0;padding:0}
 .admin-console .status.bad:before{background:#c83b38;flex-shrink:0}
+
+/* In the icon rail, the product mark is the only expand control. */
+.admin-console .brand-expand{display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;width:40px;height:40px;padding:8px;border:0;background:transparent;color:inherit;cursor:pointer}
+.admin-console .brand-expand svg{width:24px;height:24px;min-width:24px}
+.admin-console .brand-expand:hover{background:var(--soft)}
