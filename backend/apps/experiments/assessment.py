@@ -533,6 +533,38 @@ def section_result(section: AssessmentSection, *, student: bool) -> dict[str, An
     return result
 
 
+def choice_review_data(section: AssessmentSection) -> list[dict[str, Any]]:
+    """Read-only choice answers for an authorized teacher review."""
+    submission = section.current_submission
+    if submission is None:
+        return []
+    rows: list[dict[str, Any]] = []
+    answers = submission.answers.select_related("question", "grade").order_by(
+        "question__sort_order"
+    )
+    for answer in answers:
+        question = answer.question
+        options = (question.question_spec or {}).get("options", [])
+        correct = (question.marking_spec or {}).get("correct_option_ids", [])
+        grade = answer.grade if answer.grade.status == "COMPLETED" else None
+        rows.append(
+            {
+                "question_id": question.public_id,
+                "title": question.title,
+                "task_type": question.task_type,
+                "options": [
+                    {"id": option.get("id", ""), "text": option.get("text", "")}
+                    for option in options
+                ],
+                "selected_option_ids": answer.selected_option_ids,
+                "correct_option_ids": correct,
+                "score": str(grade.score) if grade else None,
+                "max_score": str(question.max_score),
+            }
+        )
+    return rows
+
+
 def assessment_results(task: ExperimentTask, *, student: bool) -> list[dict[str, Any]]:
     kinds = {"CHOICE" if kind in CHOICE_TYPES else "PROGRAMMING" for kind in
              PublicationTask.objects.filter(

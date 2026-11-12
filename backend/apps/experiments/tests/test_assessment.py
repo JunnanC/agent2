@@ -407,3 +407,17 @@ class AssessmentTests(TestCase):
                 submission_version=1, expected_version=section.row_version, scores={},
                 feedback="", trace_id="f" * 32,
             )
+
+    def test_choice_review_exposes_selected_and_correct_options(self) -> None:
+        from ..assessment import choice_review_data
+
+        draft = self.draft()
+        updated = self.save(["b"], draft["row_version"])
+        self.submit(updated["row_version"])
+        section = AssessmentSection.objects.get(task=self.task, kind="CHOICE")
+        rows = choice_review_data(section)
+        assert len(rows) == 1
+        assert rows[0]["selected_option_ids"] == ["b"]
+        assert rows[0]["correct_option_ids"] == ["b"]
+        assert rows[0]["options"] == self.public["options"]
+        assert Decimal(rows[0]["score"]) == Decimal("5")

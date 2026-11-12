@@ -20,6 +20,39 @@ vi.mock("@edu/api-client", () => ({ assessmentApi: {
 
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 
+it("shows the submitted answer sheet and per-question score after the deadline", async () => {
+  vi.mocked(assessmentApi.get).mockResolvedValueOnce({
+    task_id: "task",
+    questions: [{
+      id: "q", title: "栈", description: "访问顺序", instructions: "", task_type: "SINGLE_CHOICE",
+      max_score: "5", options: [{ id: "a", text: "先进先出" }, { id: "b", text: "后进先出" }],
+      correct_option_ids: ["b"], explanation: "",
+    }],
+    sections: [{
+      kind: "CHOICE", status: "SUBMITTED", grading_status: "COMPLETED", score: "5",
+      max_score: "5", deadline: "2020-01-01T00:00:00Z", editable: false, submission_version: 1,
+      questions: [{ id: "q", score: "5", max_score: "5", language: "" }],
+    }],
+    server_time: new Date().toISOString(), all_submitted: true, choice_answers_visible: true,
+  } as never);
+  vi.mocked(assessmentApi.history).mockResolvedValueOnce([{
+    kind: "CHOICE", version_no: 1, submitted_at: "2026-01-01T00:00:00Z", is_current: true,
+    answers: [{ question_id: "q", selected_option_ids: ["b"], language: "", snapshot_digest: null }],
+  }]);
+
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(<QueryClientProvider client={client}><ToastProvider><MemoryRouter initialEntries={["/experiments/task/assessment"]}>
+    <Routes><Route path="/experiments/:taskId/assessment" element={<AssessmentWorkbench />} /></Routes>
+  </MemoryRouter></ToastProvider></QueryClientProvider>);
+
+  await waitFor(() => expect(screen.getByRole("radio", { name: "后进先出" })).toBeChecked());
+  expect(screen.getByRole("radio", { name: "先进先出" })).not.toBeChecked();
+  expect(screen.getByText("本题得分：5 / 5 · 正确")).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "查看答卷" }));
+  expect(await screen.findByText("第 1 次提交答卷")).toBeTruthy();
+  client.clear();
+});
+
 it("saves answers and flushes before submitting only the choice section", async () => {
   vi.spyOn(window, "confirm").mockReturnValue(true);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });

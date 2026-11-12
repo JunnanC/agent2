@@ -12,7 +12,7 @@ vi.mock("@edu/api-client", () => ({ assessmentTeachingApi: {
 afterEach(cleanup);
 beforeEach(() => {
   vi.resetAllMocks();
-  vi.mocked(assessmentTeachingApi.reviews).mockResolvedValue([{ task_id: "task", student_name: "学生", title: "实验", version_no: 2, status: "SUBMITTED" }]);
+  vi.mocked(assessmentTeachingApi.reviews).mockResolvedValue([{ task_id: "task", student_name: "学生", title: "实验", kind: "PROGRAMMING", version_no: 2, status: "SUBMITTED" }]);
   vi.mocked(assessmentTeachingApi.review).mockResolvedValue({ student_name: "学生", sections: [{ kind: "PROGRAMMING", status: "SUBMITTED", submission_version: 2, row_version: 7, questions: [], grading_status: "COMPLETED" }], sources: [], report: { body_markdown: "固定报告" }, report_criteria: [{ id: "criterion", title: "分析", max_score: "10" }] } as never);
   vi.mocked(assessmentTeachingApi.reportSuggestion).mockResolvedValue({ submission_version: 2, criteria: [{ criterion_id: "criterion", score: "9", rationale: "依据", evidence: "报告" }] });
 });
@@ -46,4 +46,37 @@ it("AI 失败仍可人工填写报告分", async () => {
   fireEvent.click(screen.getByRole("button", { name: "获取报告 AI 建议" }));
   expect(await screen.findByText("报告 AI 建议暂不可用，请人工评分")).toBeInTheDocument();
   expect(screen.getByRole("spinbutton")).toBeEnabled();
+});
+
+it("shows a read-only answer sheet for choice submissions", async () => {
+  vi.mocked(assessmentTeachingApi.reviews).mockResolvedValue([{
+    task_id: "choice-task", student_name: "李四", title: "选择题", kind: "CHOICE",
+    version_no: 1, status: "SUBMITTED",
+  }]);
+  vi.mocked(assessmentTeachingApi.review).mockResolvedValue({
+    student_name: "李四",
+    sections: [{
+      kind: "CHOICE", status: "SUBMITTED", submission_version: 1, row_version: 3,
+      questions: [], grading_status: "COMPLETED", max_score: "5",
+    }],
+    sources: [], report: null, report_criteria: [],
+    choice_answers: [{
+      question_id: "q1", title: "栈", task_type: "SINGLE_CHOICE",
+      options: [{ id: "a", text: "先进先出" }, { id: "b", text: "后进先出" }],
+      selected_option_ids: ["b"], correct_option_ids: ["b"], score: "5", max_score: "5",
+    }],
+  } as never);
+
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(<QueryClientProvider client={client}><ToastProvider><MemoryRouter initialEntries={["/courses/course/publishing/pub/reviews"]}><Routes>
+    <Route path="/courses/:courseId/publishing/:publicationId/reviews" element={<Reviews />} />
+  </Routes></MemoryRouter></ToastProvider></QueryClientProvider>);
+
+  const select = await screen.findByRole("combobox") as HTMLSelectElement;
+  await screen.findByRole("option", { name: /李四 · 选择题 · 选择题/ });
+  select.value = "choice-task";
+  fireEvent.change(select);
+  expect(await screen.findByText("李四 · 选择题答卷")).toBeInTheDocument();
+  expect(screen.getByText("5 / 5")).toBeInTheDocument();
+  client.clear();
 });

@@ -36,9 +36,11 @@ export interface Assessment {
     submission_version: number | null;
     grading_status: "NOT_SUBMITTED" | "PENDING" | "COMPLETED";
     score: string | null;
+    max_score?: string;
     deadline: string;
     editable?: boolean;
     feedback?: string;
+    questions?: Array<{ id: string; score: string | null; max_score: string; language: string }>;
   }>;
   all_submitted: boolean;
   server_time: string;
@@ -82,6 +84,10 @@ export const assessmentApi = {
     request<Assessment>(`/tasks/${encodeURIComponent(taskId)}/assessment`).then((r) => r.data),
   history: (taskId: string) => request<{ rows: Array<{
     kind: string; version_no: number; submitted_at: string; is_current: boolean;
+    answers: Array<{
+      question_id: string; selected_option_ids: string[]; language: string;
+      snapshot_digest: string | null;
+    }>;
   }> }>(`/tasks/${taskId}/assessment/submissions`).then((r) => r.data.rows),
   choiceDraft: (taskId: string, questionId: string) =>
     request<ChoiceDraft>(`${questionPath(taskId, questionId)}/draft`).then((r) => r.data),
@@ -155,7 +161,7 @@ export const assessmentTeachingApi = {
       method: "POST", body: { ids }, ifMatch: version, idempotencyKey: newIdempotencyKey(),
     }).then((r) => r.data),
   reviews: (courseId: string, publicationId?: string) => request<{ rows: Array<{
-    task_id: string; student_name: string; title: string; status: string; version_no: number;
+    task_id: string; student_name: string; title: string; kind: string; status: string; version_no: number;
   }> }>(`/teaching/courses/${courseId}/assessment-reviews`, { query: { publication_id: publicationId || undefined } }).then((r) => r.data.rows),
   review: (courseId: string, taskId: string) => request<TeacherAssessmentReview>(
     `/teaching/courses/${courseId}/tasks/${taskId}/assessment`,
@@ -219,5 +225,11 @@ export interface TeacherAssessmentReview {
     report_score: string | null; report_max_score: string; feedback: string;
   }>;
   report: { body_markdown: string; version_no: number } | null;
+  choice_answers: Array<{
+    question_id: string; title: string; task_type: string;
+    options: Array<{ id: string; text: string }>;
+    selected_option_ids: string[]; correct_option_ids: string[];
+    score: string | null; max_score: string;
+  }>;
   report_criteria: Array<{ id: string; title: string; max_score: string }>;
 }

@@ -9,6 +9,10 @@ import { CodeEditor, LoadingState, Modal, useToast } from "@edu/ui";
 
 type Flush = () => Promise<boolean>;
 type Register = (key: string, flush: Flush | null) => void;
+type HistoryRow = {
+  kind: string; version_no: number; submitted_at: string; is_current: boolean;
+  answers: Array<{ question_id: string; selected_option_ids: string[] }>;
+};
 const STATUS_LABEL: Record<string, string> = {
   NOT_SUBMITTED: "未提交", SUBMITTED: "已交卷", RETURNED: "待修改重交",
   PENDING: "待评分", RUNNING: "运行中", RETRY: "服务重试中", COMPLETED: "已完成",
@@ -91,14 +95,22 @@ function useAutosave<T>({ load, save, register, draftKey, immediate = false, sav
   return { value, change, status, flush };
 }
 
-function ChoiceAnswer({ taskId, question, register, disabled }: {
+function ChoiceAnswer({ taskId, question, register, disabled, submittedSelected, result }: {
   taskId: string; question: ChoiceQuestion; register: Register; disabled: boolean;
+  submittedSelected?: string[]; result?: { score: string | null; max_score: string };
 }) {
   const draft = useAutosave<string[]>({
     draftKey: question.id, register, immediate: true,
     load: async () => { const data = await assessmentApi.choiceDraft(taskId, question.id); return { value: data.selected_option_ids, version: data.row_version }; },
     save: async (value, version) => { const data = await assessmentApi.saveChoice(taskId, question.id, value, version); return { value: data.selected_option_ids, version: data.row_version }; },
   });
+  const selected = disabled && submittedSelected ? submittedSelected : draft.value;
+  let verdict: string | null = null;
+  if (disabled && submittedSelected && question.correct_option_ids) {
+    verdict = submittedSelected.length === 0
+      ? "漏答"
+      : sameOptions(submittedSelected, question.correct_option_ids) ? "正确" : "错误";
+  }
   return <article className="panel" style={{ marginBottom: 16 }}>
     <h2>{question.title} <small>{question.max_score} 分</small></h2>
     <pre style={{ whiteSpace: "pre-wrap", fontFamily: "inherit" }}>{question.description}</pre>
@@ -106,18 +118,52 @@ function ChoiceAnswer({ taskId, question, register, disabled }: {
       <legend>{question.task_type === "SINGLE_CHOICE" ? "单选题" : "多选题（完全正确才得分）"}</legend>
       {question.options.map((option) => <label className="item" key={option.id}>
         <input type={question.task_type === "SINGLE_CHOICE" ? "radio" : "checkbox"} name={question.id}
-          checked={draft.value?.includes(option.id) ?? false} onChange={(event) => {
-            const selected = draft.value ?? [];
-            draft.change(question.task_type === "SINGLE_CHOICE" ? [option.id] : event.target.checked ? [...selected, option.id] : selected.filter((id) => id !== option.id));
+          checked={selected?.includes(option.id) ?? false} onChange={(event) => {
+            const current = draft.value ?? [];
+            draft.change(question.task_type === "SINGLE_CHOICE" ? [option.id] : event.target.checked ? [...current, option.id] : current.filter((id) => id !== option.id));
           }} /> {option.text}
       </label>)}
     </fieldset>
-    <p role="status">{draft.status} <button className="btn" onClick={() => void draft.flush()}>重试保存</button></p>
+    {result && <p>本题得分：{result.score ?? "0"} / {result.max_score}{verdict ? ` · ${verdict}` : ""}</p>}
+    {!disabled && <p role="status">{draft.status} <button className="btn" onClick={() => void draft.flush()}>重试保存</button></p>}
     {question.correct_option_ids && <div className="section">
       <p>正确选项：{question.options.filter((o) => question.correct_option_ids!.includes(o.id)).map((o) => o.text).join("；")}</p>
       <p>{question.explanation}</p>
     </div>}
   </article>;
+}
+
+function sameOptions(left: string[], right: string[]): boolean {
+  if (left.length !== right.length) return false;
+  const expected = new Set(right);
+  return left.every((id) => expected.has(id));
+}
+
+function AnswerSheet({ submission, questions, result }: {
+  submission: HistoryRow; questions: ChoiceQuestion[];
+  result?: Array<{ id: string; score: string | null; max_score: string }>;
+}) {
+  return <div>
+    {submission.answers.map((answer) => {
+      const question = questions.find((item) => item.id === answer.question_id);
+      if (!question) return null;
+      const selectedText = question.options
+        .filter((option) => answer.selected_option_ids.includes(option.id))
+        .map((option) => option.text)
+        .join("；");
+      const correctText = question.options
+        .filter((option) => question.correct_option_ids?.includes(option.id))
+        .map((option) => option.text)
+        .join("；");
+      const score = result?.find((item) => item.id === question.id);
+      return <article className="panel" key={question.id}>
+        <h3>{question.title}</h3>
+        <p>你的选择：{selectedText || "未作答"}</p>
+        {correctText && <p>正确答案：{correctText}</p>}
+        {score && <p>本题得分：{score.score ?? "0"} / {score.max_score}</p>}
+      </article>;
+    })}
+  </div>;
 }
 
 function CodeAnswer({ taskId, question, language, register, disabled }: {
@@ -249,6 +295,7 @@ function AssessmentPage({ taskId }: { taskId: string }) {
   const [selectedLanguages, setSelectedLanguages] = useState<Record<string, AssessmentLanguage>>({});
   const [busy, setBusy] = useState(false);
   const [confirmation, setConfirmation] = useState<{ message: string; execute: () => Promise<unknown> } | null>(null);
+  const [viewing, setViewing] = useState<HistoryRow | null>(null);
   const flushes = useRef(new Map<string, Flush>());
   const submitKey = useRef<string | null>(null);
   const submitPayload = useRef("");
@@ -262,6 +309,9 @@ function AssessmentPage({ taskId }: { taskId: string }) {
   const selectedQuestion = programs.find((q) => q.id === active) ?? programs[0];
   const language = selectedQuestion ? selectedLanguages[selectedQuestion.id] ?? selectedQuestion.selected_language : "python";
   const sectionState = data?.sections.find((s) => s.kind === selectedSection);
+  const choiceSubmission = history.data?.find(
+    (row) => row.kind === "CHOICE" && row.is_current,
+  ) ?? null;
   const serverNow = data ? new Date(data.server_time).getTime() + Date.now() - assessment.dataUpdatedAt : Date.now();
   const disabled = !!sectionState && (
     sectionState.editable === false || serverNow >= new Date(sectionState.deadline).getTime()
@@ -334,7 +384,9 @@ function AssessmentPage({ taskId }: { taskId: string }) {
     </nav>
     <p role="status">{STATUS_LABEL[sectionState?.status ?? ""]} · {STATUS_LABEL[sectionState?.grading_status ?? ""]} · 截止 {sectionState?.deadline ? new Date(sectionState.deadline).toLocaleString() : "—"}</p>
     {sectionState?.feedback && <p role="note">教师评语：{sectionState.feedback}</p>}
-    {selectedSection === "CHOICE" ? choices.map((question) => <ChoiceAnswer key={question.id} taskId={taskId} question={question} register={register} disabled={disabled} />) : <>
+    {selectedSection === "CHOICE" ? choices.map((question) => <ChoiceAnswer key={question.id} taskId={taskId} question={question} register={register} disabled={disabled}
+      submittedSelected={disabled ? choiceSubmission?.answers.find((answer) => answer.question_id === question.id)?.selected_option_ids ?? [] : undefined}
+      result={disabled ? sectionState?.questions?.find((item) => item.id === question.id) : undefined} />) : <>
       <label>编程题<select className="field" value={selectedQuestion?.id ?? ""} onChange={(e) => void switchView(() => setActive(e.target.value))}>{programs.map((q) => <option key={q.id} value={q.id}>{q.title}</option>)}</select></label>
       {selectedQuestion && <>
         <label>语言<select className="field" value={language} disabled={disabled} onChange={(e) => void switchView(() => setSelectedLanguages((current) => ({ ...current, [selectedQuestion.id]: e.target.value as AssessmentLanguage })))}>{selectedQuestion.allowed_languages.map((v) => <option key={v}>{v}</option>)}</select></label>
@@ -344,7 +396,16 @@ function AssessmentPage({ taskId }: { taskId: string }) {
     </>}
     <button className="btn primary" disabled={busy || disabled} onClick={() => void submit()}>{busy ? "提交中…" : selectedSection === "CHOICE" ? "提交选择题卷" : "提交编程与报告卷"}</button>
     <p>{data.all_submitted ? "两部分已交齐（或当前实验全部部分已提交）" : "尚未交齐全部部分"}</p>
-    {sectionState?.score !== null && <p>本部分得分：{sectionState?.score}</p>}
-    <details><summary>交卷历史</summary>{history.data?.map((submission) => <p key={`${submission.kind}:${submission.version_no}`}>{submission.kind === "CHOICE" ? "选择题" : "编程与报告"} · 第 {submission.version_no} 次 · {new Date(submission.submitted_at).toLocaleString()}{submission.is_current ? "（当前有效）" : ""}</p>)}</details>
+    {sectionState?.score !== null && <p>本部分得分：{sectionState?.score} / {sectionState?.max_score ?? "—"}</p>}
+    <details><summary>交卷历史</summary>{history.data?.map((submission) => <p key={`${submission.kind}:${submission.version_no}`}>
+      {submission.kind === "CHOICE" ? "选择题" : "编程与报告"} · 第 {submission.version_no} 次 · {new Date(submission.submitted_at).toLocaleString()}{submission.is_current ? "（当前有效）" : ""}
+      {submission.kind === "CHOICE" && <button className="btn sm" onClick={() => setViewing(submission)}>查看答卷</button>}
+    </p>)}</details>
+    <Modal open={viewing !== null} onClose={() => setViewing(null)} wide
+      title={viewing ? `第 ${viewing.version_no} 次提交答卷` : ""}
+      actions={<button className="btn" onClick={() => setViewing(null)}>关闭</button>}>
+      {viewing && <AnswerSheet submission={viewing} questions={choices}
+        result={viewing.is_current ? sectionState?.questions : undefined} />}
+    </Modal>
   </main>;
 }

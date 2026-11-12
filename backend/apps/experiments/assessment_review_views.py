@@ -10,7 +10,7 @@ from apps.core.errors import ResourceNotFound, StateConflict
 from apps.core.idempotency import StoredResponse
 from apps.reviews.selectors import teaching_course
 
-from .assessment import review_programming, section_result
+from .assessment import choice_review_data, review_programming, section_result
 from .assessment_views import AssessmentResponseSerializer
 from .models import AssessmentSection, ExperimentTask
 from .views import IDEMPOTENCY_KEY, IF_MATCH, _body, _idempotent, _response
@@ -136,6 +136,8 @@ class AssessmentTeachingView(APIView):
                 )
                 if answer.code_snapshot_id
             ]
+        choice = next((s for s in sections if s.kind == "CHOICE"), None)
+        choice_answers = choice_review_data(choice) if choice else []
         history = [
             {
                 "kind": section.kind,
@@ -155,6 +157,7 @@ class AssessmentTeachingView(APIView):
                 "task_id": task.public_id,
                 "student_name": task.student.display_name,
                 "sections": [section_result(section, student=False) for section in sections],
+                "choice_answers": choice_answers,
                 "report": {"body_markdown": report.body_markdown, "version_no": report.version_no}
                 if report
                 else None,
@@ -205,7 +208,6 @@ class AssessmentReviewListView(APIView):
         sections = (
             AssessmentSection.objects.filter(
                 task__course=course,
-                kind="PROGRAMMING",
                 current_submission__isnull=False,
             )
             .select_related(
@@ -227,6 +229,7 @@ class AssessmentReviewListView(APIView):
                         "task_id": section.task.public_id,
                         "student_name": section.task.student.display_name,
                         "title": section.task.publication.title,
+                        "kind": section.kind,
                         "status": section.status,
                         "version_no": section.current_submission.version_no,
                     }
