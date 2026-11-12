@@ -38,6 +38,7 @@ export const REVIEW_STATUS_LABEL: Record<string, string> = {
   SAVED: "已保存评分",
   APPROVED: "已通过",
   RETURNED: "已退回",
+  DECIDED: "已完成评审",
   COMPLETED: "已完成",
 };
 
