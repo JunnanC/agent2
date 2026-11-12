@@ -6,6 +6,7 @@
       "Action": [
         "s3:GetBucketLocation",
         "s3:ListBucket",
+        "s3:ListBucketVersions",
         "s3:ListBucketMultipartUploads"
       ],
       "Resource": ["arn:aws:s3:::edu-platform"]
@@ -24,6 +25,8 @@
       "Resource": [
         "arn:aws:s3:::edu-platform/template-assets/*",
         "arn:aws:s3:::edu-platform/workspaces/*",
+        "arn:aws:s3:::edu-platform/assessment/*",
+        "arn:aws:s3:::edu-platform/assessment-tests/*",
         "arn:aws:s3:::edu-platform/reports/*",
         "arn:aws:s3:::edu-platform/archives/*"
       ]

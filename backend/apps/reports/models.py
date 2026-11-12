@@ -86,7 +86,8 @@ class ReportVersion(AppendOnlyModel):
     body_markdown = models.TextField()
     body_digest = models.CharField(max_length=64, db_collation="ascii_bin")
     workspace_snapshot = models.ForeignKey(
-        "workspaces.WorkspaceSnapshot", on_delete=models.PROTECT, related_name="report_versions"
+        "workspaces.WorkspaceSnapshot", on_delete=models.PROTECT, related_name="report_versions",
+        null=True, blank=True,
     )
     # Execution facts are copied at submission time.  The source run and output
     # objects are retained with PROTECT, while these fields make the report a

@@ -3559,6 +3559,41 @@
                 ]
             }
         },
+        "/api/v2/platform/courses/{course_id}/members": {
+            "get": {
+                "operationId": "api_v2_platform_courses_members_retrieve",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "course_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "api"
+                ],
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/GenericTimetableResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
         "/api/v2/platform/courses/{course_id}/unfreeze": {
             "post": {
                 "operationId": "api_v2_platform_courses_unfreeze_create",
@@ -6993,6 +7028,215 @@
                 ]
             }
         },
+        "/api/v2/tasks/{task_id}/assessment": {
+            "get": {
+                "operationId": "api_v2_tasks_assessment_retrieve",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "task_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "api"
+                ],
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AssessmentResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/v2/tasks/{task_id}/assessment/report-draft": {
+            "get": {
+                "operationId": "api_v2_tasks_assessment_report_draft_retrieve",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "task_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "api"
+                ],
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AssessmentResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            },
+            "put": {
+                "operationId": "api_v2_tasks_assessment_report_draft_update",
+                "parameters": [
+                    {
+                        "in": "header",
+                        "name": "If-Match",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "task_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "api"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/AssessmentReportWrite"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/AssessmentReportWrite"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/AssessmentReportWrite"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AssessmentResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/v2/tasks/{task_id}/assessment/runs/{run_id}": {
+            "get": {
+                "operationId": "api_v2_tasks_assessment_runs_retrieve",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "run_id",
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "task_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "api"
+                ],
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AssessmentResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/v2/tasks/{task_id}/assessment/submissions": {
+            "get": {
+                "operationId": "api_v2_tasks_assessment_submissions_retrieve",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "task_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "api"
+                ],
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AssessmentResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
         "/api/v2/tasks/{task_id}/attachments": {
             "post": {
                 "operationId": "tasks_report_attachments_create",
@@ -7905,6 +8149,315 @@
                 ]
             }
         },
+        "/api/v2/tasks/{task_id}/questions/{question_id}/code/{language}": {
+            "get": {
+                "operationId": "api_v2_tasks_questions_code_retrieve",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "language",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "question_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "task_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "api"
+                ],
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AssessmentResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            },
+            "put": {
+                "operationId": "api_v2_tasks_questions_code_update",
+                "parameters": [
+                    {
+                        "in": "header",
+                        "name": "If-Match",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "language",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "question_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "task_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "api"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/DraftWrite"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/DraftWrite"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/DraftWrite"
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AssessmentResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/v2/tasks/{task_id}/questions/{question_id}/draft": {
+            "get": {
+                "operationId": "api_v2_tasks_questions_draft_retrieve",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "question_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "task_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "api"
+                ],
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AssessmentResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            },
+            "put": {
+                "operationId": "api_v2_tasks_questions_draft_update",
+                "parameters": [
+                    {
+                        "in": "header",
+                        "name": "If-Match",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "question_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "task_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "api"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/DraftWrite"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/DraftWrite"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/DraftWrite"
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AssessmentResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/v2/tasks/{task_id}/questions/{question_id}/runs": {
+            "post": {
+                "operationId": "api_v2_tasks_questions_runs_create",
+                "parameters": [
+                    {
+                        "in": "header",
+                        "name": "Idempotency-Key",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "question_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "task_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "api"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/AssessmentRunWrite"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/AssessmentRunWrite"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/AssessmentRunWrite"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AssessmentResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
         "/api/v2/tasks/{task_id}/report-draft": {
             "get": {
                 "operationId": "tasks_report_draft_retrieve",
@@ -8143,6 +8696,132 @@
                 "x-portals": [
                     "USER"
                 ]
+            }
+        },
+        "/api/v2/tasks/{task_id}/sections/choice/submissions": {
+            "post": {
+                "operationId": "api_v2_tasks_sections_choice_submissions_create",
+                "parameters": [
+                    {
+                        "in": "header",
+                        "name": "Idempotency-Key",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "task_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "api"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ChoiceSubmit"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ChoiceSubmit"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ChoiceSubmit"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AssessmentResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/v2/tasks/{task_id}/sections/programming/submissions": {
+            "post": {
+                "operationId": "api_v2_tasks_sections_programming_submissions_create",
+                "parameters": [
+                    {
+                        "in": "header",
+                        "name": "Idempotency-Key",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "task_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "api"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ProgrammingSubmit"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ProgrammingSubmit"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ProgrammingSubmit"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AssessmentResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
             }
         },
         "/api/v2/tasks/{task_id}/start": {
@@ -8552,6 +9231,32 @@
                 "x-portals": [
                     "USER"
                 ]
+            }
+        },
+        "/api/v2/teaching/choice-import-template": {
+            "get": {
+                "operationId": "api_v2_teaching_choice_import_template_retrieve",
+                "tags": [
+                    "api"
+                ],
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {
+                                "schema": {
+                                    "type": "string",
+                                    "format": "binary"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
             }
         },
         "/api/v2/teaching/courses": {
@@ -11052,6 +11757,41 @@
                 "x-portals": [
                     "TEACHING"
                 ]
+            }
+        },
+        "/api/v2/teaching/courses/{course_id}/assessment-reviews": {
+            "get": {
+                "operationId": "api_v2_teaching_courses_assessment_reviews_retrieve",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "course_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "api"
+                ],
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AssessmentResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
             }
         },
         "/api/v2/teaching/courses/{course_id}/chapters/{chapter_id}/{status}": {
@@ -15010,6 +15750,126 @@
                 ]
             }
         },
+        "/api/v2/teaching/courses/{course_id}/tasks/{task_id}/assessment": {
+            "get": {
+                "operationId": "api_v2_teaching_courses_tasks_assessment_retrieve",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "course_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "task_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "api"
+                ],
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AssessmentResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            },
+            "post": {
+                "operationId": "api_v2_teaching_courses_tasks_assessment_create",
+                "parameters": [
+                    {
+                        "in": "header",
+                        "name": "Idempotency-Key",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "header",
+                        "name": "If-Match",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "course_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "task_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "api"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/AssessmentReviewWrite"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/AssessmentReviewWrite"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/AssessmentReviewWrite"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AssessmentResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
         "/api/v2/teaching/courses/{course_id}/tasks/{task_id}/operation-replay": {
             "get": {
                 "operationId": "api_v2_teaching_courses_tasks_operation_replay_list",
@@ -15215,6 +16075,128 @@
                 "x-portals": [
                     "TEACHING"
                 ]
+            }
+        },
+        "/api/v2/teaching/courses/{course_id}/template-chapters/{chapter_id}/choice-import/confirm": {
+            "post": {
+                "operationId": "api_v2_teaching_courses_template_chapters_choice_import_confirm_create",
+                "parameters": [
+                    {
+                        "in": "header",
+                        "name": "Idempotency-Key",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "chapter_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "course_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "api"
+                ],
+                "requestBody": {
+                    "content": {
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ChoiceImport"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ChoiceImportResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/v2/teaching/courses/{course_id}/template-chapters/{chapter_id}/choice-import/preview": {
+            "post": {
+                "operationId": "api_v2_teaching_courses_template_chapters_choice_import_preview_create",
+                "parameters": [
+                    {
+                        "in": "header",
+                        "name": "Idempotency-Key",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "chapter_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "course_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "api"
+                ],
+                "requestBody": {
+                    "content": {
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ChoiceImport"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ChoiceImportResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
             }
         },
         "/api/v2/teaching/courses/{course_id}/template-chapters/{chapter_id}/tasks": {
@@ -15454,6 +16436,49 @@
                 ]
             }
         },
+        "/api/v2/teaching/courses/{course_id}/template-tasks/{question_id}/assessment-tests": {
+            "get": {
+                "operationId": "api_v2_teaching_courses_template_tasks_assessment_tests_retrieve",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "course_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "question_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "api"
+                ],
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ChoiceImportResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
         "/api/v2/teaching/courses/{course_id}/template-tasks/{task_id}": {
             "patch": {
                 "operationId": "teaching_template_tasks_update",
@@ -15525,6 +16550,55 @@
                 "x-portals": [
                     "TEACHING"
                 ]
+            },
+            "delete": {
+                "operationId": "api_v2_teaching_courses_template_tasks_destroy",
+                "parameters": [
+                    {
+                        "in": "header",
+                        "name": "If-Match",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "course_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "task_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "api"
+                ],
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/TemplateTaskResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
             }
         },
         "/api/v2/teaching/courses/{course_id}/template-versions/{version_id}": {
@@ -15642,6 +16716,85 @@
                 "x-portals": [
                     "TEACHING"
                 ]
+            }
+        },
+        "/api/v2/teaching/courses/{course_id}/template-versions/{version_id}/assessment-tests": {
+            "post": {
+                "operationId": "api_v2_teaching_courses_template_versions_assessment_tests_create",
+                "parameters": [
+                    {
+                        "in": "header",
+                        "name": "Idempotency-Key",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "header",
+                        "name": "If-Match",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "course_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "version_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "api"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/AssessmentTestsWrite"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/AssessmentTestsWrite"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/AssessmentTestsWrite"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ChoiceImportResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
             }
         },
         "/api/v2/teaching/courses/{course_id}/template-versions/{version_id}/auto-check-rules": {
@@ -18574,6 +19727,109 @@
                 "type": "string",
                 "description": "* `REPORT` - REPORT\n* `SYSTEM_ARTIFACT` - SYSTEM_ARTIFACT"
             },
+            "AssessmentReportWrite": {
+                "type": "object",
+                "properties": {
+                    "body_markdown": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "body_markdown"
+                ]
+            },
+            "AssessmentResponse": {
+                "type": "object",
+                "properties": {
+                    "data": {
+                        "type": "object",
+                        "additionalProperties": {}
+                    },
+                    "meta": {
+                        "type": "object",
+                        "additionalProperties": {}
+                    }
+                },
+                "required": [
+                    "data",
+                    "meta"
+                ]
+            },
+            "AssessmentReviewWrite": {
+                "type": "object",
+                "properties": {
+                    "submission_version": {
+                        "type": "integer",
+                        "minimum": 1
+                    },
+                    "scores": {
+                        "type": "object",
+                        "additionalProperties": {
+                            "type": "string"
+                        }
+                    },
+                    "feedback": {
+                        "type": "string",
+                        "default": ""
+                    },
+                    "return_until": {
+                        "type": "string",
+                        "format": "date-time",
+                        "nullable": true
+                    },
+                    "retry_judge": {
+                        "type": "boolean",
+                        "default": false
+                    }
+                },
+                "required": [
+                    "submission_version"
+                ]
+            },
+            "AssessmentRunWrite": {
+                "type": "object",
+                "properties": {
+                    "language": {
+                        "$ref": "#/components/schemas/LanguageEnum"
+                    },
+                    "row_version": {
+                        "type": "integer",
+                        "minimum": 1
+                    },
+                    "stdin": {
+                        "type": "string",
+                        "maxLength": 1048576
+                    }
+                },
+                "required": [
+                    "language",
+                    "row_version",
+                    "stdin"
+                ]
+            },
+            "AssessmentTestsWrite": {
+                "type": "object",
+                "properties": {
+                    "groups": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "additionalProperties": {}
+                        }
+                    },
+                    "scores": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "additionalProperties": {}
+                        }
+                    }
+                },
+                "required": [
+                    "groups",
+                    "scores"
+                ]
+            },
             "AudienceModeEnum": {
                 "enum": [
                     "ALL_ACTIVE",
@@ -18907,6 +20163,69 @@
                         "maxLength": 180
                     }
                 }
+            },
+            "ChoiceImport": {
+                "type": "object",
+                "properties": {
+                    "file": {
+                        "type": "string",
+                        "format": "uri"
+                    },
+                    "token": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "file"
+                ]
+            },
+            "ChoiceImportResponse": {
+                "type": "object",
+                "properties": {
+                    "data": {
+                        "type": "object",
+                        "additionalProperties": {}
+                    },
+                    "meta": {
+                        "type": "object",
+                        "additionalProperties": {}
+                    }
+                },
+                "required": [
+                    "data",
+                    "meta"
+                ]
+            },
+            "ChoiceSubmit": {
+                "type": "object",
+                "properties": {
+                    "versions": {
+                        "type": "object",
+                        "additionalProperties": {
+                            "type": "integer",
+                            "minimum": 1
+                        }
+                    }
+                },
+                "required": [
+                    "versions"
+                ]
+            },
+            "CodeVersion": {
+                "type": "object",
+                "properties": {
+                    "language": {
+                        "$ref": "#/components/schemas/LanguageEnum"
+                    },
+                    "row_version": {
+                        "type": "integer",
+                        "minimum": 1
+                    }
+                },
+                "required": [
+                    "language",
+                    "row_version"
+                ]
             },
             "ComparatorEnum": {
                 "enum": [
@@ -19766,6 +21085,23 @@
                     "data",
                     "meta"
                 ]
+            },
+            "DraftWrite": {
+                "type": "object",
+                "properties": {
+                    "selected_option_ids": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "files": {
+                        "type": "object",
+                        "additionalProperties": {
+                            "type": "string"
+                        }
+                    }
+                }
             },
             "DriverEnum": {
                 "enum": [
@@ -21160,14 +22496,14 @@
             },
             "LanguageEnum": {
                 "enum": [
+                    "python",
                     "c",
                     "cpp",
                     "java",
-                    "python",
                     "go"
                 ],
                 "type": "string",
-                "description": "* `c` - c\n* `cpp` - cpp\n* `java` - java\n* `python` - python\n* `go` - go"
+                "description": "* `python` - python\n* `c` - c\n* `cpp` - cpp\n* `java` - java\n* `go` - go"
             },
             "LateEnrollmentPolicyEnum": {
                 "enum": [
@@ -21634,6 +22970,11 @@
             "PatchedPublicationPatch": {
                 "type": "object",
                 "properties": {
+                    "score_release_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "nullable": true
+                    },
                     "template_version_id": {
                         "type": "string",
                         "maxLength": 26
@@ -21941,6 +23282,19 @@
                     "grading_policy": {
                         "type": "object",
                         "additionalProperties": {}
+                    },
+                    "question_spec": {
+                        "type": "object",
+                        "additionalProperties": {}
+                    },
+                    "marking_spec": {
+                        "type": "object",
+                        "additionalProperties": {}
+                    },
+                    "max_score": {
+                        "type": "string",
+                        "format": "decimal",
+                        "pattern": "^-?\\d{0,5}(?:\\.\\d{0,2})?$"
                     }
                 }
             },
@@ -21952,14 +23306,17 @@
                     },
                     "runtime_adapter_id": {
                         "type": "string",
+                        "nullable": true,
                         "maxLength": 26
                     },
                     "image_id": {
                         "type": "string",
+                        "nullable": true,
                         "maxLength": 26
                     },
                     "resource_profile_id": {
                         "type": "string",
+                        "nullable": true,
                         "maxLength": 26
                     },
                     "dependencies": {
@@ -22355,6 +23712,25 @@
                     "modes"
                 ]
             },
+            "ProgrammingSubmit": {
+                "type": "object",
+                "properties": {
+                    "versions": {
+                        "type": "object",
+                        "additionalProperties": {
+                            "$ref": "#/components/schemas/CodeVersion"
+                        }
+                    },
+                    "report_version": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "nullable": true
+                    }
+                },
+                "required": [
+                    "versions"
+                ]
+            },
             "PromptWrite": {
                 "type": "object",
                 "properties": {
@@ -22581,6 +23957,11 @@
             "PublicationData": {
                 "type": "object",
                 "properties": {
+                    "score_release_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "nullable": true
+                    },
                     "public_id": {
                         "type": "string"
                     },
@@ -22595,7 +23976,8 @@
                         "type": "string"
                     },
                     "rubric_version_id": {
-                        "type": "string"
+                        "type": "string",
+                        "nullable": true
                     },
                     "template_spec_digest": {
                         "type": "string",
@@ -22721,6 +24103,7 @@
                     "runtime_adapter_config_ref",
                     "runtime_adapter_driver",
                     "runtime_adapter_id",
+                    "score_release_at",
                     "status",
                     "template_digest",
                     "template_spec_digest",
@@ -22822,7 +24205,13 @@
                     },
                     "rubric_version_id": {
                         "type": "string",
+                        "nullable": true,
                         "maxLength": 26
+                    },
+                    "score_release_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "nullable": true
                     },
                     "title": {
                         "type": "string",
@@ -22866,7 +24255,6 @@
                 "required": [
                     "audience_mode",
                     "review_mode",
-                    "rubric_version_id",
                     "template_version_id",
                     "title",
                     "window_end",
@@ -25376,6 +26764,9 @@
             "TaskData": {
                 "type": "object",
                 "properties": {
+                    "assessment_available": {
+                        "type": "boolean"
+                    },
                     "public_id": {
                         "type": "string"
                     },
@@ -25508,6 +26899,7 @@
                 },
                 "required": [
                     "allowed_actions",
+                    "assessment_available",
                     "blockers",
                     "course_id",
                     "current_failure",
@@ -25791,7 +27183,8 @@
                         "nullable": true
                     },
                     "effective_resource_profile_id": {
-                        "type": "string"
+                        "type": "string",
+                        "nullable": true
                     },
                     "row_version": {
                         "type": "integer"
@@ -26035,6 +27428,19 @@
             "TemplateTaskData": {
                 "type": "object",
                 "properties": {
+                    "question_spec": {
+                        "type": "object",
+                        "additionalProperties": {}
+                    },
+                    "marking_spec": {
+                        "type": "object",
+                        "additionalProperties": {}
+                    },
+                    "max_score": {
+                        "type": "string",
+                        "format": "decimal",
+                        "pattern": "^-?\\d{0,5}(?:\\.\\d{0,2})?$"
+                    },
                     "public_id": {
                         "type": "string"
                     },
@@ -26065,7 +27471,8 @@
                         "nullable": true
                     },
                     "effective_resource_profile_id": {
-                        "type": "string"
+                        "type": "string",
+                        "nullable": true
                     },
                     "submission_policy": {
                         "type": "object",
@@ -26085,7 +27492,10 @@
                     "execution_spec",
                     "grading_policy",
                     "instructions",
+                    "marking_spec",
+                    "max_score",
                     "public_id",
+                    "question_spec",
                     "resource_profile_id",
                     "row_version",
                     "sort_order",
@@ -26170,6 +27580,19 @@
                     "grading_policy": {
                         "type": "object",
                         "additionalProperties": {}
+                    },
+                    "question_spec": {
+                        "type": "object",
+                        "additionalProperties": {}
+                    },
+                    "marking_spec": {
+                        "type": "object",
+                        "additionalProperties": {}
+                    },
+                    "max_score": {
+                        "type": "string",
+                        "format": "decimal",
+                        "pattern": "^-?\\d{0,5}(?:\\.\\d{0,2})?$"
                     }
                 }
             },
@@ -26192,16 +27615,19 @@
                         "type": "string"
                     },
                     "runtime_adapter_id": {
-                        "type": "string"
+                        "type": "string",
+                        "nullable": true
                     },
                     "image_id": {
-                        "type": "string"
+                        "type": "string",
+                        "nullable": true
                     },
                     "image_digest": {
                         "type": "string"
                     },
                     "resource_profile_id": {
-                        "type": "string"
+                        "type": "string",
+                        "nullable": true
                     },
                     "dependencies": {
                         "type": "array",
@@ -26354,14 +27780,17 @@
                     },
                     "runtime_adapter_id": {
                         "type": "string",
+                        "nullable": true,
                         "maxLength": 26
                     },
                     "image_id": {
                         "type": "string",
+                        "nullable": true,
                         "maxLength": 26
                     },
                     "resource_profile_id": {
                         "type": "string",
+                        "nullable": true,
                         "maxLength": 26
                     },
                     "dependencies": {

@@ -77,7 +77,7 @@ export function GradeAnalysis({ courseId }: { courseId: string }) {
       </RequestStateView>
       <label className="form-label" htmlFor="retake-start">重新开放时间</label><input id="retake-start" className="field" type="datetime-local" value={start} onChange={e => setStart(e.target.value)} />
       <label className="form-label" htmlFor="retake-deadline">重新提交截止时间</label><input id="retake-deadline" className="field" type="datetime-local" value={deadline} onChange={e => setDeadline(e.target.value)} />
-      <p className="subtle">原发布保持截止，重做分数先封顶 60 分，再与首次分数取最大值，不新增计分项。</p>
+      <p className="subtle">原发布保持截止，重做分数封顶为该实验满分的 60%，按满分比例换算后与首次分数取最大值，不新增计分项。</p>
       <button type="button" className="btn primary" disabled={!selectedEnrollments.length || !start || !deadline || new Date(start) <= new Date() || deadline <= start || createRetake.isPending} onClick={() => createRetake.mutate()}>确认批量重新发布</button>
       {createRetake.error ? <p role="alert" className="teacher-notice">{createRetake.error instanceof Error ? createRetake.error.message : "创建补做实验失败"}</p> : null}
     </Modal></Panel>;

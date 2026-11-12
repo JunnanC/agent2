@@ -269,6 +269,7 @@ export interface Blocker {
 }
 
 export interface Task {
+  assessment_available?: boolean;
   public_id: string;
   course_id: string;
   publication_id: string;

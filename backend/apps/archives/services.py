@@ -200,6 +200,30 @@ def request_task_archive(
         raise ResourceNotFound() from exc
     if task.status in TERMINAL_STATUSES:
         return ArchiveJob.objects.filter(task=task).first()
+    from apps.experiments.models import PublicationTask
+
+    assessment = PublicationTask.objects.filter(
+        publication_chapter__publication_id=task.publication_id,
+        task_type__in=("SINGLE_CHOICE", "MULTIPLE_CHOICE", "PROGRAMMING"),
+    ).exists()
+    if assessment:
+        task = _set_terminal_target(task, terminal_target)
+        if task.status != ExperimentTask.Status.ARCHIVING:
+            task = compare_and_swap(
+                ExperimentTask, pk=task.pk, expected_version=task.row_version,
+                changes={"status": ExperimentTask.Status.ARCHIVING},
+            )
+        job, _ = ArchiveJob.objects.get_or_create(task=task, defaults={
+            "course": task.course, "terminal_target": terminal_target,
+            "safe_recycle_at": _safe_recycle_at(), "max_attempts": _max_attempts(),
+            "trace_id": _trace(context),
+        })
+        from .tasks import run_archive_job
+
+        transaction.on_commit(lambda: run_archive_job.apply_async(
+            kwargs={"job_id": job.public_id, "trace_id": _trace(context)}, queue="q_archive",
+        ))
+        return job
     instance_exists = (
         ProvisioningInstance.objects.filter(task=task)
         .exclude(status=ProvisioningInstance.Status.DESTROYED)
@@ -505,7 +529,17 @@ def _copy_verified_asset(
 
 
 def _build_package(task: ExperimentTask) -> tuple[Any, list[dict[str, Any]], str, int]:
-    snapshot, assets = _snapshot(task)
+    from apps.experiments.models import PublicationTask
+
+    if PublicationTask.objects.filter(
+        publication_chapter__publication_id=task.publication_id,
+        task_type__in=("SINGLE_CHOICE", "MULTIPLE_CHOICE", "PROGRAMMING"),
+    ).exists():
+        from .assessment import assessment_archive
+
+        snapshot, assets = assessment_archive(task)
+    else:
+        snapshot, assets = _snapshot(task)
     generated = {
         "task.json": _canonical_bytes({"task": snapshot["task"]}),
         "report.json": _canonical_bytes(snapshot["report"]),
@@ -1414,7 +1448,9 @@ def scan_due_tasks(*, trace_id: str = "", course_id: str = "") -> int:
             ExperimentTask.Status.IN_PROGRESS,
             ExperimentTask.Status.REPORT_DRAFT,
         )
-    )
+    ).exclude(publication__chapter_snapshots__task_snapshots__task_type__in=(
+        "SINGLE_CHOICE", "MULTIPLE_CHOICE", "PROGRAMMING",
+    ))
     if course_id:
         values = values.filter(course__public_id=course_id)
     count = 0

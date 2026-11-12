@@ -801,7 +801,8 @@ class TemplateTaskCollectionView(APIView):
         )
         return _response(
             request,
-            [task_data(task, version) for task in chapter.tasks.all().order_by("sort_order")],
+            [task_data(task, version)
+             for task in chapter.tasks.filter(active=True).order_by("sort_order")],
         )
 
     @extend_schema(
@@ -836,6 +837,15 @@ class TemplateTaskCollectionView(APIView):
 
 class TemplateTaskDetailView(APIView):
     permission_classes = [IsTeachingPortal]
+
+    @extend_schema(responses={200: TemplateTaskResponseSerializer}, parameters=[IF_MATCH])
+    def delete(self, request: HttpRequest, course_id: str, task_id: str) -> Response:
+        task = update_task(
+            course_id=course_id, task_id=task_id, actor=request.user,
+            expected_version=parse_if_match(request.headers.get("If-Match")),
+            changes={"active": False}, context=_ctx(request),
+        )
+        return _response(request, {"public_id": task.public_id, "deleted": True})
 
     @extend_schema(
         operation_id="teaching_template_tasks_update",

@@ -8,6 +8,7 @@ import {
 } from "@edu/ui";
 import type { JobStage } from "@edu/ui";
 import { apiErrorMessage } from "@/lib/format";
+import { AssessmentQuestions } from "@/components/assessment-questions";
 
 const STEPS = ["基础信息", "内容结构", "运行环境", "报告与评审", "预检与发布"] as const;
 
@@ -146,6 +147,7 @@ export function TemplateEditor() {
       versionId,
       {
         runtime_adapter_id: selectedAdapterId,
+        runtime_type: "CONTAINER",
         image_id: selectedImageId,
         resource_profile_id: selectedProfileId,
       },
@@ -399,7 +401,11 @@ export function TemplateEditor() {
             </RequestStateView>
           ) : null}
 
-          {step === "内容结构" ? (
+          {step === "内容结构" && !(chapters.data?.rows ?? []).some((chapter) => chapter.tasks.some((task) => !["SINGLE_CHOICE", "MULTIPLE_CHOICE", "PROGRAMMING"].includes(task.task_type))) ? (
+            <AssessmentQuestions courseId={courseId} templateId={templateId}
+              version={currentVersion} refresh={async () => { await versions.refetch(); await chapters.refetch(); }} />
+          ) : null}
+          {step === "内容结构" && (chapters.data?.rows ?? []).some((chapter) => chapter.tasks.some((task) => !["SINGLE_CHOICE", "MULTIPLE_CHOICE", "PROGRAMMING"].includes(task.task_type))) ? (
             <RequestStateView loading={chapters.isLoading} error={chapters.error}
               onRetry={() => void chapters.refetch()}
               empty={!currentVersion}

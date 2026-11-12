@@ -434,6 +434,8 @@ def _version_changes(course: Course, data: dict[str, Any]) -> dict[str, Any]:
     for field, model, filters in resource_lookups:
         if field not in clean:
             continue
+        if clean[field] is None:
+            continue
         resource = model.objects.filter(public_id=clean[field], **filters).first()
         if resource is None:
             raise TemplateValidationError(detail={field: "not_available"})
@@ -727,9 +729,6 @@ def create_version(
     latest = template.versions.order_by("-version_no").first()
     version_no = 1 if latest is None else latest.version_no + 1
     clean = _version_changes(course, data)
-    required = {"runtime_type", "runtime_adapter_id", "image_id", "resource_profile_id"}
-    if not required.issubset(clean):
-        raise TemplateValidationError(detail={"required": sorted(required - clean.keys())})
     version = TemplateVersion.objects.create(
         template=template,
         version_no=version_no,
@@ -894,6 +893,10 @@ def _task_payload(data: dict[str, Any]) -> dict[str, Any]:
         "resource_profile_id",
         "submission_policy",
         "grading_policy",
+        "question_spec",
+        "marking_spec",
+        "max_score",
+        "active",
     }
     clean = {key: data[key] for key in allowed if key in data}
     for field in ("title", "task_type"):
@@ -911,6 +914,23 @@ def _task_payload(data: dict[str, Any]) -> dict[str, Any]:
         if clean["sort_order"] < 1:
             raise TemplateValidationError(detail={"sort_order": "positive_integer_required"})
     return clean
+
+
+def _assessment_payload(clean: dict[str, Any], item: TemplateTask | None = None) -> None:
+    from .questions import QUESTION_TYPES, normalize_question
+
+    kind = clean.get("task_type", item.task_type if item else "")
+    if kind not in QUESTION_TYPES:
+        if any(key in clean for key in ("question_spec", "marking_spec", "max_score")):
+            raise TemplateValidationError(detail={"task_type": "assessment_type_required"})
+        return
+    public, marking, points = normalize_question(
+        task_type=kind,
+        public=clean.get("question_spec", item.question_spec if item else {}),
+        marking=clean.get("marking_spec", item.marking_spec if item else {}),
+        max_score=clean.get("max_score", item.max_score if item else 0),
+    )
+    clean.update(question_spec=public, marking_spec=marking, max_score=points)
 
 
 @transaction.atomic
@@ -1036,6 +1056,7 @@ def create_task(
         raise ResourceNotFound() from exc
     template_version = _content_guard(chapter.template_version, expected_version, context)
     clean = _task_payload(data)
+    _assessment_payload(clean)
     if "sort_order" not in clean:
         clean["sort_order"] = (
             chapter.tasks.order_by("-sort_order").values_list("sort_order", flat=True).first() or 0
@@ -1091,6 +1112,7 @@ def update_task(
         raise ResourceNotFound() from exc
     template_version = _content_guard(item.chapter.template_version, expected_version, context)
     clean = _task_payload(changes)
+    _assessment_payload(clean, item)
     if "resource_profile_id" in clean:
         resource_profile_id = clean.pop("resource_profile_id")
         profile = _profile(course, resource_profile_id) if resource_profile_id else None
@@ -1137,12 +1159,16 @@ def _reorder(
     if len(ids) != len(set(ids)) or not ids:
         raise TemplateValidationError(detail={"ids": "complete_unique_order_required"})
     query = model.objects.select_for_update().filter(public_id__in=ids)
+    if model is TemplateTask:
+        query = query.filter(active=True)
     if parent is None:
         query = query.filter(template_version=version)  # type: ignore[union-attr]
     else:
         query = query.filter(chapter=parent)  # type: ignore[union-attr]
     rows = list(query)
-    expected_count = version.chapters.count() if parent is None else parent.tasks.count()
+    expected_count = (
+        version.chapters.count() if parent is None else parent.tasks.filter(active=True).count()
+    )
     if len(rows) != len(ids) or len(rows) != expected_count:
         raise TemplateValidationError(detail={"ids": "complete_unique_order_required"})
     rows_by_id = {row.public_id: row for row in rows}
@@ -1370,6 +1396,13 @@ def _validated_snapshot(
         if stage is not None:
             stage(name, result)
 
+    from .questions import assessment_snapshot
+
+    assessment = assessment_snapshot(version, run_reference=stage is not None)
+    if assessment is not None:
+        report("QUESTIONS", "PASSED")
+        return assessment
+
     course = version.template.course
     report("SCOPE", "RUNNING")
     material_ids = [str(item.get("version_id", "")) for item in version.material_refs]
@@ -1541,7 +1574,26 @@ def _validated_snapshot(
                 )
             execution_plans[language] = build_execution_plan(selected)
 
+    from .questions import QUESTION_TYPES, normalize_question
+
+    question_specs = []
+    for question in TemplateTask.objects.filter(
+        chapter__template_version=version, task_type__in=QUESTION_TYPES,
+    ).order_by("chapter__sort_order", "sort_order", "id"):
+        public, marking, points = normalize_question(
+            task_type=question.task_type, public=question.question_spec,
+            marking=question.marking_spec, max_score=question.max_score,
+        )
+        question_specs.append({
+            "id": question.public_id, "chapter_id": question.chapter.public_id,
+            "title": question.title, "description": question.description,
+            "instructions": question.instructions, "sort_order": question.sort_order,
+            "task_type": question.task_type, "question_spec": public,
+            "marking_spec": marking, "max_score": str(points),
+        })
+
     return {
+        **({"questions": question_specs} if question_specs else {}),
         "runtime_type": version.runtime_type,
         "runtime_adapter": {"code": adapter.code, "driver": adapter.driver},
         "image_digest": image.digest,
@@ -1890,7 +1942,7 @@ def publish_version(
             expected_version=task.row_version,
             changes={"status": TemplateTask.Status.PUBLISHED},
         )
-    if not ExperimentImage.objects.filter(
+    if version.image_id and not ExperimentImage.objects.filter(
         template_version=version, status=ExperimentImage.Status.READY
     ).exists():
         ExperimentImage.objects.create(
@@ -2094,6 +2146,8 @@ def clone_version(
         source_chapter.pk: cloned_chapter
         for source_chapter, cloned_chapter in zip(source_chapters, cloned_chapters, strict=True)
     }
+    from .assessment_assets import clone_marking_spec
+
     TemplateTask.objects.bulk_create([
         TemplateTask(
             chapter=chapter_map[task.chapter_id],
@@ -2107,9 +2161,12 @@ def clone_version(
             resource_profile=task.resource_profile,
             submission_policy=task.submission_policy,
             grading_policy=task.grading_policy,
+            question_spec=task.question_spec,
+            marking_spec=clone_marking_spec(task, clone),
+            max_score=task.max_score,
         )
         for source_chapter in source_chapters
-        for task in source_chapter.tasks.all().order_by("sort_order")
+        for task in source_chapter.tasks.filter(active=True).order_by("sort_order")
     ])
     _audit(
         context,

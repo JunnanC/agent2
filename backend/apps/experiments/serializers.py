@@ -36,7 +36,8 @@ class PrerequisiteWriteSerializer(serializers.Serializer):
 
 class PublicationWriteSerializer(serializers.Serializer):
     template_version_id = serializers.CharField(max_length=26)
-    rubric_version_id = serializers.CharField(max_length=26)
+    rubric_version_id = serializers.CharField(max_length=26, required=False, allow_null=True)
+    score_release_at = serializers.DateTimeField(required=False, allow_null=True)
     title = serializers.CharField(max_length=180)
     description = serializers.CharField(required=False, allow_blank=True)
     audience_mode = serializers.ChoiceField(choices=TaskPublication.AudienceMode.choices)
@@ -58,10 +59,14 @@ class PublicationWriteSerializer(serializers.Serializer):
         deadline = cast(datetime | None, attrs.get("assignment_deadline"))
         if deadline is not None and deadline > window_end:
             raise serializers.ValidationError({"assignment_deadline": "不能晚于 window_end"})
+        release = cast(datetime | None, attrs.get("score_release_at"))
+        if release is not None and release < window_end:
+            raise serializers.ValidationError({"score_release_at": "不能早于截止时间"})
         return attrs
 
 
 class PublicationPatchSerializer(serializers.Serializer):
+    score_release_at = serializers.DateTimeField(required=False, allow_null=True)
     template_version_id = serializers.CharField(max_length=26, required=False)
     rubric_version_id = serializers.CharField(max_length=26, required=False)
     title = serializers.CharField(max_length=180, required=False)
@@ -138,11 +143,12 @@ class TaskExtensionDecisionSerializer(serializers.Serializer):
 
 
 class PublicationDataSerializer(serializers.Serializer):
+    score_release_at = serializers.DateTimeField(allow_null=True)
     public_id = serializers.CharField()
     course_id = serializers.CharField()
     retake_of_publication_id = serializers.CharField(allow_null=True)
     template_version_id = serializers.CharField()
-    rubric_version_id = serializers.CharField()
+    rubric_version_id = serializers.CharField(allow_null=True)
     template_spec_digest = serializers.CharField(allow_null=True)
     template_digest = serializers.CharField(allow_null=True)
     publication_digest = serializers.CharField(allow_null=True)
@@ -174,6 +180,7 @@ class PublicationDataSerializer(serializers.Serializer):
 
 
 class TaskDataSerializer(serializers.Serializer):
+    assessment_available = serializers.BooleanField()
     public_id = serializers.CharField()
     course_id = serializers.CharField()
     publication_id = serializers.CharField()
@@ -293,7 +300,7 @@ def publication_data(item: TaskPublication) -> dict[str, Any]:
             item.retake_of.public_id if item.retake_of_id else None
         ),
         "template_version_id": item.template_version.public_id,
-        "rubric_version_id": item.rubric_version.public_id,
+        "rubric_version_id": item.rubric_version.public_id if item.rubric_version else None,
         "template_spec_digest": template_spec_digest,
         "template_digest": item.template_digest,
         "publication_digest": item.publication_digest,
@@ -313,6 +320,7 @@ def publication_data(item: TaskPublication) -> dict[str, Any]:
         "late_enrollment_policy": item.late_enrollment_policy,
         "window_start": item.window_start,
         "window_end": item.window_end,
+        "score_release_at": item.score_release_at,
         "assignment_deadline": item.assignment_deadline,
         "report_required": item.report_required,
         "review_mode": item.review_mode,
@@ -498,6 +506,10 @@ def task_data(
     except (AttributeError, ProvisioningInstance.DoesNotExist, ProvisioningJob.DoesNotExist):
         provisioning = None
     return {
+        "assessment_available": PublicationTask.objects.filter(
+            publication_chapter__publication_id=item.publication_id,
+            task_type__in=("SINGLE_CHOICE", "MULTIPLE_CHOICE", "PROGRAMMING"),
+        ).exists(),
         "public_id": item.public_id,
         "course_id": item.course.public_id,
         "publication_id": item.publication.public_id,

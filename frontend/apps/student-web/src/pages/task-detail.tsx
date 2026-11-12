@@ -189,7 +189,8 @@ export function TaskDetail() {
         <Link className="crumb-link" to="/experiments">实验任务</Link>　/　<b>{current.title}</b>
       </div>
       <div className="page-actions align-end">
-        {current.allowed_actions.includes("enter") && !current.blockers.length ? (
+        {current.assessment_available ? <Link className="btn primary" to={`/experiments/${taskId}/assessment`}>进入实验答题</Link> : null}
+        {!current.assessment_available && current.allowed_actions.includes("enter") && !current.blockers.length ? (
           <Button variant="primary" onClick={() => {
             if (current.status === "ASSIGNED" && !actionMutation.isPending) {
               autoEnteredRef.current = false;

@@ -206,6 +206,14 @@ class SettingsTests(SimpleTestCase):
             "experiments_task_state_transition",
             "experiments_task_extension_request",
             "experiments_task_extension_decision",
+            "experiments_answer_draft",
+            "experiments_code_draft",
+            "experiments_assessment_section",
+            "experiments_section_submission",
+            "experiments_question_submission",
+            "experiments_question_grade",
+            "experiments_assessment_run",
+            "experiments_report_grade",
         }
         assert {
             model._meta.db_table for model in apps.get_app_config("provisioning").get_models()

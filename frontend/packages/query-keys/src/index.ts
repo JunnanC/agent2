@@ -38,6 +38,9 @@ export const keys = {
     ["courses", courseId, resource, ...stable(filter)] as const,
   tasks: (filter: QueryFilter = {}) => ["tasks", ...stable(filter)] as const,
   task: (taskId: string) => ["tasks", taskId] as const,
+  assessment: (taskId: string) => ["tasks", taskId, "assessment"] as const,
+  assessmentDraft: (taskId: string, questionId: string, language: string = "choice") =>
+    ["tasks", taskId, "assessment", "drafts", questionId, language] as const,
   taskTransitions: (taskId: string) => ["tasks", taskId, "transitions"] as const,
   taskExtension: (taskId: string) => ["tasks", taskId, "extensions"] as const,
   provisioningJob: (taskId: string) => ["tasks", taskId, "provisioning-job"] as const,

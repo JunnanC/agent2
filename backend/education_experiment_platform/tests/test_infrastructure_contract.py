@@ -416,6 +416,13 @@ def test_every_first_party_model_table_has_runtime_grants() -> None:
         "First-party model tables missing runtime grants: " f"{sorted(missing_tables)}"
     )
     expected_grants = {
+        "experiments_answer_draft": {"SELECT", "INSERT", "UPDATE"},
+        "experiments_code_draft": {"SELECT", "INSERT", "UPDATE"},
+        "experiments_assessment_section": {"SELECT", "INSERT", "UPDATE"},
+        "experiments_section_submission": {"SELECT", "INSERT"},
+        "experiments_question_submission": {"SELECT", "INSERT"},
+        "experiments_question_grade": {"SELECT", "INSERT", "UPDATE"},
+        "experiments_assessment_run": {"SELECT", "INSERT", "UPDATE"},
         "experiments_experiment_retake_link": {"SELECT", "INSERT", "UPDATE"},
         "courses_administrative_class": {"SELECT", "INSERT"},
         "courses_administrative_class_membership": {"SELECT", "INSERT", "UPDATE"},
@@ -443,10 +450,13 @@ def test_workspaces_minio_policy_scopes_versioned_workspace_objects() -> None:
     assert set(object_statement["Resource"]) == {
         "arn:aws:s3:::edu-platform/template-assets/*",
         "arn:aws:s3:::edu-platform/workspaces/*",
+        "arn:aws:s3:::edu-platform/assessment/*",
+        "arn:aws:s3:::edu-platform/assessment-tests/*",
         "arn:aws:s3:::edu-platform/reports/*",
         "arn:aws:s3:::edu-platform/archives/*",
     }
     assert {"s3:GetObjectVersion", "s3:DeleteObjectVersion"} <= set(object_statement["Action"])
+    assert "s3:ListBucketVersions" in policy["Statement"][0]["Action"]
 
 
 def test_core_declares_architecture_queue_names() -> None:

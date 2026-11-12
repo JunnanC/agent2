@@ -190,6 +190,7 @@ export function Reviews() {
   return (
     <>
       <Breadcrumbs items={[{ label: "教师门户" }, { label: "课程" }]} current="实验报告与评审" />
+      <AssessmentReviews courseId={courseId} />
       <div className="page-actions align-end">
         <button type="button" className={`btn sm${statusFilter === "PENDING" ? " primary" : ""}`} onClick={() => setStatusFilter("PENDING")}>待评审</button>
         <button type="button" className={`btn sm${statusFilter === "ALL" ? " primary" : ""}`} onClick={() => setStatusFilter("ALL")}>全部记录</button>
@@ -388,3 +389,4 @@ export function Reviews() {
     </>
   );
 }
+import { AssessmentReviews } from "@/components/assessment-reviews";

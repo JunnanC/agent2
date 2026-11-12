@@ -8,6 +8,17 @@ from apps.governance.models import ImageAsset, ResourceProfile, RuntimeAdapter
 from apps.labtemplates.models import TemplateVersion
 from apps.reviews.models import RubricVersion
 
+from .assessment_models import (  # noqa: F401 - register assessment models with Django
+    AnswerDraft,
+    AssessmentRun,
+    AssessmentSection,
+    CodeDraft,
+    QuestionGrade,
+    QuestionSubmission,
+    ReportGrade,
+    SectionSubmission,
+)
+
 TASK_STATUS_VALUES = (
     "ASSIGNED",
     "PROVISIONING",
@@ -111,7 +122,8 @@ class TaskPublication(VersionedModel):
     )
     resource_profile_snapshot = models.JSONField(default=dict, blank=True)
     rubric_version = models.ForeignKey(
-        RubricVersion, on_delete=models.PROTECT, related_name="task_publications"
+        RubricVersion, on_delete=models.PROTECT, related_name="task_publications",
+        null=True, blank=True,
     )
     title = models.CharField(max_length=180)
     description = models.TextField(blank=True, default="")
@@ -123,6 +135,7 @@ class TaskPublication(VersionedModel):
     )
     window_start = models.DateTimeField()
     window_end = models.DateTimeField()
+    score_release_at = models.DateTimeField(null=True, blank=True)
     assignment_deadline = models.DateTimeField(null=True, blank=True)
     report_required = models.BooleanField(default=True)
     review_mode = models.CharField(max_length=32, choices=ReviewMode.choices)
@@ -237,6 +250,9 @@ class PublicationTask(AppendOnlyModel):
     execution_snapshot = models.JSONField(default=dict, blank=True)
     submission_policy = models.JSONField(default=dict, blank=True)
     grading_policy = models.JSONField(default=dict, blank=True)
+    question_spec = models.JSONField(default=dict, blank=True)
+    marking_spec = models.JSONField(default=dict, blank=True)
+    max_score = models.DecimalField(max_digits=7, decimal_places=2, default=0)
 
     class Meta:
         db_table = "experiments_publication_task"

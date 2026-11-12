@@ -125,7 +125,25 @@ def _locked_task(*, task_id: str, actor: User) -> ExperimentTask:
 
 def _require_report_task(task: ExperimentTask) -> None:
     if not task.publication.report_required:
-        raise ReportStateConflict(detail={"report_required": False})
+        from apps.experiments.models import PublicationTask
+
+        if not PublicationTask.objects.filter(
+            publication_chapter__publication_id=task.publication_id, task_type="PROGRAMMING",
+        ).exists():
+            raise ReportStateConflict(detail={"report_required": False})
+
+
+def _require_report_editable(task: ExperimentTask, actor: User) -> None:
+    from apps.experiments.models import PublicationTask
+
+    if PublicationTask.objects.filter(
+        publication_chapter__publication_id=task.publication_id, task_type="PROGRAMMING",
+    ).exists():
+        from apps.experiments.assessment import _task, _writable
+
+        _writable(_task(actor, task.public_id, write=True), "PROGRAMMING")
+    elif task.status not in {ExperimentTask.Status.IN_PROGRESS, ExperimentTask.Status.REPORT_DRAFT}:
+        raise ReportStateConflict(detail={"task_status": task.status})
 
 
 def _task_scope_matches(task: ExperimentTask) -> bool:
@@ -494,8 +512,7 @@ def create_attachment_upload(
     task = _locked_task(task_id=task_id, actor=actor)
     _require_report_task(task)
     _require_task_scope(task)
-    if task.status not in {ExperimentTask.Status.IN_PROGRESS, ExperimentTask.Status.REPORT_DRAFT}:
-        raise ReportStateConflict(detail={"task_status": task.status})
+    _require_report_editable(task, actor)
     if not ReportDraft.objects.filter(
         task=task, student=actor, status=ReportDraft.Status.DRAFT
     ).exists():
@@ -567,8 +584,7 @@ def request_attachment_scan(
         raise RowVersionConflict(detail={"expected_row_version": expected_version})
     if asset.scan_status != ObjectAsset.ScanStatus.PENDING:
         raise ReportStateConflict(detail={"scan_status": asset.scan_status})
-    if task.status not in {ExperimentTask.Status.IN_PROGRESS, ExperimentTask.Status.REPORT_DRAFT}:
-        raise ReportStateConflict(detail={"task_status": task.status})
+    _require_report_editable(task, actor)
     _audit(
         context=context,
         actor=actor,
@@ -598,8 +614,9 @@ def attachment_for_user(*, task_id: str, asset_id: str, actor: User) -> ObjectAs
         )
     except (ExperimentTask.DoesNotExist, ObjectAsset.DoesNotExist) as exc:
         raise ResourceNotFound() from exc
-    if not task.publication.report_required or not _task_scope_matches(task):
+    if not _task_scope_matches(task):
         raise ResourceNotFound()
+    _require_report_task(task)
     return asset
 
 

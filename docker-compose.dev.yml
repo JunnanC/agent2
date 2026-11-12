@@ -415,6 +415,17 @@ services:
         reservations: { cpus: "0.10", memory: 128M }
         limits: { cpus: "0.50", memory: 512M }
 
+  runtime-stdio:
+    profiles: ["tools"]
+    platform: linux/amd64
+    build:
+      context: ./runtime/algorithm-workspace
+      dockerfile: Dockerfile.stdio
+    image: experimental-platform-stdio:local
+    entrypoint: ["python", "--version"]
+    network_mode: none
+    read_only: true
+
   runtime-algorithm-workspace:
     container_name: ${COMPOSE_PROJECT_NAME}-runtime-algorithm-workspace
     profiles: ["runtime"]

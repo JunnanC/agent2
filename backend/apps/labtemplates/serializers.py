@@ -61,9 +61,9 @@ class TemplatePatchSerializer(serializers.Serializer):
 
 class TemplateVersionWriteSerializer(serializers.Serializer):
     runtime_type = serializers.ChoiceField(choices=("CONTAINER", "VM"), required=False)
-    runtime_adapter_id = serializers.CharField(max_length=26, required=False)
-    image_id = serializers.CharField(max_length=26, required=False)
-    resource_profile_id = serializers.CharField(max_length=26, required=False)
+    runtime_adapter_id = serializers.CharField(max_length=26, required=False, allow_null=True)
+    image_id = serializers.CharField(max_length=26, required=False, allow_null=True)
+    resource_profile_id = serializers.CharField(max_length=26, required=False, allow_null=True)
     dependencies = serializers.ListField(child=serializers.DictField(), required=False)
     execution_spec = ExecutionSpecSerializer(required=False)
     network_policy = serializers.DictField(required=False)
@@ -131,6 +131,9 @@ class TemplateTaskWriteSerializer(serializers.Serializer):
     resource_profile_id = serializers.CharField(max_length=26, required=False, allow_null=True)
     submission_policy = serializers.DictField(required=False)
     grading_policy = serializers.DictField(required=False)
+    question_spec = serializers.DictField(required=False)
+    marking_spec = serializers.DictField(required=False)
+    max_score = serializers.DecimalField(max_digits=7, decimal_places=2, required=False)
 
 
 class ReorderWriteSerializer(serializers.Serializer):
@@ -320,6 +323,9 @@ class AutoCheckRuleDataSerializer(serializers.Serializer):
 
 
 class TemplateTaskDataSerializer(serializers.Serializer):
+    question_spec = serializers.DictField()
+    marking_spec = serializers.DictField()
+    max_score = serializers.DecimalField(max_digits=7, decimal_places=2)
     public_id = serializers.CharField()
     title = serializers.CharField()
     description = serializers.CharField()
@@ -329,7 +335,7 @@ class TemplateTaskDataSerializer(serializers.Serializer):
     status = serializers.CharField()
     execution_spec = serializers.DictField()
     resource_profile_id = serializers.CharField(allow_null=True)
-    effective_resource_profile_id = serializers.CharField()
+    effective_resource_profile_id = serializers.CharField(allow_null=True)
     submission_policy = serializers.DictField()
     grading_policy = serializers.DictField()
     row_version = serializers.IntegerField()
@@ -343,7 +349,7 @@ class TemplateChapterDataSerializer(serializers.Serializer):
     sort_order = serializers.IntegerField()
     status = serializers.CharField()
     resource_profile_id = serializers.CharField(allow_null=True)
-    effective_resource_profile_id = serializers.CharField()
+    effective_resource_profile_id = serializers.CharField(allow_null=True)
     row_version = serializers.IntegerField()
     tasks = TemplateTaskDataSerializer(many=True)
 
@@ -383,10 +389,10 @@ class TemplateVersionDataSerializer(serializers.Serializer):
     version_no = serializers.IntegerField()
     status = serializers.ChoiceField(choices=TemplateVersion.Status.choices)
     runtime_type = serializers.CharField()
-    runtime_adapter_id = serializers.CharField()
-    image_id = serializers.CharField()
+    runtime_adapter_id = serializers.CharField(allow_null=True)
+    image_id = serializers.CharField(allow_null=True)
     image_digest = serializers.CharField()
-    resource_profile_id = serializers.CharField()
+    resource_profile_id = serializers.CharField(allow_null=True)
     dependencies = serializers.ListField(child=serializers.DictField())
     execution_spec = serializers.DictField()
     network_policy = serializers.DictField()
@@ -506,11 +512,14 @@ def task_data(item: TemplateTask, version: TemplateVersion) -> dict[str, object]
         "description": item.description,
         "instructions": item.instructions,
         "task_type": item.task_type,
+        "question_spec": item.question_spec,
+        "marking_spec": item.marking_spec,
+        "max_score": str(item.max_score),
         "sort_order": item.sort_order,
         "status": item.status,
         "execution_spec": item.execution_spec,
         "resource_profile_id": item.resource_profile.public_id if item.resource_profile else None,
-        "effective_resource_profile_id": profile.public_id,
+        "effective_resource_profile_id": profile.public_id if profile else None,
         "submission_policy": item.submission_policy,
         "grading_policy": item.grading_policy,
         "row_version": item.row_version,
@@ -527,9 +536,12 @@ def chapter_data(item: TemplateChapter, version: TemplateVersion) -> dict[str, o
         "sort_order": item.sort_order,
         "status": item.status,
         "resource_profile_id": item.resource_profile.public_id if item.resource_profile else None,
-        "effective_resource_profile_id": profile.public_id,
+        "effective_resource_profile_id": profile.public_id if profile else None,
         "row_version": item.row_version,
-        "tasks": [task_data(task, version) for task in item.tasks.all().order_by("sort_order")],
+        "tasks": [
+            task_data(task, version)
+            for task in item.tasks.filter(active=True).order_by("sort_order")
+        ],
     }
 
 
@@ -542,13 +554,16 @@ def version_data(item: TemplateVersion) -> dict[str, object]:
             "description": task.description,
             "instructions": task.instructions,
             "task_type": task.task_type,
+            "question_spec": task.question_spec,
+            "marking_spec": task.marking_spec,
+            "max_score": str(task.max_score),
             "sort_order": task.sort_order,
             "status": task.status,
             "execution_spec": task.execution_spec,
             "resource_profile_id": task.resource_profile.public_id
             if task.resource_profile
             else None,
-            "effective_resource_profile_id": profile.public_id,
+            "effective_resource_profile_id": profile.public_id if profile else None,
             "submission_policy": task.submission_policy,
             "grading_policy": task.grading_policy,
             "row_version": task.row_version,
@@ -566,9 +581,12 @@ def version_data(item: TemplateVersion) -> dict[str, object]:
             "resource_profile_id": chapter.resource_profile.public_id
             if chapter.resource_profile
             else None,
-            "effective_resource_profile_id": profile.public_id,
+            "effective_resource_profile_id": profile.public_id if profile else None,
             "row_version": chapter.row_version,
-            "tasks": [task_value(task) for task in chapter.tasks.all().order_by("sort_order")],
+            "tasks": [
+                task_value(task)
+                for task in chapter.tasks.filter(active=True).order_by("sort_order")
+            ],
         }
 
     return {
@@ -577,10 +595,10 @@ def version_data(item: TemplateVersion) -> dict[str, object]:
         "version_no": item.version_no,
         "status": item.status,
         "runtime_type": item.runtime_type,
-        "runtime_adapter_id": item.runtime_adapter.public_id,
-        "image_id": item.image.public_id,
-        "image_digest": item.image.digest,
-        "resource_profile_id": item.resource_profile.public_id,
+        "runtime_adapter_id": item.runtime_adapter.public_id if item.runtime_adapter else None,
+        "image_id": item.image.public_id if item.image else None,
+        "image_digest": item.image.digest if item.image else "",
+        "resource_profile_id": item.resource_profile.public_id if item.resource_profile else None,
         "dependencies": item.dependencies,
         "execution_spec": item.execution_spec,
         "network_policy": item.network_policy,

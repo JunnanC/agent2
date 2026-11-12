@@ -31,7 +31,7 @@ it("saves the selected runtime adapter together with image and resource profile"
   fireEvent.click(screen.getByRole("radio", { name: /小规格/ }));
   fireEvent.click(screen.getByRole("button", { name: "保存运行环境" }));
   await waitFor(() => expect(teachingApi.updateTemplateVersion).toHaveBeenCalledWith("course-1", "version-1", {
-    runtime_adapter_id: "adapter-2", image_id: "image-2", resource_profile_id: "profile-2",
+    runtime_adapter_id: "adapter-2", runtime_type: "CONTAINER", image_id: "image-2", resource_profile_id: "profile-2",
   }, "5"));
   client.clear();
 });

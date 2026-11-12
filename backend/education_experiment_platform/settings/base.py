@@ -233,6 +233,8 @@ CELERY_TASK_DEFAULT_QUEUE = "q_default"
 CELERY_WORKER_PREFETCH_MULTIPLIER = 1
 CELERY_WORKER_HIJACK_ROOT_LOGGER = False
 CELERY_TASK_ROUTES = {
+    "apps.experiments.run_assessment_job": {"queue": "q_provision"},
+    "apps.experiments.cleanup_assessment_resources": {"queue": "q_provision"},
     "apps.provisioning.*": {"queue": "q_provision"},
     "apps.core.relay_outbox": {"queue": "q_relay"},
     "apps.governance.probe_runtime_adapters": {"queue": "q_provision"},
@@ -258,6 +260,22 @@ CELERY_TASK_ROUTES = {
 }
 NOTIFICATION_DEADLINE_REMINDER_HOURS = int(env("NOTIFICATION_DEADLINE_REMINDER_HOURS", "24"))
 CELERY_BEAT_SCHEDULE = {
+    "cleanup-assessment-objects": {
+        "task": "apps.experiments.cleanup_assessment_objects",
+        "schedule": 3600.0,
+    },
+    "archive-closed-assessments": {
+        "task": "apps.experiments.archive_closed_assessments",
+        "schedule": 60.0,
+    },
+    "cleanup-assessment-resources": {
+        "task": "apps.experiments.cleanup_assessment_resources",
+        "schedule": 60.0,
+    },
+    "dispatch-assessments": {
+        "task": "apps.experiments.dispatch_assessments",
+        "schedule": 5.0,
+    },
     "remind-unfinished-experiments": {
         "task": "apps.notifications.remind_unfinished_experiments",
         "schedule": 60.0,

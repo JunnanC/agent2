@@ -63,15 +63,20 @@ class TemplateVersion(VersionedModel):
     template = models.ForeignKey(Template, on_delete=models.PROTECT, related_name="versions")
     version_no = models.PositiveIntegerField()
     status = models.CharField(max_length=24, choices=Status.choices, default=Status.DRAFT)
-    runtime_type = models.CharField(max_length=16, choices=RuntimeAdapter.RuntimeType.choices)
+    runtime_type = models.CharField(
+        max_length=16, choices=RuntimeAdapter.RuntimeType.choices, blank=True, default="",
+    )
     runtime_adapter = models.ForeignKey(
-        RuntimeAdapter, on_delete=models.PROTECT, related_name="template_versions"
+        RuntimeAdapter, on_delete=models.PROTECT, related_name="template_versions",
+        null=True, blank=True,
     )
     image = models.ForeignKey(
-        ImageAsset, on_delete=models.PROTECT, related_name="template_versions"
+        ImageAsset, on_delete=models.PROTECT, related_name="template_versions",
+        null=True, blank=True,
     )
     resource_profile = models.ForeignKey(
-        ResourceProfile, on_delete=models.PROTECT, related_name="template_versions"
+        ResourceProfile, on_delete=models.PROTECT, related_name="template_versions",
+        null=True, blank=True,
     )
     dependencies = models.JSONField(default=list)
     execution_spec = models.JSONField(default=dict)
@@ -250,6 +255,10 @@ class TemplateTask(VersionedModel):
     )
     submission_policy = models.JSONField(default=dict)
     grading_policy = models.JSONField(default=dict)
+    question_spec = models.JSONField(default=dict, blank=True)
+    marking_spec = models.JSONField(default=dict, blank=True)
+    max_score = models.DecimalField(max_digits=7, decimal_places=2, default=0)
+    active = models.BooleanField(default=True)
 
     class Meta:
         db_table = "labtemplates_template_task"

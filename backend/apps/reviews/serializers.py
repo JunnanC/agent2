@@ -671,7 +671,7 @@ def review_result_data(values: list[Review]) -> dict[str, Any]:
     return {
         "task_id": latest.task.public_id,
         "task_status": latest.task.status,
-        "effective_score": task_grades([latest.task])[latest.task.pk]["score"],
+        "effective_score": task_grades([latest.task], student=True)[latest.task.pk]["score"],
         "rounds": rounds,
         "allowed_actions": allowed_actions,
     }

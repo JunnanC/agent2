@@ -17,6 +17,7 @@ import type {
 } from "./types";
 
 export * from "./types";
+export * from "./assessment";
 
 function normalizeTask(raw: Partial<Task>): Task {
   const base = ({ ...raw } as unknown) as Task;

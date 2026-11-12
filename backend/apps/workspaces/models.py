@@ -89,7 +89,11 @@ class WorkspaceSnapshot(AppendOnlyModel):
         ExperimentTask, on_delete=models.PROTECT, related_name="workspace_snapshots"
     )
     session = models.ForeignKey(
-        WorkspaceSession, on_delete=models.PROTECT, related_name="snapshots"
+        WorkspaceSession, on_delete=models.PROTECT, related_name="snapshots", null=True, blank=True,
+    )
+    question = models.ForeignKey(
+        "experiments.PublicationTask", on_delete=models.PROTECT, null=True, blank=True,
+        related_name="code_snapshots",
     )
     asset = models.ForeignKey(
         ObjectAsset, on_delete=models.PROTECT, related_name="workspace_snapshots"

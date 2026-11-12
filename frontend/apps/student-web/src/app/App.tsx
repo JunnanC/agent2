@@ -44,6 +44,7 @@ export function App(): JSX.Element {
             </Route>
             <Route element={<AuthGuard fullscreen />}>
               <Route path="/experiments/:taskId/workbench" element={<Workbench />} />
+              <Route path="/experiments/:taskId/assessment" element={<AssessmentWorkbench />} />
             </Route>
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
@@ -73,3 +74,4 @@ export function FullPageLoading(): JSX.Element {
     </div>
   );
 }
+import { AssessmentWorkbench } from "@/pages/assessment";

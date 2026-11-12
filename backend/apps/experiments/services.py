@@ -245,6 +245,54 @@ def _ready_image_snapshot(template: TemplateVersion) -> dict[str, Any]:
 
 
 def _content_snapshot(template: TemplateVersion) -> dict[str, Any]:
+    from apps.labtemplates.questions import assessment_snapshot
+    from apps.labtemplates.services import _digest
+
+    assessment = assessment_snapshot(template)
+    if assessment is not None:
+        if _digest(assessment) != template.spec_digest:
+            raise PublicationValidationError(detail={"template": "precheck_digest_mismatch"})
+        has_programming = any(q["task_type"] == "PROGRAMMING" for q in assessment["questions"])
+        image = _ready_image_snapshot(template) if has_programming else {
+            "image": None, "registry": "", "repository": "", "digest": "",
+        }
+        profile = _resource_snapshot(
+            template.resource_profile, runtime_type=template.runtime_type,
+            source_id=template.public_id,
+        ) if has_programming else {}
+        return {
+            "chapters": [{
+                "source_chapter_id": chapter["id"], "title": chapter["title"],
+                "description": chapter["description"],
+                "learning_objectives": chapter["learning_objectives"],
+                "sort_order": chapter["sort_order"], "resource_profile_snapshot": {},
+                "tasks": [{
+                    "source_task_id": question["id"], "title": question["title"],
+                    "description": question["description"],
+                    "instructions": question["instructions"], "task_type": question["task_type"],
+                    "sort_order": question["sort_order"],
+                    "image_digest": (
+                        image["digest"] if question["task_type"] == "PROGRAMMING" else ""
+                    ),
+                    "resource_profile_snapshot": profile,
+                    "execution_snapshot": {
+                        "tests_digest": question.get("tests_digest", ""),
+                    },
+                    "submission_policy": {}, "grading_policy": {},
+                    "question_spec": question["question_spec"],
+                    "marking_spec": question["marking_spec"], "max_score": question["max_score"],
+                } for question in assessment["questions"]
+                    if question["chapter_id"] == chapter["id"]],
+            } for chapter in assessment["chapters"]],
+            "template_digest": _json_digest(assessment),
+            "template_spec_digest": template.spec_digest, "execution_spec": {},
+            "runtime_adapter": template.runtime_adapter if has_programming else None,
+            "runtime_adapter_driver": template.runtime_adapter.driver if has_programming else "",
+            "runtime_adapter_config_ref": (
+                template.runtime_adapter.config_ref if has_programming else ""
+            ),
+            "resource_profile": profile, "image": image,
+        }
     all_chapters = list(
         TemplateChapter.objects.filter(template_version=template)
         .select_related("resource_profile")
@@ -330,6 +378,9 @@ def _content_snapshot(template: TemplateVersion) -> dict[str, Any]:
                 "description": task.description,
                 "instructions": task.instructions,
                 "task_type": task.task_type,
+                "question_spec": dict(task.question_spec),
+                "marking_spec": dict(task.marking_spec),
+                "max_score": str(task.max_score),
                 "sort_order": task.sort_order,
                 "image_digest": image_snapshot["digest"],
                 "resource_profile_snapshot": resource_snapshot,
@@ -419,6 +470,17 @@ def _runtime_snapshot(
     template: TemplateVersion, content: dict[str, Any] | None = None
 ) -> dict[str, Any]:
     """Capture mutable runtime inputs when a publication is frozen."""
+
+    if template.runtime_adapter_id is None or (
+        content is not None and content["runtime_adapter"] is None
+    ):
+        return {
+            "template_spec_digest": template.spec_digest, "execution_spec": {},
+            "runtime_adapter": None, "runtime_adapter_driver": "",
+            "runtime_adapter_config_ref": "", "image": None, "image_registry": "",
+            "image_repository": "", "image_digest": "", "resource_profile": None,
+            "resource_profile_snapshot": {},
+        }
 
     adapter = template.runtime_adapter
     image = content["image"]["image"] if content is not None else template.image
@@ -600,6 +662,10 @@ def _validate_dependencies(*, publication: TaskPublication) -> None:
     if template.status != TemplateVersion.Status.PUBLISHED or not template.spec_digest:
         raise PublicationValidationError(detail={"template_version_status": template.status})
     rubric = publication.rubric_version
+    if rubric is None:
+        if publication.report_required:
+            raise PublicationValidationError(detail={"rubric_version_id": "report_rubric_required"})
+        return
     if rubric.rubric.course_id != publication.course_id:
         raise PublicationValidationError(detail={"rubric_version_id": rubric.public_id})
     if rubric.status != RubricVersion.Status.PUBLISHED:
@@ -623,12 +689,15 @@ def create_publication(
         template = TemplateVersion.objects.select_related("template").get(
             public_id=data["template_version_id"]
         )
-        rubric = RubricVersion.objects.select_related("rubric").get(
-            public_id=data["rubric_version_id"]
+        rubric = (
+            RubricVersion.objects.select_related("rubric").get(public_id=data["rubric_version_id"])
+            if data.get("rubric_version_id") else None
         )
     except (TemplateVersion.DoesNotExist, RubricVersion.DoesNotExist) as exc:
         raise ResourceNotFound() from exc
-    if template.template.course_id != course.pk or rubric.rubric.course_id != course.pk:
+    if template.template.course_id != course.pk or (
+        rubric is not None and rubric.rubric.course_id != course.pk
+    ):
         raise PublicationValidationError(detail={"reason": "CROSS_COURSE_REFERENCE"})
     publication = TaskPublication.objects.create(
         course=course,
@@ -642,6 +711,7 @@ def create_publication(
         ),
         window_start=data["window_start"],
         window_end=data["window_end"],
+        score_release_at=data.get("score_release_at"),
         assignment_deadline=data.get("assignment_deadline"),
         report_required=bool(data.get("report_required", True)),
         review_mode=data["review_mode"],
@@ -699,6 +769,7 @@ def update_publication(
             "late_enrollment_policy",
             "window_start",
             "window_end",
+            "score_release_at",
             "assignment_deadline",
             "report_required",
             "review_mode",
@@ -725,6 +796,9 @@ def update_publication(
     candidate_start = changes.get("window_start", publication.window_start)
     candidate_end = changes.get("window_end", publication.window_end)
     candidate_deadline = changes.get("assignment_deadline", publication.assignment_deadline)
+    release = changes.get("score_release_at", publication.score_release_at)
+    if release is not None and release < candidate_end:
+        raise PublicationValidationError(detail={"score_release_at": "before_deadline"})
     if candidate_end <= candidate_start:
         raise PublicationValidationError(detail={"reason": "INVALID_WINDOW"})
     if candidate_deadline is not None and candidate_deadline > candidate_end:
@@ -957,6 +1031,9 @@ def _copy_publication_snapshots(
                 description=task_snapshot["description"],
                 instructions=task_snapshot["instructions"],
                 task_type=task_snapshot["task_type"],
+                question_spec=task_snapshot["question_spec"],
+                marking_spec=task_snapshot["marking_spec"],
+                max_score=task_snapshot["max_score"],
                 sort_order=task_snapshot["sort_order"],
                 image_digest=task_snapshot["image_digest"],
                 resource_profile_snapshot=task_snapshot["resource_profile_snapshot"],
@@ -1073,7 +1150,11 @@ def publish_publication(
         before={"status": publication.status},
         after={"status": next_status, "audience_count": len(enrollments)},
     )
-    if getattr(settings, "AUTO_PROVISION_ON_ASSIGNMENT", True):
+    if (
+        published.runtime_adapter_id and getattr(settings, "AUTO_PROVISION_ON_ASSIGNMENT", True)
+        and not any(task["task_type"] in {"PROGRAMMING", "SINGLE_CHOICE", "MULTIPLE_CHOICE"}
+                    for chapter in content["chapters"] for task in chapter["tasks"])
+    ):
         from apps.provisioning.tasks import warmup_publication_image_task
 
         transaction.on_commit(
@@ -1159,7 +1240,7 @@ def create_retake_publication(
         actor=actor,
         data={
             "template_version_id": source.template_version.public_id,
-            "rubric_version_id": source.rubric_version.public_id,
+            "rubric_version_id": source.rubric_version.public_id if source.rubric_version else None,
             "title": source.title,
             "description": source.description,
             "audience_mode": TaskPublication.AudienceMode.SELECTED,
@@ -1948,7 +2029,7 @@ def student_learning_history(*, actor: User) -> dict[str, Any]:
         "review"
     ).order_by("review__task_id", "-review__round_no"):
         latest_decisions.setdefault(decision.review.task_id, decision)
-    grades = task_grades(tasks)
+    grades = task_grades(tasks, student=True)
     tasks_by_enrollment: dict[int, list[ExperimentTask]] = {}
     for task in tasks:
         tasks_by_enrollment.setdefault(task.enrollment_id, []).append(task)
