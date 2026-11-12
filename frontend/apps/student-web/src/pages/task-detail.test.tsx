@@ -65,6 +65,19 @@ describe("TaskDetail 渲染", () => {
     expect(screen.getAllByText("进行中").length).toBeGreaterThan(0);
   });
 
+  it("新实验只提供轻量入口，不请求旧评审或提供容器启动操作", async () => {
+    (taskApi.detail as unknown as Mock).mockResolvedValue({
+      ...taskFixture, assessment_available: true, allowed_actions: ["start", "enter", "retry"],
+    });
+    renderTaskDetail();
+    expect(await screen.findByRole("link", { name: "进入实验答题" }))
+      .toHaveAttribute("href", "/experiments/task-1/assessment");
+    expect(screen.queryByRole("button", { name: "进入实验工作台" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "重试任务" })).not.toBeInTheDocument();
+    expect(reportApi.reviewResult).not.toHaveBeenCalled();
+    expect(taskApi.provisioningJob).not.toHaveBeenCalled();
+  });
+
   it("进行中且无评审记录时不显示正在评审", async () => {
     (reportApi.reviewResult as unknown as Mock).mockRejectedValue(new ApiError({
       status: 404, url: "/review-result", method: "GET", kind: "validation",

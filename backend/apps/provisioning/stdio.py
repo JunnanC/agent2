@@ -9,6 +9,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
+from docker.errors import NotFound
+
 OUTPUT_LIMIT = 65536
 SOURCE_LIMIT = 20 * 1024 * 1024
 TOOLCHAIN_SMOKE = {
@@ -255,16 +257,24 @@ class StdioExecutor:
     def close(self) -> None:
         """Leave failed removals visible to the caller for durable cleanup/retry."""
         errors = []
-        for container in reversed(self.containers):
+        for container in self.containers[::-1]:
             try:
                 container.remove(force=True)
+            except NotFound:
+                pass
             except Exception as exc:
                 errors.append(exc)
-        for volume in reversed(self.volumes):
+                continue
+            self.containers.remove(container)
+        for volume in self.volumes[::-1]:
             try:
                 volume.remove(force=True)
+            except NotFound:
+                pass
             except Exception as exc:
                 errors.append(exc)
+                continue
+            self.volumes.remove(volume)
         if errors:
             raise RuntimeError("Assessment resource cleanup requires retry") from errors[0]
 

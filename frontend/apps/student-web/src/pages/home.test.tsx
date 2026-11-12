@@ -40,10 +40,17 @@ function show(rows: Task[]) {
     <Route path="/" element={<Home />} />
     <Route path="/experiments/:id" element={<div>任务详情页面</div>} />
     <Route path="/experiments/:id/workbench" element={<div>任务工作台页面</div>} />
+    <Route path="/experiments/:id/assessment" element={<div>轻量答题页面</div>} />
   </Routes></MemoryRouter></QueryClientProvider>);
 }
 
 const taskButtons = () => screen.getAllByRole("button", { name: /10日任务/ });
+
+it("新实验从日历进入轻量答题，不进入旧工作台", async () => {
+  show(tasks(1).map(task => ({ ...task, assessment_available: true, allowed_actions: ["enter"] })));
+  fireEvent.click(await screen.findByRole("button", { name: /10日任务1/ }));
+  expect(await screen.findByText("轻量答题页面")).toBeInTheDocument();
+});
 
 it("7 项任务分为 3、3、1 项，保留总数并禁用首尾翻页", async () => {
   show(tasks(7));

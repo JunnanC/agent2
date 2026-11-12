@@ -1,9 +1,16 @@
 import io
 import tarfile
+from unittest.mock import Mock
 
 import pytest
+from docker.errors import NotFound
 
-from apps.provisioning.stdio import compile_plan, source_archive, stdio_outputs_match
+from apps.provisioning.stdio import (
+    StdioExecutor,
+    compile_plan,
+    source_archive,
+    stdio_outputs_match,
+)
 
 
 @pytest.mark.parametrize(("actual", "expected", "matches"), [
@@ -33,3 +40,23 @@ def test_staged_files_have_no_write_permissions_and_no_embedded_test_runner() ->
     with tarfile.open(fileobj=io.BytesIO(content)) as archive:
         assert {item.name for item in archive if item.isfile()} == {"main.py", "lib/helper.py"}
         assert all(item.mode & 0o222 == 0 for item in archive)
+
+
+def test_cleanup_retries_only_failed_resources_and_tolerates_external_removal() -> None:
+    executor = StdioExecutor(Mock(), "stdio-image", owner="cleanup-test")
+    removed, failed, swept, volume = Mock(), Mock(), Mock(), Mock()
+    failed.remove.side_effect = [RuntimeError("engine unavailable"), None]
+    swept.remove.side_effect = NotFound("already swept")
+    executor.containers = [removed, failed, swept]
+    executor.volumes = [volume]
+    with pytest.raises(RuntimeError, match="cleanup requires retry"):
+        executor.close()
+    assert executor.containers == [failed]
+    assert executor.volumes == []
+    executor.close()
+    executor.close()
+    assert executor.containers == []
+    assert failed.remove.call_count == 2
+    removed.remove.assert_called_once_with(force=True)
+    swept.remove.assert_called_once_with(force=True)
+    volume.remove.assert_called_once_with(force=True)

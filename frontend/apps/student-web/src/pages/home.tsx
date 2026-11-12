@@ -89,9 +89,11 @@ export function Home() {
           subtitle: `完成度 ${task.progress}% · 截止 ${formatDate(deadline)}`,
           statusLabel: taskStatusLabel(task.status),
           statusTone: taskStatusTone(task.status),
-          onClick: () => navigate(task.allowed_actions.includes("enter") || task.allowed_actions.includes("view_workbench")
-            ? `/experiments/${task.public_id}/workbench`
-            : `/experiments/${task.public_id}`),
+          onClick: () => navigate(task.assessment_available
+            ? `/experiments/${task.public_id}/assessment`
+            : task.allowed_actions.includes("enter") || task.allowed_actions.includes("view_workbench")
+              ? `/experiments/${task.public_id}/workbench`
+              : `/experiments/${task.public_id}`),
         });
         cursor.setDate(cursor.getDate() + 1);
       }

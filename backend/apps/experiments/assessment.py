@@ -46,8 +46,10 @@ def _task(actor: User, task_id: str, *, write: bool = False) -> ExperimentTask:
     if timezone.now() < task.publication.window_start:
         raise StateConflict(detail={"window": "not_started"})
     if write:
+        # Publication lifecycle operations also lock publication before student tasks.
+        publication = TaskPublication.objects.select_for_update().get(pk=task.publication_id)
         task = ExperimentTask.objects.select_for_update().get(pk=task.pk)
-        task.publication = TaskPublication.objects.select_for_update().get(pk=task.publication_id)
+        task.publication = publication
         if task.publication.status != TaskPublication.Status.PUBLISHED:
             raise StateConflict(detail={"publication": "not_open"})
         if task.status in {

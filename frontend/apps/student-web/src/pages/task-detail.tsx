@@ -37,7 +37,7 @@ export function TaskDetail() {
     queryKey: keys.task(taskId), queryFn: () => taskApi.detail(taskId),
     refetchInterval: (query) => query.state.data?.status === "PROVISIONING" ? 2000 : false,
   });
-  const hasReview = ["SUBMITTED", "UNDER_REVIEW", "APPROVED", "REJECTED", "REPORT_DRAFT", "IN_PROGRESS", "ARCHIVING", "DESTROYING", "COMPLETED"].includes(task.data?.status ?? "");
+  const hasReview = !task.data?.assessment_available && ["SUBMITTED", "UNDER_REVIEW", "APPROVED", "REJECTED", "REPORT_DRAFT", "IN_PROGRESS", "ARCHIVING", "DESTROYING", "COMPLETED"].includes(task.data?.status ?? "");
   const reviewResult = useQuery({
     queryKey: keys.reviewResult(taskId), queryFn: () => reportApi.reviewResult(taskId), enabled: hasReview, retry: false,
   });
@@ -229,7 +229,7 @@ export function TaskDetail() {
         ) : null}
         <div className="section actions" style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
           {current.allowed_actions
-            .filter((action) => !["enter", "extension", "request_extension"].includes(action))
+            .filter((action) => !current.assessment_available && !["enter", "extension", "request_extension"].includes(action))
             .map((action) => (
               <Button key={action}
                 variant={action === "start" || action === "retry" ? "primary" : "default"}
