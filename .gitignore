@@ -107,6 +107,7 @@ Thumbs.db
 .superpowers/
 .tmp/
 .codex-local.patch
+specs/
 
 # Root-level API/browser probe dumps and QA screenshots
 /*.json

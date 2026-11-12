@@ -17,19 +17,15 @@
 
 ## 二、本地启动
 
-先按[根 README](../../README.md)启动 8080 后端入口。Docker 热更新方式从仓库根目录执行：
+先按[根 README](../../README.md)启动 8080 后端入口。前端在 `frontend/` 安装依赖后运行对应应用的 Vite 开发服务器：
 
 ```powershell
-.\scripts\frontend-dev-up.ps1 -SkipBackend
+cd frontend
+npm ci --ignore-scripts
+npm run dev:student   # 教师端 dev:teacher，管理端 dev:admin
 ```
 
-学生、教师、管理入口分别为 `http://student.localhost:8081`、`http://teacher.localhost:8082`、`http://admin.localhost:8083`。源码以只读卷挂载，依赖卷单独管理。
-
-已有标准 Compose 后端时使用 `-SkipBackend`；省略该参数会按 `.env` 选择的 Compose 配置和 `runtime` profile 构建并启动标准后端。脚本的端口检查要求与实际映射一致；不要仅修改访问 URL。
-
-主机安装 Node.js 24 时，也可在 `frontend/` 执行 `npm ci --ignore-scripts`，分别运行 `npm run dev:student`、`npm run dev:teacher`、`npm run dev:admin`。主机模式的管理端端口以该应用的 dev script 为准，不等同于 Docker 的 5176 映射。
-
-Vite 代理 `/api`、`/files`、`/workspace`，按对应门户 Host 和后端 Origin 转发；工作区启用 WebSocket。后端目标由 `VITE_DEV_API_TARGET` 指定，Docker 开发配置使用 `host.docker.internal:8080`。
+开发端口以各应用 `vite.config.ts` 为准；管理端、教师端和学生端代理分别以对应门户 Host 转发。Vite 代理 `/api`、`/files`，后端目标由 `VITE_DEV_API_TARGET` 指定，默认 `http://127.0.0.1:8080`。修改源码由 Vite 热更新，部署构建仍由 Nginx 在 `:8080` 提供。
 
 ## 三、请求与权限
 
@@ -60,9 +56,9 @@ npm run build
 npx tsc -p e2e/tsconfig.json --noEmit
 ```
 
-当前五份浏览器用例为 `admin-smoke`、`teacher-smoke`、`student-workbench`、`analytics-notifications` 和 `real-workspace`。执行配置见 [playwright.config.ts](../../frontend/playwright.config.ts)。
+当前六份浏览器用例为 `admin-console`、`admin-smoke`、`teacher-smoke`、`assessment`、`assessment-teacher` 和 `analytics-notifications`。执行配置见 [playwright.config.ts](../../frontend/playwright.config.ts)。
 
-浏览器测试需要可访问服务和对应数据；部分冒烟用例在缺少账号环境变量时会跳过。真实工作区流程需要任务、登录凭据及运行时，优先使用[集成脚本](../../scripts/verify/real-workspace-integration.ps1)。用例存在、类型检查通过或部分跳过都不等于完整业务验收。
+浏览器测试需要可访问服务和对应数据；部分冒烟用例在缺少账号环境变量时会跳过。真实工作区流程需要任务、登录凭据及运行时，按[轻量答题验收](../开发指南/轻量答题验收.md)执行。用例存在、类型检查通过或部分跳过都不等于完整业务验收。
 
 ## 六、构建与契约更新
 
