@@ -1,5 +1,5 @@
 // @ts-expect-error Test the TypeScript source even when a stale emitted index.js exists.
-import { reportApi, taskApi, workspaceApi, teachingApi } from "./index.ts";
+import { reportApi, taskApi, teachingApi } from "./index.ts";
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 
 function jsonResponse(status: number, body: unknown, headers?: Record<string, string>): Response {
@@ -66,49 +66,6 @@ describe("task 数据边界规范化", () => {
     expect(new Headers(init.headers).get("Idempotency-Key")).toBeTruthy();
   });
 
-  it("editor control checks the raw bridge response and sends CSRF and session identity", async () => {
-    document.cookie = "csrftoken=bridge-csrf; Path=/";
-    const fetchMock = vi.fn(async (_input: string | URL, init?: RequestInit) => {
-      const body = JSON.parse(String(init?.body));
-      return jsonResponse(200, { ...body, schema_version: 1, dirty_files: [], saved: true });
-    });
-    vi.stubGlobal("fetch", fetchMock);
-    await workspaceApi.editorControl("session-1", "save", "ticket");
-    const [url, init] = fetchMock.mock.calls[0]!;
-    expect(url).toBe("/workspace/session-1/webide/edu-control/save");
-    const headers = new Headers(init?.headers);
-    expect(headers.get("X-CSRFToken")).toBe("bridge-csrf");
-    expect(headers.get("X-Workspace-Token")).toBe("ticket");
-    expect(init?.credentials).toBe("include");
-    expect(JSON.parse(String(init?.body)).session_id).toBe("session-1");
-  });
-
-  it("rejects a bridge response from another session or with dirty buffers", async () => {
-    document.cookie = "csrftoken=bridge-csrf; Path=/";
-    for (const extra of [{ session_id: "other-session" }, { dirty_files: ["unsaved.py"] }]) {
-      vi.stubGlobal("fetch", vi.fn(async (_input: string | URL, init?: RequestInit) =>
-        jsonResponse(200, { ...JSON.parse(String(init?.body)), schema_version: 1, dirty_files: [], saved: true, ...extra })));
-      await expect(workspaceApi.editorControl("session-1", "save", "ticket")).rejects.toThrow("编辑器仍有未保存文件");
-    }
-  });
-
-  it("retries save during a brief extension reload but never retries authentication failures", async () => {
-    vi.useFakeTimers();
-    document.cookie = "csrftoken=bridge-csrf; Path=/";
-    const fetchMock = vi.fn(async (_input: string | URL, init?: RequestInit) =>
-      jsonResponse(200, { ...JSON.parse(String(init?.body)), schema_version: 1, dirty_files: [], saved: true }))
-      .mockResolvedValueOnce(jsonResponse(502, {}));
-    vi.stubGlobal("fetch", fetchMock);
-    const saving = workspaceApi.editorControl("session-1", "save", "ticket");
-    await vi.advanceTimersByTimeAsync(1000);
-    await saving;
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(fetchMock.mock.calls[0]?.[1]?.body).toBe(fetchMock.mock.calls[1]?.[1]?.body);
-    fetchMock.mockClear().mockResolvedValueOnce(jsonResponse(401, {}));
-    await expect(workspaceApi.editorControl("session-1", "save", "ticket")).rejects.toThrow("编辑器保存失败");
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-  });
-
   it("字段缺失时不抛错（空数组保底）", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => jsonResponse(200, { ...okEnvelope, data: { public_id: "t2" } })));
     const task = await taskApi.detail("t2");
@@ -124,65 +81,6 @@ describe("task 数据边界规范化", () => {
     const list = await taskApi.list({});
     expect(list.rows[0]?.row_version).toBe("9");
     expect(list.rows[0]?.allowed_actions).toEqual(["start"]);
-  });
-
-  it("checkpoints 的 { items: [...] } 包装返回也能转成列表", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse(200, {
-      data: { items: [{ public_id: "cp-1", task_id: "t-1" }], current_version: 0, row_version: 1 },
-      meta: { trace_id: "t1" },
-    })));
-    const list = await workspaceApi.checkpoints("t-1", "tok");
-    expect(list.rows).toHaveLength(1);
-    expect(list.currentVersion).toBe(0);
-    expect(list.sessionRowVersion).toBe(1);
-  });
-
-  it("工作区运行请求会携带 X-Workspace-Token 头", async () => {
-    const fetchMock = vi.fn(async (input: string | URL, init?: RequestInit) => {
-      void input;
-      void init;
-      return jsonResponse(200, { ...okEnvelope, data: { public_id: "r-1", status: "PASSED" } });
-    });
-    vi.stubGlobal("fetch", fetchMock);
-    await workspaceApi.createExecutionRun("t-1", {}, "ws-token");
-    const postCall = fetchMock.mock.calls.find(([, init]) => (init as RequestInit)?.method === "POST");
-    expect(postCall).toBeTruthy();
-    const headers = new Headers((postCall as [string | URL, RequestInit])[1].headers as HeadersInit);
-    expect(headers.get("X-Workspace-Token")).toBe("ws-token");
-    expect(headers.get("Idempotency-Key")).toBeTruthy();
-  });
-
-  it("等待快照任务完成，并携带会话版本与工作区令牌", async () => {
-    vi.useFakeTimers();
-    let reads = 0;
-    const fetchMock = vi.fn(async (input: string | URL, init?: RequestInit) => {
-      const url = String(input);
-      const data = url.endsWith("/checkpoints")
-        ? { items: [], current_version: 2, row_version: 7 }
-        : init?.method === "POST"
-          ? { public_id: "capture-1", status: "QUEUED", result_snapshot_id: null }
-          : { public_id: "capture-1", status: ++reads === 1 ? "RUNNING" : "PASSED", result_snapshot_id: reads === 1 ? null : "snapshot-3" };
-      return jsonResponse(200, { ...okEnvelope, data });
-    });
-    vi.stubGlobal("fetch", fetchMock);
-    const capturing = workspaceApi.captureSnapshot("t-1", "token");
-    await vi.runAllTimersAsync();
-    expect((await capturing).result_snapshot_id).toBe("snapshot-3");
-    expect(reads).toBe(2);
-    const [, init] = fetchMock.mock.calls.find(([, options]) => options?.method === "POST")!;
-    expect(new Headers(init?.headers).get("If-Match")).toBe('"7"');
-    expect(new Headers(init?.headers).get("X-Workspace-Token")).toBe("token");
-    expect(JSON.parse(init?.body as string)).toMatchObject({ kind: "CAPTURE", base_version: 2 });
-  });
-
-  it("判题资源可运行时不依赖公开用例的数量", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse(200, {
-      ...okEnvelope,
-      data: { task: { public_id: "t-1" }, tests: { runnable: true, summary: [] } },
-    })));
-    const data = await workspaceApi.workbench("t-1");
-    expect(data.tests_available).toBe(true);
-    expect(data.tests).toEqual([]);
   });
 
   it("从最新已决策评审轮次读取成绩，保留零分", async () => {

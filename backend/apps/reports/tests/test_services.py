@@ -449,63 +449,6 @@ class ReportServiceTests(TestCase):
         updated.refresh_from_db()
         self.assertEqual(updated.body_markdown, "# Draft 1")
 
-    def test_draft_api_returns_412_for_stale_if_match(self) -> None:
-        client, csrf = self._student_client()
-        draft = ReportDraft.objects.get(task=self.task)
-        url = f"/api/v2/tasks/{self.task.public_id}/report-draft"
-        headers = {
-            "HTTP_X_CSRFTOKEN": csrf,
-            "HTTP_X_PORTAL": "USER",
-            "HTTP_IDEMPOTENCY_KEY": "report-draft-write-1",
-            "HTTP_IF_MATCH": f'"{draft.row_version}"',
-            "HTTP_X_PROXY_CONTEXT": "ingress-v1",
-            "REMOTE_ADDR": "127.0.0.1",
-        }
-        saved = client.put(
-            url,
-            data='{"body_markdown":"# Saved"}',
-            content_type="application/json",
-            **headers,
-        )
-        self.assertEqual(saved.status_code, 200, saved.content)
-        stale = client.put(
-            url,
-            data='{"body_markdown":"# Must not replace saved"}',
-            content_type="application/json",
-            **{**headers, "HTTP_IDEMPOTENCY_KEY": "report-draft-write-2"},
-        )
-        self.assertEqual(stale.status_code, 412, stale.content)
-        self.assertEqual(ReportDraft.objects.get(task=self.task).body_markdown, "# Saved")
-
-    def test_submit_api_replays_exactly_without_duplicate_report_version(self) -> None:
-        self._snapshot()
-        draft = ReportDraft.objects.get(task=self.task)
-        update_report_draft(
-            task_id=self.task.public_id,
-            actor=self.task.student,
-            body_markdown="# Final report",
-            expected_version=draft.row_version,
-            context=self.context,
-        )
-        self.task.refresh_from_db()
-        client, csrf = self._student_client()
-        url = f"/api/v2/tasks/{self.task.public_id}/submit-report"
-        headers = {
-            "HTTP_X_CSRFTOKEN": csrf,
-            "HTTP_X_PORTAL": "USER",
-            "HTTP_IDEMPOTENCY_KEY": "report-submit-once",
-            "HTTP_IF_MATCH": f'"{self.task.row_version}"',
-            "HTTP_X_PROXY_CONTEXT": "ingress-v1",
-            "REMOTE_ADDR": "127.0.0.1",
-        }
-        first = client.post(url, data="{}", content_type="application/json", **headers)
-        replay = client.post(url, data="{}", content_type="application/json", **headers)
-        self.assertEqual(first.status_code, 201, first.content)
-        self.assertEqual(replay.status_code, 201, replay.content)
-        self.assertEqual(replay["X-Idempotent-Replayed"], "true")
-        self.assertEqual(replay.json(), first.json())
-        self.assertEqual(ReportVersion.objects.filter(task=self.task).count(), 1)
-
     def test_submit_freezes_version_and_transitions_task_atomically(self) -> None:
         snapshot = self._snapshot()
         draft = ReportDraft.objects.get(task=self.task)

@@ -296,10 +296,6 @@ CELERY_BEAT_SCHEDULE = {
         "task": "apps.archives.purge_retention",
         "schedule": 3600.0,
     },
-    "reconcile-workspace-storage": {
-        "task": "apps.workspaces.reconcile_workspace_storage_jobs",
-        "schedule": 30.0,
-    },
     "refresh-analytics": {
         "task": "apps.analytics.refresh_projection",
         "schedule": 300.0,
@@ -410,8 +406,10 @@ SWARM_BOOT_TIMEOUT_SECONDS = int(env("SWARM_BOOT_TIMEOUT_SECONDS", "120"))
 SWARM_POLL_INTERVAL_SECONDS = float(env("SWARM_POLL_INTERVAL_SECONDS", "2"))
 SWARM_RUNTIME_NETWORK = env("SWARM_RUNTIME_NETWORK", "experimental-platform-swarm-runtime")
 if os.getenv("DJANGO_SETTINGS_MODULE", "").endswith(".prod"):
-    if RUNTIME_MODE != "swarm" or not RUNTIME_ADAPTER_CODE.strip():
-        raise RuntimeError("Production requires RUNTIME_MODE=swarm and RUNTIME_ADAPTER_CODE")
+    if RUNTIME_MODE not in {"local", "swarm"} or not RUNTIME_ADAPTER_CODE.strip():
+        raise RuntimeError("Production requires RUNTIME_MODE=local|swarm and RUNTIME_ADAPTER_CODE")
+    if RUNTIME_MODE == "local" and LOCAL_RUNTIME_MODE != "REAL":
+        raise RuntimeError("Production Docker Local requires LOCAL_RUNTIME_MODE=REAL")
     if RUNTIME_ADAPTER_CODE not in RUNTIME_ADAPTER_CONFIGS:
         raise RuntimeError("Production runtime adapter configuration is missing")
 RUNTIME_DEFAULT_TTL_SECONDS = int(env("RUNTIME_DEFAULT_TTL_SECONDS", "14400"))

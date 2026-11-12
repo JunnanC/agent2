@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 from django.core.management import call_command
 from django.core.management.base import CommandError
-from django.test import Client, TestCase, override_settings
+from django.test import TestCase, override_settings
 from django.utils import timezone
 
 from apps.accounts.models import User
@@ -42,7 +42,6 @@ from ..models import (
     WorkspaceStorageJob,
 )
 from ..permissions import require_workspace_session
-from ..serializers import execution_run_data
 from ..services import (
     _execution_rules,
     _output_asset,
@@ -302,10 +301,10 @@ class WorkspaceSessionServiceTests(TestCase):
             self.assertEqual(run.execution_rule_summary["language"], "c")
             self.assertEqual(run.execution_rule_summary["command"], ["python", "main.c"])
 
-    def test_ready_task_exposes_enter_and_issue_is_scoped(self) -> None:
+    def test_internal_session_issue_is_scoped_without_public_entry(self) -> None:
         self.assertEqual(
             allowed_actions(self.task, actor=self.task.student),
-            ["ENTER", "REQUEST_EXTENSION"],
+            ["REQUEST_EXTENSION"],
         )
         _, session, token = enter_task(
             task_id=self.task.public_id,
@@ -526,89 +525,6 @@ class WorkspaceSessionServiceTests(TestCase):
                 to_status=WorkspaceStorageJob.Status.RUNNING,
                 context=self.context,
             )
-
-    def test_storage_job_api_creates_replays_and_returns_sanitized_job(self) -> None:
-        RuntimeAdapter.objects.filter(pk=self.task.runtime_adapter_id).update(
-            driver=RuntimeAdapter.Driver.DOCKER_LOCAL,
-            config_ref="runtime/local-docker",
-        )
-        ExperimentTask.objects.filter(pk=self.task.pk).update(
-            runtime_adapter_driver=RuntimeAdapter.Driver.DOCKER_LOCAL
-        )
-        self.task.refresh_from_db()
-        with patch("apps.workspaces.storage.create_initialization_job"):
-            _, session, token = enter_task(
-                task_id=self.task.public_id,
-                actor=self.task.student,
-                expected_version=self.task.row_version,
-                context=self.context,
-            )
-        client = Client(enforce_csrf_checks=True)
-        client.get(
-            "/api/v2/auth/csrf",
-            HTTP_X_PORTAL="USER",
-            HTTP_X_PROXY_CONTEXT="ingress-v1",
-            REMOTE_ADDR="127.0.0.1",
-        )
-        csrf = str(client.cookies["csrftoken"].value)
-        with (
-            patch("apps.accounts.views.check_login_rate_limit", return_value="rate-key"),
-            patch("apps.accounts.views.clear_login_rate_limit"),
-        ):
-            login = client.post(
-                "/api/v2/auth/login",
-                {
-                    "identifier": self.task.student.email,
-                    "password": "ValidPassword!234",
-                },
-                content_type="application/json",
-                HTTP_X_CSRFTOKEN=csrf,
-                HTTP_X_PORTAL="USER",
-                HTTP_X_PROXY_CONTEXT="ingress-v1",
-                REMOTE_ADDR="127.0.0.1",
-            )
-        self.assertEqual(login.status_code, 200, login.content)
-        headers = {
-            "HTTP_X_PORTAL": "USER",
-            "HTTP_X_PROXY_CONTEXT": "ingress-v1",
-            "REMOTE_ADDR": "127.0.0.1",
-            "HTTP_X_CSRFTOKEN": csrf,
-            "HTTP_X_WORKSPACE_TOKEN": token,
-            "HTTP_IF_MATCH": f'"{session.row_version}"',
-            "HTTP_IDEMPOTENCY_KEY": "storage-api-capture-1",
-        }
-        path = f"/api/v2/tasks/{self.task.public_id}/workspace-storage-jobs"
-        payload = {"kind": "CAPTURE", "client_seq": 1, "base_version": 0}
-
-        response = client.post(path, payload, content_type="application/json", **headers)
-        self.assertEqual(response.status_code, 202, response.content)
-        job = response.json()["data"]
-        self.assertEqual(job["status"], WorkspaceStorageJob.Status.QUEUED)
-        self.assertEqual(response["Location"], f"/api/v2/workspace-storage-jobs/{job['public_id']}")
-        self.assertEqual(response["ETag"], f'"{session.row_version + 1}"')
-
-        replay = client.post(path, payload, content_type="application/json", **headers)
-        self.assertEqual(replay.status_code, 202, replay.content)
-        self.assertEqual(replay["X-Idempotent-Replayed"], "true")
-        self.assertEqual(replay.json()["data"]["public_id"], job["public_id"])
-        self.assertEqual(WorkspaceStorageJob.objects.count(), 1)
-
-        detail = client.get(
-            response["Location"],
-            HTTP_X_PORTAL="USER",
-            HTTP_X_PROXY_CONTEXT="ingress-v1",
-            REMOTE_ADDR="127.0.0.1",
-        )
-        self.assertEqual(detail.status_code, 200, detail.content)
-        serialized = detail.content.decode()
-        for hidden_field in (
-            "external_id",
-            "container_id",
-            "volume_name",
-            "object_key",
-            "upstream_token",
-        ):
-            self.assertNotIn(hidden_field, serialized)
 
     def test_capture_worker_commits_snapshot_and_session_version(self) -> None:
         RuntimeAdapter.objects.filter(pk=self.task.runtime_adapter_id).update(
@@ -1148,99 +1064,6 @@ class WorkspaceSessionServiceTests(TestCase):
                     task_id=self.task.public_id,
                 )
             model.objects.filter(pk=pk).update(**original)
-
-    @override_settings(WORKSPACE_INTERNAL_KEY="internal-secret")
-    def test_gateway_records_only_whitelisted_operation_and_returns_unified_errors(self) -> None:
-        _, session, token = enter_task(
-            task_id=self.task.public_id,
-            actor=self.task.student,
-            expected_version=self.task.row_version,
-            context=self.context,
-        )
-        client = Client(enforce_csrf_checks=True)
-        response = client.post(
-            f"/workspace/{session.public_id}/operations",
-            data=json.dumps({"operation": "RUN_CHECK", "arguments": {"secret": "redact-me"}}),
-            content_type="application/json",
-            HTTP_X_PORTAL="USER",
-            HTTP_X_WORKSPACE_INTERNAL_KEY="internal-secret",
-            HTTP_X_WORKSPACE_TOKEN=token,
-        )
-        self.assertEqual(response.status_code, 201)
-        self.assertEqual(response.json()["data"]["event_type"], "operation.run_check")
-        self.assertNotIn("redact-me", response.content.decode())
-
-        denied = client.post(
-            f"/workspace/{session.public_id}/operations",
-            data=json.dumps({"operation": "SHELL"}),
-            content_type="application/json",
-            HTTP_X_PORTAL="USER",
-            HTTP_X_WORKSPACE_INTERNAL_KEY="internal-secret",
-            HTTP_X_WORKSPACE_TOKEN=token,
-        )
-        self.assertEqual(denied.status_code, 403)
-        self.assertEqual(denied.json()["error"]["code"], "WORKSPACE_OPERATION_DENIED")
-
-        internal_denied = client.post(
-            f"/workspace/{session.public_id}/operations",
-            data=json.dumps({"operation": "RUN_CHECK"}),
-            content_type="application/json",
-            HTTP_X_PORTAL="USER",
-            HTTP_X_WORKSPACE_TOKEN=token,
-        )
-        self.assertEqual(internal_denied.status_code, 403)
-        self.assertEqual(internal_denied.json()["error"]["code"], "WORKSPACE_INTERNAL_DENIED")
-
-    @override_settings(WORKSPACE_INTERNAL_KEY="internal-secret")
-    def test_run_check_creates_a_fake_execution_and_replays_by_request_key(self) -> None:
-        _, session, token = enter_task(
-            task_id=self.task.public_id,
-            actor=self.task.student,
-            expected_version=self.task.row_version,
-            context=self.context,
-        )
-        WorkspaceSession.objects.filter(pk=session.pk).update(
-            capabilities={**session.capabilities, "terminal": False, "snapshot": True}
-        )
-        client = Client(enforce_csrf_checks=True)
-        headers = {
-            "HTTP_X_PORTAL": "USER",
-            "HTTP_X_WORKSPACE_INTERNAL_KEY": "internal-secret",
-            "HTTP_X_WORKSPACE_TOKEN": token,
-            "HTTP_IDEMPOTENCY_KEY": "execution-request-1",
-        }
-        response = client.post(
-            f"/workspace/{session.public_id}/operations",
-            data=json.dumps({"operation": "RUN_CHECK", "arguments": {"source": "test"}}),
-            content_type="application/json",
-            **headers,
-        )
-        self.assertEqual(response.status_code, 201)
-        operation_id = response.json()["data"]["public_id"]
-        execution_id = response.json()["data"]["payload"]["execution_run_id"]
-        run = WorkspaceExecutionRun.objects.get(public_id=execution_id)
-        self.assertEqual(run.status, WorkspaceExecutionRun.Status.PASSED)
-        self.assertEqual(run.task_id, self.task.pk)
-        public_run = execution_run_data(run)
-        for hidden_field in (
-            "execution_rule_summary",
-            "execution_rule_digest",
-            "execution_spec",
-            "execution_spec_digest",
-            "stdout_asset_id",
-            "stderr_asset_id",
-            "test_report_asset_id",
-        ):
-            self.assertNotIn(hidden_field, public_run)
-        replay = client.post(
-            f"/workspace/{session.public_id}/operations",
-            data=json.dumps({"operation": "RUN_CHECK", "arguments": {"source": "test"}}),
-            content_type="application/json",
-            **headers,
-        )
-        self.assertEqual(replay.status_code, 201)
-        self.assertEqual(replay.json()["data"]["public_id"], operation_id)
-        self.assertEqual(WorkspaceExecutionRun.objects.filter(task=self.task).count(), 1)
 
     @override_settings(WORKSPACE_INTERNAL_KEY="internal-secret")
     def test_self_test_is_separate_from_formal_run(self) -> None:

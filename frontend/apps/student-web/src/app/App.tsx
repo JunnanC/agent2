@@ -13,7 +13,7 @@ import { JoinCourses } from "@/pages/join-courses";
 import { CourseDetail } from "@/pages/course-detail";
 import { Experiments } from "@/pages/experiments";
 import { TaskDetail } from "@/pages/task-detail";
-import { Workbench } from "@/pages/workbench";
+import { AssessmentWorkbench } from "@/pages/assessment";
 import { Notifications } from "@/pages/notifications";
 import { Profile } from "@/pages/profile";
 import { NoAccess } from "@/pages/no-access";
@@ -43,7 +43,6 @@ export function App(): JSX.Element {
               <Route path="/no-access" element={<NoAccess />} />
             </Route>
             <Route element={<AuthGuard fullscreen />}>
-              <Route path="/experiments/:taskId/workbench" element={<Workbench />} />
               <Route path="/experiments/:taskId/assessment" element={<AssessmentWorkbench />} />
             </Route>
             <Route path="*" element={<Navigate to="/" replace />} />
@@ -74,4 +73,3 @@ export function FullPageLoading(): JSX.Element {
     </div>
   );
 }
-import { AssessmentWorkbench } from "@/pages/assessment";

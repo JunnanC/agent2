@@ -1650,19 +1650,6 @@ def allowed_actions(task: ExperimentTask, *, actor: User | None = None) -> list[
         or task.enrollment.status != Enrollment.Status.ACTIVE
     ):
         return actions
-    if task.status == ExperimentTask.Status.ASSIGNED:
-        actions.append("START")
-    if task.status in {
-        ExperimentTask.Status.READY,
-        ExperimentTask.Status.IN_PROGRESS,
-        ExperimentTask.Status.REPORT_DRAFT,
-    }:
-        # 工作区可用的三个状态都允许(重)进入:enter 对 READY 会推进 IN_PROGRESS,其余状态仅轮换会话
-        actions.append("ENTER")
-    if task.status == ExperimentTask.Status.FAILED and (task.current_failure or {}).get(
-        "retryable"
-    ):
-        actions.append("RETRY")
     if task.status not in {
         ExperimentTask.Status.COMPLETED,
         ExperimentTask.Status.CANCELLED,

@@ -2089,22 +2089,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v2/platform/workspaces/sessions": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["api_v2_platform_workspaces_sessions_retrieve"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v2/questions/{question_id}/answers": {
         parameters: {
             query?: never;
@@ -2115,22 +2099,6 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["user_question_answers_create"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v2/student/task-runtimes/{runtime_id}/stop": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["student_task_runtime_stop"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2313,102 +2281,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v2/tasks/{task_id}/checkpoints": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["api_v2_tasks_checkpoints_retrieve"];
-        put?: never;
-        post: operations["api_v2_tasks_checkpoints_create"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v2/tasks/{task_id}/checkpoints/{checkpoint_id}/restore": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["api_v2_tasks_checkpoints_restore_create"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v2/tasks/{task_id}/complete": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["tasks_complete"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v2/tasks/{task_id}/enter": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["api_v2_tasks_enter_create"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v2/tasks/{task_id}/execution-runs": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["tasks_execution_runs_list"];
-        put?: never;
-        post: operations["tasks_execution_runs_create"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v2/tasks/{task_id}/execution-runs/{execution_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["api_v2_tasks_execution_runs_retrieve"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v2/tasks/{task_id}/extension-requests": {
         parameters: {
             query?: never;
@@ -2435,54 +2307,6 @@ export interface paths {
         get: operations["tasks_extensions_list"];
         put?: never;
         post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v2/tasks/{task_id}/operation-replay": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["api_v2_tasks_operation_replay_list"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v2/tasks/{task_id}/provisioning-job": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["tasks_provisioning_job_retrieve"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v2/tasks/{task_id}/provisioning-job/cancel": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["tasks_provisioning_cancel"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2537,22 +2361,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v2/tasks/{task_id}/report-draft": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["tasks_report_draft_retrieve"];
-        put: operations["tasks_report_draft_update"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v2/tasks/{task_id}/report-versions": {
         parameters: {
             query?: never;
@@ -2563,22 +2371,6 @@ export interface paths {
         get: operations["tasks_report_versions_list"];
         put?: never;
         post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v2/tasks/{task_id}/retry": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["tasks_retry"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2633,38 +2425,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v2/tasks/{task_id}/start": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["tasks_start"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v2/tasks/{task_id}/submit-report": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["tasks_report_submit"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v2/tasks/{task_id}/transitions": {
         parameters: {
             query?: never;
@@ -2675,70 +2435,6 @@ export interface paths {
         get: operations["tasks_transitions_list"];
         put?: never;
         post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v2/tasks/{task_id}/workbench": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["tasks_workbench_retrieve"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v2/tasks/{task_id}/workspace-sessions": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["api_v2_tasks_workspace_sessions_create"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v2/tasks/{task_id}/workspace-snapshot": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put: operations["tasks_workspace_snapshot_save"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v2/tasks/{task_id}/workspace-storage-jobs": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["tasks_workspace_storage_jobs_create"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4313,22 +4009,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v2/teaching/courses/{course_id}/tasks/{task_id}/operation-replay": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["api_v2_teaching_courses_tasks_operation_replay_list"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v2/teaching/courses/{course_id}/tasks/{task_id}/submission-preview": {
         parameters: {
             query?: never;
@@ -4337,22 +4017,6 @@ export interface paths {
             cookie?: never;
         };
         get: operations["teaching_task_submission_preview"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v2/teaching/courses/{course_id}/tasks/{task_id}/workspace": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["api_v2_teaching_courses_tasks_workspace_retrieve"];
         put?: never;
         post?: never;
         delete?: never;
@@ -4857,54 +4521,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v2/workspace-sessions/{session_id}/renew": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["api_v2_workspace_sessions_renew_create"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v2/workspace-sessions/{session_id}/revoke": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["api_v2_workspace_sessions_revoke_create"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v2/workspace-storage-jobs/{job_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["workspace_storage_jobs_retrieve"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/files/{token}": {
         parameters: {
             query?: never;
@@ -5111,12 +4727,6 @@ export interface components {
          * @enum {string}
          */
         AgentModeEnum: "KNOWLEDGE_QA" | "SOCRATIC_HINT" | "DEBUG_ASSIST" | "REPORT_COACH" | "WORKSPACE_ASSIST";
-        /**
-         * @description * `REPORT` - REPORT
-         *     * `COMPLETE` - COMPLETE
-         * @enum {string}
-         */
-        AgentReportStrategyEnum: "REPORT" | "COMPLETE";
         AgentResponseMeta: {
             trace_id: string;
         };
@@ -5439,10 +5049,6 @@ export interface components {
         CheckResponse: {
             data: components["schemas"]["CheckData"];
             meta: components["schemas"]["CourseTraceMeta"];
-        };
-        CheckpointWrite: {
-            name?: string;
-            label?: string;
         };
         ChoiceImport: {
             /** Format: uri */
@@ -5825,24 +5431,9 @@ export interface components {
                 [key: string]: unknown;
             };
         };
-        /**
-         * @description * `FORMAL` - FORMAL
-         *     * `SELF_TEST` - SELF_TEST
-         * @enum {string}
-         */
-        EvaluationModeEnum: "FORMAL" | "SELF_TEST";
         ExecutionMaterial: {
             asset_id: string;
             role: components["schemas"]["RoleEnum"];
-        };
-        /** @description Write contract for the student REST create-execution-run endpoint.
-         *
-         *     v1 evaluates the whole test asset for every run; ``test_keys`` and
-         *     ``snapshot_id`` are accepted for API compatibility, and ``snapshot_id``
-         *     is forwarded to the execution service as the evaluated snapshot. */
-        ExecutionRunCreate: {
-            snapshot_id?: string;
-            test_keys?: string[];
         };
         ExecutionSpec: {
             schema_version?: components["schemas"]["SchemaVersionEnum"];
@@ -6246,22 +5837,6 @@ export interface components {
         NetworkModeEc7Enum: "DENY_ALL";
         /** @enum {unknown} */
         NullEnum: null;
-        OperationEvent: {
-            public_id: string;
-            task_id: string;
-            seq: number;
-            event_type: string;
-            phase: string;
-            payload: {
-                [key: string]: unknown;
-            };
-            result_summary: string;
-            /** Format: date-time */
-            occurred_at: string;
-            trace_id: string;
-            execution_run_id?: string | null;
-            execution_status?: string | null;
-        };
         OwnershipTransfer: {
             new_owner_id: string;
             reason: string;
@@ -6586,58 +6161,6 @@ export interface components {
          * @enum {string}
          */
         ProtocolEnum: "TCP" | "UDP";
-        ProvisioningActionResponse: {
-            job_id: string;
-            subject_id: string;
-            status: components["schemas"]["WorkflowJobStatusEnum"];
-            events_channel: string;
-        };
-        ProvisioningJob: {
-            public_id: string;
-            task_id: string;
-            course_id: string;
-            status: components["schemas"]["WorkflowJobStatusEnum"];
-            current_stage: string;
-            attempt_no: number;
-            attempt_count: number;
-            retryable: boolean;
-            trace_id: string;
-            reservation: {
-                [key: string]: unknown;
-            };
-            instance: {
-                [key: string]: unknown;
-            } | null;
-            stages: components["schemas"]["ProvisioningStageEvent"][];
-            failure: {
-                [key: string]: unknown;
-            } | null;
-            events_channel: string;
-            row_version: number;
-        };
-        ProvisioningStageEvent: {
-            public_id: string;
-            stage: components["schemas"]["StageEnum"];
-            status: components["schemas"]["ProvisioningStageEventStatusEnum"];
-            attempt_no: number;
-            detail: {
-                [key: string]: unknown;
-            };
-            error_code: string;
-            trace_id: string;
-            /** Format: date-time */
-            started_at: string | null;
-            /** Format: date-time */
-            completed_at: string | null;
-        };
-        /**
-         * @description * `STARTED` - Started
-         *     * `PASSED` - Passed
-         *     * `FAILED` - Failed
-         *     * `SKIPPED` - Skipped
-         * @enum {string}
-         */
-        ProvisioningStageEventStatusEnum: "STARTED" | "PASSED" | "FAILED" | "SKIPPED";
         PublicationChapterSnapshot: {
             public_id: string;
             source_chapter_id: string;
@@ -6902,43 +6425,6 @@ export interface components {
                 [key: string]: unknown;
             };
         };
-        ReportCompleteData: {
-            artifact: components["schemas"]["SystemArtifactData"];
-            task_status: components["schemas"]["TaskStatusEnum"];
-            task_row_version: number;
-        };
-        ReportCompleteResponse: {
-            data: components["schemas"]["ReportCompleteData"];
-            meta: {
-                [key: string]: unknown;
-            };
-        };
-        ReportDraftData: {
-            public_id: string;
-            task_id: string;
-            body_markdown: string;
-            snapshot_digest: string;
-            status: components["schemas"]["ReportDraftDataStatusEnum"];
-            attachments: components["schemas"]["ReportAttachmentData"][];
-            row_version: number;
-            /** Format: date-time */
-            updated_at: string;
-        };
-        /**
-         * @description * `DRAFT` - Draft
-         *     * `SUBMITTED` - Submitted
-         * @enum {string}
-         */
-        ReportDraftDataStatusEnum: "DRAFT" | "SUBMITTED";
-        ReportDraftResponse: {
-            data: components["schemas"]["ReportDraftData"];
-            meta: {
-                [key: string]: unknown;
-            };
-        };
-        ReportDraftWrite: {
-            body_markdown: string;
-        };
         ReportPreviewData: {
             kind: components["schemas"]["ArtifactKindEnum"];
             task_id: string;
@@ -7006,12 +6492,6 @@ export interface components {
         };
         ReportVersionListResponse: {
             data: components["schemas"]["ReportVersionData"][];
-            meta: {
-                [key: string]: unknown;
-            };
-        };
-        ReportVersionResponse: {
-            data: components["schemas"]["ReportVersionData"];
             meta: {
                 [key: string]: unknown;
             };
@@ -7499,16 +6979,6 @@ export interface components {
             data: components["schemas"]["StaffData"];
             meta: components["schemas"]["CourseTraceMeta"];
         };
-        /**
-         * @description * `QUOTA_CHECK` - Quota Check
-         *     * `IMAGE_PREPARE` - Image Prepare
-         *     * `CREATE` - Create
-         *     * `NETWORK_ATTACH` - Network Attach
-         *     * `BOOT_PROBE` - Boot Probe
-         *     * `WORKSPACE_READY` - Workspace Ready
-         * @enum {string}
-         */
-        StageEnum: "QUOTA_CHECK" | "IMAGE_PREPARE" | "CREATE" | "NETWORK_ATTACH" | "BOOT_PROBE" | "WORKSPACE_READY";
         StatusAction: {
             status: string;
             reason?: string;
@@ -7614,11 +7084,6 @@ export interface components {
             requested_deadline: string;
             reason: string;
         };
-        /**
-         * @description * `UNDER_REVIEW` - UNDER_REVIEW
-         * @enum {string}
-         */
-        TaskStatusEnum: "UNDER_REVIEW";
         /**
          * @description * `SUSPENDED` - SUSPENDED
          *     * `REVOKED` - REVOKED
@@ -8082,292 +7547,6 @@ export interface components {
             last_week_minutes: number;
             has_records: boolean;
         };
-        Workbench: {
-            task: components["schemas"]["WorkbenchTask"];
-            content: components["schemas"]["WorkbenchContent"];
-            template: components["schemas"]["WorkbenchTemplate"];
-            tests: components["schemas"]["WorkbenchTests"];
-            provisioning: components["schemas"]["WorkbenchProvisioning"];
-            workspace: components["schemas"]["WorkbenchWorkspace"];
-            submission: components["schemas"]["WorkbenchSubmission"];
-        };
-        WorkbenchContent: {
-            description: string;
-            objectives: unknown[];
-            steps: unknown[];
-            constraints: unknown[];
-            deliverables: unknown[];
-            materials: {
-                [key: string]: unknown;
-            }[];
-            manual: {
-                [key: string]: unknown;
-            } | null;
-        };
-        WorkbenchProvisioning: {
-            status: string;
-            job_id: string | null;
-            current_stage: string | null;
-            progress: number;
-            attempt_no?: number;
-            retryable: boolean;
-            failure: {
-                [key: string]: unknown;
-            } | null;
-            stages: components["schemas"]["WorkbenchStage"][];
-            events_channel: string;
-        };
-        WorkbenchRecentExecution: {
-            public_id: string;
-            status: string;
-            result_summary: string;
-            /** Format: date-time */
-            finished_at: string | null;
-            duration_ms: number | null;
-        };
-        WorkbenchStage: {
-            public_id?: string;
-            stage: string;
-            status: string;
-            attempt_no: number | null;
-            error_code?: string;
-            /** Format: date-time */
-            started_at: string | null;
-            /** Format: date-time */
-            completed_at: string | null;
-        };
-        WorkbenchSubmission: {
-            required: boolean;
-            kind: components["schemas"]["ArtifactKindEnum"];
-            strategy: components["schemas"]["AgentReportStrategyEnum"];
-            can_submit: boolean;
-            blocked_reason: {
-                [key: string]: unknown;
-            } | null;
-            draft_status: string | null;
-        };
-        WorkbenchTask: {
-            public_id: string;
-            course_id: string;
-            publication_id: string;
-            title: string;
-            description: string;
-            status: string;
-            /** Format: date-time */
-            deadline: string | null;
-            /** Format: date-time */
-            assignment_deadline: string | null;
-            report_required: boolean;
-            report_strategy: components["schemas"]["AgentReportStrategyEnum"];
-            allowed_actions: string[];
-            allowed_operations: string[];
-            blockers: {
-                [key: string]: unknown;
-            }[];
-            current_failure: {
-                [key: string]: unknown;
-            };
-            row_version: number;
-        };
-        WorkbenchTemplate: {
-            public_id: string;
-            name: string;
-            version_id: string;
-            version_no: number;
-            dependencies: unknown[];
-            workspace_capabilities: {
-                [key: string]: unknown;
-            };
-            manual_asset_id: string | null;
-            starter_asset_id: string | null;
-            report_template_asset_id: string | null;
-        };
-        WorkbenchTests: {
-            public_count: number;
-            count: number;
-            runnable: boolean;
-            summary: {
-                [key: string]: unknown;
-            }[];
-            recent_execution: components["schemas"]["WorkbenchRecentExecution"] | null;
-        };
-        WorkbenchWorkspace: {
-            mode: components["schemas"]["WorkbenchWorkspaceModeEnum"];
-            entrypoint: string;
-            language: string;
-            language_policy: {
-                [key: string]: unknown;
-            };
-            toolchain_version: string | null;
-            capture_supported: boolean;
-            last_synchronized_version: number;
-            last_synchronized_snapshot_id: string | null;
-            active_storage_job: components["schemas"]["WorkspaceStorageJob"] | null;
-        };
-        /**
-         * @description * `LEGACY_DRAFT` - LEGACY_DRAFT
-         *     * `RUNTIME_IDE` - RUNTIME_IDE
-         *     * `READ_ONLY` - READ_ONLY
-         * @enum {string}
-         */
-        WorkbenchWorkspaceModeEnum: "LEGACY_DRAFT" | "RUNTIME_IDE" | "READ_ONLY";
-        /**
-         * @description * `QUEUED` - Queued
-         *     * `RUNNING` - Running
-         *     * `RETRY` - Retry
-         *     * `PASSED` - Passed
-         *     * `FAILED` - Failed
-         *     * `CANCELLED` - Cancelled
-         * @enum {string}
-         */
-        WorkflowJobStatusEnum: "QUEUED" | "RUNNING" | "RETRY" | "PASSED" | "FAILED" | "CANCELLED";
-        WorkspaceCheckpoint: {
-            public_id: string;
-            task_id: string;
-            session_id: string;
-            checkpoint_no: number;
-            name: string;
-            source_seq: number;
-            digest_sha256: string;
-            version_no: number;
-            /** Format: date-time */
-            created_at: string;
-            /** Format: date-time */
-            retention_until: string | null;
-        };
-        WorkspaceCheckpointList: {
-            items: components["schemas"]["WorkspaceCheckpoint"][];
-            current_version: number;
-            row_version: number;
-        };
-        WorkspaceEnter: {
-            task: {
-                [key: string]: unknown;
-            };
-            session: components["schemas"]["WorkspaceSession"];
-        };
-        WorkspaceExecutionRun: {
-            public_id: string;
-            task_id: string;
-            session_id: string;
-            snapshot_id: string | null;
-            status: components["schemas"]["AutoCheckStatusEnum"];
-            error_code: string;
-            result_summary: string;
-            /** Format: date-time */
-            started_at: string | null;
-            /** Format: date-time */
-            finished_at: string | null;
-            duration_ms: number | null;
-            trace_id: string;
-            evaluation_mode: components["schemas"]["EvaluationModeEnum"];
-            test_cases?: {
-                [key: string]: unknown;
-            }[];
-        };
-        WorkspaceExecutionRunList: {
-            items: components["schemas"]["WorkspaceExecutionRun"][];
-        };
-        WorkspaceSession: {
-            public_id: string;
-            task_id: string;
-            course_id: string;
-            instance_id: string;
-            portal: string;
-            status: components["schemas"]["WorkspaceSessionStatusEnum"];
-            capabilities: {
-                [key: string]: unknown;
-            };
-            workspace_urls: {
-                [key: string]: string;
-            };
-            /** Format: date-time */
-            expires_at: string;
-            /** Format: date-time */
-            revoked_at: string | null;
-            current_version: number;
-            language: string;
-            latest_client_seq: number;
-            row_version: number;
-            readonly workspace_token: string;
-        };
-        /**
-         * @description * `ACTIVE` - Active
-         *     * `REVOKED` - Revoked
-         *     * `EXPIRED` - Expired
-         * @enum {string}
-         */
-        WorkspaceSessionStatusEnum: "ACTIVE" | "REVOKED" | "EXPIRED";
-        WorkspaceSnapshot: {
-            public_id: string;
-            task_id: string;
-            session_id: string;
-            version_no: number;
-            client_seq: number;
-            base_version: number;
-            digest_sha256: string;
-            size_bytes: number;
-            media_type: string;
-            /** Format: date-time */
-            saved_at: string;
-            language: string;
-            initial: boolean;
-        };
-        WorkspaceStorageJob: {
-            public_id: string;
-            task_id: string;
-            session_id: string;
-            kind: components["schemas"]["WorkspaceStorageJobKindEnum"];
-            status: components["schemas"]["WorkspaceStorageJobStatusEnum"];
-            client_seq: number | null;
-            base_version: number | null;
-            source_snapshot_id: string | null;
-            result_snapshot_id: string | null;
-            failure: {
-                [key: string]: unknown;
-            } | null;
-            /** Format: date-time */
-            queued_at: string;
-            /** Format: date-time */
-            started_at: string | null;
-            /** Format: date-time */
-            completed_at: string | null;
-            row_version: number;
-        };
-        /**
-         * @description * `INITIALIZE` - Initialize
-         *     * `CAPTURE` - Capture
-         *     * `RESTORE` - Restore
-         *     * `FINALIZE` - Finalize
-         *     * `SWITCH` - Switch
-         *     * `RESET` - Reset
-         * @enum {string}
-         */
-        WorkspaceStorageJobKindEnum: "INITIALIZE" | "CAPTURE" | "RESTORE" | "FINALIZE" | "SWITCH" | "RESET";
-        /**
-         * @description * `QUEUED` - Queued
-         *     * `RUNNING` - Running
-         *     * `PASSED` - Passed
-         *     * `FAILED` - Failed
-         *     * `CANCELLED` - Cancelled
-         * @enum {string}
-         */
-        WorkspaceStorageJobStatusEnum: "QUEUED" | "RUNNING" | "PASSED" | "FAILED" | "CANCELLED";
-        WorkspaceStorageJobWrite: {
-            kind: components["schemas"]["WorkspaceStorageJobWriteKindEnum"];
-            client_seq?: number;
-            base_version?: number;
-            snapshot_id?: string;
-            language?: components["schemas"]["LanguageEnum"];
-        };
-        /**
-         * @description * `CAPTURE` - CAPTURE
-         *     * `RESTORE` - RESTORE
-         *     * `SWITCH` - SWITCH
-         *     * `RESET` - RESET
-         * @enum {string}
-         */
-        WorkspaceStorageJobWriteKindEnum: "CAPTURE" | "RESTORE" | "SWITCH" | "RESET";
     };
     responses: never;
     parameters: never;
@@ -12181,24 +11360,6 @@ export interface operations {
             };
         };
     };
-    api_v2_platform_workspaces_sessions_retrieve: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description workspace session summaries */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
     user_question_answers_create: {
         parameters: {
             query?: never;
@@ -12222,30 +11383,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CourseContentResponse"];
-                };
-            };
-        };
-    };
-    student_task_runtime_stop: {
-        parameters: {
-            query?: never;
-            header: {
-                "Idempotency-Key": string;
-                "If-Match": string;
-            };
-            path: {
-                runtime_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["GenericResponse"];
                 };
             };
         };
@@ -12535,220 +11672,6 @@ export interface operations {
             };
         };
     };
-    api_v2_tasks_checkpoints_retrieve: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                task_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["WorkspaceCheckpointList"];
-                };
-            };
-        };
-    };
-    api_v2_tasks_checkpoints_create: {
-        parameters: {
-            query?: never;
-            header: {
-                "Idempotency-Key": string;
-                "X-Workspace-Token": string;
-            };
-            path: {
-                task_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: {
-            content: {
-                "application/json": components["schemas"]["CheckpointWrite"];
-                "application/x-www-form-urlencoded": components["schemas"]["CheckpointWrite"];
-                "multipart/form-data": components["schemas"]["CheckpointWrite"];
-            };
-        };
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["WorkspaceCheckpoint"];
-                };
-            };
-        };
-    };
-    api_v2_tasks_checkpoints_restore_create: {
-        parameters: {
-            query?: never;
-            header: {
-                "Idempotency-Key": string;
-                "If-Match": string;
-                "X-Workspace-Token": string;
-            };
-            path: {
-                checkpoint_id: string;
-                task_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["WorkspaceSnapshot"];
-                "application/x-www-form-urlencoded": components["schemas"]["WorkspaceSnapshot"];
-                "multipart/form-data": components["schemas"]["WorkspaceSnapshot"];
-            };
-        };
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["WorkspaceSnapshot"];
-                };
-            };
-        };
-    };
-    tasks_complete: {
-        parameters: {
-            query?: never;
-            header: {
-                "Idempotency-Key": string;
-                "If-Match": string;
-            };
-            path: {
-                task_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ReportCompleteResponse"];
-                };
-            };
-        };
-    };
-    api_v2_tasks_enter_create: {
-        parameters: {
-            query?: never;
-            header: {
-                "Idempotency-Key": string;
-                "If-Match": string;
-            };
-            path: {
-                task_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["WorkspaceSession"];
-                "application/x-www-form-urlencoded": components["schemas"]["WorkspaceSession"];
-                "multipart/form-data": components["schemas"]["WorkspaceSession"];
-            };
-        };
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["WorkspaceEnter"];
-                };
-            };
-        };
-    };
-    tasks_execution_runs_list: {
-        parameters: {
-            query?: never;
-            header: {
-                "X-Workspace-Token": string;
-            };
-            path: {
-                task_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["WorkspaceExecutionRunList"];
-                };
-            };
-        };
-    };
-    tasks_execution_runs_create: {
-        parameters: {
-            query?: never;
-            header: {
-                "Idempotency-Key": string;
-                "X-Workspace-Token": string;
-            };
-            path: {
-                task_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: {
-            content: {
-                "application/json": components["schemas"]["ExecutionRunCreate"];
-                "application/x-www-form-urlencoded": components["schemas"]["ExecutionRunCreate"];
-                "multipart/form-data": components["schemas"]["ExecutionRunCreate"];
-            };
-        };
-        responses: {
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["WorkspaceExecutionRun"];
-                };
-            };
-        };
-    };
-    api_v2_tasks_execution_runs_retrieve: {
-        parameters: {
-            query?: never;
-            header: {
-                "X-Workspace-Token": string;
-            };
-            path: {
-                execution_id: string;
-                task_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["WorkspaceExecutionRun"];
-                };
-            };
-        };
-    };
     tasks_extension_requests_create: {
         parameters: {
             query?: never;
@@ -12795,72 +11718,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ExtensionData"][];
-                };
-            };
-        };
-    };
-    api_v2_tasks_operation_replay_list: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                task_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["OperationEvent"][];
-                };
-            };
-        };
-    };
-    tasks_provisioning_job_retrieve: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                task_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProvisioningJob"];
-                };
-            };
-        };
-    };
-    tasks_provisioning_cancel: {
-        parameters: {
-            query?: never;
-            header: {
-                "Idempotency-Key": string;
-                "If-Match": string;
-            };
-            path: {
-                task_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            202: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProvisioningActionResponse"];
                 };
             };
         };
@@ -13001,57 +11858,6 @@ export interface operations {
             };
         };
     };
-    tasks_report_draft_retrieve: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                task_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ReportDraftResponse"];
-                };
-            };
-        };
-    };
-    tasks_report_draft_update: {
-        parameters: {
-            query?: never;
-            header: {
-                "Idempotency-Key": string;
-                "If-Match": string;
-            };
-            path: {
-                task_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ReportDraftWrite"];
-                "application/x-www-form-urlencoded": components["schemas"]["ReportDraftWrite"];
-                "multipart/form-data": components["schemas"]["ReportDraftWrite"];
-            };
-        };
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ReportDraftResponse"];
-                };
-            };
-        };
-    };
     tasks_report_versions_list: {
         parameters: {
             query?: never;
@@ -13069,30 +11875,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ReportVersionListResponse"];
-                };
-            };
-        };
-    };
-    tasks_retry: {
-        parameters: {
-            query?: never;
-            header: {
-                "Idempotency-Key": string;
-                "If-Match": string;
-            };
-            path: {
-                task_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            202: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProvisioningActionResponse"];
                 };
             };
         };
@@ -13176,54 +11958,6 @@ export interface operations {
             };
         };
     };
-    tasks_start: {
-        parameters: {
-            query?: never;
-            header: {
-                "Idempotency-Key": string;
-                "If-Match": string;
-            };
-            path: {
-                task_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            202: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["TaskData"];
-                };
-            };
-        };
-    };
-    tasks_report_submit: {
-        parameters: {
-            query?: never;
-            header: {
-                "Idempotency-Key": string;
-                "If-Match": string;
-            };
-            path: {
-                task_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ReportVersionResponse"];
-                };
-            };
-        };
-    };
     tasks_transitions_list: {
         parameters: {
             query?: never;
@@ -13241,123 +11975,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TransitionData"][];
-                };
-            };
-        };
-    };
-    tasks_workbench_retrieve: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                task_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Workbench"];
-                };
-            };
-        };
-    };
-    api_v2_tasks_workspace_sessions_create: {
-        parameters: {
-            query?: never;
-            header: {
-                "Idempotency-Key": string;
-            };
-            path: {
-                task_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["WorkspaceSession"];
-                "application/x-www-form-urlencoded": components["schemas"]["WorkspaceSession"];
-                "multipart/form-data": components["schemas"]["WorkspaceSession"];
-            };
-        };
-        responses: {
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["WorkspaceSession"];
-                };
-            };
-        };
-    };
-    tasks_workspace_snapshot_save: {
-        parameters: {
-            query?: never;
-            header: {
-                "Idempotency-Key": string;
-                "X-Workspace-Token": string;
-            };
-            path: {
-                task_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "multipart/form-data": components["schemas"]["WorkspaceSnapshot"];
-            };
-        };
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["WorkspaceSnapshot"];
-                };
-            };
-            202: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["WorkspaceStorageJob"];
-                };
-            };
-        };
-    };
-    tasks_workspace_storage_jobs_create: {
-        parameters: {
-            query?: never;
-            header: {
-                "Idempotency-Key": string;
-                "If-Match": string;
-                "X-Workspace-Token": string;
-            };
-            path: {
-                task_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["WorkspaceStorageJobWrite"];
-                "application/x-www-form-urlencoded": components["schemas"]["WorkspaceStorageJobWrite"];
-                "multipart/form-data": components["schemas"]["WorkspaceStorageJobWrite"];
-            };
-        };
-        responses: {
-            202: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["WorkspaceStorageJob"];
                 };
             };
         };
@@ -16507,28 +15124,6 @@ export interface operations {
             };
         };
     };
-    api_v2_teaching_courses_tasks_operation_replay_list: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                course_id: string;
-                task_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["OperationEvent"][];
-                };
-            };
-        };
-    };
     teaching_task_submission_preview: {
         parameters: {
             query?: never;
@@ -16548,27 +15143,6 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ReportPreviewResponse"];
                 };
-            };
-        };
-    };
-    api_v2_teaching_courses_tasks_workspace_retrieve: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                course_id: string;
-                task_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description authorized workspace projection */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
             };
         };
     };
@@ -17671,88 +16245,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["GenericTimetableResponse"];
-                };
-            };
-        };
-    };
-    api_v2_workspace_sessions_renew_create: {
-        parameters: {
-            query?: never;
-            header: {
-                "Idempotency-Key": string;
-                "X-Workspace-Token": string;
-            };
-            path: {
-                session_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["WorkspaceSession"];
-                "application/x-www-form-urlencoded": components["schemas"]["WorkspaceSession"];
-                "multipart/form-data": components["schemas"]["WorkspaceSession"];
-            };
-        };
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["WorkspaceSession"];
-                };
-            };
-        };
-    };
-    api_v2_workspace_sessions_revoke_create: {
-        parameters: {
-            query?: never;
-            header: {
-                "Idempotency-Key": string;
-                "If-Match": string;
-                "X-Workspace-Token": string;
-            };
-            path: {
-                session_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["WorkspaceSession"];
-                "application/x-www-form-urlencoded": components["schemas"]["WorkspaceSession"];
-                "multipart/form-data": components["schemas"]["WorkspaceSession"];
-            };
-        };
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["WorkspaceSession"];
-                };
-            };
-        };
-    };
-    workspace_storage_jobs_retrieve: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                job_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["WorkspaceStorageJob"];
                 };
             };
         };

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // Vitest must bypass a generated sibling index.js in this checkout; production imports use the package entrypoint.
 // @ts-expect-error Vitest resolves the TypeScript source directly.
-import { agentApi, meApi, oidcApi, reportApi, studentApi, taskApi, timetableApi } from "./index.ts";
+import { agentApi, meApi, oidcApi, reportApi, studentApi, timetableApi } from "./index.ts";
 
 const envelope = (data: unknown) => ({ data, meta: { trace_id: "trace-1" } });
 
@@ -85,14 +85,6 @@ describe("student API contracts", () => {
     await timetableApi.confirm("job-1");
     expect(String(vi.mocked(fetch).mock.calls.at(-1)?.[0])).toContain("/me/timetable-imports/job-1/confirm");
     expect(vi.mocked(fetch).mock.calls.at(-1)?.[1]?.method).toBe("POST");
-  });
-
-  it("stops a runtime with the task version required by the backend", async () => {
-    await taskApi.stopRuntime("runtime-1", 12, "stop-once");
-    expect(String(vi.mocked(fetch).mock.calls.at(-1)?.[0])).toContain("/student/task-runtimes/runtime-1/stop");
-    const headers = new Headers(vi.mocked(fetch).mock.calls.at(-1)?.[1]?.headers);
-    expect(headers.get("If-Match")).toBe('"12"');
-    expect(headers.get("Idempotency-Key")).toBe("stop-once");
   });
 
   it("uses course/task Agent scope and preserves asynchronous message acknowledgements", async () => {

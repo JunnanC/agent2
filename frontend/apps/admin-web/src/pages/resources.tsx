@@ -18,7 +18,6 @@ export function Resources() {
   const adapters = useQuery({ queryKey: keys.runtimeAdapters({}), queryFn: () => platformApi.runtimeAdapters() });
   const quotas = useQuery({ queryKey: keys.quotas({}), queryFn: () => platformApi.quotas({}) });
   const instances = useQuery({ queryKey: keys.instances({ status: "ACTIVE" }), queryFn: () => platformApi.instances({ status: "ACTIVE", page_size: 1 }) });
-  const sessions = useQuery({ queryKey: keys.platformWorkspaceSessions({}), queryFn: () => platformApi.workspaceSessions({ page_size: 1 }) });
 
   const decideImage = useMutation({
     mutationFn: (input: { target: PlatformImage; decision: "approve" | "reject" }) =>
@@ -35,9 +34,6 @@ export function Resources() {
   const profileRows = (profiles.data?.rows ?? []) as ResourceProfile[];
   const adapterRows = (adapters.data?.rows ?? []) as RuntimeAdapter[];
   const quotaRows = (quotas.data?.rows ?? []) as Quota[];
-  const sessionTotal = typeof sessions.data?.total === "number"
-    ? sessions.data?.total
-    : (sessions.data?.rows.length ?? 0);
   const instanceTotal = typeof instances.data?.total === "number"
     ? instances.data?.total
     : (instances.data?.rows.length ?? 0);
@@ -74,7 +70,6 @@ export function Resources() {
             <Metric label="运行中实例" value={instanceTotal ? String(instanceTotal) : "—"} icon="boxes" sub="当前活跃实例" />
             <Metric label="已治理镜像" value={String(approvedImages)} icon="boxes" sub="全部通过扫描" />
             <Metric label="配额预警" value={String(quotaAlerts)} icon="gauge" sub="使用率超过 80%" />
-            <Metric label="工作区会话" value={sessionTotal ? String(sessionTotal) : "—"} icon="monitor" sub="会话记录" />
           </div>
         </RequestStateView>
       </Panel>
@@ -169,7 +164,7 @@ export function Resources() {
                       </StatusBadge>
                     </td>
                     <td>{adapter.last_health_at ?? "—"}</td>
-                    <td>{sessionTotal ? `${sessionTotal} 会话` : "—"}</td>
+                    <td className="subtle">按需执行</td>
                   </tr>
                 ))}
                 {profileRows.map((profile) => (

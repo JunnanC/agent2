@@ -20,27 +20,19 @@ from .serializers import (
     ReportAttachmentCreateSerializer,
     ReportAttachmentResponseSerializer,
     ReportAttachmentUploadResponseSerializer,
-    ReportCompleteResponseSerializer,
-    ReportDraftResponseSerializer,
-    ReportDraftWriteSerializer,
     ReportPreviewResponseSerializer,
     ReportVersionListResponseSerializer,
-    ReportVersionResponseSerializer,
     attachment_data,
-    report_draft_data,
     report_version_data,
     system_artifact_data,
 )
 from .services import (
     attachment_for_user,
-    complete_non_report_task,
     create_attachment_upload,
     report_draft_for_user,
     report_preview_for_teaching,
     request_attachment_scan,
     scan_anomaly_summary,
-    submit_report,
-    update_report_draft,
 )
 from .tasks import scan_report_asset
 
@@ -90,49 +82,6 @@ def _idempotent(
     if result.replayed:
         response["X-Idempotent-Replayed"] = "true"
     return response
-
-
-class UserReportDraftView(APIView):
-    permission_classes = [IsUserPortal]
-
-    @extend_schema(
-        operation_id="tasks_report_draft_retrieve",
-        responses={200: ReportDraftResponseSerializer},
-        tags=["reports"],
-        extensions={"x-portals": ["USER"]},
-    )
-    def get(self, request: HttpRequest, task_id: str) -> Response:
-        draft = report_draft_for_user(task_id=task_id, actor=request.user)
-        return _response(request, report_draft_data(draft), etag=draft.row_version)
-
-    @extend_schema(
-        operation_id="tasks_report_draft_update",
-        request=ReportDraftWriteSerializer,
-        responses={200: ReportDraftResponseSerializer},
-        parameters=[IF_MATCH, IDEMPOTENCY_KEY],
-        tags=["reports"],
-        extensions={"x-portals": ["USER"]},
-    )
-    def put(self, request: HttpRequest, task_id: str) -> Response:
-        serializer = ReportDraftWriteSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        expected = parse_if_match(request.headers.get("If-Match"))
-
-        def operation() -> StoredResponse:
-            draft = update_report_draft(
-                task_id=task_id,
-                actor=request.user,
-                body_markdown=serializer.validated_data["body_markdown"],
-                expected_version=expected,
-                context=_context(request),
-            )
-            return StoredResponse(
-                200,
-                _body(request, report_draft_data(draft)),
-                {"ETag": etag_for_version(draft.row_version)},
-            )
-
-        return _idempotent(request, payload=serializer.validated_data, operation=operation)
 
 
 class UserReportAttachmentCreateView(APIView):
@@ -221,36 +170,6 @@ class UserReportAttachmentStatusView(APIView):
         return _response(request, attachment_data(asset, attached=attached), etag=asset.row_version)
 
 
-class UserReportSubmitView(APIView):
-    permission_classes = [IsUserPortal]
-
-    @extend_schema(
-        operation_id="tasks_report_submit",
-        request=None,
-        responses={201: ReportVersionResponseSerializer},
-        parameters=[IF_MATCH, IDEMPOTENCY_KEY],
-        tags=["reports"],
-        extensions={"x-portals": ["USER"]},
-    )
-    def post(self, request: HttpRequest, task_id: str) -> Response:
-        expected = parse_if_match(request.headers.get("If-Match"))
-
-        def operation() -> StoredResponse:
-            version, task = submit_report(
-                task_id=task_id,
-                actor=request.user,
-                expected_task_version=expected,
-                context=_context(request),
-            )
-            return StoredResponse(
-                201,
-                _body(request, report_version_data(version)),
-                {"ETag": etag_for_version(task.row_version)},
-            )
-
-        return _idempotent(request, payload={"task_id": task_id}, operation=operation)
-
-
 class UserReportVersionsView(APIView):
     permission_classes = [IsUserPortal]
 
@@ -277,43 +196,6 @@ class UserReportVersionsView(APIView):
             .order_by("-version_no")
         )
         return _response(request, [report_version_data(row) for row in versions])
-
-
-class UserTaskCompleteView(APIView):
-    permission_classes = [IsUserPortal]
-
-    @extend_schema(
-        operation_id="tasks_complete",
-        request=None,
-        responses={201: ReportCompleteResponseSerializer},
-        parameters=[IF_MATCH, IDEMPOTENCY_KEY],
-        tags=["reports"],
-        extensions={"x-portals": ["USER"]},
-    )
-    def post(self, request: HttpRequest, task_id: str) -> Response:
-        expected = parse_if_match(request.headers.get("If-Match"))
-
-        def operation() -> StoredResponse:
-            artifact, task = complete_non_report_task(
-                task_id=task_id,
-                actor=request.user,
-                expected_task_version=expected,
-                context=_context(request),
-            )
-            return StoredResponse(
-                201,
-                _body(
-                    request,
-                    {
-                        "artifact": system_artifact_data(artifact),
-                        "task_status": task.status,
-                        "task_row_version": task.row_version,
-                    },
-                ),
-                {"ETag": etag_for_version(task.row_version)},
-            )
-
-        return _idempotent(request, payload={"task_id": task_id}, operation=operation)
 
 
 class TeachingSubmissionPreviewView(APIView):

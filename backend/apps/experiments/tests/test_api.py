@@ -777,18 +777,14 @@ class DashboardWeeklyStudyTests(TestCase):
         from apps.workspaces.models import WorkspaceExecutionRun
 
         client = self._client(self.student.email)
-        enter_status, enter_payload = self._post(
-            client,
-            f"/api/v2/tasks/{self.task.public_id}/enter",
-            key="dash-enter",
-            token="",
-            body=None,
-            if_match=self.task.row_version,
+        from apps.workspaces.services import enter_task, request_execution_run
+
+        from .helpers import context
+
+        _, session, token = enter_task(
+            task_id=self.task.public_id, actor=self.student,
+            expected_version=self.task.row_version, context=context(self.student),
         )
-        self.assertEqual(enter_status, 200, enter_payload)
-        session = enter_payload["data"].get("session")
-        assert isinstance(session, dict)
-        token = str(session.get("workspace_token", ""))
 
         today = timezone.localtime(timezone.now())
         monday = (today - timezone.timedelta(days=today.weekday())).replace(
@@ -800,14 +796,11 @@ class DashboardWeeklyStudyTests(TestCase):
             ("dash-run-1", monday + timezone.timedelta(hours=9), 120000),  # 本周 2 分钟
             ("dash-run-2", last_monday + timezone.timedelta(hours=9), 600000),  # 上周 10 分钟
         ):
-            status, payload = self._post(
-                client,
-                f"/api/v2/tasks/{self.task.public_id}/execution-runs",
-                key=key,
-                token=token,
+            run = request_execution_run(
+                actor=self.student, session=session, token=token, arguments={},
+                request_key=key, context=context(self.student),
             )
-            self.assertEqual(status, 201, payload)
-            run_id = str(payload["data"].get("public_id"))
+            run_id = run.public_id
             WorkspaceExecutionRun.objects.filter(public_id=run_id).update(
                 started_at=started_at,
                 finished_at=started_at + timezone.timedelta(minutes=duration_ms // 60000),

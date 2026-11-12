@@ -67,7 +67,7 @@ def test_kong_uses_protocol_specific_upstream_timeouts() -> None:
 
     assert services["django-api"]["read_timeout"] == 60_000
     assert services["django-events"]["read_timeout"] == 3_600_000
-    assert services["django-workspace"]["read_timeout"] == 600_000
+    assert "django-workspace" not in services
     assert services["django-files"]["read_timeout"] == 300_000
     assert all(service["retries"] == 0 for service in services.values())
     assert {plugin["name"] for plugin in config["plugins"]} >= {
@@ -133,34 +133,31 @@ def test_production_edge_terminates_tls_from_swarm_secrets() -> None:
     assert {"tls_certificate", "tls_private_key"} <= set(stack["services"]["nginx"]["secrets"])
 
 
-def test_workspace_edge_allows_only_same_origin_embedding() -> None:
-    for relative_path, student_host in (
-        ("infrastructure/nginx/nginx.conf", "student.localhost student.example.edu"),
-        ("infrastructure/nginx/nginx.prod.conf", "${STUDENT_HOST}"),
-    ):
-        nginx = (ROOT / relative_path).read_text(encoding="utf-8")
-        student = server_block(nginx, student_host)
-        workspace = student.split("location /workspace/ {", maxsplit=1)[1]
-        workspace = workspace.split("}", maxsplit=1)[0]
-
-        assert "proxy_hide_header X-Frame-Options;" in workspace
-        assert "proxy_hide_header Content-Security-Policy;" in workspace
-        assert "add_header X-Frame-Options SAMEORIGIN always;" in workspace
-        assert "frame-ancestors 'self'" in workspace
+def test_retired_workspace_edge_has_no_proxy_or_services() -> None:
+    for name in ("nginx.conf", "nginx.prod.conf"):
+        nginx = (ROOT / "infrastructure/nginx" / name).read_text(encoding="utf-8")
+        assert nginx.count("location /workspace/ { return 404; }") == 3
+        assert "proxy_hide_header X-Frame-Options" not in nginx
+    for path in ("docker-compose.dev.yml", "infrastructure/swarm/stack.yml"):
+        config = load_yaml(path)
+        assert not {"workspace-gateway", "workspace-storage-worker", "runtime-reference",
+                    "runtime-algorithm-workspace"} & config["services"].keys()
+        assert "workspace_internal_key" not in config.get("secrets", {})
 
 
-def test_swarm_workspace_internal_key_is_scoped_to_gateway_and_authority() -> None:
-    stack = load_yaml("infrastructure/swarm/stack.yml")
-
-    assert "WORKSPACE_INTERNAL_KEY_FILE" not in stack["x-app-environment"]
-    for service in ("django", "workspace-gateway"):
-        assert "workspace_internal_key" in stack["services"][service]["secrets"]
-        assert (
-            stack["services"][service]["environment"]["WORKSPACE_INTERNAL_KEY_FILE"]
-            == "/run/secrets/workspace_internal_key"
-        )
-    for service in ("celery", "runtime-worker"):
-        assert "workspace_internal_key" not in stack["services"][service]["secrets"]
+def test_assessment_deployment_keeps_dispatch_and_scanning_requirements() -> None:
+    deploy = (ROOT / "scripts/cd/deploy.sh").read_text(encoding="utf-8")
+    assert "managed=(django celery runtime-worker celery-beat log-ingest)" in deploy
+    assert "'fluent-bit', 'clamav'):" in deploy
+    assert "Remove retired services from the server override" in deploy
+    for name in ("ci.yml", "cd.yml"):
+        workflow = load_yaml(".github/workflows/" + name)
+        # Use the image matrix, regardless of the CI/CD job display name.
+        matrices = [definition["strategy"]["matrix"]["include"]
+                    for definition in workflow["jobs"].values()
+                    if "strategy" in definition and "matrix" in definition["strategy"]]
+        images = {item["image"] for matrix in matrices for item in matrix if "image" in item}
+        assert images == {"backend", "web", "stdio"}, name
 
 
 def test_swarm_swarm_hosts_network_and_support_images_are_deployment_injected() -> None:
@@ -169,7 +166,6 @@ def test_swarm_swarm_hosts_network_and_support_images_are_deployment_injected() 
 
     assert environment["DJANGO_ALLOWED_HOSTS"] == "${DJANGO_ALLOWED_HOSTS}"
     assert environment["DJANGO_TRUSTED_ORIGINS"] == "${DJANGO_TRUSTED_ORIGINS}"
-    assert environment["WORKSPACE_ALLOWED_ORIGINS"] == "${WORKSPACE_ALLOWED_ORIGINS}"
     assert environment["TRUSTED_PROXY_CIDRS"] == "${TRUSTED_PROXY_CIDRS}"
     assert stack["networks"]["app"]["ipam"]["config"][0]["subnet"] == "${APP_NETWORK_SUBNET}"
     runtime_network = "${SWARM_RUNTIME_NETWORK:-experimental-platform-swarm-runtime}"
@@ -189,16 +185,16 @@ def test_local_runtime_docker_access_is_scoped_to_runtime_worker() -> None:
     assert "/var/run/docker.sock:/var/run/docker.sock" in services["runtime-worker"]["volumes"]
     assert "q_provision" in services["runtime-worker"]["command"][-1]
     for service, definition in services.items():
-        if service in {"runtime-worker", "workspace-storage-worker"}:
+        if service == "runtime-worker":
             continue
         assert not any("docker.sock" in str(item) for item in definition.get("volumes", []))
     environment = compose["x-app-environment"]
     assert environment["RUNTIME_MODE"] == "${RUNTIME_MODE:-local}"
     assert environment["RUNTIME_ADAPTER_CODE"] == "${RUNTIME_ADAPTER_CODE:-runtime/local-docker}"
     assert environment["LOCAL_RUNTIME_MODE"] == "${LOCAL_RUNTIME_MODE:-REAL}"
-    assert environment["AUTO_PROVISION_ON_ASSIGNMENT"] == ("${AUTO_PROVISION_ON_ASSIGNMENT:-true}")
+    assert environment["AUTO_PROVISION_ON_ASSIGNMENT"] == ("${AUTO_PROVISION_ON_ASSIGNMENT:-false}")
     assert environment["LOCAL_RUNTIME_IMAGE"] == (
-        "${LOCAL_RUNTIME_IMAGE:-experimental-platform-workspace:local}"
+        "${LOCAL_RUNTIME_IMAGE:-experimental-platform-stdio:local}"
     )
     assert environment["LOCAL_RUNTIME_NETWORK"] == (
         "${LOCAL_RUNTIME_NETWORK:-${COMPOSE_PROJECT_NAME}-runtime}"
@@ -208,11 +204,6 @@ def test_local_runtime_docker_access_is_scoped_to_runtime_worker() -> None:
         '${RUNTIME_ADAPTER_CONFIGS:-{"runtime/local-docker":{"pids_limit":256}}}'
     )
     assert "q_workspace_storage" not in services["runtime-worker"]["command"][-1]
-    assert services["workspace-storage-worker"]["command"][-1] == "--queues=q_workspace_storage"
-    assert (
-        "/var/run/docker.sock:/var/run/docker.sock"
-        in services["workspace-storage-worker"]["volumes"]
-    )
 
 
 def test_swarm_runtime_access_is_injected_only_into_runtime_worker() -> None:
@@ -227,14 +218,13 @@ def test_swarm_runtime_access_is_injected_only_into_runtime_worker() -> None:
         "swarm_docker_cert",
         "swarm_docker_key",
     } <= set(services["runtime-worker"]["secrets"])
-    for service in ("django", "celery", "workspace-gateway"):
+    for service in ("django", "celery"):
         assert not {
             "swarm_docker_ca",
             "swarm_docker_cert",
             "swarm_docker_key",
         } & set(services[service].get("secrets", []))
     assert "q_workspace_storage" not in services["runtime-worker"]["command"][-1]
-    assert services["workspace-storage-worker"]["command"][-1] == "--queues=q_workspace_storage"
 
 
 def test_compose_declares_foundation_services_and_isolated_app_network() -> None:

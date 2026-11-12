@@ -505,7 +505,7 @@ class ExperimentServiceTests(TestCase):
             context=context(self.owner, "WORKER"),
         )
         self.assertEqual(task.current_failure["previous_status"], "PROVISIONING")
-        self.assertEqual(allowed_actions(task, actor=task.student), ["RETRY", "REQUEST_EXTENSION"])
+        self.assertEqual(allowed_actions(task, actor=task.student), ["REQUEST_EXTENSION"])
         with self.assertRaises(TaskStateConflict):
             transition_task(
                 task_id=task.public_id,
@@ -527,7 +527,7 @@ class ExperimentServiceTests(TestCase):
         )
         self.assertEqual(retried.status, ExperimentTask.Status.PROVISIONING)
 
-    def test_allowed_actions_offer_enter_for_workspace_usable_statuses(self) -> None:
+    def test_allowed_actions_no_longer_offer_retired_workspace_entry(self) -> None:
         published = self._publish()
         task = ExperimentTask.objects.get(publication=published)
         task = transition_task(
@@ -548,7 +548,7 @@ class ExperimentServiceTests(TestCase):
             reason="workspace ready",
             context=context(self.owner, "WORKER"),
         )
-        self.assertEqual(allowed_actions(task, actor=task.student), ["ENTER", "REQUEST_EXTENSION"])
+        self.assertEqual(allowed_actions(task, actor=task.student), ["REQUEST_EXTENSION"])
         task = transition_task(
             task_id=task.public_id,
             to_status=ExperimentTask.Status.IN_PROGRESS,
@@ -558,12 +558,12 @@ class ExperimentServiceTests(TestCase):
             reason="entered workspace",
             context=context(task.student, "USER"),
         )
-        self.assertEqual(allowed_actions(task, actor=task.student), ["ENTER", "REQUEST_EXTENSION"])
+        self.assertEqual(allowed_actions(task, actor=task.student), ["REQUEST_EXTENSION"])
         ExperimentTask.objects.filter(pk=task.pk).update(
             status=ExperimentTask.Status.REPORT_DRAFT
         )
         task.refresh_from_db()
-        self.assertEqual(allowed_actions(task, actor=task.student), ["ENTER", "REQUEST_EXTENSION"])
+        self.assertEqual(allowed_actions(task, actor=task.student), ["REQUEST_EXTENSION"])
 
     def test_extension_decision_is_single_and_does_not_change_publication_window(self) -> None:
         published = self._publish()

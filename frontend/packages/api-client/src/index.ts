@@ -1,14 +1,14 @@
-import { ensureCsrf, readCsrfToken, newIdempotencyKey, request } from "@edu/auth-client";
+import { newIdempotencyKey, request } from "@edu/auth-client";
 import type { EnvelopeSuccess } from "@edu/auth-client";
 import type { components } from "./generated/schema";
 import type {
-  Anomaly, Announcement, CalendarEvent, Checkpoint, CheckpointList, Chapter, Compensation, Course,
-  Enrollment, ExecutionRun, ImageCreateInput, ImageScanReportInput, ImportJob, Instance as InstanceData, Invitation, Material, Me,
+  Anomaly, Announcement, CalendarEvent, Chapter, Compensation, Course,
+  Enrollment, ImageCreateInput, ImageScanReportInput, ImportJob, Instance as InstanceData, Invitation, Material, Me,
   ModelRoute, NotificationItem, OperationLog, OperationsOverview, PlatformImage, PlatformUser,
-  PortalContext, PrecheckRun, Publication, Quota, ReportDraft, ResourceProfile, ReviewDetail,
+  PortalContext, PrecheckRun, Publication, Quota, ResourceProfile, ReviewDetail,
   ReviewResult, ReviewSummary, Rubric, RuntimeAdapter, StudentDashboard, Task, TeachingCourseList, Template,
   TemplateChapter, TemplateTask, ToolPolicy, TemplateVersion, UsageCost, Verification,
-  WorkspaceOperationEvent, WorkspaceSession, WorkspaceStorageJob, AgentMessage, AgentMode, CourseResourceSummary,
+  AgentMessage, AgentMode, CourseResourceSummary,
   LearningHistoryData, NotificationPreferences, TimetableData, TimetableImport, AgentProfile, AgentSession,
   AgentToolCall, ToolRequest, ToolDecision, AgentFeedback, VerificationUpdate, NotificationPreferenceUpdate,
   EnrollmentExitCheck, CourseQuestion, CourseAnswer, DownloadGrant, DownloadGrantRevoke,
@@ -46,82 +46,6 @@ function taskListEnvelope(envelope: EnvelopeSuccess<Partial<Task>[]>): ListEnvel
 
 function taskEnvelope(envelope: EnvelopeSuccess<Partial<Task>>): EnvelopeSuccess<Task> {
   return { ...envelope, data: normalizeTask(envelope.data ?? {}) } as EnvelopeSuccess<Task>;
-}
-
-/**
- * 工作台聚合归一（真实契约：task / content / template / tests / workspace / submission）：
- * - task 沿用 normalizeTask（动作转小写等）
- * - 章节列表缺省时，由 content.steps 或 content.description 派生一个可用章节，避免左侧空白
- * - tests 实测为对象（public_count/count/summary/recent_execution），summary 才是用例列表；
- *   聚合归一为页面使用的数组
- */
-function normalizeWorkbenchAggregate(data: WorkbenchAggregate | undefined | null): WorkbenchAggregate {
-  if (data == null || typeof data !== "object") {
-    return { task: normalizeTask({}), chapters: [] };
-  }
-  const content = data.content as { description?: string | null; steps?: Array<Record<string, unknown>> } | null;
-  let chapters = Array.isArray(data.chapters) ? data.chapters : [];
-  if (!chapters.length && Array.isArray(content?.steps) && content?.steps?.length) {
-    chapters = content.steps.map((step, index) => ({
-      public_id: String(step["public_id"] ?? `step-${index}`),
-      title: String(step["title"] ?? step["name"] ?? `步骤 ${index + 1}`),
-      description: step["description"] != null ? String(step["description"]) : null,
-      sort_order: index,
-      instructions: Array.isArray(step["instructions"])
-        ? step["instructions"].map((item) => String(item))
-        : undefined,
-    }));
-  }
-  if (!chapters.length) {
-    chapters = [{
-      public_id: "chapter-current",
-      title: data.task?.title ?? "实验内容",
-      description: content?.description ?? null,
-      sort_order: 0,
-    }];
-  }
-  const rawTests = data.tests as unknown;
-  let testsList: Array<{ key?: string; name: string; description?: string }> | undefined;
-  if (Array.isArray(rawTests)) {
-    testsList = rawTests as Array<{ key?: string; name: string; description?: string }>;
-  } else if (rawTests != null && typeof rawTests === "object") {
-    const summary = (rawTests as { summary?: unknown }).summary;
-    if (Array.isArray(summary)) {
-      testsList = summary.map((item, index) => {
-        const entry = item as Record<string, unknown>;
-        return {
-          key: entry["key"] != null ? String(entry["key"]) : String(index),
-          name: String(entry["name"] ?? entry["title"] ?? `测试用例 ${index + 1}`),
-          description: entry["description"] != null ? String(entry["description"]) : undefined,
-          input: entry["input"] != null ? String(entry["input"]) : undefined,
-          expected: entry["expected"] != null ? String(entry["expected"]) : undefined,
-        };
-      });
-    }
-  } else {
-    testsList = undefined;
-  }
-  const rawTemplate = (data as { template?: unknown }).template;
-  let templateCaps: Record<string, boolean> | null = null;
-  if (rawTemplate != null && typeof rawTemplate === "object") {
-    const rawCaps = (rawTemplate as { workspace_capabilities?: unknown }).workspace_capabilities;
-    if (rawCaps != null && typeof rawCaps === "object") {
-      templateCaps = Object.fromEntries(
-        Object.entries(rawCaps as Record<string, unknown>)
-          .filter((entry) => typeof entry[1] === "boolean")
-          .map((entry) => [entry[0], entry[1] as boolean]),
-      );
-    }
-  }
-  return {
-    ...data,
-    task: data.task ? normalizeTask(data.task) : (data.task as never),
-    chapters,
-    tests: testsList,
-    tests_count: (rawTests as { count?: number } | null)?.count ?? testsList?.length ?? 0,
-    tests_available: (rawTests as { runnable?: boolean } | null)?.runnable ?? Boolean(testsList?.length),
-    template_caps: templateCaps,
-  };
 }
 
 export interface ListEnvelope<T> {
@@ -320,29 +244,6 @@ export const taskApi = {
   transitions: (taskId: string) =>
     request<{ allowed_actions: string[]; blockers: Task["blockers"] }>(`/tasks/${taskId}/transitions`).then((r) => r.data),
 
-  start: (taskId: string, ifMatch?: string | number | null, reuseKey?: string) =>
-    request<Partial<Task>>(`/tasks/${taskId}/start`, {
-      method: "POST", body: {}, idempotencyKey: reuseKey ?? newIdempotencyKey(), ifMatch,
-    }).then(taskEnvelope).then((r) => r.data),
-
-  enter: (taskId: string, ifMatch?: string | number | null, reuseKey?: string) =>
-    request<{ task: Partial<Task>; session: WorkspaceSession }>(`/tasks/${taskId}/enter`, {
-      method: "POST",
-      body: {},
-      idempotencyKey: reuseKey ?? newIdempotencyKey(),
-      ifMatch,
-    }).then((r) => r.data)
-      .then((data) => ({ ...data, task: data?.task ? normalizeTask(data.task) : (data?.task as never) })) as
-    Promise<{ task: Task; session: WorkspaceSession }>,
-
-  provisioningJob: (taskId: string) =>
-    request<Record<string, unknown> | null>(`/tasks/${taskId}/provisioning-job`).then((r) => r.data),
-
-  cancelProvisioning: (taskId: string, ifMatch?: string | number | null, reuseKey?: string) =>
-    request(`/tasks/${taskId}/provisioning-job/cancel`, {
-      method: "POST", body: {}, idempotencyKey: reuseKey ?? newIdempotencyKey(), ifMatch,
-    }).then((r) => r.data),
-
   extensions: (taskId: string) =>
     request<Array<Record<string, unknown>>>(`/tasks/${taskId}/extensions`).then(toList),
 
@@ -351,240 +252,15 @@ export const taskApi = {
       method: "POST", body: payload, idempotencyKey: reuseKey ?? newIdempotencyKey(), ifMatch,
     }).then((r) => r.data),
 
-  retry: (taskId: string, ifMatch?: string | number | null, reuseKey?: string) =>
-    request<Partial<Task>>(`/tasks/${taskId}/retry`, {
-      method: "POST", body: {}, idempotencyKey: reuseKey ?? newIdempotencyKey(), ifMatch,
-    }).then(taskEnvelope).then((r) => r.data),
-
-  complete: (taskId: string, ifMatch?: string | number | null, reuseKey?: string) =>
-    request<Partial<Task>>(`/tasks/${taskId}/complete`, {
-      method: "POST", body: {}, idempotencyKey: reuseKey ?? newIdempotencyKey(), ifMatch,
-    }).then(taskEnvelope).then((r) => r.data),
-
   archive: (taskId: string) => request<Record<string, unknown>>(`/tasks/${taskId}/archive`).then((r) => r.data),
-  stopRuntime: (runtimeId: string, taskVersion: string | number, reuseKey?: string) =>
-    request<{ runtime_id: string; task_id: string; status: string }>(`/student/task-runtimes/${runtimeId}/stop`, {
-      method: "POST", body: {}, ifMatch: taskVersion, idempotencyKey: reuseKey ?? newIdempotencyKey(),
-    }).then((r) => r.data),
-  operationReplay: (taskId: string) => request<Array<Record<string, unknown>>>(`/tasks/${taskId}/operation-replay`).then(toList),
-};
 
-/* ══════════ 工作区 ══════════ */
-
-export interface WorkbenchAggregate {
-  task: Task;
-  session?: WorkspaceSession | null;
-  chapters: Array<{ public_id: string; title: string; description?: string | null; sort_order: number; status?: string; tasks?: unknown; instructions?: string[] }>;
-  content?: { description?: string | null; steps?: Array<Record<string, unknown>>; manual?: { asset_id: string; format: string; text: string | null } | null } | null;
-  current_chapter?: { public_id: string; title: string; instructions?: string[] } | null;
-  tests?: Array<{ key?: string; name: string; description?: string; input?: string; expected?: string }>;
-  tests_available?: boolean;
-  tests_count?: number;
-  capabilities?: string[];
-  /** 模板锁定的工作区能力声明(布尔开关,后端 template.workspace_capabilities) */
-  template_caps?: Record<string, boolean> | null;
-  submission?: { can_submit: boolean; blocked_reason?: { code?: string } | null };
-  workspace?: {
-    mode?: string;
-    language?: string;
-    language_policy?: {
-      mode?: string;
-      language?: string | null;
-      allowed_languages?: string[];
-      default_versions?: Record<string, string>;
-    };
-    toolchain_version?: string | null;
-    last_synchronized_snapshot_id?: string | null;
-    active_storage_job?: WorkspaceStorageJob | null;
-  };
-}
-
-async function waitForStorageJob(job: WorkspaceStorageJob): Promise<WorkspaceStorageJob> {
-  for (let attempt = 0; attempt < 60; attempt++) {
-    if (job.status === "PASSED" && job.result_snapshot_id) return job;
-    if (job.status === "FAILED" || job.status === "CANCELLED") {
-      throw new Error(job.failure?.message || "工作区快照保存失败，请重试");
-    }
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    job = await request<WorkspaceStorageJob>(`/workspace-storage-jobs/${job.public_id}`).then(r => r.data);
-  }
-  throw new Error("工作区快照仍在处理中，请稍后重试");
-}
-
-export const workspaceApi = {
-  editorControl: async (sessionId: string, action: "save" | "reload", workspaceToken: string) => {
-    await ensureCsrf();
-    const requestId = newIdempotencyKey();
-    const send = () => fetch(`/workspace/${sessionId}/webide/edu-control/${action}`, {
-      method: "POST", credentials: "include", signal: AbortSignal.timeout(15000),
-      headers: { "Content-Type": "application/json", "X-CSRFToken": readCsrfToken() ?? "", "X-Workspace-Token": workspaceToken },
-      body: JSON.stringify({ session_id: sessionId, request_id: requestId }),
-    });
-    let response = await send();
-    // Reload briefly stops the extension host. saveAll is safe to repeat; never bypass it.
-    for (let attempt = 0; action === "save" && [502, 503].includes(response.status) && attempt < 4; attempt++) {
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      response = await send();
-    }
-    if (!response.ok) throw new Error(action === "save" ? "编辑器保存失败，请先保存文件后重试" : "编辑器重载失败，请刷新工作台");
-    const body = await response.json() as { schema_version?: number; session_id?: string; request_id?: string; dirty_files?: unknown; saved?: boolean };
-    if (body.schema_version !== 1 || body.session_id !== sessionId || body.request_id !== requestId
-      || !Array.isArray(body.dirty_files) || body.dirty_files.length || (action === "save" && body.saved !== true)) {
-      throw new Error("编辑器仍有未保存文件，请保存后重试");
-    }
-  },
-  workbench: (taskId: string) => request<WorkbenchAggregate>(`/tasks/${taskId}/workbench`)
-    .then((r) => r.data)
-    .then((data) => normalizeWorkbenchAggregate(data)),
-
-  createSession: (taskId: string, reuseKey?: string) =>
-    request<WorkspaceSession>(`/tasks/${taskId}/workspace-sessions`, {
-      method: "POST", body: {}, idempotencyKey: reuseKey ?? newIdempotencyKey(),
-    }).then((r) => r.data),
-
-  renewSession: (sessionId: string, workspaceToken?: string, reuseKey?: string) =>
-    request<WorkspaceSession>(`/workspace-sessions/${sessionId}/renew`, {
-      method: "POST",
-      body: {},
-      idempotencyKey: reuseKey ?? newIdempotencyKey(),
-      headers: workspaceToken ? { "X-Workspace-Token": workspaceToken } : undefined,
-    }).then((r) => r.data),
-
-  revokeSession: (sessionId: string, workspaceToken?: string, reuseKey?: string) =>
-    request(`/workspace-sessions/${sessionId}/revoke`, {
-      method: "POST",
-      body: {},
-      idempotencyKey: reuseKey ?? newIdempotencyKey(),
-      headers: workspaceToken ? { "X-Workspace-Token": workspaceToken } : undefined,
-    }).then((r) => r.data),
-
-  saveSnapshot: (taskId: string, payload: { base_version: number; client_seq: number; digest: string; content?: unknown }, workspaceToken?: string, reuseKey?: string) =>
-    request<Record<string, unknown>>(`/tasks/${taskId}/workspace-snapshot`, {
-      method: "PUT",
-      body: payload,
-      idempotencyKey: reuseKey ?? newIdempotencyKey(),
-      headers: workspaceToken ? { "X-Workspace-Token": workspaceToken } : undefined,
-    }).then((r) => r.data),
-
-  captureSnapshot: async (taskId: string, workspaceToken: string) => {
-    const state = await workspaceApi.checkpoints(taskId, workspaceToken);
-    const job = await request<WorkspaceStorageJob>(`/tasks/${taskId}/workspace-storage-jobs`, {
-      method: "POST",
-      // Failed captures keep their sequence, so a new attempt needs a fresh one.
-      body: { kind: "CAPTURE", client_seq: Date.now(), base_version: state.currentVersion },
-      ifMatch: state.sessionRowVersion,
-      idempotencyKey: newIdempotencyKey(),
-      headers: { "X-Workspace-Token": workspaceToken },
-    }).then(r => r.data);
-    return waitForStorageJob(job);
-  },
-
-  storageJob: async (
-    taskId: string,
-    payload: { kind: "SWITCH" | "RESET"; language?: string },
-    sessionRowVersion: number,
-    workspaceToken: string,
-    reuseKey?: string,
-  ) => {
-    const job = await request<WorkspaceStorageJob>(`/tasks/${taskId}/workspace-storage-jobs`, {
-      method: "POST",
-      body: payload,
-      ifMatch: sessionRowVersion,
-      idempotencyKey: reuseKey ?? newIdempotencyKey(),
-      headers: { "X-Workspace-Token": workspaceToken },
-    }).then((r) => r.data);
-    return waitForStorageJob(job);
-  },
-
-  checkpoints: (taskId: string, workspaceToken?: string) =>
-    request<{ items?: unknown[]; current_version?: number; row_version?: number }>(
-      `/tasks/${taskId}/checkpoints`,
-      { headers: workspaceToken ? { "X-Workspace-Token": workspaceToken } : undefined },
-    ).then((envelope) => {
-      const raw = envelope.data as { items?: unknown[]; current_version?: number; row_version?: number } | null;
-      return {
-        rows: Array.isArray(raw?.items) ? (raw.items as Checkpoint[]) : [],
-        currentVersion: typeof raw?.current_version === "number" ? raw.current_version : 0,
-        sessionRowVersion: typeof raw?.row_version === "number" ? raw.row_version : 0,
-      } satisfies CheckpointList;
-    }),
-
-  createCheckpoint: (taskId: string, payload: { label: string }, workspaceToken?: string, reuseKey?: string) =>
-    request<Checkpoint>(`/tasks/${taskId}/checkpoints`, {
-      method: "POST",
-      body: payload,
-      idempotencyKey: reuseKey ?? newIdempotencyKey(),
-      headers: workspaceToken ? { "X-Workspace-Token": workspaceToken } : undefined,
-    }).then((r) => r.data),
-
-  restoreCheckpoint: (taskId: string, checkpointId: string, ifMatch?: string | number | null, workspaceToken?: string, reuseKey?: string) =>
-    request<WorkspaceStorageJob | Record<string, unknown>>(`/tasks/${taskId}/checkpoints/${checkpointId}/restore`, {
-      method: "POST",
-      body: {},
-      idempotencyKey: reuseKey ?? newIdempotencyKey(),
-      ifMatch,
-      headers: workspaceToken ? { "X-Workspace-Token": workspaceToken } : undefined,
-    }).then(async (r) => "status" in r.data ? await waitForStorageJob(r.data as WorkspaceStorageJob) : r.data),
-
-  executionRuns: (taskId: string, query?: { page?: number; page_size?: number }, workspaceToken?: string) =>
-    request<ExecutionRun[]>(`/tasks/${taskId}/execution-runs`, {
-      query,
-      headers: workspaceToken ? { "X-Workspace-Token": workspaceToken } : undefined,
-    }).then(toList),
-
-  executionRun: (taskId: string, runId: string, workspaceToken?: string) =>
-    request<ExecutionRun>(`/tasks/${taskId}/execution-runs/${runId}`, {
-      headers: workspaceToken ? { "X-Workspace-Token": workspaceToken } : undefined,
-    }).then((r) => r.data),
-
-  createExecutionRun: (
-    taskId: string,
-    payload: { snapshot_id?: string; test_keys?: string[] },
-    workspaceToken?: string,
-    reuseKey?: string,
-  ) =>
-    request<ExecutionRun>(`/tasks/${taskId}/execution-runs`, {
-      method: "POST",
-      body: payload,
-      idempotencyKey: reuseKey ?? newIdempotencyKey(),
-      headers: workspaceToken ? { "X-Workspace-Token": workspaceToken } : undefined,
-    }).then((r) => r.data),
-
-  stopRuntime: (runtimeId: string, ifMatch: string | number, reuseKey?: string) =>
-    request(`/student/task-runtimes/${runtimeId}/stop`, {
-      method: "POST", body: {}, ifMatch, idempotencyKey: reuseKey ?? newIdempotencyKey(),
-    }).then((r) => r.data),
-
-  operation: (
-    sessionId: string,
-    operation: string,
-    arguments_: Record<string, unknown>,
-    workspaceToken: string,
-    reuseKey?: string,
-  ) => request<WorkspaceOperationEvent>(`/workspace/${sessionId}/operations`, {
-    prefix: "",
-    method: "POST",
-    body: { operation, arguments: arguments_ },
-    idempotencyKey: reuseKey ?? newIdempotencyKey(),
-    headers: { "X-Workspace-Token": workspaceToken },
-  }).then((r) => r.data),
 };
 
 /* ══════════ 报告 ══════════ */
 
 export const reportApi = {
-  draft: (taskId: string) => request<ReportDraft>(`/tasks/${taskId}/report-draft`).then((r) => r.data),
-
-  saveDraft: (taskId: string, payload: { body_markdown: string }, ifMatch?: string | null) =>
-    request<ReportDraft>(`/tasks/${taskId}/report-draft`, {
-      method: "PUT", body: payload, idempotencyKey: newIdempotencyKey(), ifMatch,
-    }),
-
   reportVersions: (taskId: string) =>
     request<Array<Record<string, unknown>>>(`/tasks/${taskId}/report-versions`).then(toList),
-
-  attachments: (taskId: string) =>
-    request<ReportDraft>(`/tasks/${taskId}/report-draft`).then((r) => r.data.attachments),
 
   uploadAttachment: (taskId: string, payload: ReportAttachmentCreate, reuseKey?: string) =>
     request<ReportAttachmentUpload>(`/tasks/${taskId}/attachments`, {
@@ -600,11 +276,6 @@ export const reportApi = {
   createDownloadGrant: (assetId: string, reuseKey?: string) =>
     request<DownloadGrant>(`/files/${assetId}/download-grants`, {
       method: "POST", body: {}, idempotencyKey: reuseKey ?? newIdempotencyKey(),
-    }).then((r) => r.data),
-
-  submitReport: (taskId: string, reuseKey?: string, ifMatch?: string | number | null) =>
-    request<Record<string, unknown>>(`/tasks/${taskId}/submit-report`, {
-      method: "POST", body: {}, idempotencyKey: reuseKey ?? newIdempotencyKey(), ifMatch,
     }).then((r) => r.data),
 
   reviewResult: (taskId: string) =>
@@ -1149,8 +820,7 @@ export const platformApi = {
       method: "POST", body: {}, idempotencyKey: reuseKey ?? newIdempotencyKey(), ifMatch,
     }).then((r) => r.data),
 
-  workspaceSessions: (query?: { page?: number; page_size?: number; status?: string }) =>
-    request<WorkspaceSession[]>("/platform/workspaces/sessions", { query }).then(toList),
+
 
   anomalies: (query?: { kind?: string; page?: number; page_size?: number }) =>
     request<Anomaly[]>("/platform/tasks/anomalies", { query }).then(toList),

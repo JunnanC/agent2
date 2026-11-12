@@ -91,9 +91,7 @@ export function Home() {
           statusTone: taskStatusTone(task.status),
           onClick: () => navigate(task.assessment_available
             ? `/experiments/${task.public_id}/assessment`
-            : task.allowed_actions.includes("enter") || task.allowed_actions.includes("view_workbench")
-              ? `/experiments/${task.public_id}/workbench`
-              : `/experiments/${task.public_id}`),
+            : `/experiments/${task.public_id}`),
         });
         cursor.setDate(cursor.getDate() + 1);
       }

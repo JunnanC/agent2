@@ -59,8 +59,6 @@ from .services import (
     prerequisite_blockers_for_publication,
     publish_publication,
     request_extension,
-    start_task_runtime,
-    stop_task_runtime,
     student_learning_history,
     teaching_progress,
     update_publication,
@@ -623,73 +621,6 @@ class UserTaskTransitionsView(APIView):
             request,
             [transition_data(row) for row in item.transitions.all().order_by("created_at", "id")],
         )
-
-
-class UserTaskStartView(APIView):
-    permission_classes = [IsUserPortal]
-
-    @extend_schema(
-        operation_id="tasks_start",
-        request=None,
-        responses={202: TaskDataSerializer},
-        parameters=[IF_MATCH, IDEMPOTENCY_KEY],
-        extensions={"x-portals": ["USER"]},
-    )
-    def post(self, request: HttpRequest, task_id: str) -> Response:
-        expected = parse_if_match(request.headers.get("If-Match"))
-
-        def operation() -> StoredResponse:
-            item, _job = start_task_runtime(
-                task_id=task_id,
-                actor=request.user,
-                expected_version=expected,
-                context=_context(request),
-                payload=request.data if isinstance(request.data, dict) else {},
-            )
-            item = task_for_user(actor=request.user, task_id=item.public_id)
-            return StoredResponse(
-                202,
-                _body(request, task_data(item, actions=allowed_actions(item, actor=request.user))),
-                {"ETag": etag_for_version(item.row_version)},
-            )
-
-        return _idempotent(request, payload={}, operation=operation)
-
-
-class UserTaskStopView(APIView):
-    permission_classes = [IsUserPortal]
-
-    @extend_schema(
-        operation_id="student_task_runtime_stop",
-        request=None,
-        responses=GenericResponseSerializer,
-        parameters=[IF_MATCH, IDEMPOTENCY_KEY],
-        extensions={"x-portals": ["USER"]},
-    )
-    def post(self, request: HttpRequest, runtime_id: str) -> Response:
-        expected = parse_if_match(request.headers.get("If-Match"))
-
-        def operation() -> StoredResponse:
-            instance = stop_task_runtime(
-                runtime_id=runtime_id,
-                actor=request.user,
-                context=_context(request),
-                expected_version=expected,
-            )
-            return StoredResponse(
-                202 if instance.status == "DESTROYING" else 200,
-                _body(
-                    request,
-                    {
-                        "runtime_id": instance.public_id,
-                        "task_id": instance.task.public_id,
-                        "status": instance.status,
-                    },
-                ),
-                {"ETag": etag_for_version(instance.task.row_version)},
-            )
-
-        return _idempotent(request, payload={}, operation=operation)
 
 
 class UserTaskExtensionListView(APIView):

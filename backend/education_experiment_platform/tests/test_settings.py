@@ -89,7 +89,19 @@ class SettingsTests(SimpleTestCase):
             check=False,
         )
         assert result.returncode != 0
-        assert "Production requires RUNTIME_MODE=swarm" in result.stderr
+        assert "Production requires RUNTIME_MODE=local|swarm" in result.stderr
+        environment.update({
+            "RUNTIME_MODE": "local", "RUNTIME_ADAPTER_CODE": "assessment/local",
+            "RUNTIME_ADAPTER_CONFIGS": '{"assessment/local":{"docker_host":"unix:///var/run/docker.sock"}}',
+            "LOCAL_RUNTIME_MODE": "REAL",
+        })
+        for mode, expected in (("REAL", 0), ("STUB", 1)):
+            environment["LOCAL_RUNTIME_MODE"] = mode
+            result = subprocess.run(
+                [sys.executable, "-c", "import education_experiment_platform.settings.prod"],
+                cwd=ROOT / "backend", env=environment, capture_output=True, text=True,
+            )
+            assert (result.returncode != 0) == bool(expected), result.stderr
 
     def test_all_target_apps_exist_without_teams(self) -> None:
         installed = {config.label for config in apps.get_app_configs()}

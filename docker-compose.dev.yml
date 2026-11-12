@@ -35,11 +35,6 @@ x-app-environment: &app-environment
   DEFAULT_FROM_EMAIL: ${DEFAULT_FROM_EMAIL:-no-reply@example.edu}
   STUDENT_PUBLIC_URL: ${STUDENT_PUBLIC_URL:-http://student.localhost:8080}
   TEACHER_PUBLIC_URL: ${TEACHER_PUBLIC_URL:-http://teacher.localhost:8080}
-  WORKSPACE_ALLOWED_ORIGINS: http://student.localhost:${ENTRY_PORT:-8080}
-  WORKSPACE_INTERNAL_KEY: ${WORKSPACE_INTERNAL_KEY:-unsafe-local-workspace-internal-key}
-  WORKSPACE_UPSTREAM_HMAC_KEY: ${WORKSPACE_UPSTREAM_HMAC_KEY:-unsafe-local-workspace-upstream-hmac-key}
-  WORKSPACE_AUTHORITY_URL: ${WORKSPACE_AUTHORITY_URL:-http://django:8000}
-  WORKSPACE_COOKIE_NAME: workspace_ticket
   WORKSPACE_STORAGE_STALE_AFTER_SECONDS: ${WORKSPACE_STORAGE_STALE_AFTER_SECONDS:-900}
   WORKSPACE_STORAGE_REDISPATCH_SECONDS: ${WORKSPACE_STORAGE_REDISPATCH_SECONDS:-300}
   WORKSPACE_FINALIZE_TIMEOUT_SECONDS: ${WORKSPACE_FINALIZE_TIMEOUT_SECONDS:-1200}
@@ -71,11 +66,11 @@ x-app-environment: &app-environment
   SWARM_RUNTIME_NETWORK: ${SWARM_RUNTIME_NETWORK:-experimental-platform-swarm-runtime}
   RUNTIME_MODE: ${RUNTIME_MODE:-local}
   RUNTIME_ADAPTER_CODE: ${RUNTIME_ADAPTER_CODE:-runtime/local-docker}
-  LOCAL_RUNTIME_IMAGE: ${LOCAL_RUNTIME_IMAGE:-experimental-platform-workspace:local}
+  LOCAL_RUNTIME_IMAGE: ${LOCAL_RUNTIME_IMAGE:-experimental-platform-stdio:local}
   LOCAL_RUNTIME_NETWORK: ${LOCAL_RUNTIME_NETWORK:-${COMPOSE_PROJECT_NAME}-runtime}
   LOCAL_DOCKER_HOST: ${LOCAL_DOCKER_HOST:-unix:///var/run/docker.sock}
   LOCAL_RUNTIME_MODE: ${LOCAL_RUNTIME_MODE:-REAL}
-  AUTO_PROVISION_ON_ASSIGNMENT: ${AUTO_PROVISION_ON_ASSIGNMENT:-true}
+  AUTO_PROVISION_ON_ASSIGNMENT: ${AUTO_PROVISION_ON_ASSIGNMENT:-false}
   RUNTIME_ADAPTER_CONFIGS: '${RUNTIME_ADAPTER_CONFIGS:-{"runtime/local-docker":{"pids_limit":256}}}'
 
 x-backend-build: &backend-build
@@ -350,7 +345,7 @@ services:
         limits: { cpus: "1.00", memory: 768M }
       update_config: { parallelism: 1, order: stop-first, failure_action: rollback }
 
-  runtime-worker: &runtime-worker
+  runtime-worker:
     container_name: ${COMPOSE_PROJECT_NAME}-runtime-worker
     image: experimental-platform-backend:local
     profiles: ["runtime"]
@@ -372,49 +367,6 @@ services:
         limits: { cpus: "1.00", memory: 768M }
       update_config: { parallelism: 1, order: stop-first, failure_action: rollback }
 
-  workspace-storage-worker:
-    <<: *runtime-worker
-    container_name: ${COMPOSE_PROJECT_NAME}-workspace-storage-worker
-    command: ["celery", "-A", "education_experiment_platform", "worker", "--loglevel=INFO", "--concurrency=1", "--queues=q_workspace_storage"]
-
-  workspace-gateway:
-    container_name: ${COMPOSE_PROJECT_NAME}-workspace-gateway
-    image: experimental-platform-backend:local
-    build: *backend-build
-    command: ["uvicorn", "education_experiment_platform.workspace_gateway:application", "--host", "0.0.0.0", "--port", "8080", "--no-proxy-headers"]
-    environment: *app-environment
-    networks: [app, runtime]
-    depends_on:
-      mysql-grants: { condition: service_completed_successfully }
-    healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/healthz"]
-      interval: 5s
-      timeout: 3s
-      retries: 20
-    logging: *fluentd-logging
-    deploy:
-      replicas: 1
-      resources:
-        reservations: { cpus: "0.10", memory: 128M }
-        limits: { cpus: "0.50", memory: 384M }
-      update_config: { parallelism: 1, order: start-first, failure_action: rollback }
-
-  runtime-reference:
-    container_name: ${COMPOSE_PROJECT_NAME}-runtime-reference
-    image: experimental-platform-reference:local
-    profiles: ["runtime"]
-    build: ./runtime/reference-workspace
-    networks:
-      runtime:
-        aliases:
-          - tasks.fake-runtime
-    read_only: true
-    tmpfs: [/tmp]
-    deploy:
-      resources:
-        reservations: { cpus: "0.10", memory: 128M }
-        limits: { cpus: "0.50", memory: 512M }
-
   runtime-stdio:
     profiles: ["tools"]
     platform: linux/amd64
@@ -425,26 +377,6 @@ services:
     entrypoint: ["python", "--version"]
     network_mode: none
     read_only: true
-
-  runtime-algorithm-workspace:
-    container_name: ${COMPOSE_PROJECT_NAME}-runtime-algorithm-workspace
-    profiles: ["runtime"]
-    platform: linux/amd64
-    build:
-      context: ./runtime/algorithm-workspace
-      args:
-        GO_BUILDER_IMAGE: public.ecr.aws/docker/library/golang:1.25.1-alpine3.22@sha256:546671046d6f9f786c24b83111ba1801b736ee4b01b23db33e4f3eb41d4f8883
-        PYTHON_BASE_IMAGE: public.ecr.aws/docker/library/python:3.14.0-slim-bookworm@sha256:9bbb8720ae0a24a6ca8dd678bfdf57818fe70caf54c52a53ec01d8db43405056
-    image: ${LOCAL_RUNTIME_IMAGE:-experimental-platform-workspace:local}
-    networks: [runtime]
-    secrets:
-      - workspace_upstream_token
-    read_only: true
-    tmpfs: [/tmp]
-    deploy:
-      resources:
-        reservations: { cpus: "0.10", memory: 256M }
-        limits: { cpus: "1.00", memory: 768M }
 
   celery-beat:
     container_name: ${COMPOSE_PROJECT_NAME}-celery-beat
@@ -629,6 +561,3 @@ volumes:
     name: ${COMPOSE_PROJECT_NAME}-fluent-bit-buffer
   prometheus-data:
     name: ${COMPOSE_PROJECT_NAME}-prometheus-data
-secrets:
-  workspace_upstream_token:
-    file: ./secrets/workspace_upstream_token

@@ -84,9 +84,7 @@ export function Experiments() {
                     <div className="table-actions">
                       {task.assessment_available
                         ? <Link className="btn sm primary" to={`/experiments/${task.public_id}/assessment`}>进入实验答题</Link>
-                        : task.allowed_actions.includes("enter") && !task.blockers.length
-                          ? <Link className="btn sm primary" to={`/experiments/${task.public_id}/workbench`}>进入工作台</Link>
-                          : <Link className="btn sm" to={`/experiments/${task.public_id}`}>查看详情</Link>}
+                        : <Link className="btn sm" to={`/experiments/${task.public_id}`}>查看详情</Link>}
                     </div>
                   ),
                 },

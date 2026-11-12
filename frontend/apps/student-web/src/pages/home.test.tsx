@@ -39,7 +39,6 @@ function show(rows: Task[]) {
   render(<QueryClientProvider client={client}><MemoryRouter><Routes>
     <Route path="/" element={<Home />} />
     <Route path="/experiments/:id" element={<div>任务详情页面</div>} />
-    <Route path="/experiments/:id/workbench" element={<div>任务工作台页面</div>} />
     <Route path="/experiments/:id/assessment" element={<div>轻量答题页面</div>} />
   </Routes></MemoryRouter></QueryClientProvider>);
 }
@@ -73,13 +72,13 @@ it("7 项任务分为 3、3、1 项，保留总数并禁用首尾翻页", async 
   expect(screen.getByText("任务详情页面")).toBeInTheDocument();
 });
 
-it("最后一页的可进入任务仍然打开工作台", async () => {
+it("旧格式任务仍可查看详情但不再进入工作台", async () => {
   show(tasks(9));
   const next = await screen.findByRole("button", { name: "下一页" });
   fireEvent.click(next);
   fireEvent.click(next);
   fireEvent.click(screen.getByRole("button", { name: /10日任务9/ }));
-  expect(screen.getByText("任务工作台页面")).toBeInTheDocument();
+  expect(screen.getByText("任务详情页面")).toBeInTheDocument();
 });
 
 it("切换日期及返回原日期均回到第一页，空日期显示空状态", async () => {
