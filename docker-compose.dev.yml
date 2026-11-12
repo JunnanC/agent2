@@ -119,6 +119,9 @@ services:
       MYSQL_APP_PASSWORD: ${MYSQL_APP_PASSWORD:-local-app-password}
     volumes:
       - ./infrastructure/mysql/configure-users.sh:/scripts/configure-users.sh:ro
+    # The mysql image declares VOLUME /var/lib/mysql; back it with tmpfs so a
+    # one-shot helper never creates an anonymous volume.
+    tmpfs: [/var/lib/mysql]
     networks: [data]
     depends_on:
       mysql: { condition: service_healthy }
@@ -148,6 +151,9 @@ services:
       MONGO_REPLICA_SET_KEY: ${MONGO_REPLICA_SET_KEY:-local-replica-set-key-change-this-value-now}
     command: ["bash", "-ec", "printf '%s' \"$$MONGO_REPLICA_SET_KEY\" > /keyfile/keyfile && chmod 400 /keyfile/keyfile && chown 999:999 /keyfile/keyfile"]
     volumes: [mongo-keyfile:/keyfile]
+    # The mongo image declares VOLUME /data/db and /data/configdb; back them
+    # with tmpfs so this one-shot helper never creates anonymous volumes.
+    tmpfs: [/data/db, /data/configdb]
     restart: "no"
 
   mongodb:
@@ -160,6 +166,9 @@ services:
     volumes:
       - mongo-data:/data/db
       - mongo-keyfile:/keyfile:ro
+    # /data/configdb comes from the image VOLUME declaration; tmpfs keeps it
+    # from creating an anonymous volume.
+    tmpfs: [/data/configdb]
     networks: [data]
     depends_on:
       mongo-keyfile: { condition: service_completed_successfully }
@@ -187,6 +196,9 @@ services:
           try { rs.status() } catch (error) { rs.initiate({_id:"rs0",members:[{_id:0,host:"mongodb:27017"}]}) }
         '
     networks: [data]
+    # The mongo image declares VOLUME /data/db and /data/configdb; back them
+    # with tmpfs so this one-shot init never creates anonymous volumes.
+    tmpfs: [/data/db, /data/configdb]
     depends_on:
       mongodb: { condition: service_healthy }
     restart: "no"
@@ -199,6 +211,9 @@ services:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-edu-platform}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-local-minio-password}
     volumes: [minio-data:/data]
+    # The bitnami image declares VOLUME /bitnami/minio/data and /certs; tmpfs
+    # keeps them from becoming anonymous volumes.
+    tmpfs: ["/bitnami/minio/data:uid=1001,gid=1001", "/certs:uid=1001,gid=1001"]
     networks: [data, minio-host-access]
     ports:
       - "127.0.0.1:${MINIO_API_PORT:-9000}:9000"
@@ -282,6 +297,9 @@ services:
       MYSQL_APP_PASSWORD: ${MYSQL_APP_PASSWORD:-local-app-password}
     volumes:
       - ./infrastructure/mysql/configure-users.sh:/scripts/configure-users.sh:ro
+    # The mysql image declares VOLUME /var/lib/mysql; back it with tmpfs so a
+    # one-shot helper never creates an anonymous volume.
+    tmpfs: [/var/lib/mysql]
     networks: [data]
     depends_on:
       migrate: { condition: service_completed_successfully }
