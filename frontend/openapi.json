@@ -4115,108 +4115,6 @@
                 ]
             }
         },
-        "/api/v2/platform/instances": {
-            "get": {
-                "operationId": "platform_instances_list",
-                "tags": [
-                    "platform-governance"
-                ],
-                "security": [
-                    {
-                        "portalSession": []
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/InstanceListResponse"
-                                }
-                            }
-                        },
-                        "description": ""
-                    }
-                },
-                "x-portals": [
-                    "PLATFORM"
-                ]
-            }
-        },
-        "/api/v2/platform/instances/{instance_id}/destroy": {
-            "post": {
-                "operationId": "platform_instances_destroy",
-                "parameters": [
-                    {
-                        "in": "header",
-                        "name": "Idempotency-Key",
-                        "schema": {
-                            "type": "string"
-                        },
-                        "required": true
-                    },
-                    {
-                        "in": "header",
-                        "name": "If-Match",
-                        "schema": {
-                            "type": "string"
-                        },
-                        "required": true
-                    },
-                    {
-                        "in": "path",
-                        "name": "instance_id",
-                        "schema": {
-                            "type": "string"
-                        },
-                        "required": true
-                    }
-                ],
-                "tags": [
-                    "platform-governance"
-                ],
-                "requestBody": {
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "$ref": "#/components/schemas/ArchiveDestroyReason"
-                            }
-                        },
-                        "application/x-www-form-urlencoded": {
-                            "schema": {
-                                "$ref": "#/components/schemas/ArchiveDestroyReason"
-                            }
-                        },
-                        "multipart/form-data": {
-                            "schema": {
-                                "$ref": "#/components/schemas/ArchiveDestroyReason"
-                            }
-                        }
-                    },
-                    "required": true
-                },
-                "security": [
-                    {
-                        "portalSession": []
-                    }
-                ],
-                "responses": {
-                    "202": {
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/InstanceResponse"
-                                }
-                            }
-                        },
-                        "description": ""
-                    }
-                },
-                "x-portals": [
-                    "PLATFORM"
-                ]
-            }
-        },
         "/api/v2/platform/integrations/api-clients": {
             "get": {
                 "operationId": "platform_integrations_api_clients_list",
@@ -5888,34 +5786,6 @@
                             "application/json": {
                                 "schema": {
                                     "$ref": "#/components/schemas/PolicyResponse"
-                                }
-                            }
-                        },
-                        "description": ""
-                    }
-                },
-                "x-portals": [
-                    "PLATFORM"
-                ]
-            }
-        },
-        "/api/v2/platform/reviews/summary": {
-            "get": {
-                "operationId": "platform_reviews_monitor",
-                "tags": [
-                    "platform-governance"
-                ],
-                "security": [
-                    {
-                        "portalSession": []
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ReviewMonitorResponse"
                                 }
                             }
                         },
@@ -7752,82 +7622,6 @@
                 }
             }
         },
-        "/api/v2/tasks/{task_id}/report-versions": {
-            "get": {
-                "operationId": "tasks_report_versions_list",
-                "parameters": [
-                    {
-                        "in": "path",
-                        "name": "task_id",
-                        "schema": {
-                            "type": "string"
-                        },
-                        "required": true
-                    }
-                ],
-                "tags": [
-                    "reports"
-                ],
-                "security": [
-                    {
-                        "portalSession": []
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ReportVersionListResponse"
-                                }
-                            }
-                        },
-                        "description": ""
-                    }
-                },
-                "x-portals": [
-                    "USER"
-                ]
-            }
-        },
-        "/api/v2/tasks/{task_id}/review-result": {
-            "get": {
-                "operationId": "tasks_review_result_retrieve",
-                "parameters": [
-                    {
-                        "in": "path",
-                        "name": "task_id",
-                        "schema": {
-                            "type": "string"
-                        },
-                        "required": true
-                    }
-                ],
-                "tags": [
-                    "tasks"
-                ],
-                "security": [
-                    {
-                        "portalSession": []
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ReviewResultResponse"
-                                }
-                            }
-                        },
-                        "description": ""
-                    }
-                },
-                "x-portals": [
-                    "USER"
-                ]
-            }
-        },
         "/api/v2/tasks/{task_id}/sections/choice/submissions": {
             "post": {
                 "operationId": "api_v2_tasks_sections_choice_submissions_create",
@@ -8196,7 +7990,8 @@
                         "in": "path",
                         "name": "course_id",
                         "schema": {
-                            "type": "string"
+                            "type": "string",
+                            "pattern": "^[^/]+$"
                         },
                         "required": true
                     },
@@ -8204,7 +7999,8 @@
                         "in": "path",
                         "name": "resource",
                         "schema": {
-                            "type": "string"
+                            "type": "string",
+                            "pattern": "^chapters|materials|announcements|calendar-events|questions|prerequisites$"
                         },
                         "required": true
                     }
@@ -8237,7 +8033,8 @@
                         "in": "path",
                         "name": "course_id",
                         "schema": {
-                            "type": "string"
+                            "type": "string",
+                            "pattern": "^[^/]+$"
                         },
                         "required": true
                     },
@@ -8245,7 +8042,8 @@
                         "in": "path",
                         "name": "resource",
                         "schema": {
-                            "type": "string"
+                            "type": "string",
+                            "pattern": "^chapters|materials|announcements|calendar-events|questions|prerequisites$"
                         },
                         "required": true
                     }
@@ -9790,223 +9588,6 @@
                             "application/json": {
                                 "schema": {
                                     "$ref": "#/components/schemas/AgentEnvelope"
-                                }
-                            }
-                        },
-                        "description": ""
-                    }
-                },
-                "x-portals": [
-                    "TEACHING"
-                ]
-            }
-        },
-        "/api/v2/teaching/courses/{course_id}/ai-score-batches": {
-            "get": {
-                "operationId": "api_v2_teaching_courses_ai_score_batches_retrieve",
-                "parameters": [
-                    {
-                        "in": "path",
-                        "name": "course_id",
-                        "schema": {
-                            "type": "string"
-                        },
-                        "required": true
-                    },
-                    {
-                        "in": "query",
-                        "name": "publication_id",
-                        "schema": {
-                            "type": "string"
-                        }
-                    }
-                ],
-                "tags": [
-                    "teaching-reviews"
-                ],
-                "security": [
-                    {
-                        "portalSession": []
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/AIScoreBatchResponse"
-                                }
-                            }
-                        },
-                        "description": ""
-                    }
-                },
-                "x-portals": [
-                    "TEACHING"
-                ]
-            },
-            "post": {
-                "operationId": "api_v2_teaching_courses_ai_score_batches_create",
-                "parameters": [
-                    {
-                        "in": "header",
-                        "name": "Idempotency-Key",
-                        "schema": {
-                            "type": "string"
-                        },
-                        "required": true
-                    },
-                    {
-                        "in": "path",
-                        "name": "course_id",
-                        "schema": {
-                            "type": "string"
-                        },
-                        "required": true
-                    }
-                ],
-                "tags": [
-                    "teaching-reviews"
-                ],
-                "requestBody": {
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "$ref": "#/components/schemas/AIScoreBatchWrite"
-                            }
-                        },
-                        "application/x-www-form-urlencoded": {
-                            "schema": {
-                                "$ref": "#/components/schemas/AIScoreBatchWrite"
-                            }
-                        },
-                        "multipart/form-data": {
-                            "schema": {
-                                "$ref": "#/components/schemas/AIScoreBatchWrite"
-                            }
-                        }
-                    },
-                    "required": true
-                },
-                "security": [
-                    {
-                        "portalSession": []
-                    }
-                ],
-                "responses": {
-                    "202": {
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/AIScoreBatchResponse"
-                                }
-                            }
-                        },
-                        "description": ""
-                    }
-                },
-                "x-portals": [
-                    "TEACHING"
-                ]
-            }
-        },
-        "/api/v2/teaching/courses/{course_id}/ai-score-batches/{batch_id}": {
-            "get": {
-                "operationId": "teaching_ai_score_batch_retrieve",
-                "parameters": [
-                    {
-                        "in": "path",
-                        "name": "batch_id",
-                        "schema": {
-                            "type": "string"
-                        },
-                        "required": true
-                    },
-                    {
-                        "in": "path",
-                        "name": "course_id",
-                        "schema": {
-                            "type": "string"
-                        },
-                        "required": true
-                    }
-                ],
-                "tags": [
-                    "teaching-reviews"
-                ],
-                "security": [
-                    {
-                        "portalSession": []
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/AIScoreBatchDetailResponse"
-                                }
-                            }
-                        },
-                        "description": ""
-                    }
-                },
-                "x-portals": [
-                    "TEACHING"
-                ]
-            }
-        },
-        "/api/v2/teaching/courses/{course_id}/ai-score-batches/{batch_id}/accept": {
-            "post": {
-                "operationId": "teaching_ai_score_batch_accept",
-                "parameters": [
-                    {
-                        "in": "header",
-                        "name": "Idempotency-Key",
-                        "schema": {
-                            "type": "string"
-                        },
-                        "required": true
-                    },
-                    {
-                        "in": "header",
-                        "name": "If-Match",
-                        "schema": {
-                            "type": "string"
-                        },
-                        "required": true
-                    },
-                    {
-                        "in": "path",
-                        "name": "batch_id",
-                        "schema": {
-                            "type": "string"
-                        },
-                        "required": true
-                    },
-                    {
-                        "in": "path",
-                        "name": "course_id",
-                        "schema": {
-                            "type": "string"
-                        },
-                        "required": true
-                    }
-                ],
-                "tags": [
-                    "teaching-reviews"
-                ],
-                "security": [
-                    {
-                        "portalSession": []
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/AIScoreBatchDataResponse"
                                 }
                             }
                         },
@@ -12908,661 +12489,6 @@
                 }
             }
         },
-        "/api/v2/teaching/courses/{course_id}/reviews": {
-            "get": {
-                "operationId": "teaching_reviews_list",
-                "parameters": [
-                    {
-                        "in": "path",
-                        "name": "course_id",
-                        "schema": {
-                            "type": "string"
-                        },
-                        "required": true
-                    }
-                ],
-                "tags": [
-                    "teaching-reviews"
-                ],
-                "security": [
-                    {
-                        "portalSession": []
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ReviewListResponse"
-                                }
-                            }
-                        },
-                        "description": ""
-                    }
-                },
-                "x-portals": [
-                    "TEACHING"
-                ]
-            }
-        },
-        "/api/v2/teaching/courses/{course_id}/reviews/{review_id}": {
-            "get": {
-                "operationId": "teaching_reviews_retrieve",
-                "parameters": [
-                    {
-                        "in": "path",
-                        "name": "course_id",
-                        "schema": {
-                            "type": "string"
-                        },
-                        "required": true
-                    },
-                    {
-                        "in": "query",
-                        "name": "include_source",
-                        "schema": {
-                            "type": "string"
-                        }
-                    },
-                    {
-                        "in": "path",
-                        "name": "review_id",
-                        "schema": {
-                            "type": "string"
-                        },
-                        "required": true
-                    }
-                ],
-                "tags": [
-                    "teaching-reviews"
-                ],
-                "security": [
-                    {
-                        "portalSession": []
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ReviewDetailResponse"
-                                }
-                            }
-                        },
-                        "description": ""
-                    }
-                },
-                "x-portals": [
-                    "TEACHING"
-                ]
-            }
-        },
-        "/api/v2/teaching/courses/{course_id}/reviews/{review_id}/ai-score-suggestions/{suggestion_id}/accept": {
-            "post": {
-                "operationId": "teaching_ai_score_suggestion_accept",
-                "parameters": [
-                    {
-                        "in": "header",
-                        "name": "Idempotency-Key",
-                        "schema": {
-                            "type": "string"
-                        },
-                        "required": true
-                    },
-                    {
-                        "in": "header",
-                        "name": "If-Match",
-                        "schema": {
-                            "type": "string"
-                        },
-                        "required": true
-                    },
-                    {
-                        "in": "path",
-                        "name": "course_id",
-                        "schema": {
-                            "type": "string"
-                        },
-                        "required": true
-                    },
-                    {
-                        "in": "path",
-                        "name": "review_id",
-                        "schema": {
-                            "type": "string"
-                        },
-                        "required": true
-                    },
-                    {
-                        "in": "path",
-                        "name": "suggestion_id",
-                        "schema": {
-                            "type": "string"
-                        },
-                        "required": true
-                    }
-                ],
-                "tags": [
-                    "teaching-reviews"
-                ],
-                "security": [
-                    {
-                        "portalSession": []
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/AIScoreSuggestionResponse"
-                                }
-                            }
-                        },
-                        "description": ""
-                    }
-                },
-                "x-portals": [
-                    "TEACHING"
-                ]
-            }
-        },
-        "/api/v2/teaching/courses/{course_id}/reviews/{review_id}/annotations": {
-            "get": {
-                "operationId": "teaching_review_annotations_list",
-                "parameters": [
-                    {
-                        "in": "path",
-                        "name": "course_id",
-                        "schema": {
-                            "type": "string"
-                        },
-                        "required": true
-                    },
-                    {
-                        "in": "path",
-                        "name": "review_id",
-                        "schema": {
-                            "type": "string"
-                        },
-                        "required": true
-                    }
-                ],
-                "tags": [
-                    "teaching-reviews"
-                ],
-                "security": [
-                    {
-                        "portalSession": []
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/AnnotationListResponse"
-                                }
-                            }
-                        },
-                        "description": ""
-                    }
-                },
-                "x-portals": [
-                    "TEACHING"
-                ]
-            },
-            "post": {
-                "operationId": "teaching_review_annotations_create",
-                "parameters": [
-                    {
-                        "in": "header",
-                        "name": "Idempotency-Key",
-                        "schema": {
-                            "type": "string"
-                        },
-                        "required": true
-                    },
-                    {
-                        "in": "header",
-                        "name": "If-Match",
-                        "schema": {
-                            "type": "string"
-                        },
-                        "required": true
-                    },
-                    {
-                        "in": "path",
-                        "name": "course_id",
-                        "schema": {
-                            "type": "string"
-                        },
-                        "required": true
-                    },
-                    {
-                        "in": "path",
-                        "name": "review_id",
-                        "schema": {
-                            "type": "string"
-                        },
-                        "required": true
-                    }
-                ],
-                "tags": [
-                    "teaching-reviews"
-                ],
-                "requestBody": {
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "$ref": "#/components/schemas/AnnotationWrite"
-                            }
-                        },
-                        "application/x-www-form-urlencoded": {
-                            "schema": {
-                                "$ref": "#/components/schemas/AnnotationWrite"
-                            }
-                        },
-                        "multipart/form-data": {
-                            "schema": {
-                                "$ref": "#/components/schemas/AnnotationWrite"
-                            }
-                        }
-                    },
-                    "required": true
-                },
-                "security": [
-                    {
-                        "portalSession": []
-                    }
-                ],
-                "responses": {
-                    "201": {
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/AnnotationResponse"
-                                }
-                            }
-                        },
-                        "description": ""
-                    }
-                },
-                "x-portals": [
-                    "TEACHING"
-                ]
-            }
-        },
-        "/api/v2/teaching/courses/{course_id}/reviews/{review_id}/annotations/{annotation_id}/revisions": {
-            "post": {
-                "operationId": "teaching_review_annotation_revise",
-                "parameters": [
-                    {
-                        "in": "header",
-                        "name": "Idempotency-Key",
-                        "schema": {
-                            "type": "string"
-                        },
-                        "required": true
-                    },
-                    {
-                        "in": "header",
-                        "name": "If-Match",
-                        "schema": {
-                            "type": "string"
-                        },
-                        "required": true
-                    },
-                    {
-                        "in": "path",
-                        "name": "annotation_id",
-                        "schema": {
-                            "type": "string"
-                        },
-                        "required": true
-                    },
-                    {
-                        "in": "path",
-                        "name": "course_id",
-                        "schema": {
-                            "type": "string"
-                        },
-                        "required": true
-                    },
-                    {
-                        "in": "path",
-                        "name": "review_id",
-                        "schema": {
-                            "type": "string"
-                        },
-                        "required": true
-                    }
-                ],
-                "tags": [
-                    "teaching-reviews"
-                ],
-                "requestBody": {
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "$ref": "#/components/schemas/AnnotationRevisionWrite"
-                            }
-                        },
-                        "application/x-www-form-urlencoded": {
-                            "schema": {
-                                "$ref": "#/components/schemas/AnnotationRevisionWrite"
-                            }
-                        },
-                        "multipart/form-data": {
-                            "schema": {
-                                "$ref": "#/components/schemas/AnnotationRevisionWrite"
-                            }
-                        }
-                    },
-                    "required": true
-                },
-                "security": [
-                    {
-                        "portalSession": []
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/AnnotationResponse"
-                                }
-                            }
-                        },
-                        "description": ""
-                    }
-                },
-                "x-portals": [
-                    "TEACHING"
-                ]
-            }
-        },
-        "/api/v2/teaching/courses/{course_id}/reviews/{review_id}/annotations/{annotation_id}/revoke": {
-            "post": {
-                "operationId": "teaching_review_annotation_revoke",
-                "parameters": [
-                    {
-                        "in": "header",
-                        "name": "Idempotency-Key",
-                        "schema": {
-                            "type": "string"
-                        },
-                        "required": true
-                    },
-                    {
-                        "in": "header",
-                        "name": "If-Match",
-                        "schema": {
-                            "type": "string"
-                        },
-                        "required": true
-                    },
-                    {
-                        "in": "path",
-                        "name": "annotation_id",
-                        "schema": {
-                            "type": "string"
-                        },
-                        "required": true
-                    },
-                    {
-                        "in": "path",
-                        "name": "course_id",
-                        "schema": {
-                            "type": "string"
-                        },
-                        "required": true
-                    },
-                    {
-                        "in": "path",
-                        "name": "review_id",
-                        "schema": {
-                            "type": "string"
-                        },
-                        "required": true
-                    }
-                ],
-                "tags": [
-                    "teaching-reviews"
-                ],
-                "security": [
-                    {
-                        "portalSession": []
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/AnnotationResponse"
-                                }
-                            }
-                        },
-                        "description": ""
-                    }
-                },
-                "x-portals": [
-                    "TEACHING"
-                ]
-            }
-        },
-        "/api/v2/teaching/courses/{course_id}/reviews/{review_id}/criterion-scores": {
-            "get": {
-                "operationId": "teaching_review_scores_list",
-                "parameters": [
-                    {
-                        "in": "path",
-                        "name": "course_id",
-                        "schema": {
-                            "type": "string"
-                        },
-                        "required": true
-                    },
-                    {
-                        "in": "path",
-                        "name": "review_id",
-                        "schema": {
-                            "type": "string"
-                        },
-                        "required": true
-                    }
-                ],
-                "tags": [
-                    "teaching-reviews"
-                ],
-                "security": [
-                    {
-                        "portalSession": []
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/CriterionScoresResponse"
-                                }
-                            }
-                        },
-                        "description": ""
-                    }
-                },
-                "x-portals": [
-                    "TEACHING"
-                ]
-            },
-            "put": {
-                "operationId": "teaching_review_scores_update",
-                "parameters": [
-                    {
-                        "in": "header",
-                        "name": "Idempotency-Key",
-                        "schema": {
-                            "type": "string"
-                        },
-                        "required": true
-                    },
-                    {
-                        "in": "header",
-                        "name": "If-Match",
-                        "schema": {
-                            "type": "string"
-                        },
-                        "required": true
-                    },
-                    {
-                        "in": "path",
-                        "name": "course_id",
-                        "schema": {
-                            "type": "string"
-                        },
-                        "required": true
-                    },
-                    {
-                        "in": "path",
-                        "name": "review_id",
-                        "schema": {
-                            "type": "string"
-                        },
-                        "required": true
-                    }
-                ],
-                "tags": [
-                    "teaching-reviews"
-                ],
-                "requestBody": {
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "$ref": "#/components/schemas/CriterionScoresWrite"
-                            }
-                        },
-                        "application/x-www-form-urlencoded": {
-                            "schema": {
-                                "$ref": "#/components/schemas/CriterionScoresWrite"
-                            }
-                        },
-                        "multipart/form-data": {
-                            "schema": {
-                                "$ref": "#/components/schemas/CriterionScoresWrite"
-                            }
-                        }
-                    },
-                    "required": true
-                },
-                "security": [
-                    {
-                        "portalSession": []
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/CriterionScoresResponse"
-                                }
-                            }
-                        },
-                        "description": ""
-                    }
-                },
-                "x-portals": [
-                    "TEACHING"
-                ]
-            }
-        },
-        "/api/v2/teaching/courses/{course_id}/reviews/{review_id}/decide": {
-            "post": {
-                "operationId": "teaching_reviews_decide",
-                "parameters": [
-                    {
-                        "in": "header",
-                        "name": "Idempotency-Key",
-                        "schema": {
-                            "type": "string"
-                        },
-                        "required": true
-                    },
-                    {
-                        "in": "header",
-                        "name": "If-Match",
-                        "schema": {
-                            "type": "string"
-                        },
-                        "required": true
-                    },
-                    {
-                        "in": "path",
-                        "name": "course_id",
-                        "schema": {
-                            "type": "string"
-                        },
-                        "required": true
-                    },
-                    {
-                        "in": "path",
-                        "name": "review_id",
-                        "schema": {
-                            "type": "string"
-                        },
-                        "required": true
-                    }
-                ],
-                "tags": [
-                    "teaching-reviews"
-                ],
-                "requestBody": {
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "$ref": "#/components/schemas/ReviewDecisionWrite"
-                            }
-                        },
-                        "application/x-www-form-urlencoded": {
-                            "schema": {
-                                "$ref": "#/components/schemas/ReviewDecisionWrite"
-                            }
-                        },
-                        "multipart/form-data": {
-                            "schema": {
-                                "$ref": "#/components/schemas/ReviewDecisionWrite"
-                            }
-                        }
-                    },
-                    "required": true
-                },
-                "security": [
-                    {
-                        "portalSession": []
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ReviewDecisionResponse"
-                                }
-                            }
-                        },
-                        "description": ""
-                    }
-                },
-                "x-portals": [
-                    "TEACHING"
-                ]
-            }
-        },
         "/api/v2/teaching/courses/{course_id}/rubric-versions/{version_id}": {
             "get": {
                 "operationId": "teaching_rubric_versions_retrieve",
@@ -13950,172 +12876,6 @@
                             "application/json": {
                                 "schema": {
                                     "$ref": "#/components/schemas/RubricVersionResponse"
-                                }
-                            }
-                        },
-                        "description": ""
-                    }
-                },
-                "x-portals": [
-                    "TEACHING"
-                ]
-            }
-        },
-        "/api/v2/teaching/courses/{course_id}/similarity-runs": {
-            "post": {
-                "operationId": "teaching_similarity_runs_create",
-                "parameters": [
-                    {
-                        "in": "header",
-                        "name": "Idempotency-Key",
-                        "schema": {
-                            "type": "string"
-                        },
-                        "required": true
-                    },
-                    {
-                        "in": "header",
-                        "name": "If-Match",
-                        "schema": {
-                            "type": "string"
-                        },
-                        "required": true
-                    },
-                    {
-                        "in": "path",
-                        "name": "course_id",
-                        "schema": {
-                            "type": "string"
-                        },
-                        "required": true
-                    }
-                ],
-                "tags": [
-                    "teaching-reviews"
-                ],
-                "requestBody": {
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "$ref": "#/components/schemas/SimilarityStart"
-                            }
-                        },
-                        "application/x-www-form-urlencoded": {
-                            "schema": {
-                                "$ref": "#/components/schemas/SimilarityStart"
-                            }
-                        },
-                        "multipart/form-data": {
-                            "schema": {
-                                "$ref": "#/components/schemas/SimilarityStart"
-                            }
-                        }
-                    },
-                    "required": true
-                },
-                "security": [
-                    {
-                        "portalSession": []
-                    }
-                ],
-                "responses": {
-                    "202": {
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/SimilarityRunResponse"
-                                }
-                            }
-                        },
-                        "description": ""
-                    }
-                },
-                "x-portals": [
-                    "TEACHING"
-                ]
-            }
-        },
-        "/api/v2/teaching/courses/{course_id}/similarity-runs/{run_id}": {
-            "get": {
-                "operationId": "teaching_similarity_runs_retrieve",
-                "parameters": [
-                    {
-                        "in": "path",
-                        "name": "course_id",
-                        "schema": {
-                            "type": "string"
-                        },
-                        "required": true
-                    },
-                    {
-                        "in": "path",
-                        "name": "run_id",
-                        "schema": {
-                            "type": "string"
-                        },
-                        "required": true
-                    }
-                ],
-                "tags": [
-                    "teaching-reviews"
-                ],
-                "security": [
-                    {
-                        "portalSession": []
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/SimilarityRunResponse"
-                                }
-                            }
-                        },
-                        "description": ""
-                    }
-                },
-                "x-portals": [
-                    "TEACHING"
-                ]
-            }
-        },
-        "/api/v2/teaching/courses/{course_id}/similarity-runs/{run_id}/matches": {
-            "get": {
-                "operationId": "teaching_similarity_matches_list",
-                "parameters": [
-                    {
-                        "in": "path",
-                        "name": "course_id",
-                        "schema": {
-                            "type": "string"
-                        },
-                        "required": true
-                    },
-                    {
-                        "in": "path",
-                        "name": "run_id",
-                        "schema": {
-                            "type": "string"
-                        },
-                        "required": true
-                    }
-                ],
-                "tags": [
-                    "teaching-reviews"
-                ],
-                "security": [
-                    {
-                        "portalSession": []
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/SimilarityMatchListResponse"
                                 }
                             }
                         },
@@ -14701,52 +13461,6 @@
                         "description": ""
                     }
                 }
-            }
-        },
-        "/api/v2/teaching/courses/{course_id}/tasks/{task_id}/submission-preview": {
-            "get": {
-                "operationId": "teaching_task_submission_preview",
-                "parameters": [
-                    {
-                        "in": "path",
-                        "name": "course_id",
-                        "schema": {
-                            "type": "string"
-                        },
-                        "required": true
-                    },
-                    {
-                        "in": "path",
-                        "name": "task_id",
-                        "schema": {
-                            "type": "string"
-                        },
-                        "required": true
-                    }
-                ],
-                "tags": [
-                    "reports"
-                ],
-                "security": [
-                    {
-                        "portalSession": []
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ReportPreviewResponse"
-                                }
-                            }
-                        },
-                        "description": ""
-                    }
-                },
-                "x-portals": [
-                    "TEACHING"
-                ]
             }
         },
         "/api/v2/teaching/courses/{course_id}/template-chapters/{chapter_id}": {
@@ -15542,124 +14256,6 @@
                 }
             }
         },
-        "/api/v2/teaching/courses/{course_id}/template-versions/{version_id}/auto-check-rules": {
-            "get": {
-                "operationId": "teaching_auto_check_rules_list",
-                "parameters": [
-                    {
-                        "in": "path",
-                        "name": "course_id",
-                        "schema": {
-                            "type": "string"
-                        },
-                        "required": true
-                    },
-                    {
-                        "in": "path",
-                        "name": "version_id",
-                        "schema": {
-                            "type": "string"
-                        },
-                        "required": true
-                    }
-                ],
-                "tags": [
-                    "api"
-                ],
-                "security": [
-                    {
-                        "portalSession": []
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/AutoCheckRulesResponse"
-                                }
-                            }
-                        },
-                        "description": ""
-                    }
-                },
-                "x-portals": [
-                    "TEACHING"
-                ]
-            },
-            "put": {
-                "operationId": "teaching_auto_check_rules_replace",
-                "parameters": [
-                    {
-                        "in": "header",
-                        "name": "If-Match",
-                        "schema": {
-                            "type": "string"
-                        },
-                        "required": true
-                    },
-                    {
-                        "in": "path",
-                        "name": "course_id",
-                        "schema": {
-                            "type": "string"
-                        },
-                        "required": true
-                    },
-                    {
-                        "in": "path",
-                        "name": "version_id",
-                        "schema": {
-                            "type": "string"
-                        },
-                        "required": true
-                    }
-                ],
-                "tags": [
-                    "api"
-                ],
-                "requestBody": {
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "$ref": "#/components/schemas/AutoCheckRulesWrite"
-                            }
-                        },
-                        "application/x-www-form-urlencoded": {
-                            "schema": {
-                                "$ref": "#/components/schemas/AutoCheckRulesWrite"
-                            }
-                        },
-                        "multipart/form-data": {
-                            "schema": {
-                                "$ref": "#/components/schemas/AutoCheckRulesWrite"
-                            }
-                        }
-                    },
-                    "required": true
-                },
-                "security": [
-                    {
-                        "portalSession": []
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/TemplateVersionResponse"
-                                }
-                            }
-                        },
-                        "description": ""
-                    }
-                },
-                "x-portals": [
-                    "TEACHING"
-                ]
-            }
-        },
         "/api/v2/teaching/courses/{course_id}/template-versions/{version_id}/chapters": {
             "get": {
                 "operationId": "teaching_template_chapters_list",
@@ -15908,88 +14504,6 @@
                         "description": ""
                     },
                     "201": {
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/TemplateVersionResponse"
-                                }
-                            }
-                        },
-                        "description": ""
-                    }
-                },
-                "x-portals": [
-                    "TEACHING"
-                ]
-            }
-        },
-        "/api/v2/teaching/courses/{course_id}/template-versions/{version_id}/execution-spec": {
-            "post": {
-                "operationId": "teaching_template_execution_spec_save",
-                "parameters": [
-                    {
-                        "in": "header",
-                        "name": "Idempotency-Key",
-                        "schema": {
-                            "type": "string"
-                        },
-                        "required": true
-                    },
-                    {
-                        "in": "header",
-                        "name": "If-Match",
-                        "schema": {
-                            "type": "string"
-                        },
-                        "required": true
-                    },
-                    {
-                        "in": "path",
-                        "name": "course_id",
-                        "schema": {
-                            "type": "string"
-                        },
-                        "required": true
-                    },
-                    {
-                        "in": "path",
-                        "name": "version_id",
-                        "schema": {
-                            "type": "string"
-                        },
-                        "required": true
-                    }
-                ],
-                "tags": [
-                    "api"
-                ],
-                "requestBody": {
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "$ref": "#/components/schemas/ExecutionSpecSave"
-                            }
-                        },
-                        "application/x-www-form-urlencoded": {
-                            "schema": {
-                                "$ref": "#/components/schemas/ExecutionSpecSave"
-                            }
-                        },
-                        "multipart/form-data": {
-                            "schema": {
-                                "$ref": "#/components/schemas/ExecutionSpecSave"
-                            }
-                        }
-                    },
-                    "required": true
-                },
-                "security": [
-                    {
-                        "portalSession": []
-                    }
-                ],
-                "responses": {
-                    "200": {
                         "content": {
                             "application/json": {
                                 "schema": {
@@ -17224,251 +15738,6 @@
     },
     "components": {
         "schemas": {
-            "AIScoreBatchData": {
-                "type": "object",
-                "properties": {
-                    "public_id": {
-                        "type": "string"
-                    },
-                    "course_id": {
-                        "type": "string"
-                    },
-                    "publication_id": {
-                        "type": "string"
-                    },
-                    "publication_title": {
-                        "type": "string"
-                    },
-                    "created_by": {
-                        "type": "string"
-                    },
-                    "status": {
-                        "$ref": "#/components/schemas/AIScoreBatchDataStatusEnum"
-                    },
-                    "entry_count": {
-                        "type": "integer"
-                    },
-                    "counts": {
-                        "type": "object",
-                        "additionalProperties": {
-                            "type": "integer"
-                        }
-                    },
-                    "row_version": {
-                        "type": "integer"
-                    }
-                },
-                "required": [
-                    "counts",
-                    "course_id",
-                    "created_by",
-                    "entry_count",
-                    "public_id",
-                    "publication_id",
-                    "publication_title",
-                    "row_version",
-                    "status"
-                ]
-            },
-            "AIScoreBatchDataResponse": {
-                "type": "object",
-                "properties": {
-                    "data": {
-                        "$ref": "#/components/schemas/AIScoreBatchData"
-                    },
-                    "meta": {
-                        "type": "object",
-                        "additionalProperties": {}
-                    }
-                },
-                "required": [
-                    "data",
-                    "meta"
-                ]
-            },
-            "AIScoreBatchDataStatusEnum": {
-                "enum": [
-                    "QUEUED",
-                    "RUNNING",
-                    "REVIEW_REQUIRED",
-                    "COMPLETED",
-                    "COMPLETED_WITH_ERRORS",
-                    "FAILED"
-                ],
-                "type": "string",
-                "description": "* `QUEUED` - Queued\n* `RUNNING` - Running\n* `REVIEW_REQUIRED` - Review Required\n* `COMPLETED` - Completed\n* `COMPLETED_WITH_ERRORS` - Completed With Errors\n* `FAILED` - Failed"
-            },
-            "AIScoreBatchDetailData": {
-                "type": "object",
-                "properties": {
-                    "batch": {
-                        "$ref": "#/components/schemas/AIScoreBatchData"
-                    },
-                    "suggestions": {
-                        "type": "array",
-                        "items": {
-                            "$ref": "#/components/schemas/AIScoreSuggestionData"
-                        }
-                    },
-                    "page": {
-                        "type": "integer"
-                    },
-                    "page_size": {
-                        "type": "integer"
-                    },
-                    "total": {
-                        "type": "integer"
-                    }
-                },
-                "required": [
-                    "batch",
-                    "page",
-                    "page_size",
-                    "suggestions",
-                    "total"
-                ]
-            },
-            "AIScoreBatchDetailResponse": {
-                "type": "object",
-                "properties": {
-                    "data": {
-                        "$ref": "#/components/schemas/AIScoreBatchDetailData"
-                    },
-                    "meta": {
-                        "type": "object",
-                        "additionalProperties": {}
-                    }
-                },
-                "required": [
-                    "data",
-                    "meta"
-                ]
-            },
-            "AIScoreBatchResponse": {
-                "type": "object",
-                "properties": {
-                    "data": {
-                        "type": "object",
-                        "additionalProperties": {}
-                    },
-                    "meta": {
-                        "type": "object",
-                        "additionalProperties": {}
-                    }
-                },
-                "required": [
-                    "data",
-                    "meta"
-                ]
-            },
-            "AIScoreBatchWrite": {
-                "type": "object",
-                "properties": {
-                    "publication_id": {
-                        "type": "string",
-                        "maxLength": 26
-                    }
-                },
-                "required": [
-                    "publication_id"
-                ]
-            },
-            "AIScoreSuggestionData": {
-                "type": "object",
-                "properties": {
-                    "public_id": {
-                        "type": "string"
-                    },
-                    "review_id": {
-                        "type": "string"
-                    },
-                    "student_id": {
-                        "type": "string"
-                    },
-                    "student_name": {
-                        "type": "string"
-                    },
-                    "status": {
-                        "$ref": "#/components/schemas/AIScoreSuggestionDataStatusEnum"
-                    },
-                    "review_row_version": {
-                        "type": "integer"
-                    },
-                    "criteria": {
-                        "type": "array",
-                        "items": {
-                            "type": "object",
-                            "additionalProperties": {}
-                        }
-                    },
-                    "total_score": {
-                        "type": "string",
-                        "format": "decimal",
-                        "pattern": "^-?\\d{0,7}(?:\\.\\d{0,2})?$",
-                        "nullable": true
-                    },
-                    "model_name": {
-                        "type": "string"
-                    },
-                    "error_code": {
-                        "type": "string"
-                    },
-                    "accepted_by": {
-                        "type": "string",
-                        "nullable": true
-                    },
-                    "accepted_at": {
-                        "type": "string",
-                        "format": "date-time",
-                        "nullable": true
-                    },
-                    "row_version": {
-                        "type": "integer"
-                    }
-                },
-                "required": [
-                    "accepted_at",
-                    "accepted_by",
-                    "criteria",
-                    "error_code",
-                    "model_name",
-                    "public_id",
-                    "review_id",
-                    "review_row_version",
-                    "row_version",
-                    "status",
-                    "student_id",
-                    "student_name",
-                    "total_score"
-                ]
-            },
-            "AIScoreSuggestionDataStatusEnum": {
-                "enum": [
-                    "QUEUED",
-                    "RUNNING",
-                    "READY",
-                    "ACCEPTED",
-                    "FAILED"
-                ],
-                "type": "string",
-                "description": "* `QUEUED` - Queued\n* `RUNNING` - Running\n* `READY` - Ready\n* `ACCEPTED` - Accepted\n* `FAILED` - Failed"
-            },
-            "AIScoreSuggestionResponse": {
-                "type": "object",
-                "properties": {
-                    "data": {
-                        "$ref": "#/components/schemas/AIScoreSuggestionData"
-                    },
-                    "meta": {
-                        "type": "object",
-                        "additionalProperties": {}
-                    }
-                },
-                "required": [
-                    "data",
-                    "meta"
-                ]
-            },
             "APIClient": {
                 "type": "object",
                 "properties": {
@@ -17563,14 +15832,6 @@
                     "trace_id"
                 ]
             },
-            "ActionEnum": {
-                "enum": [
-                    "UPSERT",
-                    "REVOKE"
-                ],
-                "type": "string",
-                "description": "* `UPSERT` - Upsert\n* `REVOKE` - Revoke"
-            },
             "ActiveRetiredStatusEnum": {
                 "enum": [
                     "ACTIVE",
@@ -17586,14 +15847,6 @@
                 ],
                 "type": "string",
                 "description": "* `ACTIVE` - ACTIVE\n* `REVOKED` - REVOKED"
-            },
-            "ActiveRevokedStatusEnum": {
-                "enum": [
-                    "ACTIVE",
-                    "REVOKED"
-                ],
-                "type": "string",
-                "description": "* `ACTIVE` - Active\n* `REVOKED` - Revoked"
             },
             "AdminAssignmentData": {
                 "type": "object",
@@ -17734,10 +15987,10 @@
                     "SOCRATIC_HINT",
                     "DEBUG_ASSIST",
                     "REPORT_COACH",
-                    "WORKSPACE_ASSIST"
+                    "CODE_ASSIST"
                 ],
                 "type": "string",
-                "description": "* `KNOWLEDGE_QA` - KNOWLEDGE_QA\n* `SOCRATIC_HINT` - SOCRATIC_HINT\n* `DEBUG_ASSIST` - DEBUG_ASSIST\n* `REPORT_COACH` - REPORT_COACH\n* `WORKSPACE_ASSIST` - WORKSPACE_ASSIST"
+                "description": "* `KNOWLEDGE_QA` - KNOWLEDGE_QA\n* `SOCRATIC_HINT` - SOCRATIC_HINT\n* `DEBUG_ASSIST` - DEBUG_ASSIST\n* `REPORT_COACH` - REPORT_COACH\n* `CODE_ASSIST` - CODE_ASSIST"
             },
             "AgentResponseMeta": {
                 "type": "object",
@@ -17807,7 +16060,7 @@
                         "nullable": true
                     },
                     "target_type": {
-                        "$ref": "#/components/schemas/AllowlistCreateTargetTypeEnum"
+                        "$ref": "#/components/schemas/TargetTypeEnum"
                     },
                     "target_value": {
                         "type": "string",
@@ -17844,14 +16097,6 @@
                     "target_type",
                     "target_value"
                 ]
-            },
-            "AllowlistCreateTargetTypeEnum": {
-                "enum": [
-                    "HOST",
-                    "CIDR"
-                ],
-                "type": "string",
-                "description": "* `HOST` - Host\n* `CIDR` - Cidr"
             },
             "AllowlistData": {
                 "type": "object",
@@ -17942,163 +16187,6 @@
                     "meta"
                 ]
             },
-            "AnnotationData": {
-                "type": "object",
-                "properties": {
-                    "public_id": {
-                        "type": "string"
-                    },
-                    "review_id": {
-                        "type": "string"
-                    },
-                    "author_id": {
-                        "type": "string"
-                    },
-                    "target_type": {
-                        "$ref": "#/components/schemas/ReviewTargetTypeEnum"
-                    },
-                    "target_ref": {
-                        "type": "string"
-                    },
-                    "object_digest": {
-                        "type": "string"
-                    },
-                    "anchor": {},
-                    "status": {
-                        "$ref": "#/components/schemas/ActiveRevokedStatusEnum"
-                    },
-                    "body": {
-                        "type": "string"
-                    },
-                    "current_revision_no": {
-                        "type": "integer"
-                    },
-                    "row_version": {
-                        "type": "integer"
-                    },
-                    "revisions": {
-                        "type": "array",
-                        "items": {
-                            "$ref": "#/components/schemas/AnnotationRevisionData"
-                        }
-                    }
-                },
-                "required": [
-                    "anchor",
-                    "author_id",
-                    "body",
-                    "current_revision_no",
-                    "object_digest",
-                    "public_id",
-                    "review_id",
-                    "row_version",
-                    "status",
-                    "target_ref",
-                    "target_type"
-                ]
-            },
-            "AnnotationListResponse": {
-                "type": "object",
-                "properties": {
-                    "data": {
-                        "type": "array",
-                        "items": {
-                            "$ref": "#/components/schemas/AnnotationData"
-                        }
-                    },
-                    "meta": {
-                        "type": "object",
-                        "additionalProperties": {}
-                    }
-                },
-                "required": [
-                    "data",
-                    "meta"
-                ]
-            },
-            "AnnotationResponse": {
-                "type": "object",
-                "properties": {
-                    "data": {
-                        "$ref": "#/components/schemas/AnnotationData"
-                    },
-                    "meta": {
-                        "type": "object",
-                        "additionalProperties": {}
-                    }
-                },
-                "required": [
-                    "data",
-                    "meta"
-                ]
-            },
-            "AnnotationRevisionData": {
-                "type": "object",
-                "properties": {
-                    "revision_no": {
-                        "type": "integer"
-                    },
-                    "action": {
-                        "$ref": "#/components/schemas/ActionEnum"
-                    },
-                    "body": {
-                        "type": "string"
-                    },
-                    "actor_id": {
-                        "type": "string"
-                    },
-                    "created_at": {
-                        "type": "string",
-                        "format": "date-time"
-                    },
-                    "trace_id": {
-                        "type": "string"
-                    }
-                },
-                "required": [
-                    "action",
-                    "actor_id",
-                    "body",
-                    "created_at",
-                    "revision_no",
-                    "trace_id"
-                ]
-            },
-            "AnnotationRevisionWrite": {
-                "type": "object",
-                "properties": {
-                    "body": {
-                        "type": "string",
-                        "maxLength": 8000
-                    }
-                },
-                "required": [
-                    "body"
-                ]
-            },
-            "AnnotationWrite": {
-                "type": "object",
-                "properties": {
-                    "target_type": {
-                        "$ref": "#/components/schemas/ReviewTargetTypeEnum"
-                    },
-                    "target_ref": {
-                        "type": "string",
-                        "maxLength": 26
-                    },
-                    "anchor": {},
-                    "body": {
-                        "type": "string",
-                        "maxLength": 8000
-                    }
-                },
-                "required": [
-                    "anchor",
-                    "body",
-                    "target_ref",
-                    "target_type"
-                ]
-            },
             "AnswerWrite": {
                 "type": "object",
                 "properties": {
@@ -18136,10 +16224,6 @@
                     },
                     "task_status": {
                         "type": "string"
-                    },
-                    "safe_recycle_at": {
-                        "type": "string",
-                        "format": "date-time"
                     },
                     "attempt_count": {
                         "type": "integer"
@@ -18187,7 +16271,6 @@
                     "public_id",
                     "recycle",
                     "row_version",
-                    "safe_recycle_at",
                     "status",
                     "student_id",
                     "student_name",
@@ -18195,19 +16278,6 @@
                     "task_status",
                     "terminal_target",
                     "verifications"
-                ]
-            },
-            "ArchiveDestroyReason": {
-                "type": "object",
-                "properties": {
-                    "reason": {
-                        "type": "string",
-                        "maxLength": 255,
-                        "minLength": 3
-                    }
-                },
-                "required": [
-                    "reason"
                 ]
             },
             "ArchiveExportResponse": {
@@ -18261,14 +16331,6 @@
                     "data",
                     "meta"
                 ]
-            },
-            "ArtifactKindEnum": {
-                "enum": [
-                    "REPORT",
-                    "SYSTEM_ARTIFACT"
-                ],
-                "type": "string",
-                "description": "* `REPORT` - REPORT\n* `SYSTEM_ARTIFACT` - SYSTEM_ARTIFACT"
             },
             "AssessmentReportWrite": {
                 "type": "object",
@@ -18380,244 +16442,6 @@
                 ],
                 "type": "string",
                 "description": "* `ALL_ACTIVE` - All Active\n* `SELECTED` - Selected"
-            },
-            "AutoCheckData": {
-                "type": "object",
-                "properties": {
-                    "public_id": {
-                        "type": "string"
-                    },
-                    "checker_type": {
-                        "type": "string"
-                    },
-                    "rule_digest": {
-                        "type": "string"
-                    },
-                    "artifact_digest": {
-                        "type": "string"
-                    },
-                    "execution_rule_summary": {
-                        "type": "object",
-                        "additionalProperties": {}
-                    },
-                    "execution_rule_digest": {
-                        "type": "string"
-                    },
-                    "status": {
-                        "$ref": "#/components/schemas/AutoCheckStatusEnum"
-                    },
-                    "attempt_count": {
-                        "type": "integer"
-                    },
-                    "result_summary": {
-                        "type": "object",
-                        "additionalProperties": {}
-                    },
-                    "evidence": {
-                        "type": "array",
-                        "items": {
-                            "type": "object",
-                            "additionalProperties": {}
-                        }
-                    },
-                    "error_code": {
-                        "type": "string"
-                    },
-                    "trace_id": {
-                        "type": "string"
-                    },
-                    "duration_ms": {
-                        "type": "integer",
-                        "nullable": true
-                    },
-                    "completed_at": {
-                        "type": "string",
-                        "format": "date-time",
-                        "nullable": true
-                    }
-                },
-                "required": [
-                    "artifact_digest",
-                    "attempt_count",
-                    "checker_type",
-                    "completed_at",
-                    "duration_ms",
-                    "error_code",
-                    "evidence",
-                    "execution_rule_digest",
-                    "execution_rule_summary",
-                    "public_id",
-                    "result_summary",
-                    "rule_digest",
-                    "status",
-                    "trace_id"
-                ]
-            },
-            "AutoCheckRuleData": {
-                "type": "object",
-                "properties": {
-                    "public_id": {
-                        "type": "string"
-                    },
-                    "position": {
-                        "type": "integer"
-                    },
-                    "checker_type": {
-                        "type": "string"
-                    },
-                    "input_schema": {
-                        "type": "object",
-                        "additionalProperties": {}
-                    },
-                    "output_schema": {
-                        "type": "object",
-                        "additionalProperties": {}
-                    },
-                    "timeout_seconds": {
-                        "type": "integer"
-                    },
-                    "resource_limit": {
-                        "type": "object",
-                        "additionalProperties": {}
-                    },
-                    "network_policy": {
-                        "type": "object",
-                        "additionalProperties": {}
-                    },
-                    "display_policy": {
-                        "type": "object",
-                        "additionalProperties": {}
-                    },
-                    "failure_semantics": {
-                        "type": "object",
-                        "additionalProperties": {}
-                    },
-                    "rule_digest": {
-                        "type": "string"
-                    }
-                },
-                "required": [
-                    "checker_type",
-                    "display_policy",
-                    "failure_semantics",
-                    "input_schema",
-                    "network_policy",
-                    "output_schema",
-                    "position",
-                    "public_id",
-                    "resource_limit",
-                    "rule_digest",
-                    "timeout_seconds"
-                ]
-            },
-            "AutoCheckRuleWrite": {
-                "type": "object",
-                "properties": {
-                    "position": {
-                        "type": "integer",
-                        "minimum": 1
-                    },
-                    "checker_type": {
-                        "type": "string",
-                        "pattern": "^[A-Za-z][A-Za-z0-9_]{0,63}$"
-                    },
-                    "input_schema": {
-                        "type": "object",
-                        "additionalProperties": {}
-                    },
-                    "output_schema": {
-                        "type": "object",
-                        "additionalProperties": {}
-                    },
-                    "timeout_seconds": {
-                        "type": "integer",
-                        "minimum": 1
-                    },
-                    "resource_limit": {
-                        "type": "object",
-                        "additionalProperties": {}
-                    },
-                    "network_policy": {
-                        "type": "object",
-                        "additionalProperties": {}
-                    },
-                    "display_policy": {
-                        "type": "object",
-                        "additionalProperties": {}
-                    },
-                    "failure_semantics": {
-                        "type": "object",
-                        "additionalProperties": {}
-                    }
-                },
-                "required": [
-                    "checker_type",
-                    "display_policy",
-                    "failure_semantics",
-                    "input_schema",
-                    "network_policy",
-                    "output_schema",
-                    "position",
-                    "resource_limit",
-                    "timeout_seconds"
-                ]
-            },
-            "AutoCheckRulesData": {
-                "type": "object",
-                "properties": {
-                    "rules": {
-                        "type": "array",
-                        "items": {
-                            "$ref": "#/components/schemas/AutoCheckRuleData"
-                        }
-                    }
-                },
-                "required": [
-                    "rules"
-                ]
-            },
-            "AutoCheckRulesResponse": {
-                "type": "object",
-                "properties": {
-                    "data": {
-                        "$ref": "#/components/schemas/AutoCheckRulesData"
-                    },
-                    "meta": {
-                        "type": "object",
-                        "additionalProperties": {}
-                    }
-                },
-                "required": [
-                    "data",
-                    "meta"
-                ]
-            },
-            "AutoCheckRulesWrite": {
-                "type": "object",
-                "properties": {
-                    "rules": {
-                        "type": "array",
-                        "items": {
-                            "$ref": "#/components/schemas/AutoCheckRuleWrite"
-                        }
-                    }
-                },
-                "required": [
-                    "rules"
-                ]
-            },
-            "AutoCheckStatusEnum": {
-                "enum": [
-                    "QUEUED",
-                    "RUNNING",
-                    "PASSED",
-                    "FAILED",
-                    "TIMEOUT",
-                    "RESOURCE_EXCEEDED",
-                    "REJECTED"
-                ],
-                "type": "string",
-                "description": "* `QUEUED` - Queued\n* `RUNNING` - Running\n* `PASSED` - Passed\n* `FAILED` - Failed\n* `TIMEOUT` - Timeout\n* `RESOURCE_EXCEEDED` - Resource Exceeded\n* `REJECTED` - Rejected"
             },
             "BlockerData": {
                 "type": "object",
@@ -18757,14 +16581,6 @@
                     "row_version"
                 ]
             },
-            "ComparatorEnum": {
-                "enum": [
-                    "token",
-                    "numeric"
-                ],
-                "type": "string",
-                "description": "* `token` - token\n* `numeric` - numeric"
-            },
             "CompensationData": {
                 "type": "object",
                 "properties": {
@@ -18858,8 +16674,7 @@
                 "properties": {
                     "reason": {
                         "type": "string",
-                        "maxLength": 255,
-                        "minLength": 3
+                        "maxLength": 1000
                     },
                     "compensation_id": {
                         "type": "string",
@@ -19300,141 +17115,6 @@
                     "trace_id"
                 ]
             },
-            "CriterionScoreData": {
-                "type": "object",
-                "properties": {
-                    "public_id": {
-                        "type": "string"
-                    },
-                    "position": {
-                        "type": "integer"
-                    },
-                    "title": {
-                        "type": "string"
-                    },
-                    "description": {
-                        "type": "string"
-                    },
-                    "guidance": {
-                        "type": "string"
-                    },
-                    "max_score": {
-                        "type": "string",
-                        "format": "decimal",
-                        "pattern": "^-?\\d{0,7}(?:\\.\\d{0,2})?$"
-                    },
-                    "weight_basis_points": {
-                        "type": "integer"
-                    },
-                    "score": {
-                        "type": "string",
-                        "format": "decimal",
-                        "pattern": "^-?\\d{0,7}(?:\\.\\d{0,2})?$",
-                        "nullable": true
-                    },
-                    "note": {
-                        "type": "string"
-                    },
-                    "score_row_version": {
-                        "type": "integer",
-                        "nullable": true
-                    },
-                    "revision_no": {
-                        "type": "integer"
-                    }
-                },
-                "required": [
-                    "description",
-                    "guidance",
-                    "max_score",
-                    "note",
-                    "position",
-                    "public_id",
-                    "revision_no",
-                    "score",
-                    "score_row_version",
-                    "title",
-                    "weight_basis_points"
-                ]
-            },
-            "CriterionScoreWriteItem": {
-                "type": "object",
-                "properties": {
-                    "criterion_id": {
-                        "type": "string",
-                        "maxLength": 26
-                    },
-                    "score": {
-                        "type": "string",
-                        "format": "decimal",
-                        "pattern": "^-?\\d{0,7}(?:\\.\\d{0,2})?$"
-                    },
-                    "note": {
-                        "type": "string",
-                        "maxLength": 8000
-                    }
-                },
-                "required": [
-                    "criterion_id",
-                    "score"
-                ]
-            },
-            "CriterionScoresData": {
-                "type": "object",
-                "properties": {
-                    "review_id": {
-                        "type": "string"
-                    },
-                    "rubric_version": {
-                        "$ref": "#/components/schemas/RubricVersionData"
-                    },
-                    "criteria": {
-                        "type": "array",
-                        "items": {
-                            "$ref": "#/components/schemas/CriterionScoreData"
-                        }
-                    },
-                    "review_row_version": {
-                        "type": "integer"
-                    }
-                },
-                "required": [
-                    "criteria",
-                    "review_id",
-                    "review_row_version",
-                    "rubric_version"
-                ]
-            },
-            "CriterionScoresResponse": {
-                "type": "object",
-                "properties": {
-                    "data": {
-                        "$ref": "#/components/schemas/CriterionScoresData"
-                    },
-                    "meta": {
-                        "type": "object",
-                        "additionalProperties": {}
-                    }
-                },
-                "required": [
-                    "data",
-                    "meta"
-                ]
-            },
-            "CriterionScoresWrite": {
-                "type": "object",
-                "properties": {
-                    "scores": {
-                        "type": "array",
-                        "items": {
-                            "$ref": "#/components/schemas/CriterionScoreWriteItem"
-                        }
-                    }
-                },
-                "required": [
-                    "scores"
-                ]
-            },
             "CsrfData": {
                 "type": "object",
                 "properties": {
@@ -19482,61 +17162,6 @@
                     "counts",
                     "next_tasks",
                     "weekly_study"
-                ]
-            },
-            "DecisionData": {
-                "type": "object",
-                "properties": {
-                    "public_id": {
-                        "type": "string"
-                    },
-                    "decision": {
-                        "$ref": "#/components/schemas/ReviewDecisionEnum"
-                    },
-                    "score": {
-                        "type": "string",
-                        "format": "decimal",
-                        "pattern": "^-?\\d{0,7}(?:\\.\\d{0,2})?$"
-                    },
-                    "feedback": {
-                        "type": "string"
-                    },
-                    "decided_by": {
-                        "type": "string"
-                    },
-                    "criterion_snapshot": {
-                        "type": "array",
-                        "items": {
-                            "type": "object",
-                            "additionalProperties": {}
-                        }
-                    },
-                    "trace_id": {
-                        "type": "string"
-                    },
-                    "created_at": {
-                        "type": "string",
-                        "format": "date-time"
-                    },
-                    "review_row_version": {
-                        "type": "integer"
-                    },
-                    "task_status": {
-                        "type": "string"
-                    },
-                    "task_row_version": {
-                        "type": "integer"
-                    }
-                },
-                "required": [
-                    "created_at",
-                    "criterion_snapshot",
-                    "decided_by",
-                    "decision",
-                    "feedback",
-                    "public_id",
-                    "score",
-                    "trace_id"
                 ]
             },
             "DownloadGrantData": {
@@ -19637,11 +17262,10 @@
                 "enum": [
                     "DOCKER_SWARM",
                     "DOCKER_LOCAL",
-                    "LIBVIRT",
-                    "FAKE"
+                    "LIBVIRT"
                 ],
                 "type": "string",
-                "description": "* `DOCKER_SWARM` - Docker Swarm\n* `DOCKER_LOCAL` - Docker Local\n* `LIBVIRT` - Libvirt\n* `FAKE` - Fake"
+                "description": "* `DOCKER_SWARM` - Docker Swarm\n* `DOCKER_LOCAL` - Docker Local\n* `LIBVIRT` - Libvirt"
             },
             "EnrollmentApply": {
                 "type": "object",
@@ -19914,191 +17538,6 @@
                 },
                 "required": [
                     "name"
-                ]
-            },
-            "ExecutionMaterial": {
-                "type": "object",
-                "properties": {
-                    "asset_id": {
-                        "type": "string",
-                        "maxLength": 26
-                    },
-                    "role": {
-                        "$ref": "#/components/schemas/RoleEnum"
-                    }
-                },
-                "required": [
-                    "asset_id",
-                    "role"
-                ]
-            },
-            "ExecutionSpec": {
-                "type": "object",
-                "properties": {
-                    "schema_version": {
-                        "$ref": "#/components/schemas/SchemaVersionEnum"
-                    },
-                    "language": {
-                        "nullable": true,
-                        "oneOf": [
-                            {
-                                "$ref": "#/components/schemas/LanguageEnum"
-                            },
-                            {
-                                "$ref": "#/components/schemas/NullEnum"
-                            }
-                        ]
-                    },
-                    "toolchain_version": {
-                        "type": "string",
-                        "nullable": true,
-                        "maxLength": 32
-                    },
-                    "language_standard": {
-                        "type": "string",
-                        "nullable": true,
-                        "maxLength": 16
-                    },
-                    "toolchain": {
-                        "type": "object",
-                        "additionalProperties": {}
-                    },
-                    "materials": {
-                        "type": "array",
-                        "items": {
-                            "$ref": "#/components/schemas/ExecutionMaterial"
-                        }
-                    },
-                    "entrypoint": {
-                        "type": "string",
-                        "nullable": true,
-                        "maxLength": 255
-                    },
-                    "timeout_seconds": {
-                        "type": "integer",
-                        "maximum": 300,
-                        "minimum": 1
-                    },
-                    "memory_mb": {
-                        "type": "integer",
-                        "minimum": 1
-                    },
-                    "cpu_millicores": {
-                        "type": "integer",
-                        "minimum": 1
-                    },
-                    "comparator": {
-                        "$ref": "#/components/schemas/ComparatorEnum"
-                    },
-                    "absolute_tolerance": {
-                        "type": "number",
-                        "format": "double",
-                        "minimum": 0
-                    },
-                    "relative_tolerance": {
-                        "type": "number",
-                        "format": "double",
-                        "minimum": 0
-                    },
-                    "tests_asset": {
-                        "type": "string",
-                        "maxLength": 26
-                    },
-                    "network_mode": {
-                        "$ref": "#/components/schemas/NetworkModeEc7Enum"
-                    }
-                },
-                "required": [
-                    "comparator",
-                    "cpu_millicores",
-                    "entrypoint",
-                    "language",
-                    "memory_mb",
-                    "network_mode",
-                    "tests_asset",
-                    "timeout_seconds"
-                ]
-            },
-            "ExecutionSpecSave": {
-                "type": "object",
-                "properties": {
-                    "tests_json": {
-                        "type": "string"
-                    },
-                    "schema_version": {
-                        "$ref": "#/components/schemas/SchemaVersionEnum"
-                    },
-                    "language": {
-                        "nullable": true,
-                        "oneOf": [
-                            {
-                                "$ref": "#/components/schemas/LanguageEnum"
-                            },
-                            {
-                                "$ref": "#/components/schemas/NullEnum"
-                            }
-                        ]
-                    },
-                    "toolchain_version": {
-                        "type": "string",
-                        "nullable": true,
-                        "maxLength": 32
-                    },
-                    "language_standard": {
-                        "type": "string",
-                        "nullable": true,
-                        "maxLength": 16
-                    },
-                    "materials": {
-                        "type": "array",
-                        "items": {
-                            "$ref": "#/components/schemas/ExecutionMaterial"
-                        }
-                    },
-                    "entrypoint": {
-                        "type": "string",
-                        "nullable": true,
-                        "maxLength": 255
-                    },
-                    "timeout_seconds": {
-                        "type": "integer",
-                        "maximum": 300,
-                        "minimum": 1
-                    },
-                    "memory_mb": {
-                        "type": "integer",
-                        "minimum": 1
-                    },
-                    "cpu_millicores": {
-                        "type": "integer",
-                        "minimum": 1
-                    },
-                    "comparator": {
-                        "$ref": "#/components/schemas/ComparatorEnum"
-                    },
-                    "absolute_tolerance": {
-                        "type": "number",
-                        "format": "double",
-                        "minimum": 0
-                    },
-                    "relative_tolerance": {
-                        "type": "number",
-                        "format": "double",
-                        "minimum": 0
-                    },
-                    "network_mode": {
-                        "$ref": "#/components/schemas/NetworkModeEc7Enum"
-                    }
-                },
-                "required": [
-                    "comparator",
-                    "cpu_millicores",
-                    "entrypoint",
-                    "language",
-                    "memory_mb",
-                    "network_mode",
-                    "tests_json",
-                    "timeout_seconds"
                 ]
             },
             "ExperimentImageCreate": {
@@ -20419,7 +17858,8 @@
                 "type": "object",
                 "properties": {
                     "data": {
-                        "$ref": "#/components/schemas/ReportScanAnomalySummary"
+                        "type": "object",
+                        "additionalProperties": {}
                     },
                     "meta": {
                         "type": "object",
@@ -20860,109 +18300,6 @@
                 "type": "string",
                 "description": "* `PENDING` - Pending\n* `CLEAN` - Clean\n* `INFECTED` - Infected\n* `FAILED` - Failed"
             },
-            "InstanceData": {
-                "type": "object",
-                "properties": {
-                    "public_id": {
-                        "type": "string"
-                    },
-                    "task_id": {
-                        "type": "string"
-                    },
-                    "course_id": {
-                        "type": "string"
-                    },
-                    "student_id": {
-                        "type": "string"
-                    },
-                    "status": {
-                        "type": "string"
-                    },
-                    "external_id": {
-                        "type": "string",
-                        "nullable": true
-                    },
-                    "external_status": {
-                        "type": "string"
-                    },
-                    "runtime_driver": {
-                        "type": "string"
-                    },
-                    "service_name": {
-                        "type": "string"
-                    },
-                    "runtime_task_count": {
-                        "type": "integer"
-                    },
-                    "runtime_health": {
-                        "type": "string"
-                    },
-                    "orphan": {
-                        "type": "boolean"
-                    },
-                    "resource_leak": {
-                        "type": "boolean"
-                    },
-                    "row_version": {
-                        "type": "integer"
-                    },
-                    "trace_id": {
-                        "type": "string"
-                    }
-                },
-                "required": [
-                    "course_id",
-                    "external_id",
-                    "external_status",
-                    "orphan",
-                    "public_id",
-                    "resource_leak",
-                    "row_version",
-                    "runtime_driver",
-                    "runtime_health",
-                    "runtime_task_count",
-                    "service_name",
-                    "status",
-                    "student_id",
-                    "task_id",
-                    "trace_id"
-                ]
-            },
-            "InstanceListResponse": {
-                "type": "object",
-                "properties": {
-                    "data": {
-                        "type": "array",
-                        "items": {
-                            "$ref": "#/components/schemas/InstanceData"
-                        }
-                    },
-                    "meta": {
-                        "type": "object",
-                        "additionalProperties": {}
-                    }
-                },
-                "required": [
-                    "data",
-                    "meta"
-                ]
-            },
-            "InstanceResponse": {
-                "type": "object",
-                "properties": {
-                    "data": {
-                        "$ref": "#/components/schemas/InstanceData"
-                    },
-                    "meta": {
-                        "type": "object",
-                        "additionalProperties": {}
-                    }
-                },
-                "required": [
-                    "data",
-                    "meta"
-                ]
-            },
             "InvitationWrite": {
                 "type": "object",
                 "properties": {
@@ -21197,18 +18534,6 @@
                     "key",
                     "model_name",
                     "provider"
-                ]
-            },
-            "NetworkModeEc7Enum": {
-                "enum": [
-                    "DENY_ALL"
-                ],
-                "type": "string",
-                "description": "* `DENY_ALL` - DENY_ALL"
-            },
-            "NullEnum": {
-                "enum": [
-                    null
                 ]
             },
             "OwnershipTransfer": {
@@ -21717,10 +19042,6 @@
                     "status": {
                         "$ref": "#/components/schemas/RubricStatusEnum"
                     },
-                    "execution_spec": {
-                        "type": "object",
-                        "additionalProperties": {}
-                    },
                     "resource_profile_id": {
                         "type": "string",
                         "nullable": true,
@@ -21777,14 +19098,7 @@
                             "additionalProperties": {}
                         }
                     },
-                    "execution_spec": {
-                        "$ref": "#/components/schemas/ExecutionSpec"
-                    },
                     "network_policy": {
-                        "type": "object",
-                        "additionalProperties": {}
-                    },
-                    "workspace_capabilities": {
                         "type": "object",
                         "additionalProperties": {}
                     },
@@ -22286,10 +19600,6 @@
                         "type": "string",
                         "nullable": true
                     },
-                    "execution_spec": {
-                        "type": "object",
-                        "additionalProperties": {}
-                    },
                     "runtime_adapter_id": {
                         "type": "string",
                         "nullable": true
@@ -22380,7 +19690,6 @@
                     "chapters",
                     "course_id",
                     "description",
-                    "execution_spec",
                     "image_digest",
                     "image_id",
                     "late_enrollment_policy",
@@ -22570,13 +19879,11 @@
                     "MANUAL",
                     "STARTER",
                     "REPORT_TEMPLATE",
-                    "TESTS",
                     "BUILD_CONTEXT",
-                    "HIDDEN_SOURCE",
                     "PUBLIC_DATA"
                 ],
                 "type": "string",
-                "description": "* `MANUAL` - MANUAL\n* `STARTER` - STARTER\n* `REPORT_TEMPLATE` - REPORT_TEMPLATE\n* `TESTS` - TESTS\n* `BUILD_CONTEXT` - BUILD_CONTEXT\n* `HIDDEN_SOURCE` - HIDDEN_SOURCE\n* `PUBLIC_DATA` - PUBLIC_DATA"
+                "description": "* `MANUAL` - MANUAL\n* `STARTER` - STARTER\n* `REPORT_TEMPLATE` - REPORT_TEMPLATE\n* `BUILD_CONTEXT` - BUILD_CONTEXT\n* `PUBLIC_DATA` - PUBLIC_DATA"
             },
             "QualificationData": {
                 "type": "object",
@@ -23086,92 +20393,6 @@
                     "meta"
                 ]
             },
-            "ReportPreviewData": {
-                "type": "object",
-                "properties": {
-                    "kind": {
-                        "$ref": "#/components/schemas/ArtifactKindEnum"
-                    },
-                    "task_id": {
-                        "type": "string"
-                    },
-                    "version": {
-                        "$ref": "#/components/schemas/ReportVersionData"
-                    },
-                    "artifact": {
-                        "$ref": "#/components/schemas/SystemArtifactData"
-                    }
-                },
-                "required": [
-                    "kind",
-                    "task_id"
-                ]
-            },
-            "ReportPreviewResponse": {
-                "type": "object",
-                "properties": {
-                    "data": {
-                        "$ref": "#/components/schemas/ReportPreviewData"
-                    },
-                    "meta": {
-                        "type": "object",
-                        "additionalProperties": {}
-                    }
-                },
-                "required": [
-                    "data",
-                    "meta"
-                ]
-            },
-            "ReportScanAnomalyItem": {
-                "type": "object",
-                "properties": {
-                    "asset_id": {
-                        "type": "string"
-                    },
-                    "task_id": {
-                        "type": "string"
-                    },
-                    "scan_status": {
-                        "$ref": "#/components/schemas/ImageScanStatusEnum"
-                    },
-                    "failure_code": {
-                        "type": "string"
-                    },
-                    "created_at": {
-                        "type": "string",
-                        "format": "date-time"
-                    }
-                },
-                "required": [
-                    "asset_id",
-                    "created_at",
-                    "failure_code",
-                    "scan_status",
-                    "task_id"
-                ]
-            },
-            "ReportScanAnomalySummary": {
-                "type": "object",
-                "properties": {
-                    "counts": {
-                        "type": "object",
-                        "additionalProperties": {
-                            "type": "integer"
-                        }
-                    },
-                    "items": {
-                        "type": "array",
-                        "items": {
-                            "$ref": "#/components/schemas/ReportScanAnomalyItem"
-                        }
-                    }
-                },
-                "required": [
-                    "counts",
-                    "items"
-                ]
-            },
             "ReportSuggestionWrite": {
                 "type": "object",
                 "properties": {
@@ -23182,159 +20403,6 @@
                 },
                 "required": [
                     "submission_version"
-                ]
-            },
-            "ReportVersionAttachmentData": {
-                "type": "object",
-                "properties": {
-                    "public_id": {
-                        "type": "string"
-                    },
-                    "file_name": {
-                        "type": "string"
-                    },
-                    "media_type": {
-                        "type": "string"
-                    },
-                    "size_bytes": {
-                        "type": "integer"
-                    },
-                    "digest_sha256": {
-                        "type": "string"
-                    },
-                    "asset_id": {
-                        "type": "string"
-                    }
-                },
-                "required": [
-                    "asset_id",
-                    "digest_sha256",
-                    "file_name",
-                    "media_type",
-                    "public_id",
-                    "size_bytes"
-                ]
-            },
-            "ReportVersionData": {
-                "type": "object",
-                "properties": {
-                    "public_id": {
-                        "type": "string"
-                    },
-                    "task_id": {
-                        "type": "string"
-                    },
-                    "version_no": {
-                        "type": "integer"
-                    },
-                    "body_markdown": {
-                        "type": "string"
-                    },
-                    "body_digest": {
-                        "type": "string"
-                    },
-                    "snapshot_digest": {
-                        "type": "string"
-                    },
-                    "execution_run_id": {
-                        "type": "string",
-                        "nullable": true
-                    },
-                    "execution_status": {
-                        "type": "string"
-                    },
-                    "execution_result_summary": {
-                        "type": "string"
-                    },
-                    "execution_rule_summary": {
-                        "type": "object",
-                        "additionalProperties": {}
-                    },
-                    "execution_rule_digest": {
-                        "type": "string"
-                    },
-                    "execution_snapshot_id": {
-                        "type": "string",
-                        "nullable": true
-                    },
-                    "execution_snapshot_digest": {
-                        "type": "string"
-                    },
-                    "stdout_asset_id": {
-                        "type": "string",
-                        "nullable": true
-                    },
-                    "stderr_asset_id": {
-                        "type": "string",
-                        "nullable": true
-                    },
-                    "test_report_asset_id": {
-                        "type": "string",
-                        "nullable": true
-                    },
-                    "execution_evidence": {
-                        "type": "object",
-                        "additionalProperties": {},
-                        "nullable": true
-                    },
-                    "submitted_at": {
-                        "type": "string",
-                        "format": "date-time"
-                    },
-                    "submitted_by_id": {
-                        "type": "string"
-                    },
-                    "trace_id": {
-                        "type": "string"
-                    },
-                    "attachments": {
-                        "type": "array",
-                        "items": {
-                            "$ref": "#/components/schemas/ReportVersionAttachmentData"
-                        }
-                    }
-                },
-                "required": [
-                    "attachments",
-                    "body_digest",
-                    "body_markdown",
-                    "execution_evidence",
-                    "execution_result_summary",
-                    "execution_rule_digest",
-                    "execution_rule_summary",
-                    "execution_run_id",
-                    "execution_snapshot_digest",
-                    "execution_snapshot_id",
-                    "execution_status",
-                    "public_id",
-                    "snapshot_digest",
-                    "stderr_asset_id",
-                    "stdout_asset_id",
-                    "submitted_at",
-                    "submitted_by_id",
-                    "task_id",
-                    "test_report_asset_id",
-                    "trace_id",
-                    "version_no"
-                ]
-            },
-            "ReportVersionListResponse": {
-                "type": "object",
-                "properties": {
-                    "data": {
-                        "type": "array",
-                        "items": {
-                            "$ref": "#/components/schemas/ReportVersionData"
-                        }
-                    },
-                    "meta": {
-                        "type": "object",
-                        "additionalProperties": {}
-                    }
-                },
-                "required": [
-                    "data",
-                    "meta"
                 ]
             },
             "ResourceProfileCreate": {
@@ -23611,228 +20679,6 @@
                 "type": "string",
                 "description": "* `APPROVE` - Approve\n* `REJECT` - Reject"
             },
-            "ReviewDecisionResponse": {
-                "type": "object",
-                "properties": {
-                    "data": {
-                        "$ref": "#/components/schemas/DecisionData"
-                    },
-                    "meta": {
-                        "type": "object",
-                        "additionalProperties": {}
-                    }
-                },
-                "required": [
-                    "data",
-                    "meta"
-                ]
-            },
-            "ReviewDecisionWrite": {
-                "type": "object",
-                "properties": {
-                    "decision": {
-                        "$ref": "#/components/schemas/ReviewDecisionEnum"
-                    },
-                    "score": {
-                        "type": "string",
-                        "format": "decimal",
-                        "pattern": "^-?\\d{0,7}(?:\\.\\d{0,2})?$",
-                        "nullable": true
-                    },
-                    "feedback": {
-                        "type": "string",
-                        "maxLength": 12000
-                    }
-                },
-                "required": [
-                    "decision"
-                ]
-            },
-            "ReviewDetailData": {
-                "type": "object",
-                "properties": {
-                    "public_id": {
-                        "type": "string"
-                    },
-                    "task_id": {
-                        "type": "string"
-                    },
-                    "publication_id": {
-                        "type": "string"
-                    },
-                    "publication_title": {
-                        "type": "string"
-                    },
-                    "student_id": {
-                        "type": "string"
-                    },
-                    "student_name": {
-                        "type": "string"
-                    },
-                    "round_no": {
-                        "type": "integer"
-                    },
-                    "status": {
-                        "$ref": "#/components/schemas/ReviewWorkflowStatusEnum"
-                    },
-                    "target_kind": {
-                        "type": "string"
-                    },
-                    "created_at": {
-                        "type": "string",
-                        "format": "date-time"
-                    },
-                    "row_version": {
-                        "type": "integer"
-                    },
-                    "project": {
-                        "type": "object",
-                        "additionalProperties": {}
-                    },
-                    "rubric_version_id": {
-                        "type": "string"
-                    },
-                    "scores": {
-                        "$ref": "#/components/schemas/CriterionScoresData"
-                    },
-                    "annotations": {
-                        "type": "array",
-                        "items": {
-                            "$ref": "#/components/schemas/AnnotationData"
-                        }
-                    },
-                    "auto_checks": {
-                        "type": "array",
-                        "items": {
-                            "$ref": "#/components/schemas/AutoCheckData"
-                        }
-                    },
-                    "similarity_runs": {
-                        "type": "array",
-                        "items": {
-                            "$ref": "#/components/schemas/SimilarityRunData"
-                        }
-                    },
-                    "decision": {
-                        "allOf": [
-                            {
-                                "$ref": "#/components/schemas/DecisionData"
-                            }
-                        ],
-                        "nullable": true
-                    },
-                    "submission": {
-                        "$ref": "#/components/schemas/SubmissionData"
-                    }
-                },
-                "required": [
-                    "annotations",
-                    "auto_checks",
-                    "created_at",
-                    "decision",
-                    "public_id",
-                    "publication_id",
-                    "publication_title",
-                    "round_no",
-                    "row_version",
-                    "rubric_version_id",
-                    "scores",
-                    "similarity_runs",
-                    "status",
-                    "student_id",
-                    "student_name",
-                    "submission",
-                    "target_kind",
-                    "task_id"
-                ]
-            },
-            "ReviewDetailResponse": {
-                "type": "object",
-                "properties": {
-                    "data": {
-                        "$ref": "#/components/schemas/ReviewDetailData"
-                    },
-                    "meta": {
-                        "type": "object",
-                        "additionalProperties": {}
-                    }
-                },
-                "required": [
-                    "data",
-                    "meta"
-                ]
-            },
-            "ReviewListData": {
-                "type": "object",
-                "properties": {
-                    "public_id": {
-                        "type": "string"
-                    },
-                    "task_id": {
-                        "type": "string"
-                    },
-                    "publication_id": {
-                        "type": "string"
-                    },
-                    "publication_title": {
-                        "type": "string"
-                    },
-                    "student_id": {
-                        "type": "string"
-                    },
-                    "student_name": {
-                        "type": "string"
-                    },
-                    "round_no": {
-                        "type": "integer"
-                    },
-                    "status": {
-                        "$ref": "#/components/schemas/ReviewWorkflowStatusEnum"
-                    },
-                    "target_kind": {
-                        "type": "string"
-                    },
-                    "created_at": {
-                        "type": "string",
-                        "format": "date-time"
-                    },
-                    "row_version": {
-                        "type": "integer"
-                    }
-                },
-                "required": [
-                    "created_at",
-                    "public_id",
-                    "publication_id",
-                    "publication_title",
-                    "round_no",
-                    "row_version",
-                    "status",
-                    "student_id",
-                    "student_name",
-                    "target_kind",
-                    "task_id"
-                ]
-            },
-            "ReviewListResponse": {
-                "type": "object",
-                "properties": {
-                    "data": {
-                        "type": "array",
-                        "items": {
-                            "$ref": "#/components/schemas/ReviewListData"
-                        }
-                    },
-                    "meta": {
-                        "type": "object",
-                        "additionalProperties": {}
-                    }
-                },
-                "required": [
-                    "data",
-                    "meta"
-                ]
-            },
             "ReviewModeEnum": {
                 "enum": [
                     "MANUAL",
@@ -23840,164 +20686,6 @@
                 ],
                 "type": "string",
                 "description": "* `MANUAL` - Manual\n* `MANUAL_WITH_AUTO_CHECK` - Manual With Auto Check"
-            },
-            "ReviewMonitorData": {
-                "type": "object",
-                "properties": {
-                    "review_counts": {
-                        "type": "object",
-                        "additionalProperties": {
-                            "type": "integer"
-                        }
-                    },
-                    "auto_check_failures": {
-                        "type": "integer"
-                    },
-                    "similarity_counts": {
-                        "type": "object",
-                        "additionalProperties": {
-                            "type": "integer"
-                        }
-                    },
-                    "latest_trace_id": {
-                        "type": "string"
-                    }
-                },
-                "required": [
-                    "auto_check_failures",
-                    "latest_trace_id",
-                    "review_counts",
-                    "similarity_counts"
-                ]
-            },
-            "ReviewMonitorResponse": {
-                "type": "object",
-                "properties": {
-                    "data": {
-                        "$ref": "#/components/schemas/ReviewMonitorData"
-                    },
-                    "meta": {
-                        "type": "object",
-                        "additionalProperties": {}
-                    }
-                },
-                "required": [
-                    "data",
-                    "meta"
-                ]
-            },
-            "ReviewResultData": {
-                "type": "object",
-                "properties": {
-                    "task_id": {
-                        "type": "string"
-                    },
-                    "task_status": {
-                        "type": "string"
-                    },
-                    "effective_score": {
-                        "type": "string",
-                        "nullable": true
-                    },
-                    "rounds": {
-                        "type": "array",
-                        "items": {
-                            "$ref": "#/components/schemas/ReviewRoundData"
-                        }
-                    },
-                    "allowed_actions": {
-                        "type": "array",
-                        "items": {
-                            "type": "string"
-                        }
-                    }
-                },
-                "required": [
-                    "allowed_actions",
-                    "effective_score",
-                    "rounds",
-                    "task_id",
-                    "task_status"
-                ]
-            },
-            "ReviewResultResponse": {
-                "type": "object",
-                "properties": {
-                    "data": {
-                        "$ref": "#/components/schemas/ReviewResultData"
-                    },
-                    "meta": {
-                        "type": "object",
-                        "additionalProperties": {}
-                    }
-                },
-                "required": [
-                    "data",
-                    "meta"
-                ]
-            },
-            "ReviewRoundData": {
-                "type": "object",
-                "properties": {
-                    "review_id": {
-                        "type": "string"
-                    },
-                    "round_no": {
-                        "type": "integer"
-                    },
-                    "status": {
-                        "$ref": "#/components/schemas/ReviewWorkflowStatusEnum"
-                    },
-                    "scores": {
-                        "allOf": [
-                            {
-                                "$ref": "#/components/schemas/CriterionScoresData"
-                            }
-                        ],
-                        "nullable": true
-                    },
-                    "annotations": {
-                        "type": "array",
-                        "items": {
-                            "$ref": "#/components/schemas/AnnotationData"
-                        }
-                    },
-                    "decision": {
-                        "allOf": [
-                            {
-                                "$ref": "#/components/schemas/DecisionData"
-                            }
-                        ],
-                        "nullable": true
-                    }
-                },
-                "required": [
-                    "annotations",
-                    "decision",
-                    "review_id",
-                    "round_no",
-                    "scores",
-                    "status"
-                ]
-            },
-            "ReviewTargetTypeEnum": {
-                "enum": [
-                    "REPORT_TEXT",
-                    "ATTACHMENT",
-                    "WORKSPACE_SNAPSHOT",
-                    "SYSTEM_ARTIFACT"
-                ],
-                "type": "string",
-                "description": "* `REPORT_TEXT` - Report Text\n* `ATTACHMENT` - Attachment\n* `WORKSPACE_SNAPSHOT` - Workspace Snapshot\n* `SYSTEM_ARTIFACT` - System Artifact"
-            },
-            "ReviewWorkflowStatusEnum": {
-                "enum": [
-                    "PENDING",
-                    "IN_REVIEW",
-                    "DECIDED"
-                ],
-                "type": "string",
-                "description": "* `PENDING` - Pending\n* `IN_REVIEW` - In Review\n* `DECIDED` - Decided"
             },
             "RiskEnum": {
                 "enum": [
@@ -24041,15 +20729,6 @@
                 ],
                 "type": "string",
                 "description": "* `ACKNOWLEDGED` - ACKNOWLEDGED\n* `IGNORED` - IGNORED\n* `CLOSED` - CLOSED"
-            },
-            "RoleEnum": {
-                "enum": [
-                    "STUDENT_FILES",
-                    "HIDDEN_SOURCE",
-                    "PUBLIC_DATA"
-                ],
-                "type": "string",
-                "description": "* `STUDENT_FILES` - STUDENT_FILES\n* `HIDDEN_SOURCE` - HIDDEN_SOURCE\n* `PUBLIC_DATA` - PUBLIC_DATA"
             },
             "RubricCriterionData": {
                 "type": "object",
@@ -24463,13 +21142,6 @@
                 "type": "string",
                 "description": "* `CONTAINER` - Container\n* `VM` - Vm"
             },
-            "SchemaVersionEnum": {
-                "enum": [
-                    2
-                ],
-                "type": "integer",
-                "description": "* `2` - 2"
-            },
             "SessionStepUpData": {
                 "type": "object",
                 "properties": {
@@ -24523,173 +21195,6 @@
                 },
                 "required": [
                     "mode"
-                ]
-            },
-            "SimilarityMatchData": {
-                "type": "object",
-                "properties": {
-                    "public_id": {
-                        "type": "string"
-                    },
-                    "candidate_report_version_id": {
-                        "type": "string"
-                    },
-                    "candidate_task_id": {
-                        "type": "string"
-                    },
-                    "candidate_student_id": {
-                        "type": "string"
-                    },
-                    "candidate_student_name": {
-                        "type": "string"
-                    },
-                    "score": {
-                        "type": "string",
-                        "format": "decimal",
-                        "pattern": "^-?\\d{0,1}(?:\\.\\d{0,4})?$"
-                    },
-                    "evidence": {
-                        "type": "array",
-                        "items": {
-                            "type": "object",
-                            "additionalProperties": {}
-                        }
-                    },
-                    "evidence_purged_at": {
-                        "type": "string",
-                        "format": "date-time",
-                        "nullable": true
-                    },
-                    "retention_until": {
-                        "type": "string",
-                        "format": "date-time"
-                    }
-                },
-                "required": [
-                    "candidate_report_version_id",
-                    "candidate_student_id",
-                    "candidate_student_name",
-                    "candidate_task_id",
-                    "evidence",
-                    "evidence_purged_at",
-                    "public_id",
-                    "retention_until",
-                    "score"
-                ]
-            },
-            "SimilarityMatchListResponse": {
-                "type": "object",
-                "properties": {
-                    "data": {
-                        "type": "array",
-                        "items": {
-                            "$ref": "#/components/schemas/SimilarityMatchData"
-                        }
-                    },
-                    "meta": {
-                        "type": "object",
-                        "additionalProperties": {}
-                    }
-                },
-                "required": [
-                    "data",
-                    "meta"
-                ]
-            },
-            "SimilarityRunData": {
-                "type": "object",
-                "properties": {
-                    "public_id": {
-                        "type": "string"
-                    },
-                    "review_id": {
-                        "type": "string"
-                    },
-                    "algorithm_version": {
-                        "type": "string"
-                    },
-                    "candidate_scope": {
-                        "type": "string"
-                    },
-                    "input_digest": {
-                        "type": "string"
-                    },
-                    "threshold": {
-                        "type": "string",
-                        "format": "decimal",
-                        "pattern": "^-?\\d{0,1}(?:\\.\\d{0,4})?$"
-                    },
-                    "candidate_count": {
-                        "type": "integer"
-                    },
-                    "status": {
-                        "$ref": "#/components/schemas/SimilarityRunDataStatusEnum"
-                    },
-                    "error_code": {
-                        "type": "string"
-                    },
-                    "trace_id": {
-                        "type": "string"
-                    },
-                    "retention_until": {
-                        "type": "string",
-                        "format": "date-time"
-                    },
-                    "row_version": {
-                        "type": "integer"
-                    }
-                },
-                "required": [
-                    "algorithm_version",
-                    "candidate_count",
-                    "candidate_scope",
-                    "error_code",
-                    "input_digest",
-                    "public_id",
-                    "retention_until",
-                    "review_id",
-                    "row_version",
-                    "status",
-                    "threshold",
-                    "trace_id"
-                ]
-            },
-            "SimilarityRunDataStatusEnum": {
-                "enum": [
-                    "QUEUED",
-                    "RUNNING",
-                    "COMPLETED",
-                    "FAILED"
-                ],
-                "type": "string",
-                "description": "* `QUEUED` - Queued\n* `RUNNING` - Running\n* `COMPLETED` - Completed\n* `FAILED` - Failed"
-            },
-            "SimilarityRunResponse": {
-                "type": "object",
-                "properties": {
-                    "data": {
-                        "$ref": "#/components/schemas/SimilarityRunData"
-                    },
-                    "meta": {
-                        "type": "object",
-                        "additionalProperties": {}
-                    }
-                },
-                "required": [
-                    "data",
-                    "meta"
-                ]
-            },
-            "SimilarityStart": {
-                "type": "object",
-                "properties": {
-                    "review_id": {
-                        "type": "string",
-                        "maxLength": 26
-                    }
-                },
-                "required": [
-                    "review_id"
                 ]
             },
             "SourceAssetUpload": {
@@ -24860,71 +21365,13 @@
                     "status"
                 ]
             },
-            "SubmissionData": {
-                "type": "object",
-                "properties": {
-                    "kind": {
-                        "$ref": "#/components/schemas/ArtifactKindEnum"
-                    },
-                    "version": {
-                        "$ref": "#/components/schemas/ReportVersionData"
-                    },
-                    "artifact": {
-                        "$ref": "#/components/schemas/SystemArtifactData"
-                    }
-                },
-                "required": [
-                    "kind"
-                ]
-            },
-            "SystemArtifactData": {
-                "type": "object",
-                "properties": {
-                    "public_id": {
-                        "type": "string"
-                    },
-                    "task_id": {
-                        "type": "string"
-                    },
-                    "kind": {
-                        "$ref": "#/components/schemas/SystemArtifactDataKindEnum"
-                    },
-                    "asset_id": {
-                        "type": "string"
-                    },
-                    "digest_sha256": {
-                        "type": "string"
-                    },
-                    "execution_run_id": {
-                        "type": "string",
-                        "nullable": true
-                    },
-                    "execution_evidence": {
-                        "type": "object",
-                        "additionalProperties": {}
-                    },
-                    "created_at": {
-                        "type": "string",
-                        "format": "date-time"
-                    }
-                },
-                "required": [
-                    "asset_id",
-                    "created_at",
-                    "digest_sha256",
-                    "execution_evidence",
-                    "execution_run_id",
-                    "kind",
-                    "public_id",
-                    "task_id"
-                ]
-            },
-            "SystemArtifactDataKindEnum": {
+            "TargetTypeEnum": {
                 "enum": [
-                    "WORKSPACE_SNAPSHOT"
+                    "HOST",
+                    "CIDR"
                 ],
                 "type": "string",
-                "description": "* `WORKSPACE_SNAPSHOT` - Workspace Snapshot"
+                "description": "* `HOST` - Host\n* `CIDR` - Cidr"
             },
             "TaskData": {
                 "type": "object",
@@ -24980,10 +21427,6 @@
                     },
                     "runtime_type": {
                         "type": "string"
-                    },
-                    "execution_spec": {
-                        "type": "object",
-                        "additionalProperties": {}
                     },
                     "runtime_adapter_id": {
                         "type": "string",
@@ -25070,7 +21513,6 @@
                     "current_failure",
                     "effective_deadline",
                     "enrollment_id",
-                    "execution_spec",
                     "image_digest",
                     "image_id",
                     "progress",
@@ -25098,22 +21540,18 @@
             "TaskDataStatusEnum": {
                 "enum": [
                     "ASSIGNED",
-                    "PROVISIONING",
-                    "READY",
                     "IN_PROGRESS",
                     "REPORT_DRAFT",
                     "UNDER_REVIEW",
                     "APPROVED",
-                    "REJECTED",
                     "ARCHIVING",
-                    "DESTROYING",
                     "COMPLETED",
                     "CANCELLED",
                     "EXPIRED",
                     "FAILED"
                 ],
                 "type": "string",
-                "description": "* `ASSIGNED` - Assigned\n* `PROVISIONING` - Provisioning\n* `READY` - Ready\n* `IN_PROGRESS` - In Progress\n* `REPORT_DRAFT` - Report Draft\n* `UNDER_REVIEW` - Under Review\n* `APPROVED` - Approved\n* `REJECTED` - Rejected\n* `ARCHIVING` - Archiving\n* `DESTROYING` - Destroying\n* `COMPLETED` - Completed\n* `CANCELLED` - Cancelled\n* `EXPIRED` - Expired\n* `FAILED` - Failed"
+                "description": "* `ASSIGNED` - Assigned\n* `IN_PROGRESS` - In Progress\n* `REPORT_DRAFT` - Report Draft\n* `UNDER_REVIEW` - Under Review\n* `APPROVED` - Approved\n* `ARCHIVING` - Archiving\n* `COMPLETED` - Completed\n* `CANCELLED` - Cancelled\n* `EXPIRED` - Expired\n* `FAILED` - Failed"
             },
             "TaskExtensionDecision": {
                 "type": "object",
@@ -25620,10 +22058,6 @@
                     "status": {
                         "type": "string"
                     },
-                    "execution_spec": {
-                        "type": "object",
-                        "additionalProperties": {}
-                    },
                     "resource_profile_id": {
                         "type": "string",
                         "nullable": true
@@ -25647,7 +22081,6 @@
                 "required": [
                     "description",
                     "effective_resource_profile_id",
-                    "execution_spec",
                     "grading_policy",
                     "instructions",
                     "marking_spec",
@@ -25722,10 +22155,6 @@
                     "status": {
                         "$ref": "#/components/schemas/RubricStatusEnum"
                     },
-                    "execution_spec": {
-                        "type": "object",
-                        "additionalProperties": {}
-                    },
                     "resource_profile_id": {
                         "type": "string",
                         "nullable": true,
@@ -25794,15 +22223,7 @@
                             "additionalProperties": {}
                         }
                     },
-                    "execution_spec": {
-                        "type": "object",
-                        "additionalProperties": {}
-                    },
                     "network_policy": {
-                        "type": "object",
-                        "additionalProperties": {}
-                    },
-                    "workspace_capabilities": {
                         "type": "object",
                         "additionalProperties": {}
                     },
@@ -25843,12 +22264,6 @@
                     "row_version": {
                         "type": "integer"
                     },
-                    "rules": {
-                        "type": "array",
-                        "items": {
-                            "$ref": "#/components/schemas/AutoCheckRuleData"
-                        }
-                    },
                     "chapters": {
                         "type": "array",
                         "items": {
@@ -25859,7 +22274,6 @@
                 "required": [
                     "chapters",
                     "dependencies",
-                    "execution_spec",
                     "image_digest",
                     "image_id",
                     "manual_asset_id",
@@ -25872,15 +22286,13 @@
                     "retention_days",
                     "review_policy",
                     "row_version",
-                    "rules",
                     "runtime_adapter_id",
                     "runtime_type",
                     "spec_digest",
                     "starter_asset_id",
                     "status",
                     "template_id",
-                    "version_no",
-                    "workspace_capabilities"
+                    "version_no"
                 ]
             },
             "TemplateVersionDataStatusEnum": {
@@ -25958,14 +22370,7 @@
                             "additionalProperties": {}
                         }
                     },
-                    "execution_spec": {
-                        "$ref": "#/components/schemas/ExecutionSpec"
-                    },
                     "network_policy": {
-                        "type": "object",
-                        "additionalProperties": {}
-                    },
-                    "workspace_capabilities": {
                         "type": "object",
                         "additionalProperties": {}
                     },

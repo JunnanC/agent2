@@ -7,8 +7,6 @@ export function formatDateTime(value?: string | null): string {
 
 export const TASK_STATUS_LABEL: Record<string, string> = {
   ASSIGNED: "待开始",
-  PROVISIONING: "准备环境",
-  READY: "已准备",
   IN_PROGRESS: "进行中",
   REPORT_DRAFT: "报告草稿",
   SUBMITTED: "已提交",
@@ -20,8 +18,6 @@ export const TASK_STATUS_LABEL: Record<string, string> = {
 
 export const TASK_STATUS_TONE: Record<string, "good" | "warn" | "blue" | "bad" | "neutral"> = {
   ASSIGNED: "warn",
-  PROVISIONING: "blue",
-  READY: "blue",
   IN_PROGRESS: "good",
   REPORT_DRAFT: "good",
   SUBMITTED: "blue",

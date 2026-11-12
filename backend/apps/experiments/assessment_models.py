@@ -150,6 +150,9 @@ class AssessmentRun(VersionedModel):
     lease_token = models.UUIDField(null=True, blank=True)
     lease_until = models.DateTimeField(null=True, blank=True)
     attempt_count = models.PositiveIntegerField(default=0)
+    started_at = models.DateTimeField(null=True, blank=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
+    duration_ms = models.PositiveBigIntegerField(null=True, blank=True)
 
     class Meta:
         db_table = "experiments_assessment_run"

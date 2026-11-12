@@ -44,6 +44,7 @@ def _claim(model: Any, pk: int) -> Any:
             model, pk=row.pk, expected_version=row.row_version,
             changes={
                 "status": "RUNNING", "lease_token": uuid.uuid4(),
+                **({"started_at": now} if model is AssessmentRun else {}),
                 "lease_until": now + timedelta(minutes=30), "attempt_count": row.attempt_count + 1,
             },
         )
@@ -61,6 +62,11 @@ def _finish(row: Any, **changes: Any) -> None:
         current = type(row).objects.select_for_update().get(pk=row.pk)
         if current.lease_token != row.lease_token or current.status != "RUNNING":
             return
+        if isinstance(current, AssessmentRun) and changes.get("status") == "COMPLETED":
+            finished = timezone.now()
+            changes.update(finished_at=finished, duration_ms=max(0, int(
+                (finished - (current.started_at or finished)).total_seconds() * 1000,
+            )))
         compare_and_swap(
             type(row), pk=current.pk, expected_version=current.row_version,
             changes={**changes, "lease_token": None, "lease_until": None},
@@ -308,7 +314,7 @@ def archive_closed_assessments() -> int:
         publication__chapter_snapshots__task_snapshots__task_type__in=(
             "SINGLE_CHOICE", "MULTIPLE_CHOICE", "PROGRAMMING",
         ),
-    ).exclude(status__in=("ARCHIVING", "DESTROYING", "COMPLETED", "CANCELLED", "EXPIRED"))
+    ).exclude(status__in=("ARCHIVING", "COMPLETED", "CANCELLED", "EXPIRED"))
     count = 0
     for task in tasks.distinct()[:100]:
         results = assessment_results(task, student=False)

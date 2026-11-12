@@ -154,9 +154,9 @@ export const assessmentTeachingApi = {
     request(`/teaching/courses/${courseId}/template-chapters/${chapterId}/tasks/reorder`, {
       method: "POST", body: { ids }, ifMatch: version, idempotencyKey: newIdempotencyKey(),
     }).then((r) => r.data),
-  reviews: (courseId: string) => request<{ rows: Array<{
+  reviews: (courseId: string, publicationId?: string) => request<{ rows: Array<{
     task_id: string; student_name: string; title: string; status: string; version_no: number;
-  }> }>(`/teaching/courses/${courseId}/assessment-reviews`).then((r) => r.data.rows),
+  }> }>(`/teaching/courses/${courseId}/assessment-reviews`, { query: { publication_id: publicationId || undefined } }).then((r) => r.data.rows),
   review: (courseId: string, taskId: string) => request<TeacherAssessmentReview>(
     `/teaching/courses/${courseId}/tasks/${taskId}/assessment`,
   ).then((r) => r.data),

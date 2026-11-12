@@ -6,7 +6,6 @@ from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
 from apps.accounts.models import User
-from apps.core.seed_names import rename_seed_labels
 from apps.courses.models import Course, MaterialVersion
 
 from ...models import (
@@ -27,7 +26,6 @@ class Command(BaseCommand):
     def handle(self, *args: object, **options: object) -> None:
         if os.getenv("APP_ENV", "") not in {"local", "integration", "test"} and not settings.DEBUG:
             raise CommandError("Agent E2E seed is restricted to disposable environments")
-        rename_seed_labels()
         course = Course.objects.filter(code="P03-DEMO-001").first()
         teacher = User.objects.filter(email="teacher.integration@example.edu").first()
         if course is None or teacher is None:
@@ -46,9 +44,9 @@ class Command(BaseCommand):
             key="p12-workspace-draft",
             version_no=1,
             defaults={
-                "tool_name": "workspace_draft",
+                "tool_name": "read_task_diagnostics",
                 "risk": ToolPolicy.Risk.HIGH,
-                "allowlist": ["workspace_draft"],
+                "allowlist": ["read_task_diagnostics"],
                 "schema": {"type": "object", "additionalProperties": True},
                 "status": ToolPolicy.Status.ACTIVE,
             },

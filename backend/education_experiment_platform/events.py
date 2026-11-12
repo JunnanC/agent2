@@ -72,15 +72,6 @@ def _visible(item: OutboxEvent, *, user: User, portal: str) -> bool:
             student=user,
             enrollment__status=Enrollment.Status.ACTIVE,
         ).exists()
-    session_id = str(payload.get("session_id", ""))
-    if session_id:
-        from apps.workspaces.models import WorkspaceSession
-
-        return WorkspaceSession.objects.filter(
-            public_id=session_id,
-            student=user,
-            task__enrollment__status=Enrollment.Status.ACTIVE,
-        ).exists()
     if course_id:
         return Enrollment.objects.filter(
             course__public_id=course_id, student=user, status="ACTIVE"

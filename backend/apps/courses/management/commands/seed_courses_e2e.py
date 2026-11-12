@@ -5,7 +5,6 @@ from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
 from apps.accounts.models import User
-from apps.core.seed_names import rename_seed_labels
 from apps.courses.content_services import (
     change_chapter_status,
     change_material_version_status,
@@ -22,7 +21,6 @@ class Command(BaseCommand):
     def handle(self, *args: object, **options: object) -> None:
         if os.getenv("APP_ENV", "") not in {"local", "integration", "test"} and not settings.DEBUG:
             raise CommandError("course E2E seed is restricted to disposable environments")
-        rename_seed_labels()
         teacher = User.objects.filter(email="teacher.integration@example.edu").first()
         student = User.objects.filter(email="student.integration@example.edu").first()
         if teacher is None or student is None:

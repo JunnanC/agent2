@@ -23,22 +23,10 @@ class ArchivesConfig(AppConfig):
             record_archive_export,
             request_task_archive,
             retry_archive_compensation,
-            retry_judge_destroy_compensation,
-            retry_runtime_cleanup_compensation,
-            retry_runtime_object_purge_compensation,
-            retry_runtime_resource_destroy_compensation,
             schedule_course_reconciliation,
         )
 
         register_compensation_handler("RETRY_ARCHIVE_JOB", retry_archive_compensation)
-        register_compensation_handler("RETRY_RUNTIME_DESTROY", retry_runtime_cleanup_compensation)
-        register_compensation_handler("RETRY_JUDGE_DESTROY", retry_judge_destroy_compensation)
-        register_compensation_handler(
-            "RETRY_RUNTIME_OBJECT_PURGE", retry_runtime_object_purge_compensation
-        )
-        register_compensation_handler(
-            "RETRY_RUNTIME_RESOURCE_DESTROY", retry_runtime_resource_destroy_compensation
-        )
         register_download_authorizer("ARCHIVE_PACKAGE", authorize_archive_download)
         register_download_grant_observer(record_archive_export)
         register_course_archive_blocker(archive_course_blockers)

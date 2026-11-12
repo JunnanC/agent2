@@ -19,34 +19,26 @@ from apps.core.idempotency import PrincipalScope, StoredResponse, execute_idempo
 from apps.core.pagination import PageSpec
 from apps.courses.services import ActorContext
 from apps.governance.errors import RecentAuthenticationRequired
-from apps.provisioning.services import enabled_runtime_inventory
 
 from .selectors import (
     archive_for_course,
     archive_for_user,
     archives_for_course,
     compensation_rows,
-    instance_rows,
     teaching_archive_course,
 )
 from .serializers import (
-    ArchiveDestroyReasonSerializer,
     ArchiveExportResponseSerializer,
     ArchiveListResponseSerializer,
     ArchiveResponseSerializer,
     CompensationListResponseSerializer,
     CompensationResponseSerializer,
     CompensationRetrySerializer,
-    InstanceListResponseSerializer,
-    InstanceResponseSerializer,
     archive_data,
     compensation_data,
-    instance_data,
 )
 from .services import (
     create_archive_export,
-    request_instance_destroy_as_admin,
-    request_orphan_destroy_as_admin,
     retry_compensation_as_admin,
 )
 
@@ -236,148 +228,6 @@ class TeachingArchiveExportView(APIView):
         return _idempotent_response(
             request,
             payload={"course_id": course_id, "archive_id": archive_id},
-            operation=operation,
-        )
-
-
-class PlatformInstanceListView(APIView):
-    permission_classes = [IsPlatformPortal]
-
-    @extend_schema(
-        operation_id="platform_instances_list",
-        responses={200: InstanceListResponseSerializer},
-        tags=["platform-governance"],
-        extensions={"x-portals": ["PLATFORM"]},
-    )
-    def get(self, request: HttpRequest) -> Response:
-        inventory_items = enabled_runtime_inventory(
-            include_unavailable=True,
-            trace_id=str(getattr(request, "trace_id", "")),
-        )
-        unavailable_adapters = {
-            str(item.metadata.get("adapter_id", ""))
-            for item in inventory_items
-            if item.metadata.get("inventory_unavailable")
-        }
-        inventory = {
-            (str(item.metadata.get("adapter_id", "")), item.external_id): item
-            for item in inventory_items
-            if item.external_id
-        }
-        rows = list(instance_rows())
-        data = [
-            instance_data(
-                item,
-                external_status=(
-                    inventory[(item.runtime_adapter.public_id, item.external_id)].status
-                    if (item.runtime_adapter.public_id, item.external_id) in inventory
-                    else "UNAVAILABLE"
-                    if item.runtime_adapter.public_id in unavailable_adapters
-                    else "ABSENT"
-                ),
-                external_metadata=(
-                    dict(inventory[(item.runtime_adapter.public_id, item.external_id)].metadata)
-                    if (item.runtime_adapter.public_id, item.external_id) in inventory
-                    else {}
-                ),
-            )
-            for item in rows
-        ]
-        known = {
-            (item.runtime_adapter.public_id, item.external_id)
-            for item in rows
-            if item.external_id
-        }
-        data.extend(
-            {
-                "public_id": f"external:{adapter_id}:{external_id}",
-                "task_id": "",
-                "course_id": "",
-                "student_id": "",
-                "status": "ORPHANED",
-                "external_id": external_id,
-                "external_status": item.status,
-                "runtime_driver": str(item.metadata.get("driver", "")),
-                "service_name": str(item.metadata.get("service_name", "")),
-                "runtime_task_count": _metadata_int(item.metadata.get("task_count", 0)),
-                "runtime_health": str(item.metadata.get("health", item.status)),
-                "orphan": True,
-                "resource_leak": True,
-                "row_version": 1,
-                "trace_id": "",
-            }
-            for (adapter_id, external_id), item in inventory.items()
-            if (adapter_id, external_id) not in known
-        )
-        return _page_response(request, data, serializer=lambda item: item)
-
-
-class PlatformInstanceDestroyView(APIView):
-    permission_classes = [IsPlatformPortal]
-
-    @extend_schema(
-        operation_id="platform_instances_destroy",
-        request=ArchiveDestroyReasonSerializer,
-        responses={202: InstanceResponseSerializer},
-        parameters=[IDEMPOTENCY_KEY, IF_MATCH],
-        tags=["platform-governance"],
-        extensions={"x-portals": ["PLATFORM"]},
-    )
-    def post(self, request: HttpRequest, instance_id: str) -> Response:
-        _require_recent_auth(request)
-        serializer = ArchiveDestroyReasonSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        expected = parse_if_match(request.headers.get("If-Match"))
-
-        def operation() -> StoredResponse:
-            if instance_id.startswith("external:"):
-                request_orphan_destroy_as_admin(
-                    orphan_ref=instance_id,
-                    actor=request.user,
-                    expected_version=expected,
-                    reason=serializer.validated_data["reason"],
-                    context=_context(request),
-                )
-                return StoredResponse(
-                    202,
-                    _body(
-                        request,
-                        {
-                            "public_id": instance_id,
-                            "task_id": "",
-                            "course_id": "",
-                            "student_id": "",
-                            "status": "DESTROY_PENDING",
-                            "external_id": instance_id.rsplit(":", 1)[-1],
-                            "external_status": "DESTROY_PENDING",
-                            "runtime_driver": "",
-                            "service_name": "",
-                            "runtime_task_count": 0,
-                            "runtime_health": "UNKNOWN",
-                            "orphan": True,
-                            "resource_leak": True,
-                            "row_version": 1,
-                            "trace_id": str(getattr(request, "trace_id", "")),
-                        },
-                    ),
-                    {"ETag": etag_for_version(1)},
-                )
-            instance = request_instance_destroy_as_admin(
-                instance_id=instance_id,
-                actor=request.user,
-                expected_version=expected,
-                reason=serializer.validated_data["reason"],
-                context=_context(request),
-            )
-            return StoredResponse(
-                202,
-                _body(request, instance_data(instance, external_status="DESTROY_PENDING")),
-                {"ETag": etag_for_version(instance.row_version)},
-            )
-
-        return _idempotent_response(
-            request,
-            payload={"instance_id": instance_id, **serializer.validated_data},
             operation=operation,
         )
 

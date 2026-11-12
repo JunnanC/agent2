@@ -10,7 +10,7 @@ import { Home } from "./home";
 vi.mock("@edu/api-client", () => ({
   taskApi: { list: vi.fn() },
   studentApi: { myEnrollments: vi.fn(), dashboard: vi.fn() },
-  reportApi: { reviewResult: vi.fn() },
+  assessmentApi: { get: vi.fn() },
 }));
 
 const now = new Date();

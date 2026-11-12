@@ -43,17 +43,7 @@ export const keys = {
     ["tasks", taskId, "assessment", "drafts", questionId, language] as const,
   taskTransitions: (taskId: string) => ["tasks", taskId, "transitions"] as const,
   taskExtension: (taskId: string) => ["tasks", taskId, "extensions"] as const,
-  provisioningJob: (taskId: string) => ["tasks", taskId, "provisioning-job"] as const,
-  workbench: (taskId: string) => ["tasks", taskId, "workbench"] as const,
-  workspaceSessions: (taskId: string) => ["tasks", taskId, "workspace-sessions"] as const,
-  checkpoints: (taskId: string) => ["tasks", taskId, "checkpoints"] as const,
-  executionRuns: (taskId: string, filter: QueryFilter = {}) =>
-    ["tasks", taskId, "execution-runs", ...stable(filter)] as const,
-  executionRun: (taskId: string, runId: string) => ["tasks", taskId, "execution-runs", runId] as const,
-  reportDraft: (taskId: string) => ["tasks", taskId, "report-draft"] as const,
   reportAttachments: (taskId: string) => ["tasks", taskId, "attachments"] as const,
-  reportVersions: (taskId: string) => ["tasks", taskId, "report-versions"] as const,
-  reviewResult: (taskId: string) => ["tasks", taskId, "review-result"] as const,
   riskSignals: (filter: QueryFilter = {}) => ["analytics", "risk-signals", ...stable(filter)] as const,
   recommendations: (filter: QueryFilter = {}) => ["analytics", "recommendations", ...stable(filter)] as const,
 
@@ -80,7 +70,6 @@ export const keys = {
   templateChapters: (versionId: string) => ["teaching-template-versions", versionId, "chapters"] as const,
   templateChapterTasks: (chapterId: string) =>
     ["teaching-template-chapters", chapterId, "tasks"] as const,
-  autoCheckRules: (versionId: string) => ["teaching-template-versions", versionId, "auto-check-rules"] as const,
   precheckRuns: (versionId: string, filter: QueryFilter = {}) =>
     ["teaching-template-versions", versionId, "precheck-runs", ...stable(filter)] as const,
   experimentImages: (courseId: string, filter: QueryFilter = {}) =>
@@ -118,8 +107,6 @@ export const keys = {
   runtimeAdapters: (filter: QueryFilter = {}) => ["platform", "runtime-adapters", ...stable(filter)] as const,
   quotas: (filter: QueryFilter = {}) => ["platform", "quotas", ...stable(filter)] as const,
   instances: (filter: QueryFilter = {}) => ["platform", "instances", ...stable(filter)] as const,
-  platformWorkspaceSessions: (filter: QueryFilter = {}) =>
-    ["platform", "workspaces", "sessions", ...stable(filter)] as const,
   anomalies: (filter: QueryFilter = {}) => ["platform", "anomalies", "tasks", ...stable(filter)] as const,
   scanAnomalies: (filter: QueryFilter = {}) => ["platform", "anomalies", "reports", ...stable(filter)] as const,
   operationsOverview: () => ["platform", "operations", "overview"] as const,

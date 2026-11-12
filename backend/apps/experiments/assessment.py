@@ -53,7 +53,7 @@ def _task(actor: User, task_id: str, *, write: bool = False) -> ExperimentTask:
         if task.publication.status != TaskPublication.Status.PUBLISHED:
             raise StateConflict(detail={"publication": "not_open"})
         if task.status in {
-            "CANCELLED", "EXPIRED", "FAILED", "ARCHIVING", "DESTROYING", "COMPLETED",
+            "CANCELLED", "EXPIRED", "FAILED", "ARCHIVING", "COMPLETED",
         }:
             raise StateConflict(detail={"task": "not_open"})
         if timezone.now() < task.publication.window_start:
@@ -92,7 +92,7 @@ def _writable(task: ExperimentTask, kind: str) -> None:
 
 def sync_assessment_status(task: ExperimentTask) -> None:
     """Keep the existing task projection usable without coupling it to container lifecycle."""
-    if task.status in {"ARCHIVING", "DESTROYING", "COMPLETED", "CANCELLED", "EXPIRED"}:
+    if task.status in {"ARCHIVING", "COMPLETED", "CANCELLED", "EXPIRED"}:
         return
     kinds = {"CHOICE" if kind in CHOICE_TYPES else "PROGRAMMING" for kind in
              PublicationTask.objects.filter(
@@ -216,7 +216,7 @@ def assessment_data(*, actor: User, task_id: str) -> dict[str, Any]:
         sections.append({
             **section_result(section, student=True), "deadline": _deadline(task, kind),
             "editable": task.publication.status == "PUBLISHED" and task.status not in {
-                "COMPLETED", "CANCELLED", "EXPIRED", "FAILED", "ARCHIVING", "DESTROYING",
+                "COMPLETED", "CANCELLED", "EXPIRED", "FAILED", "ARCHIVING",
             } and now < _deadline(task, kind),
         })
     return {
@@ -351,7 +351,7 @@ def submit_programming(
             version_no=previous.version_no + 1 if previous else 1,
             body_markdown=report.body_markdown,
             body_digest=hashlib.sha256(report.body_markdown.encode()).hexdigest(),
-            workspace_snapshot=None, snapshot_digest=manifest_digest,
+            snapshot_digest=manifest_digest,
             submitted_by=actor, submitted_at=timezone.now(), trace_id=trace_id,
         )
         ReportVersionAttachment.objects.bulk_create([
@@ -590,7 +590,7 @@ def review_programming(
     submission = section.current_submission
     if submission is None or submission.version_no != submission_version:
         raise StateConflict(detail={"submission": "not_current"})
-    if task.status in {"ARCHIVING", "DESTROYING", "COMPLETED", "CANCELLED", "EXPIRED"}:
+    if task.status in {"ARCHIVING", "COMPLETED", "CANCELLED", "EXPIRED"}:
         raise StateConflict(detail={"task": "terminal"})
     if return_until is None and section.status == "RETURNED":
         raise StateConflict(detail={"submission": "returned_submission_cannot_be_graded"})

@@ -1369,38 +1369,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v2/platform/instances": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["platform_instances_list"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v2/platform/instances/{instance_id}/destroy": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["platform_instances_destroy"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v2/platform/integrations/api-clients": {
         parameters: {
             query?: never;
@@ -1858,22 +1826,6 @@ export interface paths {
         };
         get: operations["platform_resource_scaling_policies_list"];
         put: operations["platform_resource_scaling_policies_put"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v2/platform/reviews/summary": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["platform_reviews_monitor"];
-        put?: never;
         post?: never;
         delete?: never;
         options?: never;
@@ -2361,38 +2313,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v2/tasks/{task_id}/report-versions": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["tasks_report_versions_list"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v2/tasks/{task_id}/review-result": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["tasks_review_result_retrieve"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v2/tasks/{task_id}/sections/choice/submissions": {
         parameters: {
             query?: never;
@@ -2803,54 +2723,6 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["teaching_agent_source_version_create"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v2/teaching/courses/{course_id}/ai-score-batches": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["api_v2_teaching_courses_ai_score_batches_retrieve"];
-        put?: never;
-        post: operations["api_v2_teaching_courses_ai_score_batches_create"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v2/teaching/courses/{course_id}/ai-score-batches/{batch_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["teaching_ai_score_batch_retrieve"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v2/teaching/courses/{course_id}/ai-score-batches/{batch_id}/accept": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["teaching_ai_score_batch_accept"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3657,134 +3529,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v2/teaching/courses/{course_id}/reviews": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["teaching_reviews_list"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v2/teaching/courses/{course_id}/reviews/{review_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["teaching_reviews_retrieve"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v2/teaching/courses/{course_id}/reviews/{review_id}/ai-score-suggestions/{suggestion_id}/accept": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["teaching_ai_score_suggestion_accept"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v2/teaching/courses/{course_id}/reviews/{review_id}/annotations": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["teaching_review_annotations_list"];
-        put?: never;
-        post: operations["teaching_review_annotations_create"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v2/teaching/courses/{course_id}/reviews/{review_id}/annotations/{annotation_id}/revisions": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["teaching_review_annotation_revise"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v2/teaching/courses/{course_id}/reviews/{review_id}/annotations/{annotation_id}/revoke": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["teaching_review_annotation_revoke"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v2/teaching/courses/{course_id}/reviews/{review_id}/criterion-scores": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["teaching_review_scores_list"];
-        put: operations["teaching_review_scores_update"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v2/teaching/courses/{course_id}/reviews/{review_id}/decide": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["teaching_reviews_decide"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v2/teaching/courses/{course_id}/rubric-versions/{version_id}": {
         parameters: {
             query?: never;
@@ -3843,54 +3587,6 @@ export interface paths {
         get: operations["teaching_rubric_versions_list"];
         put?: never;
         post: operations["teaching_rubric_versions_create"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v2/teaching/courses/{course_id}/similarity-runs": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["teaching_similarity_runs_create"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v2/teaching/courses/{course_id}/similarity-runs/{run_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["teaching_similarity_runs_retrieve"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v2/teaching/courses/{course_id}/similarity-runs/{run_id}/matches": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["teaching_similarity_matches_list"];
-        put?: never;
-        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -4003,22 +3699,6 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["api_v2_teaching_courses_tasks_assessment_report_suggestion_create"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v2/teaching/courses/{course_id}/tasks/{task_id}/submission-preview": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["teaching_task_submission_preview"];
-        put?: never;
-        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -4185,22 +3865,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v2/teaching/courses/{course_id}/template-versions/{version_id}/auto-check-rules": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["teaching_auto_check_rules_list"];
-        put: operations["teaching_auto_check_rules_replace"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v2/teaching/courses/{course_id}/template-versions/{version_id}/chapters": {
         parameters: {
             query?: never;
@@ -4243,22 +3907,6 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["teaching_template_versions_clone"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v2/teaching/courses/{course_id}/template-versions/{version_id}/execution-spec": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["teaching_template_execution_spec_save"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4541,93 +4189,6 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        AIScoreBatchData: {
-            public_id: string;
-            course_id: string;
-            publication_id: string;
-            publication_title: string;
-            created_by: string;
-            status: components["schemas"]["AIScoreBatchDataStatusEnum"];
-            entry_count: number;
-            counts: {
-                [key: string]: number;
-            };
-            row_version: number;
-        };
-        AIScoreBatchDataResponse: {
-            data: components["schemas"]["AIScoreBatchData"];
-            meta: {
-                [key: string]: unknown;
-            };
-        };
-        /**
-         * @description * `QUEUED` - Queued
-         *     * `RUNNING` - Running
-         *     * `REVIEW_REQUIRED` - Review Required
-         *     * `COMPLETED` - Completed
-         *     * `COMPLETED_WITH_ERRORS` - Completed With Errors
-         *     * `FAILED` - Failed
-         * @enum {string}
-         */
-        AIScoreBatchDataStatusEnum: "QUEUED" | "RUNNING" | "REVIEW_REQUIRED" | "COMPLETED" | "COMPLETED_WITH_ERRORS" | "FAILED";
-        AIScoreBatchDetailData: {
-            batch: components["schemas"]["AIScoreBatchData"];
-            suggestions: components["schemas"]["AIScoreSuggestionData"][];
-            page: number;
-            page_size: number;
-            total: number;
-        };
-        AIScoreBatchDetailResponse: {
-            data: components["schemas"]["AIScoreBatchDetailData"];
-            meta: {
-                [key: string]: unknown;
-            };
-        };
-        AIScoreBatchResponse: {
-            data: {
-                [key: string]: unknown;
-            };
-            meta: {
-                [key: string]: unknown;
-            };
-        };
-        AIScoreBatchWrite: {
-            publication_id: string;
-        };
-        AIScoreSuggestionData: {
-            public_id: string;
-            review_id: string;
-            student_id: string;
-            student_name: string;
-            status: components["schemas"]["AIScoreSuggestionDataStatusEnum"];
-            review_row_version: number;
-            criteria: {
-                [key: string]: unknown;
-            }[];
-            /** Format: decimal */
-            total_score: string | null;
-            model_name: string;
-            error_code: string;
-            accepted_by: string | null;
-            /** Format: date-time */
-            accepted_at: string | null;
-            row_version: number;
-        };
-        /**
-         * @description * `QUEUED` - Queued
-         *     * `RUNNING` - Running
-         *     * `READY` - Ready
-         *     * `ACCEPTED` - Accepted
-         *     * `FAILED` - Failed
-         * @enum {string}
-         */
-        AIScoreSuggestionDataStatusEnum: "QUEUED" | "RUNNING" | "READY" | "ACCEPTED" | "FAILED";
-        AIScoreSuggestionResponse: {
-            data: components["schemas"]["AIScoreSuggestionData"];
-            meta: {
-                [key: string]: unknown;
-            };
-        };
         APIClient: {
             name: string;
             scopes?: string[];
@@ -4657,12 +4218,6 @@ export interface components {
             trace_id: string;
         };
         /**
-         * @description * `UPSERT` - Upsert
-         *     * `REVOKE` - Revoke
-         * @enum {string}
-         */
-        ActionEnum: "UPSERT" | "REVOKE";
-        /**
          * @description * `ACTIVE` - ACTIVE
          *     * `RETIRED` - RETIRED
          * @enum {string}
@@ -4674,12 +4229,6 @@ export interface components {
          * @enum {string}
          */
         ActiveRevokedCodeStatusEnum: "ACTIVE" | "REVOKED";
-        /**
-         * @description * `ACTIVE` - Active
-         *     * `REVOKED` - Revoked
-         * @enum {string}
-         */
-        ActiveRevokedStatusEnum: "ACTIVE" | "REVOKED";
         AdminAssignmentData: {
             public_id: string;
             user_id: string;
@@ -4723,10 +4272,10 @@ export interface components {
          *     * `SOCRATIC_HINT` - SOCRATIC_HINT
          *     * `DEBUG_ASSIST` - DEBUG_ASSIST
          *     * `REPORT_COACH` - REPORT_COACH
-         *     * `WORKSPACE_ASSIST` - WORKSPACE_ASSIST
+         *     * `CODE_ASSIST` - CODE_ASSIST
          * @enum {string}
          */
-        AgentModeEnum: "KNOWLEDGE_QA" | "SOCRATIC_HINT" | "DEBUG_ASSIST" | "REPORT_COACH" | "WORKSPACE_ASSIST";
+        AgentModeEnum: "KNOWLEDGE_QA" | "SOCRATIC_HINT" | "DEBUG_ASSIST" | "REPORT_COACH" | "CODE_ASSIST";
         AgentResponseMeta: {
             trace_id: string;
         };
@@ -4744,7 +4293,7 @@ export interface components {
         AllowlistCreate: {
             scope_type: string;
             course_id?: string | null;
-            target_type: components["schemas"]["AllowlistCreateTargetTypeEnum"];
+            target_type: components["schemas"]["TargetTypeEnum"];
             target_value: string;
             protocol: components["schemas"]["ProtocolEnum"];
             port_start: number;
@@ -4752,12 +4301,6 @@ export interface components {
             risk_level: components["schemas"]["RiskLevelEnum"];
             reason: string;
         };
-        /**
-         * @description * `HOST` - Host
-         *     * `CIDR` - Cidr
-         * @enum {string}
-         */
-        AllowlistCreateTargetTypeEnum: "HOST" | "CIDR";
         AllowlistData: {
             public_id: string;
             scope_type: string;
@@ -4780,50 +4323,6 @@ export interface components {
             data: components["schemas"]["AllowlistData"];
             meta: components["schemas"]["GovernanceTraceMeta"];
         };
-        AnnotationData: {
-            public_id: string;
-            review_id: string;
-            author_id: string;
-            target_type: components["schemas"]["ReviewTargetTypeEnum"];
-            target_ref: string;
-            object_digest: string;
-            anchor: unknown;
-            status: components["schemas"]["ActiveRevokedStatusEnum"];
-            body: string;
-            current_revision_no: number;
-            row_version: number;
-            revisions?: components["schemas"]["AnnotationRevisionData"][];
-        };
-        AnnotationListResponse: {
-            data: components["schemas"]["AnnotationData"][];
-            meta: {
-                [key: string]: unknown;
-            };
-        };
-        AnnotationResponse: {
-            data: components["schemas"]["AnnotationData"];
-            meta: {
-                [key: string]: unknown;
-            };
-        };
-        AnnotationRevisionData: {
-            revision_no: number;
-            action: components["schemas"]["ActionEnum"];
-            body: string;
-            actor_id: string;
-            /** Format: date-time */
-            created_at: string;
-            trace_id: string;
-        };
-        AnnotationRevisionWrite: {
-            body: string;
-        };
-        AnnotationWrite: {
-            target_type: components["schemas"]["ReviewTargetTypeEnum"];
-            target_ref: string;
-            anchor: unknown;
-            body: string;
-        };
         AnswerWrite: {
             body: string;
         };
@@ -4836,8 +4335,6 @@ export interface components {
             status: string;
             terminal_target: string;
             task_status: string;
-            /** Format: date-time */
-            safe_recycle_at: string;
             attempt_count: number;
             max_attempts: number;
             row_version: number;
@@ -4856,9 +4353,6 @@ export interface components {
             recycle: {
                 [key: string]: unknown;
             };
-        };
-        ArchiveDestroyReason: {
-            reason: string;
         };
         ArchiveExportResponse: {
             data: {
@@ -4880,12 +4374,6 @@ export interface components {
                 [key: string]: unknown;
             };
         };
-        /**
-         * @description * `REPORT` - REPORT
-         *     * `SYSTEM_ARTIFACT` - SYSTEM_ARTIFACT
-         * @enum {string}
-         */
-        ArtifactKindEnum: "REPORT" | "SYSTEM_ARTIFACT";
         AssessmentReportWrite: {
             body_markdown: string;
         };
@@ -4928,100 +4416,6 @@ export interface components {
          * @enum {string}
          */
         AudienceModeEnum: "ALL_ACTIVE" | "SELECTED";
-        AutoCheckData: {
-            public_id: string;
-            checker_type: string;
-            rule_digest: string;
-            artifact_digest: string;
-            execution_rule_summary: {
-                [key: string]: unknown;
-            };
-            execution_rule_digest: string;
-            status: components["schemas"]["AutoCheckStatusEnum"];
-            attempt_count: number;
-            result_summary: {
-                [key: string]: unknown;
-            };
-            evidence: {
-                [key: string]: unknown;
-            }[];
-            error_code: string;
-            trace_id: string;
-            duration_ms: number | null;
-            /** Format: date-time */
-            completed_at: string | null;
-        };
-        AutoCheckRuleData: {
-            public_id: string;
-            position: number;
-            checker_type: string;
-            input_schema: {
-                [key: string]: unknown;
-            };
-            output_schema: {
-                [key: string]: unknown;
-            };
-            timeout_seconds: number;
-            resource_limit: {
-                [key: string]: unknown;
-            };
-            network_policy: {
-                [key: string]: unknown;
-            };
-            display_policy: {
-                [key: string]: unknown;
-            };
-            failure_semantics: {
-                [key: string]: unknown;
-            };
-            rule_digest: string;
-        };
-        AutoCheckRuleWrite: {
-            position: number;
-            checker_type: string;
-            input_schema: {
-                [key: string]: unknown;
-            };
-            output_schema: {
-                [key: string]: unknown;
-            };
-            timeout_seconds: number;
-            resource_limit: {
-                [key: string]: unknown;
-            };
-            network_policy: {
-                [key: string]: unknown;
-            };
-            display_policy: {
-                [key: string]: unknown;
-            };
-            failure_semantics: {
-                [key: string]: unknown;
-            };
-        };
-        AutoCheckRulesData: {
-            rules: components["schemas"]["AutoCheckRuleData"][];
-        };
-        AutoCheckRulesResponse: {
-            data: components["schemas"]["AutoCheckRulesData"];
-            meta: {
-                [key: string]: unknown;
-            };
-        };
-        AutoCheckRulesWrite: {
-            rules: components["schemas"]["AutoCheckRuleWrite"][];
-        };
-        /**
-         * @description * `QUEUED` - Queued
-         *     * `RUNNING` - Running
-         *     * `PASSED` - Passed
-         *     * `FAILED` - Failed
-         *     * `TIMEOUT` - Timeout
-         *     * `RESOURCE_EXCEEDED` - Resource Exceeded
-         *     * `REJECTED` - Rejected
-         * @enum {string}
-         */
-        AutoCheckStatusEnum: "QUEUED" | "RUNNING" | "PASSED" | "FAILED" | "TIMEOUT" | "RESOURCE_EXCEEDED" | "REJECTED";
         BlockerData: {
             type: string;
             count: number;
@@ -5072,12 +4466,6 @@ export interface components {
             language: components["schemas"]["LanguageEnum"];
             row_version: number;
         };
-        /**
-         * @description * `token` - token
-         *     * `numeric` - numeric
-         * @enum {string}
-         */
-        ComparatorEnum: "token" | "numeric";
         CompensationData: {
             public_id: string;
             task_type: string;
@@ -5242,42 +4630,6 @@ export interface components {
         CourseTraceMeta: {
             trace_id: string;
         };
-        CriterionScoreData: {
-            public_id: string;
-            position: number;
-            title: string;
-            description: string;
-            guidance: string;
-            /** Format: decimal */
-            max_score: string;
-            weight_basis_points: number;
-            /** Format: decimal */
-            score: string | null;
-            note: string;
-            score_row_version: number | null;
-            revision_no: number;
-        };
-        CriterionScoreWriteItem: {
-            criterion_id: string;
-            /** Format: decimal */
-            score: string;
-            note?: string;
-        };
-        CriterionScoresData: {
-            review_id: string;
-            rubric_version: components["schemas"]["RubricVersionData"];
-            criteria: components["schemas"]["CriterionScoreData"][];
-            review_row_version: number;
-        };
-        CriterionScoresResponse: {
-            data: components["schemas"]["CriterionScoresData"];
-            meta: {
-                [key: string]: unknown;
-            };
-        };
-        CriterionScoresWrite: {
-            scores: components["schemas"]["CriterionScoreWriteItem"][];
-        };
         CsrfData: {
             csrf: string;
         };
@@ -5291,23 +4643,6 @@ export interface components {
             };
             weekly_study: components["schemas"]["WeeklyStudyData"];
             next_tasks: components["schemas"]["TaskData"][];
-        };
-        DecisionData: {
-            public_id: string;
-            decision: components["schemas"]["ReviewDecisionEnum"];
-            /** Format: decimal */
-            score: string;
-            feedback: string;
-            decided_by: string;
-            criterion_snapshot: {
-                [key: string]: unknown;
-            }[];
-            trace_id: string;
-            /** Format: date-time */
-            created_at: string;
-            review_row_version?: number;
-            task_status?: string;
-            task_row_version?: number;
         };
         DownloadGrantData: {
             grant_id: string;
@@ -5344,10 +4679,9 @@ export interface components {
          * @description * `DOCKER_SWARM` - Docker Swarm
          *     * `DOCKER_LOCAL` - Docker Local
          *     * `LIBVIRT` - Libvirt
-         *     * `FAKE` - Fake
          * @enum {string}
          */
-        DriverEnum: "DOCKER_SWARM" | "DOCKER_LOCAL" | "LIBVIRT" | "FAKE";
+        DriverEnum: "DOCKER_SWARM" | "DOCKER_LOCAL" | "LIBVIRT";
         EnrollmentApply: {
             application_message?: string;
             invitation_code?: string;
@@ -5430,49 +4764,6 @@ export interface components {
             threshold?: {
                 [key: string]: unknown;
             };
-        };
-        ExecutionMaterial: {
-            asset_id: string;
-            role: components["schemas"]["RoleEnum"];
-        };
-        ExecutionSpec: {
-            schema_version?: components["schemas"]["SchemaVersionEnum"];
-            language: (components["schemas"]["LanguageEnum"] | components["schemas"]["NullEnum"]) | null;
-            toolchain_version?: string | null;
-            language_standard?: string | null;
-            toolchain?: {
-                [key: string]: unknown;
-            };
-            materials?: components["schemas"]["ExecutionMaterial"][];
-            entrypoint: string | null;
-            timeout_seconds: number;
-            memory_mb: number;
-            cpu_millicores: number;
-            comparator: components["schemas"]["ComparatorEnum"];
-            /** Format: double */
-            absolute_tolerance?: number;
-            /** Format: double */
-            relative_tolerance?: number;
-            tests_asset: string;
-            network_mode: components["schemas"]["NetworkModeEc7Enum"];
-        };
-        ExecutionSpecSave: {
-            tests_json: string;
-            schema_version?: components["schemas"]["SchemaVersionEnum"];
-            language: (components["schemas"]["LanguageEnum"] | components["schemas"]["NullEnum"]) | null;
-            toolchain_version?: string | null;
-            language_standard?: string | null;
-            materials?: components["schemas"]["ExecutionMaterial"][];
-            entrypoint: string | null;
-            timeout_seconds: number;
-            memory_mb: number;
-            cpu_millicores: number;
-            comparator: components["schemas"]["ComparatorEnum"];
-            /** Format: double */
-            absolute_tolerance?: number;
-            /** Format: double */
-            relative_tolerance?: number;
-            network_mode: components["schemas"]["NetworkModeEc7Enum"];
         };
         ExperimentImageCreate: {
             template_version_id: string;
@@ -5593,7 +4884,9 @@ export interface components {
             note?: string;
         };
         GenericReportResponse: {
-            data: components["schemas"]["ReportScanAnomalySummary"];
+            data: {
+                [key: string]: unknown;
+            };
             meta: {
                 [key: string]: unknown;
             };
@@ -5726,35 +5019,6 @@ export interface components {
          * @enum {string}
          */
         ImageScanStatusEnum: "PENDING" | "CLEAN" | "INFECTED" | "FAILED";
-        InstanceData: {
-            public_id: string;
-            task_id: string;
-            course_id: string;
-            student_id: string;
-            status: string;
-            external_id: string | null;
-            external_status: string;
-            runtime_driver: string;
-            service_name: string;
-            runtime_task_count: number;
-            runtime_health: string;
-            orphan: boolean;
-            resource_leak: boolean;
-            row_version: number;
-            trace_id: string;
-        };
-        InstanceListResponse: {
-            data: components["schemas"]["InstanceData"][];
-            meta: {
-                [key: string]: unknown;
-            };
-        };
-        InstanceResponse: {
-            data: components["schemas"]["InstanceData"];
-            meta: {
-                [key: string]: unknown;
-            };
-        };
         InvitationWrite: {
             max_uses: number;
             /** Format: date-time */
@@ -5830,13 +5094,6 @@ export interface components {
             /** @default 0 */
             cost_per_1k_output_minor: number;
         };
-        /**
-         * @description * `DENY_ALL` - DENY_ALL
-         * @enum {string}
-         */
-        NetworkModeEc7Enum: "DENY_ALL";
-        /** @enum {unknown} */
-        NullEnum: null;
         OwnershipTransfer: {
             new_owner_id: string;
             reason: string;
@@ -5986,9 +5243,6 @@ export interface components {
             task_type?: string;
             sort_order?: number;
             status?: components["schemas"]["RubricStatusEnum"];
-            execution_spec?: {
-                [key: string]: unknown;
-            };
             resource_profile_id?: string | null;
             submission_policy?: {
                 [key: string]: unknown;
@@ -6013,11 +5267,7 @@ export interface components {
             dependencies?: {
                 [key: string]: unknown;
             }[];
-            execution_spec?: components["schemas"]["ExecutionSpec"];
             network_policy?: {
-                [key: string]: unknown;
-            };
-            workspace_capabilities?: {
                 [key: string]: unknown;
             };
             material_version_ids?: string[];
@@ -6184,9 +5434,6 @@ export interface components {
             template_spec_digest: string | null;
             template_digest: string | null;
             publication_digest: string | null;
-            execution_spec: {
-                [key: string]: unknown;
-            };
             runtime_adapter_id: string | null;
             runtime_adapter_driver: string;
             runtime_adapter_config_ref: string;
@@ -6284,13 +5531,11 @@ export interface components {
          * @description * `MANUAL` - MANUAL
          *     * `STARTER` - STARTER
          *     * `REPORT_TEMPLATE` - REPORT_TEMPLATE
-         *     * `TESTS` - TESTS
          *     * `BUILD_CONTEXT` - BUILD_CONTEXT
-         *     * `HIDDEN_SOURCE` - HIDDEN_SOURCE
          *     * `PUBLIC_DATA` - PUBLIC_DATA
          * @enum {string}
          */
-        PurposeEnum: "MANUAL" | "STARTER" | "REPORT_TEMPLATE" | "TESTS" | "BUILD_CONTEXT" | "HIDDEN_SOURCE" | "PUBLIC_DATA";
+        PurposeEnum: "MANUAL" | "STARTER" | "REPORT_TEMPLATE" | "BUILD_CONTEXT" | "PUBLIC_DATA";
         QualificationData: {
             public_id: string;
             user_id: string;
@@ -6425,76 +5670,8 @@ export interface components {
                 [key: string]: unknown;
             };
         };
-        ReportPreviewData: {
-            kind: components["schemas"]["ArtifactKindEnum"];
-            task_id: string;
-            version?: components["schemas"]["ReportVersionData"];
-            artifact?: components["schemas"]["SystemArtifactData"];
-        };
-        ReportPreviewResponse: {
-            data: components["schemas"]["ReportPreviewData"];
-            meta: {
-                [key: string]: unknown;
-            };
-        };
-        ReportScanAnomalyItem: {
-            asset_id: string;
-            task_id: string;
-            scan_status: components["schemas"]["ImageScanStatusEnum"];
-            failure_code: string;
-            /** Format: date-time */
-            created_at: string;
-        };
-        ReportScanAnomalySummary: {
-            counts: {
-                [key: string]: number;
-            };
-            items: components["schemas"]["ReportScanAnomalyItem"][];
-        };
         ReportSuggestionWrite: {
             submission_version: number;
-        };
-        ReportVersionAttachmentData: {
-            public_id: string;
-            file_name: string;
-            media_type: string;
-            size_bytes: number;
-            digest_sha256: string;
-            asset_id: string;
-        };
-        ReportVersionData: {
-            public_id: string;
-            task_id: string;
-            version_no: number;
-            body_markdown: string;
-            body_digest: string;
-            snapshot_digest: string;
-            execution_run_id: string | null;
-            execution_status: string;
-            execution_result_summary: string;
-            execution_rule_summary: {
-                [key: string]: unknown;
-            };
-            execution_rule_digest: string;
-            execution_snapshot_id: string | null;
-            execution_snapshot_digest: string;
-            stdout_asset_id: string | null;
-            stderr_asset_id: string | null;
-            test_report_asset_id: string | null;
-            execution_evidence: {
-                [key: string]: unknown;
-            } | null;
-            /** Format: date-time */
-            submitted_at: string;
-            submitted_by_id: string;
-            trace_id: string;
-            attachments: components["schemas"]["ReportVersionAttachmentData"][];
-        };
-        ReportVersionListResponse: {
-            data: components["schemas"]["ReportVersionData"][];
-            meta: {
-                [key: string]: unknown;
-            };
         };
         ResourceProfileCreate: {
             code: string;
@@ -6578,126 +5755,12 @@ export interface components {
          * @enum {string}
          */
         ReviewDecisionEnum: "APPROVE" | "REJECT";
-        ReviewDecisionResponse: {
-            data: components["schemas"]["DecisionData"];
-            meta: {
-                [key: string]: unknown;
-            };
-        };
-        ReviewDecisionWrite: {
-            decision: components["schemas"]["ReviewDecisionEnum"];
-            /** Format: decimal */
-            score?: string | null;
-            feedback?: string;
-        };
-        ReviewDetailData: {
-            public_id: string;
-            task_id: string;
-            publication_id: string;
-            publication_title: string;
-            student_id: string;
-            student_name: string;
-            round_no: number;
-            status: components["schemas"]["ReviewWorkflowStatusEnum"];
-            target_kind: string;
-            /** Format: date-time */
-            created_at: string;
-            row_version: number;
-            project?: {
-                [key: string]: unknown;
-            };
-            rubric_version_id: string;
-            scores: components["schemas"]["CriterionScoresData"];
-            annotations: components["schemas"]["AnnotationData"][];
-            auto_checks: components["schemas"]["AutoCheckData"][];
-            similarity_runs: components["schemas"]["SimilarityRunData"][];
-            decision: components["schemas"]["DecisionData"] | null;
-            submission: components["schemas"]["SubmissionData"];
-        };
-        ReviewDetailResponse: {
-            data: components["schemas"]["ReviewDetailData"];
-            meta: {
-                [key: string]: unknown;
-            };
-        };
-        ReviewListData: {
-            public_id: string;
-            task_id: string;
-            publication_id: string;
-            publication_title: string;
-            student_id: string;
-            student_name: string;
-            round_no: number;
-            status: components["schemas"]["ReviewWorkflowStatusEnum"];
-            target_kind: string;
-            /** Format: date-time */
-            created_at: string;
-            row_version: number;
-        };
-        ReviewListResponse: {
-            data: components["schemas"]["ReviewListData"][];
-            meta: {
-                [key: string]: unknown;
-            };
-        };
         /**
          * @description * `MANUAL` - Manual
          *     * `MANUAL_WITH_AUTO_CHECK` - Manual With Auto Check
          * @enum {string}
          */
         ReviewModeEnum: "MANUAL" | "MANUAL_WITH_AUTO_CHECK";
-        ReviewMonitorData: {
-            review_counts: {
-                [key: string]: number;
-            };
-            auto_check_failures: number;
-            similarity_counts: {
-                [key: string]: number;
-            };
-            latest_trace_id: string;
-        };
-        ReviewMonitorResponse: {
-            data: components["schemas"]["ReviewMonitorData"];
-            meta: {
-                [key: string]: unknown;
-            };
-        };
-        ReviewResultData: {
-            task_id: string;
-            task_status: string;
-            effective_score: string | null;
-            rounds: components["schemas"]["ReviewRoundData"][];
-            allowed_actions: string[];
-        };
-        ReviewResultResponse: {
-            data: components["schemas"]["ReviewResultData"];
-            meta: {
-                [key: string]: unknown;
-            };
-        };
-        ReviewRoundData: {
-            review_id: string;
-            round_no: number;
-            status: components["schemas"]["ReviewWorkflowStatusEnum"];
-            scores: components["schemas"]["CriterionScoresData"] | null;
-            annotations: components["schemas"]["AnnotationData"][];
-            decision: components["schemas"]["DecisionData"] | null;
-        };
-        /**
-         * @description * `REPORT_TEXT` - Report Text
-         *     * `ATTACHMENT` - Attachment
-         *     * `WORKSPACE_SNAPSHOT` - Workspace Snapshot
-         *     * `SYSTEM_ARTIFACT` - System Artifact
-         * @enum {string}
-         */
-        ReviewTargetTypeEnum: "REPORT_TEXT" | "ATTACHMENT" | "WORKSPACE_SNAPSHOT" | "SYSTEM_ARTIFACT";
-        /**
-         * @description * `PENDING` - Pending
-         *     * `IN_REVIEW` - In Review
-         *     * `DECIDED` - Decided
-         * @enum {string}
-         */
-        ReviewWorkflowStatusEnum: "PENDING" | "IN_REVIEW" | "DECIDED";
         /**
          * @description * `LOW` - LOW
          *     * `MEDIUM` - MEDIUM
@@ -6724,13 +5787,6 @@ export interface components {
          * @enum {string}
          */
         RiskResolveStatusEnum: "ACKNOWLEDGED" | "IGNORED" | "CLOSED";
-        /**
-         * @description * `STUDENT_FILES` - STUDENT_FILES
-         *     * `HIDDEN_SOURCE` - HIDDEN_SOURCE
-         *     * `PUBLIC_DATA` - PUBLIC_DATA
-         * @enum {string}
-         */
-        RoleEnum: "STUDENT_FILES" | "HIDDEN_SOURCE" | "PUBLIC_DATA";
         RubricCriterionData: {
             public_id: string;
             position: number;
@@ -6861,11 +5917,6 @@ export interface components {
          * @enum {string}
          */
         RuntimeTypeEnum: "CONTAINER" | "VM";
-        /**
-         * @description * `2` - 2
-         * @enum {integer}
-         */
-        SchemaVersionEnum: 2;
         SessionStepUpData: {
             recent: boolean;
             /** Format: date-time */
@@ -6880,61 +5931,6 @@ export interface components {
         };
         SessionWrite: {
             mode: components["schemas"]["AgentModeEnum"];
-        };
-        SimilarityMatchData: {
-            public_id: string;
-            candidate_report_version_id: string;
-            candidate_task_id: string;
-            candidate_student_id: string;
-            candidate_student_name: string;
-            /** Format: decimal */
-            score: string;
-            evidence: {
-                [key: string]: unknown;
-            }[];
-            /** Format: date-time */
-            evidence_purged_at: string | null;
-            /** Format: date-time */
-            retention_until: string;
-        };
-        SimilarityMatchListResponse: {
-            data: components["schemas"]["SimilarityMatchData"][];
-            meta: {
-                [key: string]: unknown;
-            };
-        };
-        SimilarityRunData: {
-            public_id: string;
-            review_id: string;
-            algorithm_version: string;
-            candidate_scope: string;
-            input_digest: string;
-            /** Format: decimal */
-            threshold: string;
-            candidate_count: number;
-            status: components["schemas"]["SimilarityRunDataStatusEnum"];
-            error_code: string;
-            trace_id: string;
-            /** Format: date-time */
-            retention_until: string;
-            row_version: number;
-        };
-        /**
-         * @description * `QUEUED` - Queued
-         *     * `RUNNING` - Running
-         *     * `COMPLETED` - Completed
-         *     * `FAILED` - Failed
-         * @enum {string}
-         */
-        SimilarityRunDataStatusEnum: "QUEUED" | "RUNNING" | "COMPLETED" | "FAILED";
-        SimilarityRunResponse: {
-            data: components["schemas"]["SimilarityRunData"];
-            meta: {
-                [key: string]: unknown;
-            };
-        };
-        SimilarityStart: {
-            review_id: string;
         };
         SourceAssetUpload: {
             file_name: string;
@@ -6983,29 +5979,12 @@ export interface components {
             status: string;
             reason?: string;
         };
-        SubmissionData: {
-            kind: components["schemas"]["ArtifactKindEnum"];
-            version?: components["schemas"]["ReportVersionData"];
-            artifact?: components["schemas"]["SystemArtifactData"];
-        };
-        SystemArtifactData: {
-            public_id: string;
-            task_id: string;
-            kind: components["schemas"]["SystemArtifactDataKindEnum"];
-            asset_id: string;
-            digest_sha256: string;
-            execution_run_id: string | null;
-            execution_evidence: {
-                [key: string]: unknown;
-            };
-            /** Format: date-time */
-            created_at: string;
-        };
         /**
-         * @description * `WORKSPACE_SNAPSHOT` - Workspace Snapshot
+         * @description * `HOST` - Host
+         *     * `CIDR` - Cidr
          * @enum {string}
          */
-        SystemArtifactDataKindEnum: "WORKSPACE_SNAPSHOT";
+        TargetTypeEnum: "HOST" | "CIDR";
         TaskData: {
             assessment_available: boolean;
             public_id: string;
@@ -7023,9 +6002,6 @@ export interface components {
             template_name: string;
             template_spec_digest: string | null;
             runtime_type: string;
-            execution_spec: {
-                [key: string]: unknown;
-            };
             runtime_adapter_id: string | null;
             runtime_adapter_driver: string;
             runtime_adapter_config_ref: string;
@@ -7059,22 +6035,18 @@ export interface components {
         };
         /**
          * @description * `ASSIGNED` - Assigned
-         *     * `PROVISIONING` - Provisioning
-         *     * `READY` - Ready
          *     * `IN_PROGRESS` - In Progress
          *     * `REPORT_DRAFT` - Report Draft
          *     * `UNDER_REVIEW` - Under Review
          *     * `APPROVED` - Approved
-         *     * `REJECTED` - Rejected
          *     * `ARCHIVING` - Archiving
-         *     * `DESTROYING` - Destroying
          *     * `COMPLETED` - Completed
          *     * `CANCELLED` - Cancelled
          *     * `EXPIRED` - Expired
          *     * `FAILED` - Failed
          * @enum {string}
          */
-        TaskDataStatusEnum: "ASSIGNED" | "PROVISIONING" | "READY" | "IN_PROGRESS" | "REPORT_DRAFT" | "UNDER_REVIEW" | "APPROVED" | "REJECTED" | "ARCHIVING" | "DESTROYING" | "COMPLETED" | "CANCELLED" | "EXPIRED" | "FAILED";
+        TaskDataStatusEnum: "ASSIGNED" | "IN_PROGRESS" | "REPORT_DRAFT" | "UNDER_REVIEW" | "APPROVED" | "ARCHIVING" | "COMPLETED" | "CANCELLED" | "EXPIRED" | "FAILED";
         TaskExtensionDecision: {
             decision: components["schemas"]["ReviewDecisionEnum"];
             reason?: string;
@@ -7238,9 +6210,6 @@ export interface components {
             task_type: string;
             sort_order: number;
             status: string;
-            execution_spec: {
-                [key: string]: unknown;
-            };
             resource_profile_id: string | null;
             effective_resource_profile_id: string | null;
             submission_policy: {
@@ -7270,9 +6239,6 @@ export interface components {
             task_type?: string;
             sort_order?: number;
             status?: components["schemas"]["RubricStatusEnum"];
-            execution_spec?: {
-                [key: string]: unknown;
-            };
             resource_profile_id?: string | null;
             submission_policy?: {
                 [key: string]: unknown;
@@ -7302,13 +6268,7 @@ export interface components {
             dependencies: {
                 [key: string]: unknown;
             }[];
-            execution_spec: {
-                [key: string]: unknown;
-            };
             network_policy: {
-                [key: string]: unknown;
-            };
-            workspace_capabilities: {
                 [key: string]: unknown;
             };
             material_refs: {
@@ -7326,7 +6286,6 @@ export interface components {
             retention_days: number;
             spec_digest: string | null;
             row_version: number;
-            rules: components["schemas"]["AutoCheckRuleData"][];
             chapters: components["schemas"]["TemplateChapterData"][];
         };
         /**
@@ -7359,11 +6318,7 @@ export interface components {
             dependencies?: {
                 [key: string]: unknown;
             }[];
-            execution_spec?: components["schemas"]["ExecutionSpec"];
             network_policy?: {
-                [key: string]: unknown;
-            };
-            workspace_capabilities?: {
                 [key: string]: unknown;
             };
             material_version_ids?: string[];
@@ -9871,55 +8826,6 @@ export interface operations {
             };
         };
     };
-    platform_instances_list: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["InstanceListResponse"];
-                };
-            };
-        };
-    };
-    platform_instances_destroy: {
-        parameters: {
-            query?: never;
-            header: {
-                "Idempotency-Key": string;
-                "If-Match": string;
-            };
-            path: {
-                instance_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ArchiveDestroyReason"];
-                "application/x-www-form-urlencoded": components["schemas"]["ArchiveDestroyReason"];
-                "multipart/form-data": components["schemas"]["ArchiveDestroyReason"];
-            };
-        };
-        responses: {
-            202: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["InstanceResponse"];
-                };
-            };
-        };
-    };
     platform_integrations_api_clients_list: {
         parameters: {
             query?: never;
@@ -10916,25 +9822,6 @@ export interface operations {
             };
         };
     };
-    platform_reviews_monitor: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ReviewMonitorResponse"];
-                };
-            };
-        };
-    };
     platform_runtime_adapters_list: {
         parameters: {
             query?: never;
@@ -11854,48 +10741,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AssessmentResponse"];
-                };
-            };
-        };
-    };
-    tasks_report_versions_list: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                task_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ReportVersionListResponse"];
-                };
-            };
-        };
-    };
-    tasks_review_result_retrieve: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                task_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ReviewResultResponse"];
                 };
             };
         };
@@ -12844,105 +11689,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AgentEnvelope"];
-                };
-            };
-        };
-    };
-    api_v2_teaching_courses_ai_score_batches_retrieve: {
-        parameters: {
-            query?: {
-                publication_id?: string;
-            };
-            header?: never;
-            path: {
-                course_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AIScoreBatchResponse"];
-                };
-            };
-        };
-    };
-    api_v2_teaching_courses_ai_score_batches_create: {
-        parameters: {
-            query?: never;
-            header: {
-                "Idempotency-Key": string;
-            };
-            path: {
-                course_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AIScoreBatchWrite"];
-                "application/x-www-form-urlencoded": components["schemas"]["AIScoreBatchWrite"];
-                "multipart/form-data": components["schemas"]["AIScoreBatchWrite"];
-            };
-        };
-        responses: {
-            202: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AIScoreBatchResponse"];
-                };
-            };
-        };
-    };
-    teaching_ai_score_batch_retrieve: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                batch_id: string;
-                course_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AIScoreBatchDetailResponse"];
-                };
-            };
-        };
-    };
-    teaching_ai_score_batch_accept: {
-        parameters: {
-            query?: never;
-            header: {
-                "Idempotency-Key": string;
-                "If-Match": string;
-            };
-            path: {
-                batch_id: string;
-                course_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AIScoreBatchDataResponse"];
                 };
             };
         };
@@ -14346,272 +13092,6 @@ export interface operations {
             };
         };
     };
-    teaching_reviews_list: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                course_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ReviewListResponse"];
-                };
-            };
-        };
-    };
-    teaching_reviews_retrieve: {
-        parameters: {
-            query?: {
-                include_source?: string;
-            };
-            header?: never;
-            path: {
-                course_id: string;
-                review_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ReviewDetailResponse"];
-                };
-            };
-        };
-    };
-    teaching_ai_score_suggestion_accept: {
-        parameters: {
-            query?: never;
-            header: {
-                "Idempotency-Key": string;
-                "If-Match": string;
-            };
-            path: {
-                course_id: string;
-                review_id: string;
-                suggestion_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AIScoreSuggestionResponse"];
-                };
-            };
-        };
-    };
-    teaching_review_annotations_list: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                course_id: string;
-                review_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AnnotationListResponse"];
-                };
-            };
-        };
-    };
-    teaching_review_annotations_create: {
-        parameters: {
-            query?: never;
-            header: {
-                "Idempotency-Key": string;
-                "If-Match": string;
-            };
-            path: {
-                course_id: string;
-                review_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AnnotationWrite"];
-                "application/x-www-form-urlencoded": components["schemas"]["AnnotationWrite"];
-                "multipart/form-data": components["schemas"]["AnnotationWrite"];
-            };
-        };
-        responses: {
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AnnotationResponse"];
-                };
-            };
-        };
-    };
-    teaching_review_annotation_revise: {
-        parameters: {
-            query?: never;
-            header: {
-                "Idempotency-Key": string;
-                "If-Match": string;
-            };
-            path: {
-                annotation_id: string;
-                course_id: string;
-                review_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AnnotationRevisionWrite"];
-                "application/x-www-form-urlencoded": components["schemas"]["AnnotationRevisionWrite"];
-                "multipart/form-data": components["schemas"]["AnnotationRevisionWrite"];
-            };
-        };
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AnnotationResponse"];
-                };
-            };
-        };
-    };
-    teaching_review_annotation_revoke: {
-        parameters: {
-            query?: never;
-            header: {
-                "Idempotency-Key": string;
-                "If-Match": string;
-            };
-            path: {
-                annotation_id: string;
-                course_id: string;
-                review_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AnnotationResponse"];
-                };
-            };
-        };
-    };
-    teaching_review_scores_list: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                course_id: string;
-                review_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["CriterionScoresResponse"];
-                };
-            };
-        };
-    };
-    teaching_review_scores_update: {
-        parameters: {
-            query?: never;
-            header: {
-                "Idempotency-Key": string;
-                "If-Match": string;
-            };
-            path: {
-                course_id: string;
-                review_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CriterionScoresWrite"];
-                "application/x-www-form-urlencoded": components["schemas"]["CriterionScoresWrite"];
-                "multipart/form-data": components["schemas"]["CriterionScoresWrite"];
-            };
-        };
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["CriterionScoresResponse"];
-                };
-            };
-        };
-    };
-    teaching_reviews_decide: {
-        parameters: {
-            query?: never;
-            header: {
-                "Idempotency-Key": string;
-                "If-Match": string;
-            };
-            path: {
-                course_id: string;
-                review_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ReviewDecisionWrite"];
-                "application/x-www-form-urlencoded": components["schemas"]["ReviewDecisionWrite"];
-                "multipart/form-data": components["schemas"]["ReviewDecisionWrite"];
-            };
-        };
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ReviewDecisionResponse"];
-                };
-            };
-        };
-    };
     teaching_rubric_versions_retrieve: {
         parameters: {
             query?: never;
@@ -14787,80 +13267,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RubricVersionResponse"];
-                };
-            };
-        };
-    };
-    teaching_similarity_runs_create: {
-        parameters: {
-            query?: never;
-            header: {
-                "Idempotency-Key": string;
-                "If-Match": string;
-            };
-            path: {
-                course_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["SimilarityStart"];
-                "application/x-www-form-urlencoded": components["schemas"]["SimilarityStart"];
-                "multipart/form-data": components["schemas"]["SimilarityStart"];
-            };
-        };
-        responses: {
-            202: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SimilarityRunResponse"];
-                };
-            };
-        };
-    };
-    teaching_similarity_runs_retrieve: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                course_id: string;
-                run_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SimilarityRunResponse"];
-                };
-            };
-        };
-    };
-    teaching_similarity_matches_list: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                course_id: string;
-                run_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SimilarityMatchListResponse"];
                 };
             };
         };
@@ -15120,28 +13526,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AssessmentResponse"];
-                };
-            };
-        };
-    };
-    teaching_task_submission_preview: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                course_id: string;
-                task_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ReportPreviewResponse"];
                 };
             };
         };
@@ -15495,58 +13879,6 @@ export interface operations {
             };
         };
     };
-    teaching_auto_check_rules_list: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                course_id: string;
-                version_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AutoCheckRulesResponse"];
-                };
-            };
-        };
-    };
-    teaching_auto_check_rules_replace: {
-        parameters: {
-            query?: never;
-            header: {
-                "If-Match": string;
-            };
-            path: {
-                course_id: string;
-                version_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AutoCheckRulesWrite"];
-                "application/x-www-form-urlencoded": components["schemas"]["AutoCheckRulesWrite"];
-                "multipart/form-data": components["schemas"]["AutoCheckRulesWrite"];
-            };
-        };
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["TemplateVersionResponse"];
-                };
-            };
-        };
-    };
     teaching_template_chapters_list: {
         parameters: {
             query?: never;
@@ -15653,37 +13985,6 @@ export interface operations {
                 };
             };
             201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["TemplateVersionResponse"];
-                };
-            };
-        };
-    };
-    teaching_template_execution_spec_save: {
-        parameters: {
-            query?: never;
-            header: {
-                "Idempotency-Key": string;
-                "If-Match": string;
-            };
-            path: {
-                course_id: string;
-                version_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ExecutionSpecSave"];
-                "application/x-www-form-urlencoded": components["schemas"]["ExecutionSpecSave"];
-                "multipart/form-data": components["schemas"]["ExecutionSpecSave"];
-            };
-        };
-        responses: {
-            200: {
                 headers: {
                     [name: string]: unknown;
                 };

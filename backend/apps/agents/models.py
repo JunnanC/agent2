@@ -418,7 +418,7 @@ class AgentSession(VersionedModel):
         SOCRATIC_HINT = "SOCRATIC_HINT"
         DEBUG_ASSIST = "DEBUG_ASSIST"
         REPORT_COACH = "REPORT_COACH"
-        WORKSPACE_ASSIST = "WORKSPACE_ASSIST"
+        CODE_ASSIST = "CODE_ASSIST"
 
     class Status(models.TextChoices):
         ACTIVE = "ACTIVE"

@@ -1,5 +1,5 @@
 // @ts-expect-error Test the TypeScript source even when a stale emitted index.js exists.
-import { reportApi, taskApi, teachingApi } from "./index.ts";
+import { taskApi } from "./index.ts";
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 
 function jsonResponse(status: number, body: unknown, headers?: Record<string, string>): Response {
@@ -49,23 +49,6 @@ describe("task 数据边界规范化", () => {
     expect(task.status).toBe("READY");
   });
 
-  it("AI suggestions paginate to the selected review and adoption sends its version", async () => {
-    document.cookie = "csrftoken=ai-csrf; Path=/";
-    const fetchMock = vi.fn(async (_input: string | URL, _init?: RequestInit) => jsonResponse(200, okEnvelope))
-      .mockResolvedValueOnce(jsonResponse(200, { data: { suggestions: [], total: 101 } }))
-      .mockResolvedValueOnce(jsonResponse(200, { data: { suggestions: [
-        { public_id: "suggestion", review_id: "review", review_row_version: 7, status: "READY" },
-      ], total: 101 } }));
-    vi.stubGlobal("fetch", fetchMock);
-    expect((await teachingApi.aiScoreSuggestion("course", "batch", "review"))?.public_id).toBe("suggestion");
-    expect(String(fetchMock.mock.calls[1]?.[0])).toContain("page=2");
-    await teachingApi.acceptAIScoreSuggestion("course", "review", "suggestion", "7");
-    const init = fetchMock.mock.calls[2]?.[1] as RequestInit;
-    expect(init.method).toBe("POST");
-    expect(new Headers(init.headers).get("If-Match")).toBe('"7"');
-    expect(new Headers(init.headers).get("Idempotency-Key")).toBeTruthy();
-  });
-
   it("字段缺失时不抛错（空数组保底）", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => jsonResponse(200, { ...okEnvelope, data: { public_id: "t2" } })));
     const task = await taskApi.detail("t2");
@@ -83,14 +66,5 @@ describe("task 数据边界规范化", () => {
     expect(list.rows[0]?.allowed_actions).toEqual(["start"]);
   });
 
-  it("从最新已决策评审轮次读取成绩，保留零分", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse(200, {
-      ...okEnvelope,
-      data: { task_id: "t-1", rounds: [
-        { round_no: 2, decision: null },
-        { round_no: 1, decision: { decision: "REJECT", score: 0 } },
-      ] },
-    })));
-    expect((await reportApi.reviewResult("t-1")).score).toBe(0);
-  });
+
 });

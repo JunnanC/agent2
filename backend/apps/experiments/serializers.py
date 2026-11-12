@@ -3,8 +3,6 @@ from typing import Any, cast
 
 from rest_framework import serializers
 
-from apps.labtemplates.legacy import LegacyTemplateAdapter
-
 from .models import (
     ExperimentTask,
     PublicationAudience,
@@ -152,7 +150,6 @@ class PublicationDataSerializer(serializers.Serializer):
     template_spec_digest = serializers.CharField(allow_null=True)
     template_digest = serializers.CharField(allow_null=True)
     publication_digest = serializers.CharField(allow_null=True)
-    execution_spec = serializers.DictField()
     runtime_adapter_id = serializers.CharField(allow_null=True)
     runtime_adapter_driver = serializers.CharField()
     runtime_adapter_config_ref = serializers.CharField()
@@ -196,7 +193,6 @@ class TaskDataSerializer(serializers.Serializer):
     template_name = serializers.CharField()
     template_spec_digest = serializers.CharField(allow_null=True)
     runtime_type = serializers.CharField()
-    execution_spec = serializers.DictField()
     runtime_adapter_id = serializers.CharField(allow_null=True)
     runtime_adapter_driver = serializers.CharField()
     runtime_adapter_config_ref = serializers.CharField()
@@ -261,18 +257,10 @@ class GenericResponseSerializer(serializers.Serializer):
 
 
 def publication_data(item: TaskPublication) -> dict[str, Any]:
-    template = item.template_version
     template_spec_digest = item.template_spec_digest
-    execution_spec = dict(item.execution_spec or {})
     adapter = item.runtime_adapter
     image = item.image
     profile = item.resource_profile
-    if adapter is None:
-        adapter = template.runtime_adapter
-        image = template.image
-        profile = template.resource_profile
-        template_spec_digest = template.spec_digest
-        execution_spec = dict(template.execution_spec or {})
     profile_snapshot = dict(item.resource_profile_snapshot or {})
     if not profile_snapshot and profile is not None:
         profile_snapshot = {
@@ -304,7 +292,6 @@ def publication_data(item: TaskPublication) -> dict[str, Any]:
         "template_spec_digest": template_spec_digest,
         "template_digest": item.template_digest,
         "publication_digest": item.publication_digest,
-        "execution_spec": execution_spec,
         "runtime_adapter_id": adapter.public_id if adapter else None,
         "runtime_adapter_driver": item.runtime_adapter_driver
         or (adapter.driver if adapter else ""),
@@ -345,39 +332,6 @@ def publication_data(item: TaskPublication) -> dict[str, Any]:
 
 def publication_chapter_data(item: TaskPublication) -> list[dict[str, object]]:
     chapters = _publication_chapters(item)
-    if not chapters:
-        legacy = LegacyTemplateAdapter.from_version(item.template_version)
-        if legacy.migration_required:
-            return []
-        return [
-            {
-                "public_id": chapter["public_id"],
-                "source_chapter_id": None,
-                "title": chapter["title"],
-                "description": chapter["description"],
-                "learning_objectives": chapter.get("learning_objectives", []),
-                "sort_order": chapter["sort_order"],
-                "snapshot": True,
-                "tasks": [
-                    {
-                        "public_id": task["public_id"],
-                        "source_task_id": None,
-                        "title": task["title"],
-                        "description": task["description"],
-                        "instructions": task["instructions"],
-                        "task_type": task["task_type"],
-                        "sort_order": task["sort_order"],
-                        "image_digest": "",
-                        "resource_profile_snapshot": {},
-                        "execution_snapshot": task["execution_spec"],
-                        "submission_policy": {"required": True},
-                        "grading_policy": {"mode": "MANUAL"},
-                    }
-                    for task in chapter["tasks"]
-                ],
-            }
-            for chapter in legacy.chapters
-        ]
     return [
         {
             "public_id": chapter.public_id,
@@ -457,9 +411,9 @@ def task_data(
     actions: list[str] | None = None,
 ) -> dict[str, object]:
     template = item.template_version
-    adapter = item.runtime_adapter or template.runtime_adapter
-    image = item.image or template.image
-    profile = item.resource_profile or template.resource_profile
+    adapter = item.runtime_adapter
+    image = item.image
+    profile = item.resource_profile
     profile_snapshot = dict(item.resource_profile_snapshot or {})
     if not profile_snapshot and profile is not None:
         profile_snapshot = {
@@ -471,40 +425,6 @@ def task_data(
             "disk_gb": profile.disk_gb,
             "network_mode": profile.network_mode,
         }
-    provisioning = None
-    try:
-        from apps.provisioning.models import ProvisioningInstance, ProvisioningJob
-
-        job = (
-            item.provisioning_jobs.select_related("failure_record", "compensation_task")
-            .order_by("-attempt_no", "-created_at")
-            .first()
-        )
-        if job is not None:
-            provisioning = {
-                "job_id": job.public_id,
-                "status": job.status,
-                "current_stage": job.current_stage,
-                "attempt_no": job.attempt_no,
-                "retryable": job.retryable,
-                "failure_code": job.failure_record.error_code if job.failure_record else "",
-                "compensation_status": (
-                    job.compensation_task.status if job.compensation_task else None
-                ),
-                "events_channel": f"task:{item.public_id}",
-            }
-        instance = getattr(item, "provisioning_instance", None)
-        if instance is not None:
-            provisioning = dict(provisioning or {})
-            provisioning.update(
-                {
-                    "runtime_id": instance.public_id,
-                    "runtime_row_version": instance.row_version,
-                    "instance_status": instance.status,
-                }
-            )
-    except (AttributeError, ProvisioningInstance.DoesNotExist, ProvisioningJob.DoesNotExist):
-        provisioning = None
     return {
         "assessment_available": PublicationTask.objects.filter(
             publication_chapter__publication_id=item.publication_id,
@@ -521,7 +441,6 @@ def task_data(
         "template_name": template.template.name,
         "template_spec_digest": item.template_spec_digest or template.spec_digest,
         "runtime_type": item.runtime_type,
-        "execution_spec": dict(item.execution_spec or template.execution_spec or {}),
         "runtime_adapter_id": adapter.public_id if adapter else None,
         "runtime_adapter_driver": item.runtime_adapter_driver
         or (adapter.driver if adapter else ""),
@@ -541,7 +460,6 @@ def task_data(
         "allowed_actions": actions or [],
         "blockers": blockers or [],
         "current_failure": item.current_failure,
-        "provisioning": provisioning,
         "row_version": item.row_version,
     }
 

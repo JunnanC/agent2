@@ -3,7 +3,6 @@ from typing import Any
 
 from django.db import models
 from django.http import HttpRequest
-from django.utils import timezone
 from drf_spectacular.utils import OpenApiParameter, extend_schema, extend_schema_view
 from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
@@ -495,7 +494,7 @@ class UserDashboardView(APIView):
         extensions={"x-portals": ["USER"]},
     )
     def get(self, request: HttpRequest) -> Response:
-        from apps.workspaces.selectors import weekly_study_minutes_for_student
+        from .study import weekly_study_minutes_for_student
 
         spec = PageSpec(page=1, page_size=5)
         tasks, _ = paged_user_tasks(actor=request.user, spec=spec)
@@ -716,7 +715,7 @@ class PlatformTaskAnomalyView(APIView):
         archive_failures = (
             ArchiveJob.objects.filter(status=ArchiveJob.Status.FAILED)
             .select_related("task", "course", "failure_record", "compensation_task")
-            .order_by("safe_recycle_at", "id")[:100]
+            .order_by("updated_at", "id")[:100]
         )
         reconciliation: list[dict[str, object]] = []
         publications = (
@@ -771,8 +770,6 @@ class PlatformTaskAnomalyView(APIView):
                         "task_id": item.task.public_id,
                         "course_id": item.course.public_id,
                         "terminal_target": item.terminal_target,
-                        "safe_recycle_at": item.safe_recycle_at,
-                        "safe_recycle_due": item.safe_recycle_at <= timezone.now(),
                         "error_code": (
                             item.failure_record.error_code if item.failure_record else ""
                         ),

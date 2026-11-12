@@ -28,7 +28,6 @@ class RuntimeAdapter(GovernanceModel):
         DOCKER_SWARM = "DOCKER_SWARM"
         DOCKER_LOCAL = "DOCKER_LOCAL"
         LIBVIRT = "LIBVIRT"
-        FAKE = "FAKE"
 
     class Status(models.TextChoices):
         ENABLED = "ENABLED"
@@ -69,7 +68,7 @@ class RuntimeAdapter(GovernanceModel):
             ),
             models.CheckConstraint(
                 condition=models.Q(
-                    driver__in=("DOCKER_SWARM", "DOCKER_LOCAL", "LIBVIRT", "FAKE")
+                    driver__in=("DOCKER_SWARM", "DOCKER_LOCAL", "LIBVIRT")
                 ),
                 name="gov_runtime_driver_ck",
             ),

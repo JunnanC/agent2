@@ -79,9 +79,7 @@ class TemplateVersion(VersionedModel):
         null=True, blank=True,
     )
     dependencies = models.JSONField(default=list)
-    execution_spec = models.JSONField(default=dict)
     network_policy = models.JSONField(default=dict)
-    workspace_capabilities = models.JSONField(default=dict)
     material_refs = models.JSONField(default=list)
     manual_asset = models.ForeignKey(
         ObjectAsset,
@@ -158,40 +156,6 @@ class TemplateVersion(VersionedModel):
         ]
 
 
-class AutoCheckRule(VersionedModel):
-    public_id = public_id_field()
-    template_version = models.ForeignKey(
-        TemplateVersion, on_delete=models.PROTECT, related_name="auto_check_rules"
-    )
-    position = models.PositiveIntegerField()
-    position_key = models.CharField(max_length=64, default="")
-    is_active = models.BooleanField(default=True)
-    checker_type = models.CharField(max_length=64)
-    input_schema = models.JSONField(default=dict)
-    output_schema = models.JSONField(default=dict)
-    timeout_seconds = models.PositiveIntegerField()
-    resource_limit = models.JSONField(default=dict)
-    network_policy = models.JSONField(default=dict)
-    display_policy = models.JSONField(default=dict)
-    failure_semantics = models.JSONField(default=dict)
-    rule_digest = models.CharField(max_length=64, db_collation="ascii_bin")
-
-    class Meta:
-        db_table = "labtemplates_auto_check_rule"
-        constraints = [
-            models.UniqueConstraint(
-                fields=("template_version", "position_key"), name="lab_rule_position_uniq"
-            ),
-            models.CheckConstraint(
-                condition=models.Q(position__gte=1), name="lab_rule_position_ck"
-            ),
-            models.CheckConstraint(
-                condition=models.Q(timeout_seconds__gte=1), name="lab_rule_timeout_ck"
-            ),
-        ]
-        indexes = [models.Index(fields=("template_version", "position"), name="lab_rule_order_idx")]
-
-
 class TemplateChapter(VersionedModel):
     class Status(models.TextChoices):
         DRAFT = "DRAFT"
@@ -245,7 +209,6 @@ class TemplateTask(VersionedModel):
     task_type = models.CharField(max_length=64)
     sort_order = models.PositiveIntegerField()
     status = models.CharField(max_length=16, choices=Status.choices, default=Status.DRAFT)
-    execution_spec = models.JSONField(default=dict)
     resource_profile = models.ForeignKey(
         ResourceProfile,
         on_delete=models.PROTECT,
@@ -441,41 +404,4 @@ class ImageBuildJob(VersionedModel):
         indexes = [
             models.Index(fields=("experiment_image", "created_at"), name="lab_image_job_image_idx"),
             models.Index(fields=("status", "created_at"), name="lab_image_job_status_idx"),
-        ]
-
-
-class LegacyTemplateMigration(VersionedModel):
-    class Status(models.TextChoices):
-        MIGRATED = "MIGRATED"
-        SKIPPED = "SKIPPED"
-        MIGRATION_REQUIRED = "MIGRATION_REQUIRED"
-        FAILED = "FAILED"
-
-    public_id = public_id_field()
-    template_version = models.OneToOneField(
-        TemplateVersion, on_delete=models.PROTECT, related_name="legacy_migration"
-    )
-    chapter = models.ForeignKey(
-        TemplateChapter,
-        on_delete=models.PROTECT,
-        null=True,
-        blank=True,
-        related_name="legacy_migrations",
-    )
-    task = models.ForeignKey(
-        TemplateTask,
-        on_delete=models.PROTECT,
-        null=True,
-        blank=True,
-        related_name="legacy_migrations",
-    )
-    status = models.CharField(max_length=24, choices=Status.choices)
-    error_code = models.CharField(max_length=64, blank=True, default="")
-    detail = models.JSONField(default=dict, blank=True)
-    processed_at = models.DateTimeField(null=True, blank=True)
-
-    class Meta:
-        db_table = "labtemplates_legacy_template_migration"
-        indexes = [
-            models.Index(fields=("status", "processed_at"), name="lab_legacy_mig_status_idx")
         ]

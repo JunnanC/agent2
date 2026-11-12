@@ -1,4 +1,4 @@
-import { CourseOverview, StudentDetail, ValidationWorkspace } from "./course-layout";
+import { CourseOverview, StudentDetail } from "./course-layout";
 import { useEffect } from "react";
 import { BrowserRouter, Navigate, Route, Routes, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
@@ -36,7 +36,6 @@ export function App(): JSX.Element {
             <Route path="/courses" element={<Courses />} />
             <Route path="/courses/:courseId" element={<CourseOverview />} />
             <Route path="/courses/:courseId/students/:studentId" element={<StudentDetail />} />
-            <Route path="/courses/:courseId/templates/:templateId/validate" element={<ValidationWorkspace />} />
             <Route path="/courses/:courseId/publishing/:publicationId/reviews" element={<Reviews />} />
             <Route path="/notifications" element={<Notifications />} />
             <Route path="/courses/:courseId/enrollments" element={<Enrollments />} />

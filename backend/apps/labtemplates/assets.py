@@ -34,11 +34,7 @@ PURPOSE_FIELDS = {
     "MANUAL": "manual_asset",
     "STARTER": "starter_asset",
     "REPORT_TEMPLATE": "report_template_asset",
-    # TESTS assets are referenced by execution_spec.tests_asset instead of a
-    # mutable foreign-key slot on the version.
-    "TESTS": None,
     "BUILD_CONTEXT": None,
-    "HIDDEN_SOURCE": None,
     "PUBLIC_DATA": None,
 }
 ALLOWED_FILES = {

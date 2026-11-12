@@ -69,10 +69,11 @@ def create_domain(
         title="First task",
         description="Run the first task",
         instructions="Follow the instructions",
-        task_type="PRACTICE",
+        task_type="SINGLE_CHOICE",
+        question_spec={"options": [{"id": "a", "text": "A"}, {"id": "b", "text": "B"}]},
+        marking_spec={"correct_option_ids": ["b"]}, max_score=100,
         sort_order=1,
         status=TemplateTask.Status.PUBLISHED,
-        execution_spec=dict(template_version.execution_spec or {}),
         resource_profile=template_version.resource_profile,
         submission_policy={"required": True},
         grading_policy={"mode": "MANUAL"},
@@ -94,6 +95,11 @@ def create_domain(
         published_at=now,
     )
     Rubric.objects.filter(pk=rubric.pk).update(current_version=rubric_version)
+    from apps.labtemplates.services import compute_spec_digest
+    TemplateVersion.objects.filter(pk=template_version.pk).update(
+        spec_digest=compute_spec_digest(template_version),
+    )
+    template_version.refresh_from_db()
     course.refresh_from_db()
     return owner, course, template_version, rubric_version
 

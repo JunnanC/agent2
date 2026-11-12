@@ -31,7 +31,7 @@ class Command(BaseCommand):
                 "rules": {
                     "default_egress": "DENY_ALL",
                     "allow_privileged": False,
-                    "require_workspace_gateway": True,
+                    "require_execution_isolation": True,
                 },
                 "change_reason": "system default",
             },

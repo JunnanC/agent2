@@ -181,7 +181,7 @@ class AssessmentTests(TestCase):
             language="python",
         )
         assert draft["files"] == {"main.py": "print(1)"}
-        assert not self.task.workspace_sessions.exists()
+        assert not hasattr(self.task, "workspace_sessions")
         data = assessment_data(actor=self.student, task_id=self.task.public_id)
         assert data["questions"][1]["selected_language"] == "cpp"
 
@@ -296,23 +296,21 @@ class AssessmentTests(TestCase):
                 "review_mode": "MANUAL",
             }, context=context(self.owner),
         )
-        with patch("apps.provisioning.tasks.warmup_publication_image_task.apply_async") as warmup:
-            publication, _ = publish_publication(
-                course_id=self.course.public_id, publication_id=publication.public_id,
-                actor=self.owner, expected_version=publication.row_version,
-                selected_ids=[], context=context(self.owner),
-            )
-            warmup.assert_not_called()
+        publication, _ = publish_publication(
+            course_id=self.course.public_id, publication_id=publication.public_id,
+            actor=self.owner, expected_version=publication.row_version,
+            selected_ids=[], context=context(self.owner),
+        )
         task = publication.tasks.get(student=self.student)
         assert task.runtime_adapter_id is None
         assert task.image_id is None
-        assert not task.workspace_sessions.exists()
+        assert not hasattr(task, "workspace_sessions")
         assert assessment_data(actor=self.student, task_id=task.public_id)["questions"][0][
             "task_type"
         ] == "SINGLE_CHOICE"
 
     def test_programming_submission_freezes_all_sources_and_one_report(self) -> None:
-        from apps.core.demo.stubs import InMemoryObjectStorage
+        from apps.core.tests.storage import InMemoryObjectStorage
         from apps.reports.models import ReportVersion
 
         from ..assessment import report_draft, submit_programming
@@ -361,11 +359,11 @@ class AssessmentTests(TestCase):
             )
         answer = submission.answers.get()
         assert answer.code_snapshot.question_id == question.pk
-        assert answer.code_snapshot.session_id is None
+        assert not hasattr(answer.code_snapshot, "session_id")
         assert answer.grade.status == "PENDING"
         assert answer.grade.score is None
         assert submission.report_version.body_markdown == "My report\n"
-        assert submission.report_version.workspace_snapshot_id is None
+        assert not hasattr(submission.report_version, "workspace_snapshot_id")
         report_draft(
             actor=self.student, task_id=self.task.public_id,
             expected_version=report["row_version"], body_markdown="New draft",

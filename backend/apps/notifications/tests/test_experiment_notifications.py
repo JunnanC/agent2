@@ -110,7 +110,6 @@ class ExperimentNotificationTests(TestCase):
             "UNDER_REVIEW",
             "APPROVED",
             "ARCHIVING",
-            "DESTROYING",
             "COMPLETED",
             "CANCELLED",
             "EXPIRED",
@@ -123,11 +122,8 @@ class ExperimentNotificationTests(TestCase):
     def test_unfinished_and_rejected_tasks_are_reminded(self) -> None:
         for index, status in enumerate([
             "ASSIGNED",
-            "PROVISIONING",
-            "READY",
             "IN_PROGRESS",
             "REPORT_DRAFT",
-            "REJECTED",
         ]):
             with self.subTest(status=status):
                 # A distinct effective deadline creates a distinct legitimate reminder.

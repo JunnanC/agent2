@@ -1,19 +1,18 @@
 import { newIdempotencyKey, request } from "@edu/auth-client";
 import type { EnvelopeSuccess } from "@edu/auth-client";
-import type { components } from "./generated/schema";
 import type {
   Anomaly, Announcement, CalendarEvent, Chapter, Compensation, Course,
-  Enrollment, ImageCreateInput, ImageScanReportInput, ImportJob, Instance as InstanceData, Invitation, Material, Me,
+  Enrollment, ImageCreateInput, ImageScanReportInput, ImportJob, Invitation, Material, Me,
   ModelRoute, NotificationItem, OperationLog, OperationsOverview, PlatformImage, PlatformUser,
-  PortalContext, PrecheckRun, Publication, Quota, ResourceProfile, ReviewDetail,
-  ReviewResult, ReviewSummary, Rubric, RuntimeAdapter, StudentDashboard, Task, TeachingCourseList, Template,
+  PortalContext, PrecheckRun, Publication, Quota, ResourceProfile, Rubric,
+  RuntimeAdapter, StudentDashboard, Task, TeachingCourseList, Template,
   TemplateChapter, TemplateTask, ToolPolicy, TemplateVersion, UsageCost, Verification,
   AgentMessage, AgentMode, CourseResourceSummary,
   LearningHistoryData, NotificationPreferences, TimetableData, TimetableImport, AgentProfile, AgentSession,
   AgentToolCall, ToolRequest, ToolDecision, AgentFeedback, VerificationUpdate, NotificationPreferenceUpdate,
   EnrollmentExitCheck, CourseQuestion, CourseAnswer, DownloadGrant, DownloadGrantRevoke,
   ReportAttachmentData, ReportAttachmentUpload, ReportAttachmentCreate, LearningRecommendation, LearningRiskSignal,
-  OIDCIdentity, OIDCStart, AIScoreBatch, AIScoreSuggestion,
+  OIDCIdentity, OIDCStart,
 } from "./types";
 
 export * from "./types";
@@ -259,9 +258,6 @@ export const taskApi = {
 /* ══════════ 报告 ══════════ */
 
 export const reportApi = {
-  reportVersions: (taskId: string) =>
-    request<Array<Record<string, unknown>>>(`/tasks/${taskId}/report-versions`).then(toList),
-
   uploadAttachment: (taskId: string, payload: ReportAttachmentCreate, reuseKey?: string) =>
     request<ReportAttachmentUpload>(`/tasks/${taskId}/attachments`, {
       method: "POST", body: payload, idempotencyKey: reuseKey ?? newIdempotencyKey(),
@@ -278,72 +274,10 @@ export const reportApi = {
       method: "POST", body: {}, idempotencyKey: reuseKey ?? newIdempotencyKey(),
     }).then((r) => r.data),
 
-  reviewResult: (taskId: string) =>
-    request<components["schemas"]["ReviewResultData"]>(`/tasks/${taskId}/review-result`).then(({ data }): ReviewResult => {
-      const rounds = data.rounds.map((round) => ({
-        ...round,
-        scores: round.scores ? { ...round.scores, criteria: round.scores.criteria.map((criterion) => ({
-          ...criterion, score: criterion.score == null ? null : Number(criterion.score), max_score: Number(criterion.max_score),
-        })) } : null,
-        decision: round.decision ? { ...round.decision, score: Number(round.decision.score) } : null,
-      }));
-      return { ...data, rounds, score: rounds.find((round) => round.decision)?.decision?.score ?? null };
-    }),
+
 };
 
 /* ══════════ 教师端 ══════════ */
-
-/* ══════════ 评审详情归一 ══════════ */
-
-function escapeReportHtml(value: string): string {
-  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-}
-
-/* 后端 review_detail_data 契约：
- - 评分标准在 scores.criteria（rubric/{version}/criteria），后端没有 rubric 字段；criteria 里同条目回带已存 score
- - submission 是 { kind, version | artifact }，报告正文在 version.body_markdown（markdown 而非 html）
- - annotations 用 public_id/status；status != ACTIVE 视为已撤销 */
-function normalizeReviewDetail(raw: unknown): ReviewDetail {
-  const base = (raw ?? {}) as Record<string, unknown>;
-  const scores = base["scores"] as { criteria?: Array<Record<string, unknown>> } | undefined;
-  const submission = base["submission"] as { version?: Record<string, unknown> | null } | undefined;
-  const reportVersion = submission?.["version"] as Record<string, unknown> | null | undefined;
-  const reportMarkdown = typeof reportVersion?.["body_markdown"] === "string" ? reportVersion["body_markdown"] : "";
-  const criteria = (scores?.["criteria"] ?? []) as Array<Record<string, unknown>>;
-  const annotations = (base["annotations"] ?? []) as Array<Record<string, unknown>>;
-  return {
-    ...(base as unknown as ReviewDetail),
-    decision: typeof base["decision"] === "object" && base["decision"] !== null
-      ? String((base["decision"] as Record<string, unknown>)["decision"] ?? "")
-      : typeof base["decision"] === "string" ? base["decision"] : null,
-    score: typeof base["decision"] === "object" && base["decision"] !== null && (base["decision"] as Record<string, unknown>)["score"] != null
-      ? Number((base["decision"] as Record<string, unknown>)["score"])
-      : null,
-    rubric: {
-      criteria: criteria.map((row) => ({
-        public_id: String(row["public_id"] ?? ""),
-        title: String(row["title"] ?? ""),
-        description: row["description"] != null ? String(row["description"]) : undefined,
-        max_score: Number(row["max_score"] ?? 0),
-        score: row["score"] != null ? Number(row["score"]) : null,
-      })),
-    },
-    scores: criteria
-      .filter((row) => row["score"] != null)
-      .map((row) => ({ criterion_id: String(row["public_id"] ?? ""), score: Number(row["score"]) })),
-    submission: {
-      report_id: reportVersion?.["public_id"] != null ? String(reportVersion["public_id"]) : undefined,
-      report_html: reportMarkdown ? `<pre>${escapeReportHtml(reportMarkdown)}</pre>` : undefined,
-      report_markdown: reportMarkdown || undefined,
-    },
-    annotations: annotations.map((row) => ({
-      id: String(row["public_id"] ?? ""),
-      body: String(row["body"] ?? ""),
-      revoked: row["status"] !== "ACTIVE",
-    })),
-    row_version: String(base["row_version"] ?? ""),
-  };
-}
 
 export const teachingApi = {
   courses: (query?: { page?: number; page_size?: number }) =>
@@ -513,24 +447,10 @@ export const teachingApi = {
       method: "POST", body: {}, idempotencyKey: reuseKey ?? newIdempotencyKey(), ifMatch,
     }).then((r) => r.data),
 
-  saveExecutionSpec: (
-    courseId: string,
-    versionId: string,
-    payload: {
-      tests_json: string; schema_version: 2; language: string | null;
-      toolchain_version: string | null; language_standard: string | null;
-      entrypoint: string | null;
-      timeout_seconds: number; memory_mb: number; cpu_millicores: number;
-      comparator: string; absolute_tolerance: number; relative_tolerance: number;
-      network_mode: string;
-      materials: Array<{ asset_id: string; role: string }>;
-    },
-    ifMatch: string | number | null,
-    reuseKey?: string,
-  ) =>
-    request<TemplateVersion>(`/teaching/courses/${courseId}/template-versions/${versionId}/execution-spec`, {
-      method: "POST", body: payload, idempotencyKey: reuseKey ?? newIdempotencyKey(), ifMatch,
-    }).then((r) => r.data),
+
+
+  rubrics: (courseId: string) =>
+    request<Rubric[]>(`/teaching/courses/${courseId}/rubrics`).then(toList),
 
   publications: (courseId: string, query?: { page?: number; status?: string }) =>
     request<Publication[]>(`/teaching/courses/${courseId}/experiments`, { query }).then(toList),
@@ -603,87 +523,7 @@ export const teachingApi = {
   progress: (courseId: string, query?: { page?: number; page_size?: number; section?: string }) =>
     request<Partial<Task>[]>(`/teaching/courses/${courseId}/tasks`, { query }).then(taskListEnvelope),
 
-  studentTaskWorkspace: (courseId: string, taskId: string) =>
-    request<Record<string, unknown>>(`/teaching/courses/${courseId}/tasks/${taskId}/workspace`).then((r) => r.data),
 
-  operationReplay: (courseId: string, taskId: string) =>
-    request<Array<Record<string, unknown>>>(`/teaching/courses/${courseId}/tasks/${taskId}/operation-replay`).then(toList),
-
-  // 评审
-  reviews: (courseId: string, query?: { status?: string; page?: number; publication_id?: string; page_size?: number }) =>
-    request<ReviewSummary[]>(`/teaching/courses/${courseId}/reviews`, { query }).then(toList),
-
-  rubrics: (courseId: string) =>
-    request<Rubric[]>(`/teaching/courses/${courseId}/rubrics`).then(toList),
-
-  review: (courseId: string, reviewId: string) =>
-    request<unknown>(`/teaching/courses/${courseId}/reviews/${reviewId}`, { query: { include_source: "1" } })
-      .then((r) => r.data)
-      .then(normalizeReviewDetail),
-
-  aiScoreBatches: (courseId: string, publicationId: string) =>
-    request<{ batches: AIScoreBatch[] }>(`/teaching/courses/${courseId}/ai-score-batches`, {
-      query: { publication_id: publicationId },
-    }).then((r) => r.data.batches),
-
-  startAIScoreBatch: (courseId: string, publicationId: string) =>
-    request<AIScoreBatch>(`/teaching/courses/${courseId}/ai-score-batches`, {
-      method: "POST", body: { publication_id: publicationId }, idempotencyKey: newIdempotencyKey(),
-    }).then((r) => r.data),
-
-  aiScoreSuggestion: async (courseId: string, batchId: string, reviewId: string) => {
-    let page = 1;
-    while (true) {
-      const { data } = await request<{ suggestions: AIScoreSuggestion[]; total: number }>(
-        `/teaching/courses/${courseId}/ai-score-batches/${batchId}`, { query: { page, page_size: 100 } },
-      );
-      const suggestion = data.suggestions.find((item) => item.review_id === reviewId);
-      if (suggestion || page * 100 >= data.total) return suggestion ?? null;
-      page += 1;
-    }
-  },
-
-  acceptAIScoreSuggestion: (courseId: string, reviewId: string, suggestionId: string, ifMatch: string) =>
-    request<AIScoreSuggestion>(`/teaching/courses/${courseId}/reviews/${reviewId}/ai-score-suggestions/${suggestionId}/accept`, {
-      method: "POST", body: {}, idempotencyKey: newIdempotencyKey(), ifMatch,
-    }).then((r) => r.data),
-
-  saveCriterionScores: (courseId: string, reviewId: string, payload: { scores: Array<{ criterion_id: string; score: number; note?: string }> }, ifMatch?: string, reuseKey?: string) =>
-    request<ReviewDetail>(`/teaching/courses/${courseId}/reviews/${reviewId}/criterion-scores`, {
-      method: "PUT", body: payload, idempotencyKey: reuseKey ?? newIdempotencyKey(), ifMatch,
-    }).then((r) => r.data),
-
-  addAnnotation: (courseId: string, reviewId: string, payload: { body: string; target_ref: string; anchor: Record<string, unknown> }, ifMatch: string, reuseKey?: string) =>
-    request<unknown>(`/teaching/courses/${courseId}/reviews/${reviewId}/annotations`, {
-      method: "POST",
-      // 契约 AnnotationWriteSerializer：target_type/target_ref/anchor 必填
-      body: { target_type: "REPORT_TEXT", target_ref: payload.target_ref, anchor: payload.anchor, body: payload.body },
-      idempotencyKey: reuseKey ?? newIdempotencyKey(), ifMatch,
-    }).then((r) => r.data),
-
-  revokeAnnotation: (courseId: string, reviewId: string, annotationId: string, ifMatch: string, reuseKey?: string) =>
-    request(`/teaching/courses/${courseId}/reviews/${reviewId}/annotations/${annotationId}/revoke`, {
-      method: "POST", body: {}, idempotencyKey: reuseKey ?? newIdempotencyKey(), ifMatch,
-    }).then((r) => r.data),
-
-  decideReview: (courseId: string, reviewId: string, payload: { decision: "approve" | "return"; note?: string }, ifMatch: string, reuseKey?: string) =>
-    request<ReviewDetail>(`/teaching/courses/${courseId}/reviews/${reviewId}/decide`, {
-      method: "POST",
-      // 后端 ReviewDecisionEnum 仅收大写 APPROVE/REJECT；页面语义 return(退回修改)对应 REJECT
-      body: {
-        decision: payload.decision === "approve" ? "APPROVE" : "REJECT",
-        ...(payload.note ? { feedback: payload.note } : {}),
-      },
-      idempotencyKey: reuseKey ?? newIdempotencyKey(), ifMatch,
-    }).then((r) => r.data),
-
-  startSimilarityRun: (courseId: string, taskId: string, reuseKey?: string) =>
-    request<Record<string, unknown>>(`/teaching/courses/${courseId}/similarity-runs`, {
-      method: "POST", body: { task_id: taskId }, idempotencyKey: reuseKey ?? newIdempotencyKey(),
-    }).then((r) => r.data),
-
-  submissionPreview: (courseId: string, taskId: string) =>
-    request<Record<string, unknown>>(`/teaching/courses/${courseId}/tasks/${taskId}/submission-preview`).then((r) => r.data),
 
   // 分析
   analytics: (courseId: string, section: "overview" | "quality" | "resource-costs") =>
@@ -812,13 +652,7 @@ export const platformApi = {
       ifMatch,
     }).then((r) => r.data),
 
-  instances: (query?: { page?: number; page_size?: number; status?: string; orphaned?: boolean }) =>
-    request<InstanceData[]>("/platform/instances", { query }).then(toList),
 
-  destroyInstance: (instanceId: string, ifMatch: string, reuseKey?: string) =>
-    request(`/platform/instances/${instanceId}/destroy`, {
-      method: "POST", body: {}, idempotencyKey: reuseKey ?? newIdempotencyKey(), ifMatch,
-    }).then((r) => r.data),
 
 
 

@@ -1,5 +1,4 @@
 from datetime import timedelta
-from unittest.mock import Mock, patch
 
 from django.test import TestCase
 from django.utils import timezone
@@ -27,23 +26,10 @@ class AnalyticsProjectionTests(TestCase):
         )
         self.course = create_draft_course(self.teacher, code="analytics-ANALYTICS")
 
-    @patch("apps.analytics.observability.collect_runtime_inventory")
-    def test_operations_summary_collects_runtime_on_worker(self, collect: Mock) -> None:
-        collect.delay.return_value.get.return_value = {
-            "status": "HEALTHY", "drivers": [], "orphans": {}, "inventory": {}
-        }
+    def test_operations_summary_reads_assessment_jobs_without_docker(self) -> None:
         summary = operations_summary(trace_id="runtime-trace")
-        collect.delay.assert_called_once_with("runtime-trace")
-        collect.delay.return_value.get.assert_called_once_with(timeout=15)
-        self.assertEqual(summary["runtime"]["status"], "HEALTHY")
-
-        collect.delay.return_value.get.side_effect = TimeoutError("worker unavailable")
-        with self.assertLogs("runtime.inventory", level="ERROR"):
-            summary = operations_summary(trace_id="runtime-trace")
-        self.assertEqual(summary["runtime"]["status"], "UNAVAILABLE")
-        self.assertEqual(summary["runtime"]["error_code"], "RUNTIME_INVENTORY_WORKER_UNAVAILABLE")
-        self.assertEqual(summary["runtime"]["trace_id"], "runtime-trace")
-        self.assertIn("RUNTIME_ENGINE_UNAVAILABLE", [alert["code"] for alert in summary["alerts"]])
+        self.assertEqual(summary["runtime"]["runs"]["RUNNING"], 0)
+        self.assertEqual(summary["runtime"]["grades"]["PENDING"], 0)
 
     def test_audit_endpoint_uses_business_audit_fields_and_pagination(self) -> None:
         AuditLog.objects.create(

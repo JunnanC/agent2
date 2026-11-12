@@ -192,7 +192,7 @@ def public_question(question: Any) -> dict[str, Any]:
 
 
 def assessment_snapshot(version: Any, *, run_reference: bool = False) -> dict[str, Any] | None:
-    """Return a complete new-format specification; legacy templates stay unchanged for now."""
+    """Freeze the validated public questions and private grading configuration."""
     from .models import TemplateTask
 
     questions = list(TemplateTask.objects.filter(
@@ -270,8 +270,6 @@ def assessment_snapshot(version: Any, *, run_reference: bool = False) -> dict[st
             },
         } if programming else {},
         "retention_days": version.retention_days,
-        "execution_spec": {}, "execution_materials": [], "execution_command": [],
-        "execution_tests_asset": {},
     }
 
 

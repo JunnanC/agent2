@@ -190,8 +190,8 @@ export function CourseDetail({ discussionPage = false }: { discussionPage?: bool
                     </div>
                     <div className="task-side">
                       <StatusBadge tone={taskStatusTone(task.status)}>{taskStatusLabel(task.status)}</StatusBadge>
-                      {task.allowed_actions.includes("enter") && !task.blockers.length
-                        ? <Link className="btn sm primary" to={`/experiments/${task.public_id}/workbench`}>进入工作台</Link>
+                      {task.assessment_available
+                        ? <Link className="btn sm primary" to={`/experiments/${task.public_id}/assessment`}>进入实验答题</Link>
                         : <Link className="btn sm" to={`/experiments/${task.public_id}`}>查看详情</Link>}
                     </div>
                   </div>

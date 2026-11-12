@@ -29,7 +29,7 @@ it("opens health and usage tabs from overview and supports the browser URL", asy
   fireEvent.click(await screen.findByRole("button", { name: "全部 →" }));
   expect(await screen.findByRole("button", { name: "健康状态" })).toHaveClass("active");
   fireEvent.click(screen.getByRole("button", { name: "资源占用" }));
-  expect(await screen.findByRole("heading", { name: "实验实例 · 0 个" })).toBeInTheDocument();
+  expect(await screen.findByText("学生编辑不创建常驻实例，代码执行与评分资源由 worker 按需申请和回收。")).toBeInTheDocument();
   client.clear();
 });
 it("shows classes first then the selected class members", async () => {

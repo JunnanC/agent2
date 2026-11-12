@@ -4,7 +4,7 @@ import { assessmentTeachingApi } from "@edu/api-client";
 import { useToast } from "@edu/ui";
 import { newIdempotencyKey } from "@edu/auth-client";
 
-export function AssessmentReviews({ courseId }: { courseId: string }) {
+export function AssessmentReviews({ courseId, publicationId = "" }: { courseId: string; publicationId?: string }) {
   const [taskId, setTaskId] = useState("");
   const [scores, setScores] = useState<Record<string, string>>({});
   const [feedback, setFeedback] = useState("");
@@ -12,7 +12,7 @@ export function AssessmentReviews({ courseId }: { courseId: string }) {
   const [busy, setBusy] = useState(false);
   const [suggestion, setSuggestion] = useState<Awaited<ReturnType<typeof assessmentTeachingApi.reportSuggestion>> | null>(null);
   const toast = useToast();
-  const rows = useQuery({ queryKey: ["assessment-reviews", courseId], queryFn: () => assessmentTeachingApi.reviews(courseId) });
+  const rows = useQuery({ queryKey: ["assessment-reviews", courseId, publicationId], queryFn: () => assessmentTeachingApi.reviews(courseId, publicationId) });
   const detail = useQuery({ queryKey: ["assessment-review", courseId, taskId], queryFn: () => assessmentTeachingApi.review(courseId, taskId), enabled: !!taskId });
   const section = detail.data?.sections.find((s) => s.kind === "PROGRAMMING");
 

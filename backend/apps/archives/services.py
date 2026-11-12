@@ -10,8 +10,7 @@ from typing import Any
 
 from django.conf import settings
 from django.core.serializers.json import DjangoJSONEncoder
-from django.db import transaction
-from django.db.models import Q
+from django.db import models, transaction
 from django.utils import timezone
 
 from apps.accounts.models import User
@@ -29,35 +28,14 @@ from apps.courses.ports import Blocker
 from apps.courses.selectors import require_course_capability
 from apps.experiments.models import ExperimentTask
 from apps.experiments.services import transition_task
-from apps.governance.models import QuotaReservation, RuntimeAdapter
-from apps.provisioning.adapters import RuntimeAdapterFailure, runtime_for_driver
-from apps.provisioning.models import ProvisioningInstance
-from apps.provisioning.services import (
-    destroy_task_instance,
-    enabled_runtime_inventory,
-    enabled_runtime_resources,
-)
-from apps.reports.models import ReportVersion, SystemArtifact
-from apps.reports.serializers import execution_evidence_data
-from apps.reviews.models import AutoCheckRun, Review
-from apps.workspaces.models import (
-    OperationEvent,
-    WorkspaceCheckpoint,
-    WorkspaceSession,
-    WorkspaceSnapshot,
-    WorkspaceStorageJob,
-)
-from apps.workspaces.services import revoke_task_sessions
 
 from . import events
-from .errors import ArchiveStateConflict, ArchiveVerificationFailed, InstanceDestroyConflict
+from .errors import ArchiveStateConflict, ArchiveVerificationFailed
 from .metrics import (
     ARCHIVE_DURATION_SECONDS,
     ARCHIVE_EXPORTS_TOTAL,
     ARCHIVE_JOBS_TOTAL,
-    ARCHIVE_RECOVERY_TOTAL,
     ARCHIVE_RETENTION_TOTAL,
-    RUNTIME_RECONCILIATION_ISSUES,
 )
 from .models import ArchiveExportGrant, ArchiveJob, ArchiveManifest, ArchiveVerification
 
@@ -65,13 +43,6 @@ TERMINAL_STATUSES = {
     ExperimentTask.Status.COMPLETED,
     ExperimentTask.Status.CANCELLED,
     ExperimentTask.Status.EXPIRED,
-}
-ARCHIVABLE_STATUSES = {
-    ExperimentTask.Status.PROVISIONING,
-    ExperimentTask.Status.READY,
-    ExperimentTask.Status.IN_PROGRESS,
-    ExperimentTask.Status.REPORT_DRAFT,
-    ExperimentTask.Status.APPROVED,
 }
 
 
@@ -155,11 +126,6 @@ def _archive_retention_until() -> Any:
     return timezone.now() + timedelta(days=days)
 
 
-def _safe_recycle_at() -> Any:
-    seconds = max(60, int(getattr(settings, "ARCHIVE_SAFE_RECYCLE_SECONDS", 900)))
-    return timezone.now() + timedelta(seconds=seconds)
-
-
 def _max_attempts() -> int:
     return max(1, int(getattr(settings, "ARCHIVE_MAX_ATTEMPTS", 5)))
 
@@ -183,107 +149,37 @@ def _set_terminal_target(task: ExperimentTask, target: str) -> ExperimentTask:
 
 @transaction.atomic
 def request_task_archive(
-    *,
-    task_id: str,
-    terminal_target: str,
-    trigger: str,
-    context: Any,
-    actor: User | None = None,
+    *, task_id: str, terminal_target: str, trigger: str, context: Any, actor: User | None = None
 ) -> ArchiveJob | None:
-    try:
-        task = (
-            ExperimentTask.objects.select_for_update()
-            .select_related("course", "student", "publication", "enrollment")
-            .get(public_id=task_id)
+    task = (
+        ExperimentTask.objects.select_for_update()
+        .select_related(
+            "course",
+            "student",
+            "publication",
+            "enrollment",
         )
-    except ExperimentTask.DoesNotExist as exc:
-        raise ResourceNotFound() from exc
+        .get(public_id=task_id)
+    )
     if task.status in TERMINAL_STATUSES:
         return ArchiveJob.objects.filter(task=task).first()
-    from apps.experiments.models import PublicationTask
-
-    assessment = PublicationTask.objects.filter(
-        publication_chapter__publication_id=task.publication_id,
-        task_type__in=("SINGLE_CHOICE", "MULTIPLE_CHOICE", "PROGRAMMING"),
-    ).exists()
-    if assessment:
-        task = _set_terminal_target(task, terminal_target)
-        if task.status != ExperimentTask.Status.ARCHIVING:
-            task = compare_and_swap(
-                ExperimentTask, pk=task.pk, expected_version=task.row_version,
-                changes={"status": ExperimentTask.Status.ARCHIVING},
-            )
-        job, _ = ArchiveJob.objects.get_or_create(task=task, defaults={
-            "course": task.course, "terminal_target": terminal_target,
-            "safe_recycle_at": _safe_recycle_at(), "max_attempts": _max_attempts(),
-            "trace_id": _trace(context),
-        })
-        from .tasks import run_archive_job
-
-        transaction.on_commit(lambda: run_archive_job.apply_async(
-            kwargs={"job_id": job.public_id, "trace_id": _trace(context)}, queue="q_archive",
-        ))
-        return job
-    instance_exists = (
-        ProvisioningInstance.objects.filter(task=task)
-        .exclude(status=ProvisioningInstance.Status.DESTROYED)
-        .exists()
-    )
-    if task.status == ExperimentTask.Status.ASSIGNED and not instance_exists:
-        transition_task(
-            task_id=task.public_id,
-            to_status=terminal_target,
-            actor=actor,
-            expected_version=task.row_version,
-            trigger=trigger,
-            reason="unstarted task reached terminal condition",
-            context=context,
-        )
-        return None
     task = _set_terminal_target(task, terminal_target)
-    if task.status == ExperimentTask.Status.FAILED:
-        failure = task.current_failure or {}
-        previous = str(failure.get("previous_status", ""))
-        if previous in ARCHIVABLE_STATUSES and failure.get("retryable"):
-            task = transition_task(
-                task_id=task.public_id,
-                to_status=previous,
-                actor=actor,
-                expected_version=task.row_version,
-                trigger="ARCHIVE_RECOVER",
-                reason="resume task termination workflow",
-                context=context,
-            )
-    if task.status not in {ExperimentTask.Status.ARCHIVING, ExperimentTask.Status.FAILED}:
-        if task.status not in ARCHIVABLE_STATUSES:
-            raise ArchiveStateConflict(detail={"task_status": task.status})
-        task = transition_task(
-            task_id=task.public_id,
-            to_status=ExperimentTask.Status.ARCHIVING,
-            actor=actor,
+    if task.status != "ARCHIVING":
+        task = compare_and_swap(
+            ExperimentTask,
+            pk=task.pk,
             expected_version=task.row_version,
-            trigger=trigger,
-            reason="task terminal workflow requires archive",
-            context=context,
+            changes={"status": "ARCHIVING"},
         )
-    job, created = ArchiveJob.objects.select_for_update().get_or_create(
+    job, _ = ArchiveJob.objects.get_or_create(
         task=task,
         defaults={
             "course": task.course,
-            "status": ArchiveJob.Status.QUEUED,
             "terminal_target": terminal_target,
-            "safe_recycle_at": _safe_recycle_at(),
             "max_attempts": _max_attempts(),
             "trace_id": _trace(context),
         },
     )
-    if not created and job.status == ArchiveJob.Status.FAILED:
-        job = compare_and_swap(
-            ArchiveJob,
-            pk=job.pk,
-            expected_version=job.row_version,
-            changes={"status": ArchiveJob.Status.QUEUED, "trace_id": _trace(context)},
-        )
     _audit(
         context=context,
         actor=actor,
@@ -291,189 +187,17 @@ def request_task_archive(
         target_type="archive_job",
         target_ref=job.public_id,
         course_ref=task.course.public_id,
-        after={"task_id": task.public_id, "terminal_target": terminal_target},
-    )
-    _emit(
-        event_type=events.ARCHIVE_QUEUED,
-        aggregate_type="archive_job",
-        aggregate_ref=job.public_id,
-        payload={
-            "job_id": job.public_id,
-            "task_id": task.public_id,
-            "course_id": task.course.public_id,
-            "terminal_target": terminal_target,
-        },
-        context=context,
+        after={"trigger": trigger, "terminal_target": terminal_target},
     )
     from .tasks import run_archive_job
 
     transaction.on_commit(
         lambda: run_archive_job.apply_async(
             kwargs={"job_id": job.public_id, "trace_id": _trace(context)},
-            task_id=f"archive:{job.public_id}:{job.attempt_count + 1}",
+            queue="q_archive",
         )
     )
     return job
-
-
-def _snapshot(task: ExperimentTask) -> tuple[dict[str, Any], list[ObjectAsset]]:
-    report = (
-        ReportVersion.objects.select_related(
-            "workspace_snapshot__asset", "execution_run", "execution_snapshot__asset",
-            "execution_stdout_asset", "execution_stderr_asset", "execution_test_report_asset",
-        )
-        .prefetch_related("attachments__attachment__asset")
-        .filter(task=task)
-        .order_by("-version_no")
-        .first()
-    )
-    review = (
-        Review.objects.select_related("rubric_version", "report_version", "system_artifact")
-        .prefetch_related(
-            "criterion_scores__criterion", "annotations__revisions", "annotations__asset"
-        )
-        .filter(task=task)
-        .order_by("-round_no")
-        .first()
-    )
-    checkpoints = list(
-        WorkspaceCheckpoint.objects.select_related("snapshot__asset")
-        .filter(task=task)
-        .order_by("checkpoint_no")
-    )
-    latest_snapshot = (
-        WorkspaceSnapshot.objects.select_related("asset")
-        .filter(task=task)
-        .order_by("-version_no")
-        .first()
-    )
-    artifacts = list(SystemArtifact.objects.select_related("asset").filter(task=task))
-    assets: dict[int, ObjectAsset] = {}
-    if report is not None:
-        assets[report.workspace_snapshot.asset_id] = report.workspace_snapshot.asset
-        if report.execution_snapshot_id:
-            assets[report.execution_snapshot.asset_id] = report.execution_snapshot.asset
-        for asset in (
-            report.execution_stdout_asset, report.execution_stderr_asset,
-            report.execution_test_report_asset,
-        ):
-            if asset is not None:
-                assets[asset.pk] = asset
-        for link in report.attachments.all():
-            assets[link.attachment.asset_id] = link.attachment.asset
-    if latest_snapshot is not None:
-        assets[latest_snapshot.asset_id] = latest_snapshot.asset
-    for checkpoint in checkpoints:
-        assets[checkpoint.snapshot.asset_id] = checkpoint.snapshot.asset
-    for artifact in artifacts:
-        assets[artifact.asset_id] = artifact.asset
-    decision = getattr(review, "decision", None) if review else None
-    snapshot = {
-        "schema": "edu.archive.v1",
-        "task": {
-            "public_id": task.public_id,
-            "course_id": task.course.public_id,
-            "publication_id": task.publication.public_id,
-            "student_id": task.student.public_id,
-            "terminal_target": task.terminal_target,
-        },
-        "report": (
-            {
-                "public_id": report.public_id,
-                "version_no": report.version_no,
-                "body_digest": report.body_digest,
-                "snapshot_digest": report.snapshot_digest,
-                "submitted_at": report.submitted_at,
-                "body_markdown": report.body_markdown,
-                "execution_evidence": execution_evidence_data(report),
-            }
-            if report
-            else None
-        ),
-        "review": (
-            {
-                "public_id": review.public_id,
-                "round_no": review.round_no,
-                "rubric_version_id": review.rubric_version.public_id,
-                "scores": [
-                    {
-                        "criterion_id": score.criterion.public_id,
-                        "score": str(score.score),
-                        "note": score.note,
-                        "revision_no": score.revision_no,
-                    }
-                    for score in review.criterion_scores.all()
-                ],
-                "annotations": [
-                    {
-                        "public_id": annotation.public_id,
-                        "target_type": annotation.target_type,
-                        "object_digest": annotation.object_digest,
-                        "anchor": annotation.anchor,
-                        "status": annotation.status,
-                        "revisions": [
-                            {
-                                "revision_no": revision.revision_no,
-                                "action": revision.action,
-                                "body": revision.body,
-                                "created_at": revision.created_at,
-                            }
-                            for revision in annotation.revisions.all()
-                        ],
-                    }
-                    for annotation in review.annotations.all()
-                ],
-                "decision": (
-                    {
-                        "decision": decision.decision,
-                        "score": str(decision.score),
-                        "feedback": decision.feedback,
-                        "criterion_snapshot": decision.criterion_snapshot,
-                        "decided_at": decision.created_at,
-                    }
-                    if decision
-                    else None
-                ),
-            }
-            if review
-            else None
-        ),
-        "workspace": {
-            "latest_snapshot_id": latest_snapshot.public_id if latest_snapshot else None,
-            "checkpoints": [
-                {
-                    "public_id": item.public_id,
-                    "checkpoint_no": item.checkpoint_no,
-                    "name": item.name,
-                    "digest": item.digest_sha256,
-                    "source_seq": item.source_seq,
-                    "created_at": item.created_at,
-                }
-                for item in checkpoints
-            ],
-            "operation_events": [
-                {
-                    "seq": item.seq,
-                    "event_type": item.event_type,
-                    "phase": item.phase,
-                    "payload": item.payload_masked,
-                    "result": item.result_summary,
-                    "occurred_at": item.occurred_at,
-                }
-                for item in OperationEvent.objects.filter(task=task).order_by("seq")
-            ],
-        },
-        "system_artifacts": [
-            {
-                "public_id": item.public_id,
-                "kind": item.kind,
-                "asset_id": item.asset.public_id,
-                "digest": item.digest_sha256,
-            }
-            for item in artifacts
-        ],
-    }
-    return snapshot, list(assets.values())
 
 
 def _zip_entry(archive: zipfile.ZipFile, path: str, data: bytes) -> None:
@@ -529,17 +253,9 @@ def _copy_verified_asset(
 
 
 def _build_package(task: ExperimentTask) -> tuple[Any, list[dict[str, Any]], str, int]:
-    from apps.experiments.models import PublicationTask
+    from .assessment import assessment_archive
 
-    if PublicationTask.objects.filter(
-        publication_chapter__publication_id=task.publication_id,
-        task_type__in=("SINGLE_CHOICE", "MULTIPLE_CHOICE", "PROGRAMMING"),
-    ).exists():
-        from .assessment import assessment_archive
-
-        snapshot, assets = assessment_archive(task)
-    else:
-        snapshot, assets = _snapshot(task)
+    snapshot, assets = assessment_archive(task)
     generated = {
         "task.json": _canonical_bytes({"task": snapshot["task"]}),
         "report.json": _canonical_bytes(snapshot["report"]),
@@ -708,70 +424,39 @@ def _record_archive_failure(job: ArchiveJob, exc: Exception, context: Any) -> Ar
     return changed
 
 
+@transaction.atomic
 def _finish_task_cleanup(job: ArchiveJob, context: Any, *, archive_verified: bool) -> None:
-    task = ExperimentTask.objects.select_related("course").get(pk=job.task_id)
-    if archive_verified:
-        task.refresh_from_db()
-        if task.status == ExperimentTask.Status.FAILED:
-            previous = str((task.current_failure or {}).get("previous_status", ""))
-            if previous not in {
-                ExperimentTask.Status.ARCHIVING,
-                ExperimentTask.Status.DESTROYING,
-            }:
-                raise ArchiveStateConflict(detail={"task_status": task.status})
-            task = transition_task(
-                task_id=task.public_id,
-                to_status=previous,
-                actor=None,
-                expected_version=task.row_version,
-                trigger="TERMINAL_CLEANUP_RETRY",
-                reason="resume verified archive cleanup",
-                context=context,
-            )
-        if task.status == ExperimentTask.Status.ARCHIVING:
-            task = transition_task(
-                task_id=task.public_id,
-                to_status=ExperimentTask.Status.DESTROYING,
-                actor=None,
-                expected_version=task.row_version,
-                trigger="ARCHIVE_VERIFIED",
-                reason="verified archive ready; destroy runtime",
-                context=context,
-            )
-        elif task.status != ExperimentTask.Status.DESTROYING:
-            raise ArchiveStateConflict(detail={"task_status": task.status})
-    from apps.workspaces.storage import finalize_workspace_before_destroy
-
-    finalize_workspace_before_destroy(task_id=task.public_id, context=context)
-    revoke_task_sessions(
-        task_id=task.public_id,
-        reason="archive terminal cleanup",
-        context=context,
+    task = ExperimentTask.objects.select_for_update().get(pk=job.task_id)
+    if task.status == job.terminal_target:
+        return
+    if not archive_verified or not ArchiveManifest.objects.filter(job=job).exists():
+        raise ArchiveStateConflict(detail={"archive": "verified_manifest_required"})
+    compare_and_swap(
+        ExperimentTask,
+        pk=task.pk,
+        expected_version=task.row_version,
+        changes={
+            "status": job.terminal_target,
+            "completed_at": timezone.now()
+            if job.terminal_target == "COMPLETED"
+            else task.completed_at,
+        },
     )
-    destroy_task_instance(
-        task_id=task.public_id,
-        idempotency_key=f"archive-destroy:{job.public_id}",
+    _audit(
         context=context,
+        action="archive.finalize",
+        target_type="experiment_task",
+        target_ref=task.public_id,
+        course_ref=task.course.public_id,
+        after={"status": job.terminal_target},
     )
-    if archive_verified:
-        task.refresh_from_db()
-        transition_task(
-            task_id=task.public_id,
-            to_status=job.terminal_target,
-            actor=None,
-            expected_version=task.row_version,
-            trigger="TERMINAL_CLEANUP",
-            reason="archive, runtime, workspace, and quota closed",
-            context=context,
-        )
-        ARCHIVE_RECOVERY_TOTAL.labels(operation="terminal_cleanup", result="success").inc()
 
 
 @transaction.atomic
 def _record_cleanup_failure(job: ArchiveJob, exc: Exception, context: Any) -> None:
-    error_code = getattr(exc, "code", "RUNTIME_CLEANUP_FAILED")
+    error_code = getattr(exc, "code", "ARCHIVE_FINALIZE_FAILED")
     failure = append_failure(
-        failure_type="RUNTIME_CLEANUP",
+        failure_type="ARCHIVE_FINALIZE",
         subject_type="ARCHIVE_JOB",
         subject_ref=job.public_id,
         error_code=error_code,
@@ -781,7 +466,7 @@ def _record_cleanup_failure(job: ArchiveJob, exc: Exception, context: Any) -> No
         trace_id=_trace(context),
     )
     compensation = create_compensation(
-        task_type="RETRY_RUNTIME_DESTROY",
+        task_type="RETRY_ARCHIVE_JOB",
         subject_type="ARCHIVE_JOB",
         subject_ref=job.public_id,
         payload={"job_id": job.public_id},
@@ -796,7 +481,7 @@ def _record_cleanup_failure(job: ArchiveJob, exc: Exception, context: Any) -> No
         changes={"failure_record": failure, "compensation_task": compensation},
     )
     task = ExperimentTask.objects.select_for_update().get(pk=job.task_id)
-    if task.status == ExperimentTask.Status.DESTROYING:
+    if task.status == ExperimentTask.Status.ARCHIVING:
         transition_task(
             task_id=task.public_id,
             to_status=ExperimentTask.Status.FAILED,
@@ -963,8 +648,6 @@ def execute_archive_job(
                 .get(pk=job.pk)
             )
             failed = _record_archive_failure(current, exc, context)
-        if timezone.now() >= failed.safe_recycle_at:
-            force_safe_recycle(job_id=failed.public_id, trace_id=trace_id)
         if raise_on_failure:
             raise
         return failed
@@ -973,275 +656,8 @@ def execute_archive_job(
             package.close()
 
 
-def force_safe_recycle(*, job_id: str, trace_id: str = "") -> ArchiveJob:
-    job = ArchiveJob.objects.select_related("task", "course").get(public_id=job_id)
-    context = worker_context(trace_id=trace_id or job.trace_id, actor_ref="archive-safety-deadline")
-    _finish_task_cleanup(job, context, archive_verified=False)
-    _audit(
-        context=context,
-        action="archive.force_safe_recycle",
-        target_type="archive_job",
-        target_ref=job.public_id,
-        course_ref=job.course.public_id,
-        after={"task_status": "FAILED", "terminal_target": job.terminal_target},
-    )
-    ARCHIVE_RECOVERY_TOTAL.labels(operation="safe_deadline", result="success").inc()
-    return job
-
-
 def retry_archive_compensation(task: CompensationTask) -> None:
     execute_archive_job(job_id=task.subject_ref, trace_id=task.trace_id, raise_on_failure=True)
-
-
-def retry_runtime_cleanup_compensation(task: CompensationTask) -> None:
-    job = ArchiveJob.objects.select_related("task", "course").get(public_id=task.subject_ref)
-    _finish_task_cleanup(
-        job,
-        worker_context(trace_id=task.trace_id, actor_ref="runtime-cleanup-compensation"),
-        archive_verified=True,
-    )
-
-
-def retry_judge_destroy_compensation(task: CompensationTask) -> None:
-    """Retry one-shot judge cleanup without touching review/auto-check facts."""
-
-    payload = dict(task.payload_masked or {})
-    driver = str(payload.get("driver") or "DOCKER_LOCAL")
-    config_ref = str(payload.get("config_ref") or "")
-    judge_id = str(payload.get("judge_id") or task.subject_ref)
-    adapter = runtime_for_driver(driver, config_ref=config_ref)
-    destroy_judge = getattr(adapter, "destroy_judge", None)
-    if not callable(destroy_judge):
-        raise RuntimeAdapterFailure("RUNTIME_JUDGE_CLEANUP_UNSUPPORTED", retryable=False)
-    destroy_judge(judge_id, f"judge-destroy:{judge_id}")
-
-
-def destroy_instance_as_admin(
-    *,
-    instance_id: str,
-    actor: User,
-    expected_version: int,
-    reason: str,
-    context: Any,
-) -> ProvisioningInstance:
-    try:
-        instance = ProvisioningInstance.objects.select_related("task", "course").get(
-            public_id=instance_id
-        )
-    except ProvisioningInstance.DoesNotExist as exc:
-        raise ResourceNotFound() from exc
-    if instance.status == ProvisioningInstance.Status.DESTROYED:
-        return instance
-    if not reason.strip():
-        raise InstanceDestroyConflict(detail={"reason": "required"})
-    destroyed = destroy_task_instance(
-        task_id=instance.task.public_id,
-        idempotency_key=f"admin-destroy:{instance.public_id}:{expected_version}",
-        context=context,
-        expected_version=expected_version,
-    )
-    if destroyed is None:
-        raise ResourceNotFound()
-    _audit(
-        context=context,
-        actor=actor,
-        action="platform.instance.destroy",
-        target_type="provisioning_instance",
-        target_ref=destroyed.public_id,
-        course_ref=destroyed.course.public_id,
-        before={"status": instance.status},
-        after={"status": destroyed.status, "reason": reason.strip()},
-    )
-    _emit(
-        event_type=events.INSTANCE_DESTROYED,
-        aggregate_type="provisioning_instance",
-        aggregate_ref=destroyed.public_id,
-        payload={
-            "instance_id": destroyed.public_id,
-            "task_id": destroyed.task.public_id,
-            "course_id": destroyed.course.public_id,
-            "reason": reason.strip(),
-        },
-        context=context,
-    )
-    return destroyed
-
-
-def request_instance_destroy_as_admin(
-    *,
-    instance_id: str,
-    actor: User,
-    expected_version: int,
-    reason: str,
-    context: Any,
-) -> ProvisioningInstance:
-    try:
-        instance = ProvisioningInstance.objects.select_related("task", "course").get(
-            public_id=instance_id
-        )
-    except ProvisioningInstance.DoesNotExist as exc:
-        raise ResourceNotFound() from exc
-    if instance.row_version != expected_version:
-        raise RowVersionConflict(
-            detail={
-                "expected_row_version": expected_version,
-                "actual_row_version": instance.row_version,
-            }
-        )
-    if instance.status == ProvisioningInstance.Status.DESTROYED:
-        return instance
-    if not reason.strip():
-        raise InstanceDestroyConflict(detail={"reason": "required"})
-    _audit(
-        context=context,
-        actor=actor,
-        action="platform.instance.destroy.request",
-        target_type="provisioning_instance",
-        target_ref=instance.public_id,
-        course_ref=instance.course.public_id,
-        after={"reason": reason.strip()},
-    )
-    _emit(
-        event_type=events.INSTANCE_DESTROY_REQUESTED,
-        aggregate_type="provisioning_instance",
-        aggregate_ref=instance.public_id,
-        payload={
-            "instance_id": instance.public_id,
-            "task_id": instance.task.public_id,
-            "course_id": instance.course.public_id,
-            "reason": reason.strip(),
-        },
-        context=context,
-    )
-    from .tasks import destroy_instance_by_admin
-
-    transaction.on_commit(
-        lambda: destroy_instance_by_admin.apply_async(
-            kwargs={
-                "instance_id": instance.public_id,
-                "actor_id": actor.public_id,
-                "expected_version": expected_version,
-                "reason": reason.strip(),
-                "trace_id": _trace(context),
-            },
-            task_id=f"admin-destroy:{instance.public_id}:{expected_version}",
-        )
-    )
-    return instance
-
-
-@transaction.atomic
-def request_orphan_destroy_as_admin(
-    *,
-    orphan_ref: str,
-    actor: User,
-    expected_version: int,
-    reason: str,
-    context: Any,
-) -> None:
-    try:
-        prefix, adapter_id, external_id = orphan_ref.split(":", 2)
-    except ValueError as exc:
-        raise ResourceNotFound() from exc
-    if prefix != "external" or not adapter_id or not external_id:
-        raise ResourceNotFound()
-    if expected_version != 1 or not reason.strip():
-        raise InstanceDestroyConflict(detail={"reason": "required", "row_version": 1})
-    subject_ref = f"{adapter_id}:{external_id}"
-    incident = (
-        CompensationTask.objects.select_for_update()
-        .filter(
-            task_type="REVIEW_RUNTIME_ORPHAN",
-            subject_type="RUNTIME_ORPHAN",
-            subject_ref=subject_ref,
-            status=CompensationTask.Status.DEAD,
-        )
-        .first()
-    )
-    if incident is None:
-        raise ResourceNotFound()
-    adapter = RuntimeAdapter.objects.filter(
-        public_id=adapter_id, status=RuntimeAdapter.Status.ENABLED
-    ).first()
-    if adapter is None:
-        raise InstanceDestroyConflict(detail={"adapter": "not_enabled"})
-    _audit(
-        context=context,
-        actor=actor,
-        action="platform.runtime_orphan.destroy.request",
-        target_type="runtime_orphan",
-        target_ref=subject_ref,
-        course_ref="",
-        after={"reason": reason.strip(), "driver": adapter.driver},
-    )
-    _emit(
-        event_type=events.INSTANCE_DESTROY_REQUESTED,
-        aggregate_type="runtime_orphan",
-        aggregate_ref=subject_ref,
-        payload={"adapter_id": adapter_id, "reason": reason.strip()},
-        context=context,
-    )
-    from .tasks import destroy_orphan_by_admin
-
-    transaction.on_commit(
-        lambda: destroy_orphan_by_admin.apply_async(
-            kwargs={
-                "orphan_ref": orphan_ref,
-                "actor_id": actor.public_id,
-                "reason": reason.strip(),
-                "trace_id": _trace(context),
-            },
-            task_id=f"runtime-orphan-destroy:{adapter_id}:{external_id}",
-        )
-    )
-
-
-def destroy_orphan_as_admin(
-    *, orphan_ref: str, actor: User, reason: str, trace_id: str
-) -> None:
-    try:
-        prefix, adapter_id, external_id = orphan_ref.split(":", 2)
-        adapter_config = RuntimeAdapter.objects.get(
-            public_id=adapter_id, status=RuntimeAdapter.Status.ENABLED
-        )
-    except (ValueError, RuntimeAdapter.DoesNotExist) as exc:
-        raise ResourceNotFound() from exc
-    if prefix != "external":
-        raise ResourceNotFound()
-    subject_ref = f"{adapter_id}:{external_id}"
-    adapter = runtime_for_driver(
-        adapter_config.driver, config_ref=adapter_config.config_ref
-    )
-    item = next((value for value in adapter.inventory() if value.external_id == external_id), None)
-    if item is not None:
-        if item.metadata.get("managed") is not True:
-            raise RuntimeAdapterFailure("RUNTIME_RESOURCE_NOT_MANAGED", retryable=False)
-        adapter.destroy(external_id, f"admin-orphan:{subject_ref}")
-        if adapter.status(external_id) != "ABSENT":
-            raise RuntimeAdapterFailure("RUNTIME_DESTROY_NOT_CONFIRMED")
-    with transaction.atomic():
-        incident = CompensationTask.objects.select_for_update().get(
-            task_type="REVIEW_RUNTIME_ORPHAN",
-            subject_type="RUNTIME_ORPHAN",
-            subject_ref=subject_ref,
-        )
-        if incident.status != CompensationTask.Status.COMPLETED:
-            compare_and_swap(
-                CompensationTask,
-                pk=incident.pk,
-                expected_version=incident.row_version,
-                changes={"status": CompensationTask.Status.COMPLETED},
-            )
-        context = worker_context(trace_id=trace_id, actor_ref=actor.public_id)
-        _audit(
-            context=context,
-            actor=actor,
-            action="platform.runtime_orphan.destroy",
-            target_type="runtime_orphan",
-            target_ref=subject_ref,
-            course_ref="",
-            after={"external_absent": True, "reason": reason},
-        )
 
 
 @transaction.atomic
@@ -1307,14 +723,10 @@ def archive_course_blockers(course: Course) -> list[Blocker]:
         status__in=TERMINAL_STATUSES
     )
     active_jobs = ArchiveJob.objects.filter(course=course).exclude(status=ArchiveJob.Status.PASSED)
-    active_instances = ProvisioningInstance.objects.filter(course=course).exclude(
-        status=ProvisioningInstance.Status.DESTROYED
-    )
     blockers = []
     for name, queryset, message in (
         ("UNFINISHED_TASK", active_tasks, "仍有未终止个人任务"),
         ("ARCHIVING_IN_PROGRESS", active_jobs, "仍有未完成归档作业"),
-        ("RUNNING_INSTANCE", active_instances, "仍有未销毁运行实例"),
     ):
         refs = tuple(queryset.values_list("public_id", flat=True)[:20])
         count = queryset.count()
@@ -1434,37 +846,6 @@ def create_archive_export(
     )
 
 
-def scan_due_tasks(*, trace_id: str = "", course_id: str = "") -> int:
-    now = timezone.now()
-    context = worker_context(trace_id=trace_id, actor_ref="archive-deadline-scan")
-    values = ExperimentTask.objects.filter(
-        Q(effective_deadline__lte=now)
-        | Q(effective_deadline__isnull=True, publication__window_end__lte=now)
-    ).filter(
-        status__in=(
-            ExperimentTask.Status.ASSIGNED,
-            ExperimentTask.Status.PROVISIONING,
-            ExperimentTask.Status.READY,
-            ExperimentTask.Status.IN_PROGRESS,
-            ExperimentTask.Status.REPORT_DRAFT,
-        )
-    ).exclude(publication__chapter_snapshots__task_snapshots__task_type__in=(
-        "SINGLE_CHOICE", "MULTIPLE_CHOICE", "PROGRAMMING",
-    ))
-    if course_id:
-        values = values.filter(course__public_id=course_id)
-    count = 0
-    for task in values.iterator():
-        request_task_archive(
-            task_id=task.public_id,
-            terminal_target=ExperimentTask.TerminalTarget.EXPIRED,
-            trigger="DEADLINE_EXPIRED",
-            context=context,
-        )
-        count += 1
-    return count
-
-
 def schedule_course_reconciliation(course: Course, context: Any) -> None:
     from .tasks import reconcile_course_archives
 
@@ -1475,224 +856,16 @@ def schedule_course_reconciliation(course: Course, context: Any) -> None:
 
 
 def reconcile_archives(*, trace_id: str = "") -> dict[str, int]:
-    context = worker_context(trace_id=trace_id, actor_ref="archive-reconciler")
-    forced = 0
+    from .tasks import run_archive_job
+
+    count = 0
     for job in ArchiveJob.objects.filter(
-        status=ArchiveJob.Status.FAILED, safe_recycle_at__lte=timezone.now()
-    ).iterator():
-        force_safe_recycle(job_id=job.public_id, trace_id=trace_id)
-        forced += 1
-    inventory_items = enabled_runtime_inventory()
-    inventory = {
-        (str(item.metadata.get("adapter_id", "")), item.external_id): item
-        for item in inventory_items
-    }
-    active_instances = ProvisioningInstance.objects.exclude(
-        status=ProvisioningInstance.Status.DESTROYED
-    ).exclude(external_id__isnull=True)
-    missing = 0
-    for instance in active_instances.select_related("task", "course", "runtime_adapter"):
-        key = (instance.runtime_adapter.public_id, instance.external_id or "")
-        if key not in inventory:
-            append_failure(
-                failure_type="RUNTIME_RECONCILIATION",
-                subject_type="PROVISIONING_INSTANCE",
-                subject_ref=instance.public_id,
-                error_code="RUNTIME_EXTERNALLY_ABSENT",
-                message="runtime is absent while database instance is active",
-                detail={"task_id": instance.task.public_id},
-                retryable=True,
-                trace_id=trace_id,
-            )
-            missing += 1
-    db_external_ids = set(
-        ProvisioningInstance.objects.exclude(external_id__isnull=True).values_list(
-            "runtime_adapter__public_id", "external_id"
-        )
-    )
-    orphan_items = [item for key, item in inventory.items() if key not in db_external_ids]
-    orphans = len(orphan_items)
-    for item in orphan_items:
-        adapter_id = str(item.metadata.get("adapter_id", ""))
-        subject_ref = f"{adapter_id}:{item.external_id}"
-        if CompensationTask.objects.filter(
-            subject_type="RUNTIME_ORPHAN", subject_ref=subject_ref
-        ).exists():
-            continue
-        failure = append_failure(
-            failure_type="RUNTIME_RECONCILIATION",
-            subject_type="RUNTIME_ORPHAN",
-            subject_ref=subject_ref,
-            error_code="RUNTIME_MANAGED_ORPHAN",
-            message="managed runtime has no database instance",
-            detail={
-                "adapter_id": adapter_id,
-                "driver": str(item.metadata.get("driver", "")),
-                "task_id": str(item.metadata.get("task_id", "")),
-            },
-            retryable=False,
-            trace_id=trace_id,
-        )
-        CompensationTask.objects.create(
-            task_type="REVIEW_RUNTIME_ORPHAN",
-            subject_type="RUNTIME_ORPHAN",
-            subject_ref=subject_ref,
-            payload_masked={"adapter_id": adapter_id, "external_id": item.external_id},
-            status=CompensationTask.Status.DEAD,
-            attempt_count=1,
-            max_attempts=1,
-            last_failure=failure,
-            trace_id=trace_id,
-        )
-    # One-shot judge containers are not represented by ProvisioningInstance.  They
-    # are reconciled against AutoCheckRun facts and cleaned through the same
-    # compensation queue, so an unavailable Docker Engine cannot alter review state.
-    orphan_judges = 0
-    orphan_volumes = 0
-    for item in enabled_runtime_resources():
-        kind = str(item.metadata.get("kind", "")).casefold()
-        if kind == "volume":
-            task_id = str(item.metadata.get("task_id", ""))
-            owns_runtime = bool(
-                task_id
-                and ProvisioningInstance.objects.filter(
-                    task__public_id=task_id,
-                )
-                .exclude(status=ProvisioningInstance.Status.DESTROYED)
-                .exists()
-            )
-            if owns_runtime:
-                continue
-            orphan_volumes += 1
-            resource_task_type = "RETRY_RUNTIME_RESOURCE_DESTROY"
-            resource_subject_type = "RUNTIME_RESOURCE"
-            resource_subject_ref = item.external_id
-            if CompensationTask.objects.filter(
-                task_type=resource_task_type,
-                subject_type=resource_subject_type,
-                subject_ref=resource_subject_ref,
-                status__in=(
-                    CompensationTask.Status.PENDING,
-                    CompensationTask.Status.IN_FLIGHT,
-                    CompensationTask.Status.RETRY,
-                ),
-            ).exists():
-                continue
-            create_compensation(
-                task_type=resource_task_type,
-                subject_type=resource_subject_type,
-                subject_ref=resource_subject_ref,
-                payload={
-                    "external_id": item.external_id,
-                    "driver": str(item.metadata.get("driver", "DOCKER_LOCAL")),
-                    "config_ref": str(item.metadata.get("config_ref", "")),
-                },
-                trace_id=trace_id,
-                max_attempts=max(
-                    1, int(getattr(settings, "RUNTIME_CLEANUP_MAX_ATTEMPTS", 10))
-                ),
-            )
-            continue
-        if kind != "judge":
-            continue
-        judge_id = str(item.metadata.get("judge_id") or item.external_id)
-        run = AutoCheckRun.objects.filter(public_id=judge_id).first()
-        if run is not None and run.status in {
-            AutoCheckRun.Status.QUEUED,
-            AutoCheckRun.Status.RUNNING,
-        }:
-            continue
-        orphan_judges += 1
-        if CompensationTask.objects.filter(
-            task_type="RETRY_JUDGE_DESTROY",
-            subject_type="AUTO_CHECK_RUN",
-            subject_ref=judge_id,
-            status__in=(
-                CompensationTask.Status.PENDING,
-                CompensationTask.Status.IN_FLIGHT,
-                CompensationTask.Status.RETRY,
-            ),
-        ).exists():
-            continue
-        create_compensation(
-            task_type="RETRY_JUDGE_DESTROY",
-            subject_type="AUTO_CHECK_RUN",
-            subject_ref=judge_id,
-            payload={
-                "judge_id": judge_id,
-                "driver": str(item.metadata.get("driver", "DOCKER_LOCAL")),
-                "config_ref": str(item.metadata.get("config_ref", "")),
-            },
-            trace_id=trace_id,
-            max_attempts=max(1, int(getattr(settings, "RUNTIME_CLEANUP_MAX_ATTEMPTS", 10))),
-        )
-    terminal_leaks = (
-        ProvisioningInstance.objects.filter(task__status__in=TERMINAL_STATUSES)
-        .exclude(status=ProvisioningInstance.Status.DESTROYED)
-        .count()
-    )
-    active_sessions = WorkspaceSession.objects.filter(
-        task__status__in=TERMINAL_STATUSES,
-        status=WorkspaceSession.Status.ACTIVE,
-    ).count()
-    terminal_reservations = QuotaReservation.objects.filter(
-        subject_type="EXPERIMENT_TASK",
-        subject_ref__in=ExperimentTask.objects.filter(status__in=TERMINAL_STATUSES).values(
-            "public_id"
-        ),
-        status=QuotaReservation.Status.ACTIVE,
-    ).count()
-    archive_mismatches = 0
-    for manifest in ArchiveManifest.objects.select_related("package_asset").iterator():
-        try:
-            if _verify_stored_package(manifest.package_asset) != manifest.package_digest:
-                archive_mismatches += 1
-        except Exception:
-            archive_mismatches += 1
-    for kind, value in (
-        ("missing_runtime", missing),
-        ("orphan_runtime", orphans),
-        ("terminal_resource_leaks", terminal_leaks),
-        ("archive_object_mismatches", archive_mismatches),
-        ("orphan_judge", orphan_judges),
-        ("orphan_volume", orphan_volumes),
+        status__in=("QUEUED", "FAILED"),
+        attempt_count__lt=models.F("max_attempts"),
     ):
-        RUNTIME_RECONCILIATION_ISSUES.labels(kind=kind).set(value)
-    if (
-        missing
-        or orphans
-        or terminal_leaks
-        or active_sessions
-        or terminal_reservations
-        or archive_mismatches
-    ):
-        _emit(
-            event_type=events.RECONCILIATION_FOUND,
-            aggregate_type="archive_reconciliation",
-            aggregate_ref=trace_id or "scheduled",
-            payload={
-                "missing_runtime": missing,
-                "orphan_runtime": orphans,
-                "terminal_resource_leaks": terminal_leaks,
-                "terminal_active_sessions": active_sessions,
-                "terminal_active_reservations": terminal_reservations,
-                "archive_object_mismatches": archive_mismatches,
-                "orphan_judges": orphan_judges,
-                "orphan_volumes": orphan_volumes,
-            },
-            context=context,
-        )
-    return {
-        "forced_recycles": forced,
-        "missing_runtime": missing,
-        "orphan_runtime": orphans,
-        "terminal_resource_leaks": terminal_leaks,
-        "terminal_active_sessions": active_sessions,
-        "terminal_active_reservations": terminal_reservations,
-        "archive_object_mismatches": archive_mismatches,
-        "orphan_judges": orphan_judges,
-        "orphan_volumes": orphan_volumes,
-    }
+        run_archive_job.apply_async(kwargs={"job_id": job.public_id, "trace_id": trace_id})
+        count += 1
+    return {"redispatched": count}
 
 
 def purge_expired_archive_objects(*, trace_id: str = "") -> dict[str, int]:
@@ -1756,11 +929,6 @@ def purge_expired_archive_objects(*, trace_id: str = "") -> dict[str, int]:
                 retryable=True,
                 trace_id=trace_id,
             )
-            _runtime_cleanup_compensation(
-                asset=asset,
-                trace_id=trace_id,
-                error_code=getattr(exc, "code", "ARCHIVE_RETENTION_PURGE_FAILED"),
-            )
             with suppress(Exception):
                 record_purge_result(
                     asset_id=asset.pk,
@@ -1772,256 +940,3 @@ def purge_expired_archive_objects(*, trace_id: str = "") -> dict[str, int]:
                 )
             ARCHIVE_RETENTION_TOTAL.labels(result="failed").inc()
     return {"purged": purged, "skipped": skipped, "failed": failed}
-
-
-def _runtime_cleanup_compensation(
-    *, asset: ObjectAsset, trace_id: str, error_code: str
-) -> CompensationTask:
-    """Create one retry record for a failed object delete (idempotently)."""
-
-    existing = (
-        CompensationTask.objects.filter(
-            task_type="RETRY_RUNTIME_OBJECT_PURGE",
-            subject_type="OBJECT_ASSET",
-            subject_ref=asset.public_id,
-            status__in=(
-                CompensationTask.Status.PENDING,
-                CompensationTask.Status.IN_FLIGHT,
-                CompensationTask.Status.RETRY,
-            ),
-        )
-        .order_by("-created_at")
-        .first()
-    )
-    if existing is not None:
-        return existing
-    return create_compensation(
-        task_type="RETRY_RUNTIME_OBJECT_PURGE",
-        subject_type="OBJECT_ASSET",
-        subject_ref=asset.public_id,
-        payload={
-            "asset_id": asset.public_id,
-            "error_code": error_code,
-        },
-        trace_id=trace_id,
-        max_attempts=max(1, int(getattr(settings, "RUNTIME_CLEANUP_MAX_ATTEMPTS", 10))),
-    )
-
-
-def purge_expired_runtime_objects(*, trace_id: str = "") -> dict[str, int]:
-    """Purge expired execution output objects while preserving report evidence.
-
-    The database row and its audit history remain intact.  Only the immutable
-    object version is removed, and a failed delete is represented by a retryable
-    compensation task rather than by changing task/report terminal state.
-    """
-
-    now = timezone.now()
-    purged = skipped = failed = 0
-    values = ObjectAsset.objects.filter(
-        owner_type="WORKSPACE_EXECUTION",
-        status__in=(ObjectAsset.Status.ACTIVE, ObjectAsset.Status.PURGE_PENDING),
-        retention_until__isnull=False,
-        retention_until__lte=now,
-    )
-    for candidate in values.iterator():
-        # Report versions are the durable evidence boundary.  Do not remove an
-        # execution object still referenced by a submitted report.
-        if ReportVersion.objects.filter(
-            Q(execution_stdout_asset=candidate)
-            | Q(execution_stderr_asset=candidate)
-            | Q(execution_test_report_asset=candidate)
-        ).exists():
-            skipped += 1
-            continue
-        with transaction.atomic():
-            asset = ObjectAsset.objects.select_for_update().get(pk=candidate.pk)
-            if asset.status == ObjectAsset.Status.PURGED:
-                continue
-            if asset.status == ObjectAsset.Status.ACTIVE:
-                asset = compare_and_swap(
-                    ObjectAsset,
-                    pk=asset.pk,
-                    expected_version=asset.row_version,
-                    changes={"status": ObjectAsset.Status.PURGE_PENDING},
-                )
-        try:
-            object_storage().delete_object(
-                bucket=asset.bucket,
-                object_key=asset.object_key,
-                version_id=asset.object_version,
-            )
-            record_purge_result(
-                asset_id=asset.pk,
-                expected_version=asset.row_version,
-                result=ObjectPurgeLog.Result.PURGED,
-                trace_id=trace_id,
-                reason="runtime execution retention expired",
-            )
-            purged += 1
-        except Exception as exc:  # noqa: BLE001 - continue independent assets
-            failed += 1
-            error_code = str(getattr(exc, "code", "RUNTIME_OBJECT_PURGE_FAILED"))[:64]
-            append_failure(
-                failure_type="RUNTIME_OBJECT_RETENTION",
-                subject_type="OBJECT_ASSET",
-                subject_ref=asset.public_id,
-                error_code=error_code,
-                message=error_code,
-                detail={},
-                retryable=True,
-                trace_id=trace_id,
-            )
-            _runtime_cleanup_compensation(
-                asset=asset,
-                trace_id=trace_id,
-                error_code=error_code,
-            )
-            with suppress(Exception):
-                record_purge_result(
-                    asset_id=asset.pk,
-                    expected_version=asset.row_version,
-                    result=ObjectPurgeLog.Result.FAILED,
-                    trace_id=trace_id,
-                    reason="runtime execution retention cleanup failed",
-                    error_code=error_code,
-                )
-    return {"purged": purged, "skipped": skipped, "failed": failed}
-
-
-def retry_runtime_object_purge_compensation(task: CompensationTask) -> None:
-    """Retry a single object purge using the same retention-safe path."""
-
-    asset_id = str((task.payload_masked or {}).get("asset_id") or task.subject_ref)
-    asset = ObjectAsset.objects.get(public_id=asset_id)
-    if asset.status == ObjectAsset.Status.PURGED:
-        return
-    object_storage().delete_object(
-        bucket=asset.bucket,
-        object_key=asset.object_key,
-        version_id=asset.object_version,
-    )
-    record_purge_result(
-        asset_id=asset.pk,
-        expected_version=asset.row_version,
-        result=ObjectPurgeLog.Result.PURGED,
-        trace_id=task.trace_id,
-        reason="runtime execution retention compensation",
-    )
-
-
-def purge_expired_runtime_resources(*, trace_id: str = "") -> dict[str, int]:
-    """Destroy managed transient volumes after their TTL.
-
-    Resource deletion is deliberately adapter-owned and label-scoped.  If the
-    Docker Engine is unavailable, the resource remains observable and a
-    retryable compensation row is created.
-    """
-
-    now_epoch = int(timezone.now().timestamp())
-    purged = skipped = failed = 0
-    for item in enabled_runtime_resources():
-        kind = str(item.metadata.get("kind", "")).casefold()
-        expires_at = item.metadata.get("expires_at")
-        if isinstance(expires_at, (str, int, float)):
-            try:
-                expired = int(expires_at) <= now_epoch
-            except (TypeError, ValueError):
-                expired = False
-        else:
-            expired = False
-        if kind != "volume" or not expired:
-            skipped += 1
-            continue
-        task_id = str(item.metadata.get("task_id", ""))
-        if task_id:
-            instance = (
-                ProvisioningInstance.objects.filter(task__public_id=task_id)
-                .only("pk", "status")
-                .first()
-            )
-            if instance is not None and instance.status != ProvisioningInstance.Status.DESTROYED:
-                skipped += 1
-                continue
-            if instance is not None:
-                initialized = WorkspaceStorageJob.objects.filter(
-                    instance=instance,
-                    kind=WorkspaceStorageJob.Kind.INITIALIZE,
-                    status=WorkspaceStorageJob.Status.PASSED,
-                ).exists()
-                finalized = WorkspaceStorageJob.objects.filter(
-                    instance=instance,
-                    kind=WorkspaceStorageJob.Kind.FINALIZE,
-                    status=WorkspaceStorageJob.Status.PASSED,
-                ).exists()
-                if initialized and not finalized:
-                    skipped += 1
-                    continue
-        driver = str(item.metadata.get("driver") or "DOCKER_LOCAL")
-        config_ref = str(item.metadata.get("config_ref") or "")
-        try:
-            adapter = runtime_for_driver(driver, config_ref=config_ref)
-            destroy_resource = getattr(adapter, "destroy_resource", None)
-            if not callable(destroy_resource):
-                raise RuntimeAdapterFailure("RUNTIME_RESOURCE_CLEANUP_UNSUPPORTED", retryable=False)
-            destroy_resource(item.external_id, f"resource-destroy:{item.external_id}")
-            purged += 1
-        except Exception as exc:  # noqa: BLE001 - independent resources
-            failed += 1
-            code = str(getattr(exc, "code", "RUNTIME_RESOURCE_PURGE_FAILED"))[:64]
-            append_failure(
-                failure_type="RUNTIME_RESOURCE_RETENTION",
-                subject_type="RUNTIME_RESOURCE",
-                subject_ref=item.external_id,
-                error_code=code,
-                message=code,
-                detail={"kind": kind, "driver": driver},
-                retryable=True,
-                trace_id=trace_id,
-            )
-            if not CompensationTask.objects.filter(
-                task_type="RETRY_RUNTIME_RESOURCE_DESTROY",
-                subject_type="RUNTIME_RESOURCE",
-                subject_ref=item.external_id,
-                status__in=(
-                    CompensationTask.Status.PENDING,
-                    CompensationTask.Status.IN_FLIGHT,
-                    CompensationTask.Status.RETRY,
-                ),
-            ).exists():
-                create_compensation(
-                    task_type="RETRY_RUNTIME_RESOURCE_DESTROY",
-                    subject_type="RUNTIME_RESOURCE",
-                    subject_ref=item.external_id,
-                    payload={
-                        "external_id": item.external_id,
-                        "driver": driver,
-                        "config_ref": config_ref,
-                        "task_id": task_id,
-                    },
-                    trace_id=trace_id,
-                    max_attempts=max(
-                        1, int(getattr(settings, "RUNTIME_CLEANUP_MAX_ATTEMPTS", 10))
-                    ),
-                )
-    return {"purged": purged, "skipped": skipped, "failed": failed}
-
-
-def retry_runtime_resource_destroy_compensation(task: CompensationTask) -> None:
-    payload = dict(task.payload_masked or {})
-    task_id = str(payload.get("task_id") or "")
-    if task_id and ProvisioningInstance.objects.filter(task__public_id=task_id).exclude(
-        status=ProvisioningInstance.Status.DESTROYED
-    ).exists():
-        return
-    adapter = runtime_for_driver(
-        str(payload.get("driver") or "DOCKER_LOCAL"),
-        config_ref=str(payload.get("config_ref") or ""),
-    )
-    destroy_resource = getattr(adapter, "destroy_resource", None)
-    if not callable(destroy_resource):
-        raise RuntimeAdapterFailure("RUNTIME_RESOURCE_CLEANUP_UNSUPPORTED", retryable=False)
-    destroy_resource(
-        str(payload.get("external_id") or task.subject_ref),
-        f"resource-destroy:{payload.get('external_id') or task.subject_ref}",
-    )

@@ -8,29 +8,22 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.accounts.models import User
-from apps.accounts.permissions import IsPlatformPortal, IsTeachingPortal, IsUserPortal
+from apps.accounts.permissions import IsPlatformPortal, IsUserPortal
 from apps.accounts.security import client_ip
 from apps.core.concurrency import etag_for_version, parse_if_match
 from apps.core.idempotency import PrincipalScope, StoredResponse, execute_idempotent
 from apps.courses.services import ActorContext
 
-from .models import ReportVersion
 from .serializers import (
     GenericReportResponseSerializer,
     ReportAttachmentCreateSerializer,
     ReportAttachmentResponseSerializer,
     ReportAttachmentUploadResponseSerializer,
-    ReportPreviewResponseSerializer,
-    ReportVersionListResponseSerializer,
     attachment_data,
-    report_version_data,
-    system_artifact_data,
 )
 from .services import (
     attachment_for_user,
     create_attachment_upload,
-    report_draft_for_user,
-    report_preview_for_teaching,
     request_attachment_scan,
     scan_anomaly_summary,
 )
@@ -168,60 +161,6 @@ class UserReportAttachmentStatusView(APIView):
         asset = attachment_for_user(task_id=task_id, asset_id=asset_id, actor=request.user)
         attached = asset.report_links.exists()
         return _response(request, attachment_data(asset, attached=attached), etag=asset.row_version)
-
-
-class UserReportVersionsView(APIView):
-    permission_classes = [IsUserPortal]
-
-    @extend_schema(
-        operation_id="tasks_report_versions_list",
-        responses={200: ReportVersionListResponseSerializer},
-        tags=["reports"],
-        extensions={"x-portals": ["USER"]},
-    )
-    def get(self, request: HttpRequest, task_id: str) -> Response:
-        report_draft_for_user(task_id=task_id, actor=request.user)
-        versions = (
-            ReportVersion.objects.select_related(
-                "task",
-                "student",
-                "execution_run",
-                "execution_snapshot",
-                "execution_stdout_asset",
-                "execution_stderr_asset",
-                "execution_test_report_asset",
-            )
-            .prefetch_related("attachments__attachment__asset")
-            .filter(task__public_id=task_id, student=request.user)
-            .order_by("-version_no")
-        )
-        return _response(request, [report_version_data(row) for row in versions])
-
-
-class TeachingSubmissionPreviewView(APIView):
-    permission_classes = [IsTeachingPortal]
-
-    @extend_schema(
-        operation_id="teaching_task_submission_preview",
-        responses={200: ReportPreviewResponseSerializer},
-        tags=["reports"],
-        extensions={"x-portals": ["TEACHING"]},
-    )
-    def get(self, request: HttpRequest, course_id: str, task_id: str) -> Response:
-        preview = report_preview_for_teaching(
-            actor=request.user, course_id=course_id, task_id=task_id
-        )
-        if preview["kind"] == "REPORT":
-            version = preview["version"]
-            assert isinstance(version, ReportVersion)
-            data = {"kind": "REPORT", "task_id": task_id, "version": report_version_data(version)}
-        else:
-            data = {
-                "kind": "SYSTEM_ARTIFACT",
-                "task_id": task_id,
-                "artifact": system_artifact_data(preview["artifact"]),
-            }
-        return _response(request, data)
 
 
 class PlatformReportScanAnomaliesView(APIView):

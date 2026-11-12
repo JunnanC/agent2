@@ -136,7 +136,7 @@ SPECTACULAR_SETTINGS: dict[str, object] = {
             ("SOCRATIC_HINT", "SOCRATIC_HINT"),
             ("DEBUG_ASSIST", "DEBUG_ASSIST"),
             ("REPORT_COACH", "REPORT_COACH"),
-            ("WORKSPACE_ASSIST", "WORKSPACE_ASSIST"),
+            ("CODE_ASSIST", "CODE_ASSIST"),
         ),
         "RuntimeNetworkModeEnum": (("DENY_ALL", "Deny All"), ("ALLOWLIST", "Allowlist")),
         "RuntimeTypeEnum": (("CONTAINER", "Container"), ("VM", "Vm")),
@@ -249,14 +249,7 @@ CELERY_TASK_ROUTES = {
     "apps.integrations.*": {"queue": "q_integrations"},
     "apps.notifications.*": {"queue": "q_default"},
     "apps.experiments.*": {"queue": "q_default"},
-    "apps.workspaces.execute_workspace_storage_job": {"queue": "q_workspace_storage"},
-    "apps.workspaces.execute_workspace_execution_run": {"queue": "q_provision"},
-    "apps.workspaces.reconcile_workspace_storage_jobs": {"queue": "q_default"},
-    "apps.workspaces.*": {"queue": "q_default"},
     "apps.reports.*": {"queue": "q_provision"},
-    "apps.reviews.run_auto_check": {"queue": "q_provision"},
-    "apps.reviews.run_similarity_check": {"queue": "q_analytics"},
-    "apps.reviews.purge_similarity_evidence": {"queue": "q_default"},
 }
 NOTIFICATION_DEADLINE_REMINDER_HOURS = int(env("NOTIFICATION_DEADLINE_REMINDER_HOURS", "24"))
 CELERY_BEAT_SCHEDULE = {
@@ -278,10 +271,6 @@ CELERY_BEAT_SCHEDULE = {
     },
     "remind-unfinished-experiments": {
         "task": "apps.notifications.remind_unfinished_experiments",
-        "schedule": 60.0,
-    },
-    "scan-task-deadlines": {
-        "task": "apps.archives.scan_due_tasks",
         "schedule": 60.0,
     },
     "reconcile-archives-and-runtime": {
@@ -321,28 +310,7 @@ SIMILARITY_RETENTION_DAYS = int(env("SIMILARITY_RETENTION_DAYS", "180"))
 AUTO_CHECK_MAX_ATTEMPTS = int(
     env("AUTO_CHECK_MAX_ATTEMPTS", env("P10_AUTO_CHECK_MAX_ATTEMPTS", "3"))
 )
-WORKSPACE_TOKEN_HMAC_KEY = env("WORKSPACE_TOKEN_HMAC_KEY", SECRET_KEY)
-WORKSPACE_SESSION_TTL_SECONDS = int(env("WORKSPACE_SESSION_TTL_SECONDS", "900"))
-WORKSPACE_UPSTREAM_HMAC_KEY = env("WORKSPACE_UPSTREAM_HMAC_KEY", SECRET_KEY)
 WORKSPACE_SNAPSHOT_MAX_BYTES = int(env("WORKSPACE_SNAPSHOT_MAX_BYTES", str(20 * 1024 * 1024)))
-WORKSPACE_STORAGE_STALE_AFTER_SECONDS = max(
-    60, int(env("WORKSPACE_STORAGE_STALE_AFTER_SECONDS", "900"))
-)
-WORKSPACE_STORAGE_REDISPATCH_SECONDS = max(
-    30, int(env("WORKSPACE_STORAGE_REDISPATCH_SECONDS", "300"))
-)
-WORKSPACE_FINALIZE_TIMEOUT_SECONDS = max(
-    1, int(env("WORKSPACE_FINALIZE_TIMEOUT_SECONDS", "1200"))
-)
-WORKSPACE_VOLUME_RETENTION_SECONDS = max(
-    60, int(env("WORKSPACE_VOLUME_RETENTION_SECONDS", "900"))
-)
-WORKSPACE_SNAPSHOT_ALLOWED_MIME_TYPES = set(
-    csv_env(
-        "WORKSPACE_SNAPSHOT_ALLOWED_MIME_TYPES",
-        "text/plain,application/json,application/octet-stream,application/zip",
-    )
-)
 SSE_HEARTBEAT_SECONDS = int(env("SSE_HEARTBEAT_SECONDS", "20"))
 PUBLICATION_SYNC_LIMIT = int(
     env("PUBLICATION_SYNC_LIMIT", env("P06_PUBLICATION_SYNC_LIMIT", "100"))
@@ -408,9 +376,6 @@ if os.getenv("DJANGO_SETTINGS_MODULE", "").endswith(".prod"):
     if RUNTIME_ADAPTER_CODE not in RUNTIME_ADAPTER_CONFIGS:
         raise RuntimeError("Production runtime adapter configuration is missing")
 RUNTIME_DEFAULT_TTL_SECONDS = int(env("RUNTIME_DEFAULT_TTL_SECONDS", "14400"))
-RUNTIME_WORKSPACE_PORT = int(env("RUNTIME_WORKSPACE_PORT", "8080"))
-RUNTIME_HEALTHCHECK_PATH = env("RUNTIME_HEALTHCHECK_PATH", "/healthz")
-AUTO_PROVISION_ON_ASSIGNMENT = bool_env("AUTO_PROVISION_ON_ASSIGNMENT", default=True)
 AGENT_DEFAULT_MAX_TOKENS = int(env("AGENT_DEFAULT_MAX_TOKENS", "2048"))
 AGENT_DEFAULT_DAILY_TOKENS = int(env("AGENT_DEFAULT_DAILY_TOKENS", "100000"))
 AGENT_DEFAULT_REQUESTS_PER_MINUTE = int(env("AGENT_DEFAULT_REQUESTS_PER_MINUTE", "30"))

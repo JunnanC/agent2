@@ -91,7 +91,7 @@ class AssessmentAcceptanceTests(TestCase):
         from ..assessment import sync_assessment_status
         from ..models import ExperimentTask
 
-        for status in ("ARCHIVING", "DESTROYING", "COMPLETED", "CANCELLED", "EXPIRED"):
+        for status in ("ARCHIVING", "COMPLETED", "CANCELLED", "EXPIRED"):
             ExperimentTask.objects.filter(pk=self.task.pk).update(status=status)
             self.task.refresh_from_db()
             sync_assessment_status(self.task)

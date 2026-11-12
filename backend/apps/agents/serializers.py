@@ -22,7 +22,7 @@ class ProfileWriteSerializer(serializers.Serializer):
                 "SOCRATIC_HINT",
                 "DEBUG_ASSIST",
                 "REPORT_COACH",
-                "WORKSPACE_ASSIST",
+                "CODE_ASSIST",
             ]
         ),
         allow_empty=False,
@@ -80,7 +80,7 @@ class SessionWriteSerializer(serializers.Serializer):
             "SOCRATIC_HINT",
             "DEBUG_ASSIST",
             "REPORT_COACH",
-            "WORKSPACE_ASSIST",
+            "CODE_ASSIST",
         ]
     )
 

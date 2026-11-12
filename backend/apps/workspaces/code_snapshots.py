@@ -61,7 +61,7 @@ def create_code_snapshot(*, task: Any, question: Any, draft: Any) -> WorkspaceSn
             asset_id=asset.pk, expected_version=asset.row_version, scan_status="CLEAN",
         )
         return WorkspaceSnapshot.objects.create(
-            task=task, question=question, session=None, asset=asset,
+            task=task, question=question, asset=asset,
             version_no=version, client_seq=sequence, base_version=version - 1,
             digest_sha256=digest, size_bytes=len(content), media_type="application/gzip",
             language=draft.language, saved_at=timezone.now(), trace_id="assessment-snapshot",
@@ -77,3 +77,27 @@ def create_code_snapshot(*, task: Any, question: Any, draft: Any) -> WorkspaceSn
                 bucket=settings.MINIO_BUCKET, object_key=key, version_id=stored.version_id,
             )
         raise
+
+
+def authorize_code_download(asset: ObjectAsset, actor: Any, portal: str) -> str:
+    from apps.core.errors import ResourceNotFound
+    from apps.courses.models import CourseStaffGrant
+    from apps.courses.selectors import require_course_capability
+    snapshot = WorkspaceSnapshot.objects.select_related("task__course", "task__enrollment").filter(
+        asset=asset, task__public_id=asset.owner_ref,
+        asset__purpose="SOURCE_SNAPSHOT",
+    ).first()
+    if snapshot is None:
+        raise ResourceNotFound()
+    task = snapshot.task
+    if portal == "USER":
+        if task.student_id != actor.pk or task.enrollment.status != "ACTIVE":
+            raise ResourceNotFound()
+    elif portal == "TEACHING":
+        if not snapshot.question_submissions.exists():
+            raise ResourceNotFound()
+        require_course_capability(course=task.course, actor=actor,
+                                  capability=CourseStaffGrant.Capability.REVIEW_SUBMISSION)
+    else:
+        raise ResourceNotFound()
+    return task.course.public_id

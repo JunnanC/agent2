@@ -184,5 +184,4 @@ def can_start_session(*, session: AgentSession) -> bool:
         "CANCELLED",
         "EXPIRED",
         "ARCHIVING",
-        "DESTROYING",
     }

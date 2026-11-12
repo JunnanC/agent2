@@ -6,7 +6,6 @@ from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
 
 from apps.accounts.models import User
-from apps.core.seed_names import rename_seed_labels
 from apps.courses.models import Course
 from apps.governance.models import (
     ImageAsset,
@@ -23,7 +22,6 @@ class Command(BaseCommand):
     def handle(self, *args: object, **options: object) -> None:
         if os.getenv("APP_ENV", "") not in {"local", "integration", "test"} and not settings.DEBUG:
             raise CommandError("governance E2E seed is restricted to disposable environments")
-        rename_seed_labels()
         admin = User.objects.filter(email="admin.integration@example.edu").first()
         student = User.objects.filter(email="student.integration@example.edu").first()
         course = Course.objects.filter(code="P03-DEMO-001").first()

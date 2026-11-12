@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { teachingApi } from "@edu/api-client";
+import { assessmentTeachingApi, teachingApi } from "@edu/api-client";
 import type { Publication } from "@edu/api-client";
 import { keys } from "@edu/query-keys";
 import {
@@ -49,7 +49,7 @@ export function Home() {
       return Promise.all(targets.map(async (course) => {
         const [publications, pendingReviews, progress] = await Promise.all([
           teachingApi.publications(course.public_id, {}).catch(() => ({ rows: [], page: 1, pageSize: 20, total: 0 })),
-          teachingApi.reviews(course.public_id, { status: "PENDING" }).catch(() => ({ rows: [], page: 1, pageSize: 20, total: 0 })),
+          assessmentTeachingApi.reviews(course.public_id).then(rows => ({ rows: rows.filter(row => row.status === "SUBMITTED"), total: rows.filter(row => row.status === "SUBMITTED").length })).catch(() => ({ rows: [], total: 0 })),
           teachingApi.progress(course.public_id, {}).catch(() => ({ rows: [], page: 1, pageSize: 20, total: 0 })),
         ]);
         return { course, publications: publications.rows as Publication[], pendingReviews: pendingReviews as { rows: PendingReviewRow[]; total: number }, progress };

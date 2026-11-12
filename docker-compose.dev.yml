@@ -66,7 +66,6 @@ x-app-environment: &app-environment
   LOCAL_RUNTIME_NETWORK: ${LOCAL_RUNTIME_NETWORK:-${COMPOSE_PROJECT_NAME}-runtime}
   LOCAL_DOCKER_HOST: ${LOCAL_DOCKER_HOST:-unix:///var/run/docker.sock}
   LOCAL_RUNTIME_MODE: ${LOCAL_RUNTIME_MODE:-REAL}
-  AUTO_PROVISION_ON_ASSIGNMENT: ${AUTO_PROVISION_ON_ASSIGNMENT:-false}
   RUNTIME_ADAPTER_CONFIGS: '${RUNTIME_ADAPTER_CONFIGS:-{"runtime/local-docker":{"pids_limit":256}}}'
 
 x-backend-build: &backend-build

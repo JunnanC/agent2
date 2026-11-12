@@ -3,73 +3,47 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { ToastProvider } from "@edu/ui";
+import { assessmentTeachingApi } from "@edu/api-client";
 import { Reviews } from "./reviews";
 
-const api = vi.hoisted(() => ({
-  reviews: vi.fn(), review: vi.fn(), aiScoreBatches: vi.fn(), aiScoreSuggestion: vi.fn(),
-  startAIScoreBatch: vi.fn(), acceptAIScoreSuggestion: vi.fn(), saveCriterionScores: vi.fn(),
-}));
-vi.mock("@edu/api-client", () => ({ teachingApi: api }));
-
-const summary = { public_id: "review", publication_id: "publication", student_name: "Student",
-  publication_title: "Experiment", status: "PENDING", row_version: "7" };
-const suggestion = { public_id: "suggestion", review_row_version: 7, status: "READY", criteria: [
-  { criterion_id: "correct", score: "55", rationale: "Source supports the result", evidence: "print(42)" },
-] };
-let client: QueryClient;
+vi.mock("@edu/api-client", () => ({ assessmentTeachingApi: {
+  reviews: vi.fn(), review: vi.fn(), saveReview: vi.fn(), reportSuggestion: vi.fn(),
+} }));
+afterEach(cleanup);
 beforeEach(() => {
   vi.resetAllMocks();
-  api.reviews.mockResolvedValue({ total: 1, rows: [summary] });
-  api.review.mockResolvedValue({ ...summary, rubric: { criteria: [
-    { public_id: "correct", title: "Correctness", max_score: "60", score: null },
-  ] }, project: { language: "python", snapshot_id: "frozen", guidance: {}, files: [
-    { path: "main.py", content: "print(42)", truncated: false },
-  ] } });
-  api.aiScoreBatches.mockResolvedValue([{ public_id: "batch" }]);
-  api.aiScoreSuggestion.mockResolvedValue(suggestion);
-  api.acceptAIScoreSuggestion.mockResolvedValue({});
-  api.saveCriterionScores.mockResolvedValue({});
-  client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  vi.mocked(assessmentTeachingApi.reviews).mockResolvedValue([{ task_id: "task", student_name: "学生", title: "实验", version_no: 2, status: "SUBMITTED" }]);
+  vi.mocked(assessmentTeachingApi.review).mockResolvedValue({ student_name: "学生", sections: [{ kind: "PROGRAMMING", status: "SUBMITTED", submission_version: 2, row_version: 7, questions: [], grading_status: "COMPLETED" }], sources: [], report: { body_markdown: "固定报告" }, report_criteria: [{ id: "criterion", title: "分析", max_score: "10" }] } as never);
+  vi.mocked(assessmentTeachingApi.reportSuggestion).mockResolvedValue({ submission_version: 2, criteria: [{ criterion_id: "criterion", score: "9", rationale: "依据", evidence: "报告" }] });
 });
-afterEach(() => { cleanup(); client.clear(); });
-
-async function openReview() {
-  render(<QueryClientProvider client={client}><ToastProvider>
-    <MemoryRouter initialEntries={["/courses/course/reviews"]}><Routes>
-      <Route path="/courses/:courseId/reviews" element={<Reviews />} />
-    </Routes></MemoryRouter>
-  </ToastProvider></QueryClientProvider>);
-  fireEvent.click(await screen.findByRole("button", { name: "开始评审" }));
+async function show() {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(<QueryClientProvider client={client}><ToastProvider><MemoryRouter initialEntries={["/courses/course/publishing/pub/reviews"]}><Routes>
+    <Route path="/courses/:courseId/publishing/:publicationId/reviews" element={<Reviews />} />
+  </Routes></MemoryRouter></ToastProvider></QueryClientProvider>);
+  await screen.findByRole("option", { name: /学生 · 实验/ });
+  const select = screen.getByRole("combobox") as HTMLSelectElement;
+  select.value = "task";
+  fireEvent.change(select);
+  expect(select.value).toBe("task");
+  await waitFor(() => expect(assessmentTeachingApi.review).toHaveBeenCalledWith("course", "task"));
+  await screen.findByText("固定报告");
 }
-
-it("shows frozen source and waits for explicit teacher adoption", async () => {
-  await openReview();
-  expect(await screen.findByText("main.py")).toBeInTheDocument();
-  expect(await screen.findByText("Source supports the result")).toBeInTheDocument();
-  expect(api.acceptAIScoreSuggestion).not.toHaveBeenCalled();
-  expect(screen.getByRole("spinbutton")).toHaveValue(null);
-  fireEvent.click(screen.getByRole("button", { name: "采纳此份建议评分" }));
-  await waitFor(() => expect(api.acceptAIScoreSuggestion)
-    .toHaveBeenCalledWith("course", "review", "suggestion", "7"));
+it("按发布筛选交卷，AI 建议需教师确认保存", async () => {
+  await show();
+  expect(assessmentTeachingApi.reviews).toHaveBeenCalledWith("course", "pub");
+  fireEvent.click(screen.getByRole("button", { name: "获取报告 AI 建议" }));
+  fireEvent.click(await screen.findByRole("button", { name: "填入建议，人工核对后保存" }));
+  expect(assessmentTeachingApi.saveReview).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "保存报告评分" }));
+  await waitFor(() => expect(assessmentTeachingApi.saveReview).toHaveBeenCalledWith("course", "task", {
+    submission_version: 2, scores: { criterion: "9" }, feedback: "",
+  }, 7));
 });
-
-it("disables stale advice while leaving manual scoring available", async () => {
-  api.aiScoreSuggestion.mockResolvedValue({ ...suggestion, review_row_version: 6 });
-  await openReview();
-  expect(await screen.findByText("评审已更新，请重新生成建议。")).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "采纳此份建议评分" })).toBeDisabled();
-  fireEvent.change(screen.getByRole("spinbutton"), { target: { value: "58" } });
-  fireEvent.click(screen.getByRole("button", { name: "保存评分" }));
-  await waitFor(() => expect(api.saveCriterionScores).toHaveBeenCalledWith(
-    "course", "review", { scores: [{ criterion_id: "correct", score: 58 }] }, "7",
-  ));
-});
-
-it("keeps manual scoring available after provider failure", async () => {
-  api.aiScoreSuggestion.mockResolvedValue({ ...suggestion, status: "FAILED", criteria: [] });
-  await openReview();
-  expect(await screen.findByText("生成失败，可人工评分")).toBeInTheDocument();
-  expect(screen.queryByRole("button", { name: "采纳此份建议评分" })).not.toBeInTheDocument();
-  fireEvent.change(screen.getByRole("spinbutton"), { target: { value: "52" } });
-  expect(screen.getByRole("button", { name: "保存评分" })).toBeEnabled();
+it("AI 失败仍可人工填写报告分", async () => {
+  vi.mocked(assessmentTeachingApi.reportSuggestion).mockRejectedValue(new Error("offline"));
+  await show();
+  fireEvent.click(screen.getByRole("button", { name: "获取报告 AI 建议" }));
+  expect(await screen.findByText("报告 AI 建议暂不可用，请人工评分")).toBeInTheDocument();
+  expect(screen.getByRole("spinbutton")).toBeEnabled();
 });

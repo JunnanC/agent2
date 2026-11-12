@@ -120,9 +120,9 @@ export interface RequestOptions {
   query?: Record<string, string | number | boolean | null | undefined>;
   signal?: AbortSignal;
   accept?: string;
-  /** 额外请求头（工作区链路需要 X-Workspace-Token），不要用它覆盖认证头 */
+  /** 额外请求头；不要用它覆盖认证头 */
   headers?: Record<string, string>;
-  /** 覆盖默认的 /api/v2 前缀（工作区网关挂在站点根 /workspace 下时传 ""） */
+  /** 覆盖默认的 /api/v2 前缀，用于授权文件等独立入口 */
   prefix?: string;
 }
 

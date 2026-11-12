@@ -21,15 +21,11 @@ from .assessment_models import (  # noqa: F401 - register assessment models with
 
 TASK_STATUS_VALUES = (
     "ASSIGNED",
-    "PROVISIONING",
-    "READY",
     "IN_PROGRESS",
     "REPORT_DRAFT",
     "UNDER_REVIEW",
     "APPROVED",
-    "REJECTED",
     "ARCHIVING",
-    "DESTROYING",
     "COMPLETED",
     "CANCELLED",
     "EXPIRED",
@@ -93,7 +89,6 @@ class TaskPublication(VersionedModel):
     publication_digest = models.CharField(
         max_length=64, null=True, blank=True, db_collation="ascii_bin"
     )
-    execution_spec = models.JSONField(default=dict, blank=True)
     runtime_adapter = models.ForeignKey(
         RuntimeAdapter,
         on_delete=models.PROTECT,
@@ -378,15 +373,11 @@ class PublicationPrerequisite(AppendOnlyModel):
 class ExperimentTask(VersionedModel):
     class Status(models.TextChoices):
         ASSIGNED = "ASSIGNED"
-        PROVISIONING = "PROVISIONING"
-        READY = "READY"
         IN_PROGRESS = "IN_PROGRESS"
         REPORT_DRAFT = "REPORT_DRAFT"
         UNDER_REVIEW = "UNDER_REVIEW"
         APPROVED = "APPROVED"
-        REJECTED = "REJECTED"
         ARCHIVING = "ARCHIVING"
-        DESTROYING = "DESTROYING"
         COMPLETED = "COMPLETED"
         CANCELLED = "CANCELLED"
         EXPIRED = "EXPIRED"
@@ -408,12 +399,9 @@ class ExperimentTask(VersionedModel):
         TemplateVersion, on_delete=models.PROTECT, related_name="experiment_tasks"
     )
     runtime_type = models.CharField(max_length=16)
-    # Nullable for historical FakeRuntime rows. New tasks always get
-    # these values from the publication snapshot at assignment time.
     template_spec_digest = models.CharField(
         max_length=64, null=True, blank=True, db_collation="ascii_bin"
     )
-    execution_spec = models.JSONField(default=dict, blank=True)
     runtime_adapter = models.ForeignKey(
         RuntimeAdapter,
         on_delete=models.PROTECT,
@@ -449,7 +437,6 @@ class ExperimentTask(VersionedModel):
     effective_deadline = models.DateTimeField(null=True, blank=True)
     current_failure = models.JSONField(default=dict, blank=True)
     started_at = models.DateTimeField(null=True, blank=True)
-    ready_at = models.DateTimeField(null=True, blank=True)
     entered_at = models.DateTimeField(null=True, blank=True)
     submitted_at = models.DateTimeField(null=True, blank=True)
     reviewed_at = models.DateTimeField(null=True, blank=True)

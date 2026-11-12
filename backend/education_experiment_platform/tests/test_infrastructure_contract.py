@@ -207,7 +207,6 @@ def test_local_runtime_docker_access_is_scoped_to_runtime_worker() -> None:
     assert environment["RUNTIME_MODE"] == "${RUNTIME_MODE:-local}"
     assert environment["RUNTIME_ADAPTER_CODE"] == "${RUNTIME_ADAPTER_CODE:-runtime/local-docker}"
     assert environment["LOCAL_RUNTIME_MODE"] == "${LOCAL_RUNTIME_MODE:-REAL}"
-    assert environment["AUTO_PROVISION_ON_ASSIGNMENT"] == ("${AUTO_PROVISION_ON_ASSIGNMENT:-false}")
     assert environment["LOCAL_RUNTIME_IMAGE"] == (
         "${LOCAL_RUNTIME_IMAGE:-experimental-platform-stdio:local}"
     )
@@ -292,24 +291,11 @@ def test_core_splits_migration_and_runtime_database_accounts() -> None:
         assert f"GRANT SELECT, INSERT ON \\`${{MYSQL_DATABASE}}\\`.{table}" in bootstrap
 
 
-def test_workspaces_runtime_database_grants_workspace_append_only_tables_read_insert_only() -> None:
-    bootstrap = (ROOT / "infrastructure/mysql/configure-users.sh").read_text(encoding="utf-8")
-    assert (
-        "GRANT SELECT, INSERT, UPDATE ON \\`${MYSQL_DATABASE}\\`.workspaces_workspace_session"
-        in bootstrap
-    )
-    for table in (
-        "workspaces_workspace_snapshot",
-        "workspaces_workspace_autosave_log",
-        "workspaces_workspace_checkpoint",
-        "workspaces_operation_event",
-    ):
-        assert f"GRANT SELECT, INSERT ON \\`${{MYSQL_DATABASE}}\\`.{table}" in bootstrap
-        assert f"GRANT SELECT, INSERT, UPDATE ON \\`${{MYSQL_DATABASE}}\\`.{table}" not in bootstrap
-    assert (
-        "GRANT SELECT, INSERT, UPDATE ON \\`${MYSQL_DATABASE}\\`.workspaces_execution_run"
-        " TO '${MYSQL_APP_USER}'@'%'" in bootstrap
-    )
+def test_retired_tables_have_no_grants() -> None:
+    grants = runtime_table_grants()
+    assert grants["workspaces_workspace_snapshot"] == {"SELECT", "INSERT"}
+    for table in ("workspaces_workspace_session", "provisioning_instance", "reviews_review"):
+        assert table not in grants
 
 
 def test_reports_runtime_database_grants_reports_and_download_grants_least_privilege() -> None:
@@ -325,7 +311,6 @@ def test_reports_runtime_database_grants_reports_and_download_grants_least_privi
         "reports_report_attachment",
         "reports_report_version",
         "reports_report_version_attachment",
-        "reports_system_artifact",
     ):
         assert f"GRANT SELECT, INSERT ON \\`${{MYSQL_DATABASE}}\\`.{table}" in bootstrap
         assert f"GRANT SELECT, INSERT, UPDATE ON \\`${{MYSQL_DATABASE}}\\`.{table}" not in bootstrap
@@ -337,49 +322,10 @@ def test_reports_runtime_database_grants_reports_and_download_grants_least_privi
     }
 
 
-def test_reviews_runtime_database_grants_keep_review_history_append_only() -> None:
-    bootstrap = (ROOT / "infrastructure/mysql/configure-users.sh").read_text(encoding="utf-8")
-    compose = (ROOT / "docker-compose.dev.yml").read_text(encoding="utf-8")
-    for variable in ("MODEL_NAME", "BASE_URL", "API_KEY", "TIMEOUT_SECONDS"):
-        assert f"RUBRIC_AI_{variable}: ${{RUBRIC_AI_{variable}:-" in compose
-    config = load_yaml("docker-compose.dev.yml")
-    assert "default" in config["services"]["celery"]["networks"]
-    assert config["networks"]["runtime"]["internal"] is True
-    assert "default" not in config["services"]["runtime-worker"]["networks"]
-    for table in (
-        "reviews_review",
-        "reviews_ai_score_batch",
-        "reviews_ai_score_suggestion",
-        "reviews_criterion_score",
-        "reviews_review_annotation",
-        "reviews_auto_check_run",
-        "reviews_similarity_run",
-        "reviews_similarity_match",
-    ):
-        assert rf"GRANT SELECT, INSERT, UPDATE ON \`${{MYSQL_DATABASE}}\`.{table}" in bootstrap
-    for table in (
-        "reviews_criterion_score_event",
-        "reviews_review_decision",
-        "reviews_annotation_revision",
-    ):
-        assert rf"GRANT SELECT, INSERT ON \`${{MYSQL_DATABASE}}\`.{table}" in bootstrap
-        assert rf"GRANT SELECT, INSERT, UPDATE ON \`${{MYSQL_DATABASE}}\`.{table}" not in bootstrap
-
-
-def test_archives_archive_permissions_and_scheduler_are_least_privilege() -> None:
-    bootstrap = (ROOT / "infrastructure/mysql/configure-users.sh").read_text(encoding="utf-8")
-    assert (
-        r"GRANT SELECT, INSERT, UPDATE ON \`${MYSQL_DATABASE}\`.archives_archive_job" in bootstrap
-    )
-    for table in (
-        "archives_archive_manifest",
-        "archives_archive_verification",
-        "archives_export_grant",
-    ):
-        assert rf"GRANT SELECT, INSERT ON \`${{MYSQL_DATABASE}}\`.{table}" in bootstrap
-        assert rf"GRANT SELECT, INSERT, UPDATE ON \`${{MYSQL_DATABASE}}\`.{table}" not in bootstrap
-    compose = load_yaml("docker-compose.dev.yml")
-    assert compose["services"]["celery-beat"]["command"][3] == "beat"
+def test_rubric_and_report_grants() -> None:
+    grants = runtime_table_grants()
+    assert grants["reviews_rubric"] == {"SELECT", "INSERT", "UPDATE"}
+    assert grants["reports_report_version"] == {"SELECT", "INSERT"}
 
 
 def test_workbench_new_experiment_tables_are_available_to_the_application_user() -> None:
@@ -390,7 +336,6 @@ def test_workbench_new_experiment_tables_are_available_to_the_application_user()
         "labtemplates_template_task",
         "labtemplates_experiment_image",
         "labtemplates_image_build_job",
-        "labtemplates_legacy_template_migration",
         "provisioning_runtime_capacity_reservation",
     )
     append_only_tables = (

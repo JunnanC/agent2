@@ -6,8 +6,6 @@ from pymongo import MongoClient
 
 from apps.core.models import CompensationTask, OutboxDelivery
 from apps.governance.models import QuotaReservation, RuntimeAdapter
-from apps.provisioning.models import ProvisioningInstance
-from apps.provisioning.tasks import collect_runtime_inventory
 
 from .metrics import RUNTIME_LOG_HEALTH, RUNTIME_LOG_QUERIES
 
@@ -50,14 +48,11 @@ def runtime_logs_health() -> dict[str, object]:
 
 
 def operations_summary(*, trace_id: str = "") -> dict[str, Any]:
-    try:
-        inventory = collect_runtime_inventory.delay(trace_id).get(timeout=15)
-    except Exception:
-        logger.exception("runtime inventory worker unavailable", extra={"trace_id": trace_id})
-        inventory = {
-            "status": "UNAVAILABLE", "drivers": [], "inventory": {}, "orphans": {},
-            "error_code": "RUNTIME_INVENTORY_WORKER_UNAVAILABLE", "trace_id": trace_id,
-        }
+    from apps.experiments.models import AssessmentRun, QuestionGrade
+    inventory = {"runs": {status: AssessmentRun.objects.filter(status=status).count()
+                          for status in ("PENDING", "RUNNING", "RETRY", "COMPLETED")},
+                 "grades": {status: QuestionGrade.objects.filter(status=status).count()
+                            for status in ("PENDING", "RUNNING", "RETRY", "COMPLETED")}}
     return {
         "outbox": {
             status: OutboxDelivery.objects.filter(status=status).count()
@@ -66,10 +61,6 @@ def operations_summary(*, trace_id: str = "") -> dict[str, Any]:
         "compensations": {
             status: CompensationTask.objects.filter(status=status).count()
             for status, _ in CompensationTask.Status.choices
-        },
-        "instances": {
-            status: ProvisioningInstance.objects.filter(status=status).count()
-            for status, _ in ProvisioningInstance.Status.choices
         },
         "reservations": {
             status: QuotaReservation.objects.filter(status=status).count()
@@ -95,8 +86,6 @@ def _alerts(inventory: dict[str, Any] | None = None) -> list[dict[str, str]]:
             "code": "COMPENSATION_DEAD",
             "message": "存在 DEAD 补偿任务",
         })
-    if ProvisioningInstance.objects.filter(status=ProvisioningInstance.Status.ORPHANED).exists():
-        alerts.append({"severity": "P1", "code": "ORPHAN_INSTANCE", "message": "发现孤儿运行实例"})
     runtime = inventory or {}
     if runtime.get("status") == "UNAVAILABLE":
         alerts.append(

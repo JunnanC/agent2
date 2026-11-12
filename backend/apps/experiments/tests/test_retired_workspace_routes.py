@@ -9,6 +9,11 @@ from django.urls import Resolver404, resolve
     "tasks/task/workspace-snapshot", "tasks/task/workspace-storage-jobs",
     "tasks/task/checkpoints", "tasks/task/execution-runs", "tasks/task/provisioning-job",
     "platform/workspaces/sessions", "student/task-runtimes/runtime/stop",
+    "teaching/courses/course/reviews", "teaching/courses/course/ai-score-batches",
+    "teaching/courses/course/similarity-runs", "tasks/task/review-result",
+    "platform/reviews/summary", "platform/instances",
+    "teaching/courses/course/template-versions/version/auto-check-rules",
+    "teaching/courses/course/template-versions/version/execution-spec",
     "tasks/task/report-draft", "tasks/task/submit-report", "tasks/task/complete",
 ])
 def test_retired_workspace_api_is_not_routed(path: str) -> None:

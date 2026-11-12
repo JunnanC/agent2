@@ -7,9 +7,7 @@ from .choice_import_views import (
     ChoiceImportTemplateView,
 )
 from .views import (
-    AutoCheckRuleView,
     CloneVersionView,
-    ExecutionSpecSaveView,
     ExperimentImageCollectionView,
     ExperimentImageDetailView,
     ExperimentImageEventsView,
@@ -103,10 +101,6 @@ urlpatterns = [
         TemplateVersionDetailView.as_view(),
     ),
     path(
-        "teaching/courses/<str:course_id>/template-versions/<str:version_id>/auto-check-rules",
-        AutoCheckRuleView.as_view(),
-    ),
-    path(
         "teaching/courses/<str:course_id>/template-versions/<str:version_id>/chapters",
         TemplateChapterCollectionView.as_view(),
     ),
@@ -133,10 +127,6 @@ urlpatterns = [
     path(
         "teaching/courses/<str:course_id>/template-versions/<str:version_id>/precheck",
         PrecheckView.as_view(),
-    ),
-    path(
-        "teaching/courses/<str:course_id>/template-versions/<str:version_id>/execution-spec",
-        ExecutionSpecSaveView.as_view(),
     ),
     path(
         "teaching/courses/<str:course_id>/template-versions/<str:version_id>/precheck-runs",

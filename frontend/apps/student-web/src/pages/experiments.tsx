@@ -9,7 +9,6 @@ import { formatDateTime, taskStatusLabel, taskStatusTone } from "@/lib/task-form
 const STATUS_FILTERS = [
   { value: "all", label: "全部状态" },
   { value: "ASSIGNED", label: "待开始" },
-  { value: "PROVISIONING", label: "准备环境" },
   { value: "READY", label: "已准备" },
   { value: "IN_PROGRESS", label: "进行中" },
   { value: "REPORT_DRAFT", label: "报告草稿" },

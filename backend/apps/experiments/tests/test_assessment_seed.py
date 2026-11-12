@@ -7,7 +7,7 @@ from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.test import TestCase, override_settings
 
-from apps.core.demo.stubs import InMemoryObjectStorage
+from apps.core.tests.storage import InMemoryObjectStorage
 from apps.governance.models import RuntimeAdapter
 from apps.labtemplates.models import Template, TemplateTask
 

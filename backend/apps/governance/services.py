@@ -387,6 +387,18 @@ def record_runtime_health(
     ):
         raise GovernanceValidationError(detail={"capacity": "available_exceeds_total"})
     previous = adapter.health_status
+    if adapter.driver == "DOCKER_LOCAL":
+        from django.db.models import Sum
+
+        from apps.provisioning.models import RuntimeCapacityReservation
+
+        used = RuntimeCapacityReservation.objects.filter(
+            runtime_adapter=adapter, status="ACTIVE",
+        ).aggregate(cpu=Sum("cpu_millicores"), memory=Sum("memory_mb"))
+        available_cpu_millicores = max(
+            0, available_cpu_millicores - (used["cpu"] or 0),
+        )
+        available_memory_mb = max(0, available_memory_mb - (used["memory"] or 0))
     changed = compare_and_swap(
         RuntimeAdapter,
         pk=adapter.pk,
@@ -566,7 +578,6 @@ def decide_image(
 _IMAGE_RESOLVE_DRIVER_PRIORITY = (
     RuntimeAdapter.Driver.DOCKER_LOCAL,
     RuntimeAdapter.Driver.DOCKER_SWARM,
-    RuntimeAdapter.Driver.FAKE,
 )
 
 
@@ -1273,17 +1284,17 @@ def release_reservation(
 
 
 def _validate_security_rules(rules: dict[str, Any]) -> dict[str, Any]:
-    required = {"default_egress", "allow_privileged", "require_workspace_gateway"}
+    required = {"default_egress", "allow_privileged", "require_execution_isolation"}
     if not required.issubset(rules):
         raise GovernanceValidationError(detail={"rules": "security_shape_invalid"})
     if rules["default_egress"] not in {"DENY_ALL", "ALLOWLIST"}:
         raise GovernanceValidationError(detail={"default_egress": rules["default_egress"]})
-    if rules["allow_privileged"] is not False or rules["require_workspace_gateway"] is not True:
+    if rules["allow_privileged"] is not False or rules["require_execution_isolation"] is not True:
         raise GovernanceValidationError(detail={"rules": "isolation_cannot_be_disabled"})
     return {
         "default_egress": rules["default_egress"],
         "allow_privileged": False,
-        "require_workspace_gateway": True,
+        "require_execution_isolation": True,
     }
 
 

@@ -17,7 +17,6 @@ export function Resources() {
   const profiles = useQuery({ queryKey: keys.resourceProfiles({}), queryFn: () => platformApi.resourceProfiles({}) });
   const adapters = useQuery({ queryKey: keys.runtimeAdapters({}), queryFn: () => platformApi.runtimeAdapters() });
   const quotas = useQuery({ queryKey: keys.quotas({}), queryFn: () => platformApi.quotas({}) });
-  const instances = useQuery({ queryKey: keys.instances({ status: "ACTIVE" }), queryFn: () => platformApi.instances({ status: "ACTIVE", page_size: 1 }) });
 
   const decideImage = useMutation({
     mutationFn: (input: { target: PlatformImage; decision: "approve" | "reject" }) =>
@@ -34,9 +33,7 @@ export function Resources() {
   const profileRows = (profiles.data?.rows ?? []) as ResourceProfile[];
   const adapterRows = (adapters.data?.rows ?? []) as RuntimeAdapter[];
   const quotaRows = (quotas.data?.rows ?? []) as Quota[];
-  const instanceTotal = typeof instances.data?.total === "number"
-    ? instances.data?.total
-    : (instances.data?.rows.length ?? 0);
+
 
   const approvedImages = imageRows.filter((image) => image.approval_status === "APPROVED" && image.scan_status === "CLEAN").length;
   const pendingImages = imageRows.filter((image) => image.approval_status !== "APPROVED").length;
@@ -55,7 +52,7 @@ export function Resources() {
       <div className="page-actions align-end">
         <Link className="btn" to="/governance">查看治理告警</Link>
         <button type="button" className="btn primary"
-          onClick={() => { void images.refetch(); void adapters.refetch(); void quotas.refetch(); void instances.refetch(); }}
+          onClick={() => { void images.refetch(); void adapters.refetch(); void quotas.refetch(); }}
           aria-label="刷新巡检列表">
           刷新巡检
         </button>
@@ -67,7 +64,6 @@ export function Resources() {
           onRetry={() => { void images.refetch(); void adapters.refetch(); }}
           empty={false} emptyState={null}>
           <div className="metric-strip">
-            <Metric label="运行中实例" value={instanceTotal ? String(instanceTotal) : "—"} icon="boxes" sub="当前活跃实例" />
             <Metric label="已治理镜像" value={String(approvedImages)} icon="boxes" sub="全部通过扫描" />
             <Metric label="配额预警" value={String(quotaAlerts)} icon="gauge" sub="使用率超过 80%" />
           </div>
