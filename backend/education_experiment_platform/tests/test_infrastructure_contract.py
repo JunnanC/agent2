@@ -145,6 +145,21 @@ def test_retired_workspace_edge_has_no_proxy_or_services() -> None:
         assert "workspace_internal_key" not in config.get("secrets", {})
 
 
+def test_deployment_has_no_retired_storage_worker_configuration() -> None:
+    retired = {
+        "WORKSPACE_STORAGE_STALE_AFTER_SECONDS", "WORKSPACE_STORAGE_REDISPATCH_SECONDS",
+        "WORKSPACE_FINALIZE_TIMEOUT_SECONDS", "WORKSPACE_VOLUME_RETENTION_SECONDS",
+    }
+    for path in ("docker-compose.dev.yml", "infrastructure/swarm/stack.yml"):
+        environment = load_yaml(path)["x-app-environment"]
+        assert not retired & environment.keys()
+        assert environment["LOCAL_RUNTIME_IMAGE"] == (
+            "${LOCAL_RUNTIME_IMAGE:-experimental-platform-stdio:local}"
+        )
+    example = (ROOT / ".env.example").read_text(encoding="utf-8")
+    assert "WORKSPACE_STORAGE_WORKER_CONCURRENCY=" not in example
+
+
 def test_assessment_deployment_keeps_dispatch_and_scanning_requirements() -> None:
     deploy = (ROOT / "scripts/cd/deploy.sh").read_text(encoding="utf-8")
     assert "managed=(django celery runtime-worker celery-beat log-ingest)" in deploy
