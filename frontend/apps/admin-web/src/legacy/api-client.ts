@@ -78,7 +78,6 @@ export type CompensationData = { public_id: string; task_type: string; subject_t
 export type CompensationListResponse = { data: CompensationData[] };
 export type InstanceData = { public_id: string; external_id: string; task_id: string | null; course_id: string | null; status: string; external_status: string; orphan: boolean; resource_leak: boolean; row_version: number };
 export type InstanceListResponse = { data: InstanceData[] };
-export type WorkspaceSessionData = any;
 export type PlatformPrecheckSummaryResponse = any;
 export type AllowlistData = any;
 export type AllowlistListResponse = any;

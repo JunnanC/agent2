@@ -98,25 +98,6 @@ services:
               remove: { headers: [X-Portal, X-Auth-Context, X-Client-Id, X-Scopes, X-Proxy-Context] }
               add: { headers: ["X-Portal:USER", "X-Proxy-Context:ingress-v1"] }
 
-  # Keep the historical service identifier for protocol timeout contracts;
-  # the upstream is the dedicated gateway process, never Django or a runtime.
-  - name: django-workspace
-    url: http://workspace-gateway:8080
-    connect_timeout: 5000
-    read_timeout: 600000
-    write_timeout: 600000
-    retries: 0
-    routes:
-      - name: student-workspace
-        hosts: [student.localhost, student.example.edu]
-        paths: [/workspace]
-        strip_path: false
-        preserve_host: true
-        plugins:
-          - name: request-transformer
-            config:
-              remove: { headers: [X-Portal, X-Auth-Context, X-Client-Id, X-Scopes, X-Proxy-Context] }
-              add: { headers: ["X-Portal:USER", "X-Proxy-Context:ingress-v1"] }
   - name: django-files
     url: http://django:8000
     connect_timeout: 5000

@@ -1,4 +1,3 @@
-from django.conf import settings
 from rest_framework import serializers
 
 from apps.core.models import ObjectAsset
@@ -6,7 +5,6 @@ from apps.core.models import ObjectAsset
 from .errors import TemplateValidationError
 from .image_services import normalize_image_reference
 from .models import (
-    AutoCheckRule,
     ExperimentImage,
     Template,
     TemplateChapter,
@@ -14,37 +12,6 @@ from .models import (
     TemplateTask,
     TemplateVersion,
 )
-
-
-class ExecutionMaterialSerializer(serializers.Serializer):
-    asset_id = serializers.CharField(max_length=26)
-    role = serializers.ChoiceField(choices=("STUDENT_FILES", "HIDDEN_SOURCE", "PUBLIC_DATA"))
-
-
-class ExecutionSpecSerializer(serializers.Serializer):
-    schema_version = serializers.ChoiceField(choices=(2,), required=False)
-    language = serializers.ChoiceField(
-        choices=("c", "cpp", "java", "python", "go"), allow_null=True
-    )
-    toolchain_version = serializers.CharField(
-        max_length=32, required=False, allow_null=True, allow_blank=True
-    )
-    language_standard = serializers.CharField(
-        max_length=16, required=False, allow_null=True, allow_blank=True
-    )
-    toolchain = serializers.DictField(required=False)
-    materials = ExecutionMaterialSerializer(many=True, required=False)
-    entrypoint = serializers.CharField(max_length=255, allow_null=True, allow_blank=True)
-    timeout_seconds = serializers.IntegerField(
-        min_value=1, max_value=settings.TEMPLATE_CHECK_TIMEOUT_MAX_SECONDS
-    )
-    memory_mb = serializers.IntegerField(min_value=1)
-    cpu_millicores = serializers.IntegerField(min_value=1)
-    comparator = serializers.ChoiceField(choices=("token", "numeric"))
-    absolute_tolerance = serializers.FloatField(min_value=0, required=False)
-    relative_tolerance = serializers.FloatField(min_value=0, required=False)
-    tests_asset = serializers.CharField(max_length=26)
-    network_mode = serializers.ChoiceField(choices=("DENY_ALL",))
 
 
 class TemplateWriteSerializer(serializers.Serializer):
@@ -61,13 +28,11 @@ class TemplatePatchSerializer(serializers.Serializer):
 
 class TemplateVersionWriteSerializer(serializers.Serializer):
     runtime_type = serializers.ChoiceField(choices=("CONTAINER", "VM"), required=False)
-    runtime_adapter_id = serializers.CharField(max_length=26, required=False)
-    image_id = serializers.CharField(max_length=26, required=False)
-    resource_profile_id = serializers.CharField(max_length=26, required=False)
+    runtime_adapter_id = serializers.CharField(max_length=26, required=False, allow_null=True)
+    image_id = serializers.CharField(max_length=26, required=False, allow_null=True)
+    resource_profile_id = serializers.CharField(max_length=26, required=False, allow_null=True)
     dependencies = serializers.ListField(child=serializers.DictField(), required=False)
-    execution_spec = ExecutionSpecSerializer(required=False)
     network_policy = serializers.DictField(required=False)
-    workspace_capabilities = serializers.DictField(required=False)
     material_version_ids = serializers.ListField(
         child=serializers.CharField(max_length=26), required=False
     )
@@ -79,36 +44,7 @@ class TemplateVersionWriteSerializer(serializers.Serializer):
         unknown = set(self.initial_data) - set(self.fields)
         if unknown:
             raise serializers.ValidationError({"unknown": sorted(unknown)})
-        execution_spec = self.initial_data.get("execution_spec")
-        if isinstance(execution_spec, dict):
-            spec_unknown = set(execution_spec) - {
-                "schema_version", "language", "toolchain_version", "language_standard", "toolchain",
-                "materials",
-                "entrypoint", "timeout_seconds", "memory_mb", "cpu_millicores",
-                "comparator", "absolute_tolerance", "relative_tolerance", "tests_asset",
-                "network_mode",
-            }
-            if spec_unknown:
-                raise serializers.ValidationError(
-                    {"execution_spec": {"unknown": sorted(spec_unknown)}}
-                )
         return attrs
-
-
-class AutoCheckRuleWriteSerializer(serializers.Serializer):
-    position = serializers.IntegerField(min_value=1)
-    checker_type = serializers.RegexField(r"^[A-Za-z][A-Za-z0-9_]{0,63}$")
-    input_schema = serializers.DictField()
-    output_schema = serializers.DictField()
-    timeout_seconds = serializers.IntegerField(min_value=1)
-    resource_limit = serializers.DictField()
-    network_policy = serializers.DictField()
-    display_policy = serializers.DictField()
-    failure_semantics = serializers.DictField()
-
-
-class AutoCheckRulesWriteSerializer(serializers.Serializer):
-    rules = AutoCheckRuleWriteSerializer(many=True)
 
 
 class TemplateChapterWriteSerializer(serializers.Serializer):
@@ -127,45 +63,16 @@ class TemplateTaskWriteSerializer(serializers.Serializer):
     task_type = serializers.CharField(max_length=64, required=False)
     sort_order = serializers.IntegerField(min_value=1, required=False)
     status = serializers.ChoiceField(choices=TemplateTask.Status.choices, required=False)
-    execution_spec = serializers.DictField(required=False)
     resource_profile_id = serializers.CharField(max_length=26, required=False, allow_null=True)
     submission_policy = serializers.DictField(required=False)
     grading_policy = serializers.DictField(required=False)
+    question_spec = serializers.DictField(required=False)
+    marking_spec = serializers.DictField(required=False)
+    max_score = serializers.DecimalField(max_digits=7, decimal_places=2, required=False)
 
 
 class ReorderWriteSerializer(serializers.Serializer):
     ids = serializers.ListField(child=serializers.CharField(max_length=26), allow_empty=False)
-
-
-class ExecutionSpecSaveSerializer(serializers.Serializer):
-    tests_json = serializers.CharField()
-    schema_version = serializers.ChoiceField(choices=(2,), required=False)
-    language = serializers.ChoiceField(
-        choices=("c", "cpp", "java", "python", "go"), allow_null=True
-    )
-    toolchain_version = serializers.CharField(
-        max_length=32, required=False, allow_null=True, allow_blank=True
-    )
-    language_standard = serializers.CharField(
-        max_length=16, required=False, allow_null=True, allow_blank=True
-    )
-    materials = ExecutionMaterialSerializer(many=True, required=False)
-    entrypoint = serializers.CharField(max_length=255, allow_null=True, allow_blank=True)
-    timeout_seconds = serializers.IntegerField(
-        min_value=1, max_value=settings.TEMPLATE_CHECK_TIMEOUT_MAX_SECONDS
-    )
-    memory_mb = serializers.IntegerField(min_value=1)
-    cpu_millicores = serializers.IntegerField(min_value=1)
-    comparator = serializers.ChoiceField(choices=("token", "numeric"))
-    absolute_tolerance = serializers.FloatField(min_value=0, required=False)
-    relative_tolerance = serializers.FloatField(min_value=0, required=False)
-    network_mode = serializers.ChoiceField(choices=("DENY_ALL",))
-
-    def validate(self, attrs: dict[str, object]) -> dict[str, object]:
-        unknown = set(self.initial_data) - set(self.fields)
-        if unknown:
-            raise serializers.ValidationError({"unknown": sorted(unknown)})
-        return attrs
 
 
 class TemplateAssetCreateSerializer(serializers.Serializer):
@@ -175,9 +82,7 @@ class TemplateAssetCreateSerializer(serializers.Serializer):
             "MANUAL",
             "STARTER",
             "REPORT_TEMPLATE",
-            "TESTS",
             "BUILD_CONTEXT",
-            "HIDDEN_SOURCE",
             "PUBLIC_DATA",
         )
     )
@@ -305,21 +210,10 @@ class TemplateDataSerializer(serializers.Serializer):
     row_version = serializers.IntegerField()
 
 
-class AutoCheckRuleDataSerializer(serializers.Serializer):
-    public_id = serializers.CharField()
-    position = serializers.IntegerField()
-    checker_type = serializers.CharField()
-    input_schema = serializers.DictField()
-    output_schema = serializers.DictField()
-    timeout_seconds = serializers.IntegerField()
-    resource_limit = serializers.DictField()
-    network_policy = serializers.DictField()
-    display_policy = serializers.DictField()
-    failure_semantics = serializers.DictField()
-    rule_digest = serializers.CharField()
-
-
 class TemplateTaskDataSerializer(serializers.Serializer):
+    question_spec = serializers.DictField()
+    marking_spec = serializers.DictField()
+    max_score = serializers.DecimalField(max_digits=7, decimal_places=2)
     public_id = serializers.CharField()
     title = serializers.CharField()
     description = serializers.CharField()
@@ -327,9 +221,8 @@ class TemplateTaskDataSerializer(serializers.Serializer):
     task_type = serializers.CharField()
     sort_order = serializers.IntegerField()
     status = serializers.CharField()
-    execution_spec = serializers.DictField()
     resource_profile_id = serializers.CharField(allow_null=True)
-    effective_resource_profile_id = serializers.CharField()
+    effective_resource_profile_id = serializers.CharField(allow_null=True)
     submission_policy = serializers.DictField()
     grading_policy = serializers.DictField()
     row_version = serializers.IntegerField()
@@ -343,7 +236,7 @@ class TemplateChapterDataSerializer(serializers.Serializer):
     sort_order = serializers.IntegerField()
     status = serializers.CharField()
     resource_profile_id = serializers.CharField(allow_null=True)
-    effective_resource_profile_id = serializers.CharField()
+    effective_resource_profile_id = serializers.CharField(allow_null=True)
     row_version = serializers.IntegerField()
     tasks = TemplateTaskDataSerializer(many=True)
 
@@ -368,29 +261,18 @@ class TemplateTaskListResponseSerializer(serializers.Serializer):
     meta = serializers.DictField()
 
 
-class AutoCheckRulesDataSerializer(serializers.Serializer):
-    rules = AutoCheckRuleDataSerializer(many=True)
-
-
-class AutoCheckRulesResponseSerializer(serializers.Serializer):
-    data = AutoCheckRulesDataSerializer()
-    meta = serializers.DictField()
-
-
 class TemplateVersionDataSerializer(serializers.Serializer):
     public_id = serializers.CharField()
     template_id = serializers.CharField()
     version_no = serializers.IntegerField()
     status = serializers.ChoiceField(choices=TemplateVersion.Status.choices)
     runtime_type = serializers.CharField()
-    runtime_adapter_id = serializers.CharField()
-    image_id = serializers.CharField()
+    runtime_adapter_id = serializers.CharField(allow_null=True)
+    image_id = serializers.CharField(allow_null=True)
     image_digest = serializers.CharField()
-    resource_profile_id = serializers.CharField()
+    resource_profile_id = serializers.CharField(allow_null=True)
     dependencies = serializers.ListField(child=serializers.DictField())
-    execution_spec = serializers.DictField()
     network_policy = serializers.DictField()
-    workspace_capabilities = serializers.DictField()
     material_refs = serializers.ListField(child=serializers.DictField())
     manual_asset_id = serializers.CharField(allow_null=True)
     starter_asset_id = serializers.CharField(allow_null=True)
@@ -400,7 +282,6 @@ class TemplateVersionDataSerializer(serializers.Serializer):
     retention_days = serializers.IntegerField()
     spec_digest = serializers.CharField(allow_null=True)
     row_version = serializers.IntegerField()
-    rules = AutoCheckRuleDataSerializer(many=True)
     chapters = TemplateChapterDataSerializer(many=True)
 
 
@@ -482,22 +363,6 @@ def template_data(item: Template) -> dict[str, object]:
     }
 
 
-def rule_data(item: AutoCheckRule) -> dict[str, object]:
-    return {
-        "public_id": item.public_id,
-        "position": item.position,
-        "checker_type": item.checker_type,
-        "input_schema": item.input_schema,
-        "output_schema": item.output_schema,
-        "timeout_seconds": item.timeout_seconds,
-        "resource_limit": item.resource_limit,
-        "network_policy": item.network_policy,
-        "display_policy": item.display_policy,
-        "failure_semantics": item.failure_semantics,
-        "rule_digest": item.rule_digest,
-    }
-
-
 def task_data(item: TemplateTask, version: TemplateVersion) -> dict[str, object]:
     profile = item.resource_profile or item.chapter.resource_profile or version.resource_profile
     return {
@@ -506,11 +371,13 @@ def task_data(item: TemplateTask, version: TemplateVersion) -> dict[str, object]
         "description": item.description,
         "instructions": item.instructions,
         "task_type": item.task_type,
+        "question_spec": item.question_spec,
+        "marking_spec": item.marking_spec,
+        "max_score": str(item.max_score),
         "sort_order": item.sort_order,
         "status": item.status,
-        "execution_spec": item.execution_spec,
         "resource_profile_id": item.resource_profile.public_id if item.resource_profile else None,
-        "effective_resource_profile_id": profile.public_id,
+        "effective_resource_profile_id": profile.public_id if profile else None,
         "submission_policy": item.submission_policy,
         "grading_policy": item.grading_policy,
         "row_version": item.row_version,
@@ -527,9 +394,12 @@ def chapter_data(item: TemplateChapter, version: TemplateVersion) -> dict[str, o
         "sort_order": item.sort_order,
         "status": item.status,
         "resource_profile_id": item.resource_profile.public_id if item.resource_profile else None,
-        "effective_resource_profile_id": profile.public_id,
+        "effective_resource_profile_id": profile.public_id if profile else None,
         "row_version": item.row_version,
-        "tasks": [task_data(task, version) for task in item.tasks.all().order_by("sort_order")],
+        "tasks": [
+            task_data(task, version)
+            for task in item.tasks.filter(active=True).order_by("sort_order")
+        ],
     }
 
 
@@ -542,13 +412,15 @@ def version_data(item: TemplateVersion) -> dict[str, object]:
             "description": task.description,
             "instructions": task.instructions,
             "task_type": task.task_type,
+            "question_spec": task.question_spec,
+            "marking_spec": task.marking_spec,
+            "max_score": str(task.max_score),
             "sort_order": task.sort_order,
             "status": task.status,
-            "execution_spec": task.execution_spec,
             "resource_profile_id": task.resource_profile.public_id
             if task.resource_profile
             else None,
-            "effective_resource_profile_id": profile.public_id,
+            "effective_resource_profile_id": profile.public_id if profile else None,
             "submission_policy": task.submission_policy,
             "grading_policy": task.grading_policy,
             "row_version": task.row_version,
@@ -566,9 +438,12 @@ def version_data(item: TemplateVersion) -> dict[str, object]:
             "resource_profile_id": chapter.resource_profile.public_id
             if chapter.resource_profile
             else None,
-            "effective_resource_profile_id": profile.public_id,
+            "effective_resource_profile_id": profile.public_id if profile else None,
             "row_version": chapter.row_version,
-            "tasks": [task_value(task) for task in chapter.tasks.all().order_by("sort_order")],
+            "tasks": [
+                task_value(task)
+                for task in chapter.tasks.filter(active=True).order_by("sort_order")
+            ],
         }
 
     return {
@@ -577,14 +452,12 @@ def version_data(item: TemplateVersion) -> dict[str, object]:
         "version_no": item.version_no,
         "status": item.status,
         "runtime_type": item.runtime_type,
-        "runtime_adapter_id": item.runtime_adapter.public_id,
-        "image_id": item.image.public_id,
-        "image_digest": item.image.digest,
-        "resource_profile_id": item.resource_profile.public_id,
+        "runtime_adapter_id": item.runtime_adapter.public_id if item.runtime_adapter else None,
+        "image_id": item.image.public_id if item.image else None,
+        "image_digest": item.image.digest if item.image else "",
+        "resource_profile_id": item.resource_profile.public_id if item.resource_profile else None,
         "dependencies": item.dependencies,
-        "execution_spec": item.execution_spec,
         "network_policy": item.network_policy,
-        "workspace_capabilities": item.workspace_capabilities,
         "material_refs": item.material_refs,
         "manual_asset_id": item.manual_asset.public_id if item.manual_asset else None,
         "starter_asset_id": item.starter_asset.public_id if item.starter_asset else None,
@@ -596,10 +469,6 @@ def version_data(item: TemplateVersion) -> dict[str, object]:
         "retention_days": item.retention_days,
         "spec_digest": item.spec_digest,
         "row_version": item.row_version,
-        "rules": [
-            rule_data(rule)
-            for rule in item.auto_check_rules.filter(is_active=True).order_by("position")
-        ],
         "chapters": [
             chapter_data(chapter, item)
             for chapter in item.chapters.all().prefetch_related("tasks").order_by("sort_order")
@@ -638,18 +507,8 @@ def asset_data(item: object, version: TemplateVersion) -> dict[str, object]:
     elif item.purpose == "REPORT_TEMPLATE":
         attached_id = version.report_template_asset_id
         attached = attached_id == item.pk
-    elif item.purpose in {"HIDDEN_SOURCE", "PUBLIC_DATA"}:
-        spec = version.execution_spec if isinstance(version.execution_spec, dict) else {}
-        role = "HIDDEN_SOURCE" if item.purpose == "HIDDEN_SOURCE" else "PUBLIC_DATA"
-        materials = spec.get("materials", [])
-        attached = any(
-            row.get("asset_id") == item.public_id and row.get("role") == role
-            for row in (materials if isinstance(materials, list) else [])
-            if isinstance(row, dict)
-        )
     else:
-        spec = version.execution_spec if isinstance(version.execution_spec, dict) else {}
-        attached = spec.get("tests_asset") == item.public_id
+        attached = False
     return {
         "public_id": item.public_id,
         "version_id": version.public_id,

@@ -54,7 +54,7 @@ class GovernanceApiTests(TestCase):
             "code": "API-FAKE",
             "name": "API Fake Runtime",
             "runtime_type": "CONTAINER",
-            "driver": "FAKE",
+            "driver": "DOCKER_LOCAL",
             "config_ref": "runtime/api-fake",
             "reason": "API test",
         }
@@ -204,8 +204,9 @@ class GovernanceApiTests(TestCase):
             code=code,
             name="Fake runtime",
             runtime_type=RuntimeAdapter.RuntimeType.CONTAINER,
-            driver=RuntimeAdapter.Driver.FAKE,
+            driver=RuntimeAdapter.Driver.DOCKER_LOCAL,
             status=RuntimeAdapter.Status.ENABLED,
+            config_ref="test/local",
         )
 
     def test_platform_image_resolve_enqueues_worker_task(self) -> None:

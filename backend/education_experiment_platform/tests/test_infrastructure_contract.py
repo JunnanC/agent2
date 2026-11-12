@@ -67,7 +67,7 @@ def test_kong_uses_protocol_specific_upstream_timeouts() -> None:
 
     assert services["django-api"]["read_timeout"] == 60_000
     assert services["django-events"]["read_timeout"] == 3_600_000
-    assert services["django-workspace"]["read_timeout"] == 600_000
+    assert "django-workspace" not in services
     assert services["django-files"]["read_timeout"] == 300_000
     assert all(service["retries"] == 0 for service in services.values())
     assert {plugin["name"] for plugin in config["plugins"]} >= {
@@ -133,34 +133,46 @@ def test_production_edge_terminates_tls_from_swarm_secrets() -> None:
     assert {"tls_certificate", "tls_private_key"} <= set(stack["services"]["nginx"]["secrets"])
 
 
-def test_workspace_edge_allows_only_same_origin_embedding() -> None:
-    for relative_path, student_host in (
-        ("infrastructure/nginx/nginx.conf", "student.localhost student.example.edu"),
-        ("infrastructure/nginx/nginx.prod.conf", "${STUDENT_HOST}"),
-    ):
-        nginx = (ROOT / relative_path).read_text(encoding="utf-8")
-        student = server_block(nginx, student_host)
-        workspace = student.split("location /workspace/ {", maxsplit=1)[1]
-        workspace = workspace.split("}", maxsplit=1)[0]
-
-        assert "proxy_hide_header X-Frame-Options;" in workspace
-        assert "proxy_hide_header Content-Security-Policy;" in workspace
-        assert "add_header X-Frame-Options SAMEORIGIN always;" in workspace
-        assert "frame-ancestors 'self'" in workspace
+def test_retired_workspace_edge_has_no_proxy_or_services() -> None:
+    for name in ("nginx.conf", "nginx.prod.conf"):
+        nginx = (ROOT / "infrastructure/nginx" / name).read_text(encoding="utf-8")
+        assert nginx.count("location /workspace/ { return 404; }") == 3
+        assert "proxy_hide_header X-Frame-Options" not in nginx
+    for path in ("docker-compose.dev.yml", "infrastructure/swarm/stack.yml"):
+        config = load_yaml(path)
+        assert not {"workspace-gateway", "workspace-storage-worker", "runtime-reference",
+                    "runtime-algorithm-workspace"} & config["services"].keys()
+        assert "workspace_internal_key" not in config.get("secrets", {})
 
 
-def test_swarm_workspace_internal_key_is_scoped_to_gateway_and_authority() -> None:
-    stack = load_yaml("infrastructure/swarm/stack.yml")
-
-    assert "WORKSPACE_INTERNAL_KEY_FILE" not in stack["x-app-environment"]
-    for service in ("django", "workspace-gateway"):
-        assert "workspace_internal_key" in stack["services"][service]["secrets"]
-        assert (
-            stack["services"][service]["environment"]["WORKSPACE_INTERNAL_KEY_FILE"]
-            == "/run/secrets/workspace_internal_key"
+def test_deployment_has_no_retired_storage_worker_configuration() -> None:
+    retired = {
+        "WORKSPACE_STORAGE_STALE_AFTER_SECONDS", "WORKSPACE_STORAGE_REDISPATCH_SECONDS",
+        "WORKSPACE_FINALIZE_TIMEOUT_SECONDS", "WORKSPACE_VOLUME_RETENTION_SECONDS",
+    }
+    for path in ("docker-compose.dev.yml", "infrastructure/swarm/stack.yml"):
+        environment = load_yaml(path)["x-app-environment"]
+        assert not retired & environment.keys()
+        assert environment["LOCAL_RUNTIME_IMAGE"] == (
+            "${LOCAL_RUNTIME_IMAGE:-experimental-platform-stdio:local}"
         )
-    for service in ("celery", "runtime-worker"):
-        assert "workspace_internal_key" not in stack["services"][service]["secrets"]
+    example = (ROOT / ".env.example").read_text(encoding="utf-8")
+    assert "WORKSPACE_STORAGE_WORKER_CONCURRENCY=" not in example
+
+
+def test_assessment_deployment_keeps_dispatch_and_scanning_requirements() -> None:
+    deploy = (ROOT / "scripts/cd/deploy.sh").read_text(encoding="utf-8")
+    assert "managed=(django celery runtime-worker celery-beat log-ingest)" in deploy
+    assert "'fluent-bit', 'clamav'):" in deploy
+    assert "Remove retired services from the server override" in deploy
+    for name in ("ci.yml", "cd.yml"):
+        workflow = load_yaml(".github/workflows/" + name)
+        # Use the image matrix, regardless of the CI/CD job display name.
+        matrices = [definition["strategy"]["matrix"]["include"]
+                    for definition in workflow["jobs"].values()
+                    if "strategy" in definition and "matrix" in definition["strategy"]]
+        images = {item["image"] for matrix in matrices for item in matrix if "image" in item}
+        assert images == {"backend", "web", "stdio"}, name
 
 
 def test_swarm_swarm_hosts_network_and_support_images_are_deployment_injected() -> None:
@@ -169,7 +181,6 @@ def test_swarm_swarm_hosts_network_and_support_images_are_deployment_injected() 
 
     assert environment["DJANGO_ALLOWED_HOSTS"] == "${DJANGO_ALLOWED_HOSTS}"
     assert environment["DJANGO_TRUSTED_ORIGINS"] == "${DJANGO_TRUSTED_ORIGINS}"
-    assert environment["WORKSPACE_ALLOWED_ORIGINS"] == "${WORKSPACE_ALLOWED_ORIGINS}"
     assert environment["TRUSTED_PROXY_CIDRS"] == "${TRUSTED_PROXY_CIDRS}"
     assert stack["networks"]["app"]["ipam"]["config"][0]["subnet"] == "${APP_NETWORK_SUBNET}"
     runtime_network = "${SWARM_RUNTIME_NETWORK:-experimental-platform-swarm-runtime}"
@@ -189,16 +200,15 @@ def test_local_runtime_docker_access_is_scoped_to_runtime_worker() -> None:
     assert "/var/run/docker.sock:/var/run/docker.sock" in services["runtime-worker"]["volumes"]
     assert "q_provision" in services["runtime-worker"]["command"][-1]
     for service, definition in services.items():
-        if service in {"runtime-worker", "workspace-storage-worker"}:
+        if service == "runtime-worker":
             continue
         assert not any("docker.sock" in str(item) for item in definition.get("volumes", []))
     environment = compose["x-app-environment"]
     assert environment["RUNTIME_MODE"] == "${RUNTIME_MODE:-local}"
     assert environment["RUNTIME_ADAPTER_CODE"] == "${RUNTIME_ADAPTER_CODE:-runtime/local-docker}"
     assert environment["LOCAL_RUNTIME_MODE"] == "${LOCAL_RUNTIME_MODE:-REAL}"
-    assert environment["AUTO_PROVISION_ON_ASSIGNMENT"] == ("${AUTO_PROVISION_ON_ASSIGNMENT:-true}")
     assert environment["LOCAL_RUNTIME_IMAGE"] == (
-        "${LOCAL_RUNTIME_IMAGE:-experimental-platform-workspace:local}"
+        "${LOCAL_RUNTIME_IMAGE:-experimental-platform-stdio:local}"
     )
     assert environment["LOCAL_RUNTIME_NETWORK"] == (
         "${LOCAL_RUNTIME_NETWORK:-${COMPOSE_PROJECT_NAME}-runtime}"
@@ -208,11 +218,6 @@ def test_local_runtime_docker_access_is_scoped_to_runtime_worker() -> None:
         '${RUNTIME_ADAPTER_CONFIGS:-{"runtime/local-docker":{"pids_limit":256}}}'
     )
     assert "q_workspace_storage" not in services["runtime-worker"]["command"][-1]
-    assert services["workspace-storage-worker"]["command"][-1] == "--queues=q_workspace_storage"
-    assert (
-        "/var/run/docker.sock:/var/run/docker.sock"
-        in services["workspace-storage-worker"]["volumes"]
-    )
 
 
 def test_swarm_runtime_access_is_injected_only_into_runtime_worker() -> None:
@@ -227,14 +232,13 @@ def test_swarm_runtime_access_is_injected_only_into_runtime_worker() -> None:
         "swarm_docker_cert",
         "swarm_docker_key",
     } <= set(services["runtime-worker"]["secrets"])
-    for service in ("django", "celery", "workspace-gateway"):
+    for service in ("django", "celery"):
         assert not {
             "swarm_docker_ca",
             "swarm_docker_cert",
             "swarm_docker_key",
         } & set(services[service].get("secrets", []))
     assert "q_workspace_storage" not in services["runtime-worker"]["command"][-1]
-    assert services["workspace-storage-worker"]["command"][-1] == "--queues=q_workspace_storage"
 
 
 def test_compose_declares_foundation_services_and_isolated_app_network() -> None:
@@ -287,24 +291,11 @@ def test_core_splits_migration_and_runtime_database_accounts() -> None:
         assert f"GRANT SELECT, INSERT ON \\`${{MYSQL_DATABASE}}\\`.{table}" in bootstrap
 
 
-def test_workspaces_runtime_database_grants_workspace_append_only_tables_read_insert_only() -> None:
-    bootstrap = (ROOT / "infrastructure/mysql/configure-users.sh").read_text(encoding="utf-8")
-    assert (
-        "GRANT SELECT, INSERT, UPDATE ON \\`${MYSQL_DATABASE}\\`.workspaces_workspace_session"
-        in bootstrap
-    )
-    for table in (
-        "workspaces_workspace_snapshot",
-        "workspaces_workspace_autosave_log",
-        "workspaces_workspace_checkpoint",
-        "workspaces_operation_event",
-    ):
-        assert f"GRANT SELECT, INSERT ON \\`${{MYSQL_DATABASE}}\\`.{table}" in bootstrap
-        assert f"GRANT SELECT, INSERT, UPDATE ON \\`${{MYSQL_DATABASE}}\\`.{table}" not in bootstrap
-    assert (
-        "GRANT SELECT, INSERT, UPDATE ON \\`${MYSQL_DATABASE}\\`.workspaces_execution_run"
-        " TO '${MYSQL_APP_USER}'@'%'" in bootstrap
-    )
+def test_retired_tables_have_no_grants() -> None:
+    grants = runtime_table_grants()
+    assert grants["workspaces_workspace_snapshot"] == {"SELECT", "INSERT"}
+    for table in ("workspaces_workspace_session", "provisioning_instance", "reviews_review"):
+        assert table not in grants
 
 
 def test_reports_runtime_database_grants_reports_and_download_grants_least_privilege() -> None:
@@ -320,7 +311,6 @@ def test_reports_runtime_database_grants_reports_and_download_grants_least_privi
         "reports_report_attachment",
         "reports_report_version",
         "reports_report_version_attachment",
-        "reports_system_artifact",
     ):
         assert f"GRANT SELECT, INSERT ON \\`${{MYSQL_DATABASE}}\\`.{table}" in bootstrap
         assert f"GRANT SELECT, INSERT, UPDATE ON \\`${{MYSQL_DATABASE}}\\`.{table}" not in bootstrap
@@ -332,49 +322,10 @@ def test_reports_runtime_database_grants_reports_and_download_grants_least_privi
     }
 
 
-def test_reviews_runtime_database_grants_keep_review_history_append_only() -> None:
-    bootstrap = (ROOT / "infrastructure/mysql/configure-users.sh").read_text(encoding="utf-8")
-    compose = (ROOT / "docker-compose.dev.yml").read_text(encoding="utf-8")
-    for variable in ("MODEL_NAME", "BASE_URL", "API_KEY", "TIMEOUT_SECONDS"):
-        assert f"RUBRIC_AI_{variable}: ${{RUBRIC_AI_{variable}:-" in compose
-    config = load_yaml("docker-compose.dev.yml")
-    assert "default" in config["services"]["celery"]["networks"]
-    assert config["networks"]["runtime"]["internal"] is True
-    assert "default" not in config["services"]["runtime-worker"]["networks"]
-    for table in (
-        "reviews_review",
-        "reviews_ai_score_batch",
-        "reviews_ai_score_suggestion",
-        "reviews_criterion_score",
-        "reviews_review_annotation",
-        "reviews_auto_check_run",
-        "reviews_similarity_run",
-        "reviews_similarity_match",
-    ):
-        assert rf"GRANT SELECT, INSERT, UPDATE ON \`${{MYSQL_DATABASE}}\`.{table}" in bootstrap
-    for table in (
-        "reviews_criterion_score_event",
-        "reviews_review_decision",
-        "reviews_annotation_revision",
-    ):
-        assert rf"GRANT SELECT, INSERT ON \`${{MYSQL_DATABASE}}\`.{table}" in bootstrap
-        assert rf"GRANT SELECT, INSERT, UPDATE ON \`${{MYSQL_DATABASE}}\`.{table}" not in bootstrap
-
-
-def test_archives_archive_permissions_and_scheduler_are_least_privilege() -> None:
-    bootstrap = (ROOT / "infrastructure/mysql/configure-users.sh").read_text(encoding="utf-8")
-    assert (
-        r"GRANT SELECT, INSERT, UPDATE ON \`${MYSQL_DATABASE}\`.archives_archive_job" in bootstrap
-    )
-    for table in (
-        "archives_archive_manifest",
-        "archives_archive_verification",
-        "archives_export_grant",
-    ):
-        assert rf"GRANT SELECT, INSERT ON \`${{MYSQL_DATABASE}}\`.{table}" in bootstrap
-        assert rf"GRANT SELECT, INSERT, UPDATE ON \`${{MYSQL_DATABASE}}\`.{table}" not in bootstrap
-    compose = load_yaml("docker-compose.dev.yml")
-    assert compose["services"]["celery-beat"]["command"][3] == "beat"
+def test_rubric_and_report_grants() -> None:
+    grants = runtime_table_grants()
+    assert grants["reviews_rubric"] == {"SELECT", "INSERT", "UPDATE"}
+    assert grants["reports_report_version"] == {"SELECT", "INSERT"}
 
 
 def test_workbench_new_experiment_tables_are_available_to_the_application_user() -> None:
@@ -385,7 +336,6 @@ def test_workbench_new_experiment_tables_are_available_to_the_application_user()
         "labtemplates_template_task",
         "labtemplates_experiment_image",
         "labtemplates_image_build_job",
-        "labtemplates_legacy_template_migration",
         "provisioning_runtime_capacity_reservation",
     )
     append_only_tables = (
@@ -416,6 +366,13 @@ def test_every_first_party_model_table_has_runtime_grants() -> None:
         "First-party model tables missing runtime grants: " f"{sorted(missing_tables)}"
     )
     expected_grants = {
+        "experiments_answer_draft": {"SELECT", "INSERT", "UPDATE"},
+        "experiments_code_draft": {"SELECT", "INSERT", "UPDATE"},
+        "experiments_assessment_section": {"SELECT", "INSERT", "UPDATE"},
+        "experiments_section_submission": {"SELECT", "INSERT"},
+        "experiments_question_submission": {"SELECT", "INSERT"},
+        "experiments_question_grade": {"SELECT", "INSERT", "UPDATE"},
+        "experiments_assessment_run": {"SELECT", "INSERT", "UPDATE"},
         "experiments_experiment_retake_link": {"SELECT", "INSERT", "UPDATE"},
         "courses_administrative_class": {"SELECT", "INSERT"},
         "courses_administrative_class_membership": {"SELECT", "INSERT", "UPDATE"},
@@ -443,10 +400,13 @@ def test_workspaces_minio_policy_scopes_versioned_workspace_objects() -> None:
     assert set(object_statement["Resource"]) == {
         "arn:aws:s3:::edu-platform/template-assets/*",
         "arn:aws:s3:::edu-platform/workspaces/*",
+        "arn:aws:s3:::edu-platform/assessment/*",
+        "arn:aws:s3:::edu-platform/assessment-tests/*",
         "arn:aws:s3:::edu-platform/reports/*",
         "arn:aws:s3:::edu-platform/archives/*",
     }
     assert {"s3:GetObjectVersion", "s3:DeleteObjectVersion"} <= set(object_statement["Action"])
+    assert "s3:ListBucketVersions" in policy["Statement"][0]["Action"]
 
 
 def test_core_declares_architecture_queue_names() -> None:

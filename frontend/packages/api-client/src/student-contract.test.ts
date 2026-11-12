@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // Vitest must bypass a generated sibling index.js in this checkout; production imports use the package entrypoint.
 // @ts-expect-error Vitest resolves the TypeScript source directly.
-import { agentApi, meApi, oidcApi, reportApi, studentApi, taskApi, timetableApi } from "./index.ts";
+import { agentApi, meApi, oidcApi, studentApi, timetableApi } from "./index.ts";
 
 const envelope = (data: unknown) => ({ data, meta: { trace_id: "trace-1" } });
 
@@ -87,14 +87,6 @@ describe("student API contracts", () => {
     expect(vi.mocked(fetch).mock.calls.at(-1)?.[1]?.method).toBe("POST");
   });
 
-  it("stops a runtime with the task version required by the backend", async () => {
-    await taskApi.stopRuntime("runtime-1", 12, "stop-once");
-    expect(String(vi.mocked(fetch).mock.calls.at(-1)?.[0])).toContain("/student/task-runtimes/runtime-1/stop");
-    const headers = new Headers(vi.mocked(fetch).mock.calls.at(-1)?.[1]?.headers);
-    expect(headers.get("If-Match")).toBe('"12"');
-    expect(headers.get("Idempotency-Key")).toBe("stop-once");
-  });
-
   it("uses course/task Agent scope and preserves asynchronous message acknowledgements", async () => {
     await agentApi.createTaskSession("task-1", "REPORT_COACH", "session-once");
     expect(String(vi.mocked(fetch).mock.calls.at(-1)?.[0])).toContain("/tasks/task-1/agent-sessions");
@@ -110,13 +102,5 @@ describe("student API contracts", () => {
     expect(String(vi.mocked(fetch).mock.calls.at(-1)?.[0])).toContain("/agent-tool-calls/tool-1/decide");
   });
 
-  it("normalizes decimal review scores and preserves permission to revise a returned report", async () => {
-    vi.mocked(fetch).mockResolvedValueOnce(new Response(JSON.stringify(envelope({ task_id: "task-1", task_status: "REPORT_DRAFT", allowed_actions: ["REVISE_AND_RESUBMIT"], rounds: [
-      { review_id: "review-1", round_no: 1, status: "DECIDED", scores: { criteria: [{ public_id: "c-1", title: "实现", score: "42.50", max_score: "50.00" }] }, annotations: [], decision: { decision: "REJECT", score: "42.50", feedback: "请修改" } },
-    ] })), { status: 200 }));
-    const result = await reportApi.reviewResult("task-1");
-    expect(result.score).toBe(42.5);
-    expect(result.rounds[0]?.scores?.criteria[0]).toMatchObject({ score: 42.5, max_score: 50 });
-    expect(result.allowed_actions).toContain("REVISE_AND_RESUBMIT");
-  });
+
 });

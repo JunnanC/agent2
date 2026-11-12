@@ -8,7 +8,6 @@ from django.core.management.base import BaseCommand, CommandError
 
 from apps.core.identifiers import new_ulid
 from apps.core.models import ObjectAsset
-from apps.core.seed_names import rename_seed_labels
 
 from ...assets import scan_and_attach_asset
 from ...models import TemplateVersion
@@ -22,7 +21,6 @@ class Command(BaseCommand):
             raise CommandError(
                 "Template asset rejection verification is restricted to disposable environments"
             )
-        rename_seed_labels()
         version = (
             TemplateVersion.objects.filter(
                 template__name="容器实验模板",

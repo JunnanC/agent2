@@ -9,6 +9,13 @@ from apps.core.compensation import create_compensation
 from apps.core.concurrency import compare_and_swap
 from apps.core.tasks import run_compensations
 
+from .assessment_workers import (  # noqa: F401
+    archive_closed_assessments,
+    cleanup_assessment_objects,
+    cleanup_assessment_resources,
+    dispatch_assessments,
+    run_assessment_job,
+)
 from .models import TaskPublication
 from .services import assign_late_enrollment_task as assign_late_enrollment_service
 from .services import (

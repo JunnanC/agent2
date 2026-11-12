@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
-import { reportApi, studentApi, taskApi } from "@edu/api-client";
+import { assessmentApi, studentApi, taskApi } from "@edu/api-client";
 import { keys } from "@edu/query-keys";
 import { Breadcrumbs, Button, DateCalendar, Metric, Panel, RequestStateView, StatusBadge } from "@edu/ui";
 import type { CalendarItem } from "@edu/ui";
@@ -24,20 +24,24 @@ export function Home() {
   ])), [enrollmentsQuery.data]);
   const activeTasks = useMemo(() => tasks.filter((task) => !TERMINAL_STATUSES.has(task.status)), [tasks]);
   const draftCount = tasks.filter((task) => task.status === "REPORT_DRAFT").length;
-  const inProgressCount = tasks.filter((task) => ["PROVISIONING", "READY", "IN_PROGRESS", "REPORT_DRAFT"].includes(task.status)).length;
+  const inProgressCount = tasks.filter((task) => ["IN_PROGRESS", "REPORT_DRAFT"].includes(task.status)).length;
   const completedTasks = useMemo(() => tasks.filter((task) => task.status === "COMPLETED"), [tasks]);
   const earliestDeadline = activeTasks
     .map((task) => task.effective_deadline)
     .filter((deadline): deadline is string => Boolean(deadline))
     .sort()[0];
 
-  /** 最近一次评分：取已完成评审任务的 review-result（最多查 3 个） */
+  /** 最近一次评分：取已公开的分卷总成绩（最多查 3 个） */
   const completedKey = completedTasks.map((task) => task.public_id).join("|");
   const recentReviews = useQuery({
     queryKey: ["recent-review-scores", completedKey],
     queryFn: async () => {
       const targets = completedTasks.slice(0, 3);
-      return Promise.all(targets.map((task) => reportApi.reviewResult(task.public_id).catch(() => null)));
+      return Promise.all(targets.map(async task => {
+        const assessment = await assessmentApi.get(task.public_id).catch(() => null);
+        if (!assessment?.sections.length || assessment.sections.some(section => section.score == null)) return null;
+        return { score: assessment.sections.reduce((sum, section) => sum + Number(section.score), 0) };
+      }));
     },
     enabled: completedTasks.length > 0,
     staleTime: 60_000,
@@ -89,8 +93,8 @@ export function Home() {
           subtitle: `完成度 ${task.progress}% · 截止 ${formatDate(deadline)}`,
           statusLabel: taskStatusLabel(task.status),
           statusTone: taskStatusTone(task.status),
-          onClick: () => navigate(task.allowed_actions.includes("enter") || task.allowed_actions.includes("view_workbench")
-            ? `/experiments/${task.public_id}/workbench`
+          onClick: () => navigate(task.assessment_available
+            ? `/experiments/${task.public_id}/assessment`
             : `/experiments/${task.public_id}`),
         });
         cursor.setDate(cursor.getDate() + 1);

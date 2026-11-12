@@ -196,11 +196,8 @@ def remind_unfinished_experiments(*, now: datetime | None = None) -> int:
     unfinished = Q(
         status__in=[
             ExperimentTask.Status.ASSIGNED,
-            ExperimentTask.Status.PROVISIONING,
-            ExperimentTask.Status.READY,
             ExperimentTask.Status.IN_PROGRESS,
             ExperimentTask.Status.REPORT_DRAFT,
-            ExperimentTask.Status.REJECTED,
         ]
     ) | Q(status=ExperimentTask.Status.FAILED, current_failure__retryable=True)
 

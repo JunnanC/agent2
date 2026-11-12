@@ -43,12 +43,9 @@ jobs:
           - image: web
             context: .
             dockerfile: infrastructure/nginx/Dockerfile
-          - image: workspace
+          - image: stdio
             context: runtime/algorithm-workspace
-            dockerfile: runtime/algorithm-workspace/Dockerfile
-          - image: reference
-            context: runtime/reference-workspace
-            dockerfile: runtime/reference-workspace/Dockerfile
+            dockerfile: runtime/algorithm-workspace/Dockerfile.stdio
     steps:
       - uses: actions/checkout@v4
         with:

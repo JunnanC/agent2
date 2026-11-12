@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Link, NavLink, useParams, useLocation } from "react-router-dom";
+import { Link, NavLink, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { teachingApi } from "@edu/api-client";
 import { keys } from "@edu/query-keys";
@@ -30,10 +30,4 @@ export function CourseOverview() {
 export function StudentDetail() {
   const { courseId = "" } = useParams();
   return <Panel title={<h2>学生个人数据</h2>}><EmptyState title="个人汇总接口待接入" hint="需要使用稳定学生 ID 查询，不能以姓名关联。请在课程实验进度与发布评审中查看已有任务数据。" /><Link to={`/courses/${courseId}/students`}>返回实验进度</Link></Panel>;
-}
-
-export function ValidationWorkspace() {
-  const { courseId = "", templateId = "" } = useParams();
-  const location = useLocation();
-  return <Panel title={<h2>验证实验工作台</h2>}><EmptyState title="教师验证会话接口待接入" hint="现有学生工作台要求学生任务与会话凭证，不能直接复用于教师。已登记后端对接需求，接口提供后接入实验操作、报告保存和提交全过程。" /><p className="subtle">实验：{templateId} · 版本：{new URLSearchParams(location.search).get("version") ?? "当前版本"}</p><Link className="btn" to={`/courses/${courseId}/templates/${templateId}/edit`}>返回实验设计</Link></Panel>;
 }

@@ -33,9 +33,6 @@ from .selectors import (
     version_for_course,
 )
 from .serializers import (
-    AutoCheckRulesResponseSerializer,
-    AutoCheckRulesWriteSerializer,
-    ExecutionSpecSaveSerializer,
     ExperimentImageCreateSerializer,
     ExperimentImageEventsResponseSerializer,
     ExperimentImageListResponseSerializer,
@@ -67,7 +64,6 @@ from .serializers import (
     chapter_data,
     experiment_image_data,
     precheck_data,
-    rule_data,
     task_data,
     template_data,
     version_data,
@@ -82,9 +78,7 @@ from .services import (
     publish_version,
     reorder_chapters,
     reorder_tasks,
-    replace_rules,
     request_precheck,
-    save_execution_spec,
     update_chapter,
     update_task,
     update_template,
@@ -465,7 +459,7 @@ class TemplateVersionListView(APIView):
                 "starter_asset",
                 "report_template_asset",
             )
-            .prefetch_related("auto_check_rules")
+
             .order_by("-version_no")
         )
         return _response(request, [version_data(version) for version in versions])
@@ -647,51 +641,6 @@ class TemplateAssetCompleteView(APIView):
         return _idempotent(request, payload={}, operation=operation)
 
 
-class AutoCheckRuleView(APIView):
-    permission_classes = [IsTeachingPortal]
-
-    @extend_schema(
-        operation_id="teaching_auto_check_rules_list",
-        responses={200: AutoCheckRulesResponseSerializer},
-        extensions={"x-portals": ["TEACHING"]},
-    )
-    def get(self, request: HttpRequest, course_id: str, version_id: str) -> Response:
-        version = version_for_course(actor=request.user, course_id=course_id, version_id=version_id)
-        return _response(
-            request,
-            {
-                "rules": [
-                    rule_data(item)
-                    for item in version.auto_check_rules.filter(is_active=True).order_by("position")
-                ]
-            },
-            etag=version.row_version,
-        )
-
-    @extend_schema(
-        operation_id="teaching_auto_check_rules_replace",
-        request=AutoCheckRulesWriteSerializer,
-        responses={200: TemplateVersionResponseSerializer},
-        parameters=[IF_MATCH],
-        extensions={"x-portals": ["TEACHING"]},
-    )
-    def put(self, request: HttpRequest, course_id: str, version_id: str) -> Response:
-        serializer = AutoCheckRulesWriteSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        version = replace_rules(
-            course_id=course_id,
-            version_id=version_id,
-            actor=request.user,
-            expected_version=parse_if_match(request.headers.get("If-Match")),
-            rules=serializer.validated_data["rules"],
-            context=_ctx(request),
-        )
-        version = version_for_course(
-            actor=request.user, course_id=course_id, version_id=version.public_id
-        )
-        return _response(request, version_data(version), etag=version.row_version)
-
-
 class TemplateChapterCollectionView(APIView):
     permission_classes = [IsTeachingPortal]
 
@@ -801,7 +750,8 @@ class TemplateTaskCollectionView(APIView):
         )
         return _response(
             request,
-            [task_data(task, version) for task in chapter.tasks.all().order_by("sort_order")],
+            [task_data(task, version)
+             for task in chapter.tasks.filter(active=True).order_by("sort_order")],
         )
 
     @extend_schema(
@@ -836,6 +786,15 @@ class TemplateTaskCollectionView(APIView):
 
 class TemplateTaskDetailView(APIView):
     permission_classes = [IsTeachingPortal]
+
+    @extend_schema(responses={200: TemplateTaskResponseSerializer}, parameters=[IF_MATCH])
+    def delete(self, request: HttpRequest, course_id: str, task_id: str) -> Response:
+        task = update_task(
+            course_id=course_id, task_id=task_id, actor=request.user,
+            expected_version=parse_if_match(request.headers.get("If-Match")),
+            changes={"active": False}, context=_ctx(request),
+        )
+        return _response(request, {"public_id": task.public_id, "deleted": True})
 
     @extend_schema(
         operation_id="teaching_template_tasks_update",
@@ -990,34 +949,6 @@ class PublishVersionView(VersionActionView):
 @extend_schema_view(post=extend_schema(operation_id="teaching_template_versions_withdraw"))
 class WithdrawVersionView(VersionActionView):
     action = "withdraw"
-
-
-class ExecutionSpecSaveView(APIView):
-    permission_classes = [IsTeachingPortal]
-
-    @extend_schema(
-        operation_id="teaching_template_execution_spec_save",
-        request=ExecutionSpecSaveSerializer,
-        responses={200: TemplateVersionResponseSerializer},
-        parameters=[IF_MATCH, IDEMPOTENCY_KEY],
-        extensions={"x-portals": ["TEACHING"]},
-    )
-    def post(self, request: HttpRequest, course_id: str, version_id: str) -> Response:
-        serializer = ExecutionSpecSaveSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        item = save_execution_spec(
-            course_id=course_id,
-            template_id=version_for_course(
-                actor=request.user, course_id=course_id, version_id=version_id
-            ).template.public_id,
-            version_id=version_id,
-            actor=request.user,
-            expected_version=parse_if_match(request.headers.get("If-Match")),
-            spec=dict(serializer.validated_data),
-            tests_json=str(serializer.validated_data["tests_json"]),
-            context=_ctx(request),
-        )
-        return _response(request, version_data(item), etag=item.row_version)
 
 
 @extend_schema_view(post=extend_schema(operation_id="teaching_template_versions_clone"))

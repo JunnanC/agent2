@@ -2,8 +2,6 @@ from django.urls import path
 
 from .views import (
     PlatformCompensationView,
-    PlatformInstanceDestroyView,
-    PlatformInstanceListView,
     TeachingArchiveDetailView,
     TeachingArchiveExportView,
     TeachingArchiveListView,
@@ -26,12 +24,6 @@ urlpatterns = [
         "teaching/courses/<str:course_id>/archives/<str:archive_id>/exports",
         TeachingArchiveExportView.as_view(),
         name="teaching-archive-export",
-    ),
-    path("platform/instances", PlatformInstanceListView.as_view(), name="platform-instances"),
-    path(
-        "platform/instances/<str:instance_id>/destroy",
-        PlatformInstanceDestroyView.as_view(),
-        name="platform-instance-destroy",
     ),
     path(
         "platform/compensations",

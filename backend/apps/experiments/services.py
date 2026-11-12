@@ -1,7 +1,7 @@
 import hashlib
 import json
 import re
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable
 from datetime import datetime
 from typing import Any
 
@@ -14,21 +14,18 @@ from apps.accounts.models import User
 from apps.core.audit import append_audit, hash_client_ip
 from apps.core.concurrency import compare_and_swap
 from apps.core.errors import ResourceNotFound
-from apps.core.models import CompensationTask, ObjectAsset
+from apps.core.models import CompensationTask
 from apps.core.outbox import append_outbox_event, enqueue_relay_after_commit
 from apps.courses.content_services import prerequisite_status
 from apps.courses.models import Chapter, CourseStaffGrant, Enrollment
 from apps.courses.ports import Blocker
 from apps.courses.selectors import require_course_capability
 from apps.governance.models import ResourceProfile
-from apps.labtemplates.errors import TemplateValidationError
-from apps.labtemplates.models import ExperimentImage, TemplateChapter, TemplateTask, TemplateVersion
-from apps.labtemplates.services import _normalize_execution_spec
-from apps.reviews.models import ReviewDecision, RubricVersion
+from apps.labtemplates.models import ExperimentImage, TemplateVersion
+from apps.reviews.models import RubricVersion
 
 from . import events
 from .errors import (
-    PublicationPrerequisiteBlocked,
     PublicationStateConflict,
     PublicationValidationError,
     TaskExtensionConflict,
@@ -56,56 +53,13 @@ from .models import (
 from .ports import request_task_terminal
 
 TASK_TRANSITIONS: dict[str, set[str]] = {
-    ExperimentTask.Status.ASSIGNED: {
-        ExperimentTask.Status.PROVISIONING,
-        ExperimentTask.Status.CANCELLED,
-        ExperimentTask.Status.EXPIRED,
-    },
-    ExperimentTask.Status.PROVISIONING: {
-        ExperimentTask.Status.READY,
-        ExperimentTask.Status.FAILED,
-        ExperimentTask.Status.ARCHIVING,
-    },
-    ExperimentTask.Status.READY: {
-        ExperimentTask.Status.IN_PROGRESS,
-        ExperimentTask.Status.FAILED,
-        ExperimentTask.Status.ARCHIVING,
-    },
-    ExperimentTask.Status.IN_PROGRESS: {
-        ExperimentTask.Status.REPORT_DRAFT,
-        ExperimentTask.Status.UNDER_REVIEW,
-        ExperimentTask.Status.FAILED,
-        ExperimentTask.Status.ARCHIVING,
-    },
-    ExperimentTask.Status.REPORT_DRAFT: {
-        ExperimentTask.Status.UNDER_REVIEW,
-        ExperimentTask.Status.FAILED,
-        ExperimentTask.Status.ARCHIVING,
-    },
-    ExperimentTask.Status.UNDER_REVIEW: {
-        ExperimentTask.Status.APPROVED,
-        ExperimentTask.Status.REJECTED,
-        ExperimentTask.Status.FAILED,
-    },
-    ExperimentTask.Status.APPROVED: {ExperimentTask.Status.ARCHIVING},
-    ExperimentTask.Status.REJECTED: {
-        ExperimentTask.Status.REPORT_DRAFT,
-        ExperimentTask.Status.IN_PROGRESS,
-    },
-    ExperimentTask.Status.ARCHIVING: {
-        ExperimentTask.Status.DESTROYING,
-        ExperimentTask.Status.FAILED,
-    },
-    ExperimentTask.Status.DESTROYING: {
-        ExperimentTask.Status.COMPLETED,
-        ExperimentTask.Status.CANCELLED,
-        ExperimentTask.Status.EXPIRED,
-        ExperimentTask.Status.FAILED,
-    },
-    ExperimentTask.Status.FAILED: set(),
-    ExperimentTask.Status.COMPLETED: set(),
-    ExperimentTask.Status.CANCELLED: set(),
-    ExperimentTask.Status.EXPIRED: set(),
+    "ASSIGNED": {"IN_PROGRESS", "CANCELLED", "EXPIRED", "ARCHIVING"},
+    "IN_PROGRESS": {"REPORT_DRAFT", "UNDER_REVIEW", "FAILED", "ARCHIVING"},
+    "REPORT_DRAFT": {"IN_PROGRESS", "UNDER_REVIEW", "FAILED", "ARCHIVING"},
+    "UNDER_REVIEW": {"APPROVED", "REPORT_DRAFT", "FAILED", "ARCHIVING"},
+    "APPROVED": {"REPORT_DRAFT", "ARCHIVING"},
+    "ARCHIVING": {"COMPLETED", "CANCELLED", "EXPIRED", "FAILED"},
+    "FAILED": set(), "COMPLETED": set(), "CANCELLED": set(), "EXPIRED": set(),
 }
 
 
@@ -245,141 +199,55 @@ def _ready_image_snapshot(template: TemplateVersion) -> dict[str, Any]:
 
 
 def _content_snapshot(template: TemplateVersion) -> dict[str, Any]:
-    all_chapters = list(
-        TemplateChapter.objects.filter(template_version=template)
-        .select_related("resource_profile")
-        .prefetch_related("tasks__resource_profile")
-        .order_by("sort_order", "id")
-    )
-    if not all_chapters:
-        raise PublicationValidationError(detail={"chapters": "at_least_one_required"})
-    draft_chapters = [
-        chapter.public_id
-        for chapter in all_chapters
-        if chapter.status != TemplateChapter.Status.PUBLISHED
-    ]
-    if draft_chapters:
-        raise PublicationValidationError(
-            detail={"chapters": {"not_published": draft_chapters}}
-        )
-    chapters = [
-        chapter for chapter in all_chapters if chapter.status == TemplateChapter.Status.PUBLISHED
-    ]
-    chapter_orders = [chapter.sort_order for chapter in chapters]
-    if len(chapter_orders) != len(set(chapter_orders)) or any(
-        order < 1 for order in chapter_orders
-    ):
-        raise PublicationValidationError(detail={"chapter_sort_order": "unique_positive_required"})
+    from apps.labtemplates.questions import assessment_snapshot
+    from apps.labtemplates.services import _digest
 
-    image_snapshot = _ready_image_snapshot(template)
-    version_profile = _resource_snapshot(
-        template.resource_profile,
-        runtime_type=template.runtime_type,
-        source_id=template.public_id,
-    )
-    chapter_snapshots: list[dict[str, Any]] = []
-    for chapter in chapters:
-        all_tasks = list(chapter.tasks.all().order_by("sort_order", "id"))
-        draft_tasks = [
-            task.public_id
-            for task in all_tasks
-            if task.status != TemplateTask.Status.PUBLISHED
-        ]
-        if draft_tasks:
-            raise PublicationValidationError(
-                detail={"chapter_tasks": {chapter.public_id: {"not_published": draft_tasks}}}
-            )
-        tasks = [task for task in all_tasks if task.status == TemplateTask.Status.PUBLISHED]
-        if not tasks:
-            raise PublicationValidationError(
-                detail={"chapter_tasks": {chapter.public_id: "at_least_one_required"}}
-            )
-        task_orders = [task.sort_order for task in tasks]
-        if len(task_orders) != len(set(task_orders)) or any(order < 1 for order in task_orders):
-            raise PublicationValidationError(
-                detail={"task_sort_order": {chapter.public_id: "unique_positive_required"}}
-            )
-        task_snapshots: list[dict[str, Any]] = []
-        for task in tasks:
-            profile = task.resource_profile or chapter.resource_profile or template.resource_profile
-            resource_snapshot = _resource_snapshot(
-                profile,
-                runtime_type=template.runtime_type,
-                source_id=task.public_id,
-            )
-            merged_execution_spec = {
-                **dict(template.execution_spec or {}),
-                **dict(task.execution_spec or {}),
-            }
-            try:
-                normalized_execution_spec = _normalize_execution_spec(merged_execution_spec)
-            except TemplateValidationError as exc:
-                raise PublicationValidationError(
-                    detail={"execution_spec": {task.public_id: exc.detail}}
-                ) from exc
-            execution_snapshot = {
-                "execution_spec": normalized_execution_spec,
-                "network_policy": dict(template.network_policy or {}),
-                "workspace_capabilities": dict(template.workspace_capabilities or {}),
-                "report_policy": dict(template.report_policy or {}),
-                "review_policy": dict(template.review_policy or {}),
-            }
-            task_snapshots.append({
-                "source_task_id": task.public_id,
-                "title": task.title,
-                "description": task.description,
-                "instructions": task.instructions,
-                "task_type": task.task_type,
-                "sort_order": task.sort_order,
-                "image_digest": image_snapshot["digest"],
-                "resource_profile_snapshot": resource_snapshot,
-                "execution_snapshot": execution_snapshot,
-                "submission_policy": dict(task.submission_policy or {}),
-                "grading_policy": dict(task.grading_policy or {}),
-            })
-        chapter_snapshots.append({
-            "source_chapter_id": chapter.public_id,
-            "title": chapter.title,
-            "description": chapter.description,
-            "learning_objectives": list(chapter.learning_objectives or []),
-            "sort_order": chapter.sort_order,
-            "resource_profile_snapshot": _resource_snapshot(
-                chapter.resource_profile or template.resource_profile,
-                runtime_type=template.runtime_type,
-                source_id=chapter.public_id,
+    assessment = assessment_snapshot(template)
+    if assessment is not None:
+        if _digest(assessment) != template.spec_digest:
+            raise PublicationValidationError(detail={"template": "precheck_digest_mismatch"})
+        has_programming = any(q["task_type"] == "PROGRAMMING" for q in assessment["questions"])
+        image = _ready_image_snapshot(template) if has_programming else {
+            "image": None, "registry": "", "repository": "", "digest": "",
+        }
+        profile = _resource_snapshot(
+            template.resource_profile, runtime_type=template.runtime_type,
+            source_id=template.public_id,
+        ) if has_programming else {}
+        return {
+            "chapters": [{
+                "source_chapter_id": chapter["id"], "title": chapter["title"],
+                "description": chapter["description"],
+                "learning_objectives": chapter["learning_objectives"],
+                "sort_order": chapter["sort_order"], "resource_profile_snapshot": {},
+                "tasks": [{
+                    "source_task_id": question["id"], "title": question["title"],
+                    "description": question["description"],
+                    "instructions": question["instructions"], "task_type": question["task_type"],
+                    "sort_order": question["sort_order"],
+                    "image_digest": (
+                        image["digest"] if question["task_type"] == "PROGRAMMING" else ""
+                    ),
+                    "resource_profile_snapshot": profile,
+                    "execution_snapshot": {
+                        "tests_digest": question.get("tests_digest", ""),
+                    },
+                    "submission_policy": {}, "grading_policy": {},
+                    "question_spec": question["question_spec"],
+                    "marking_spec": question["marking_spec"], "max_score": question["max_score"],
+                } for question in assessment["questions"]
+                    if question["chapter_id"] == chapter["id"]],
+            } for chapter in assessment["chapters"]],
+            "template_digest": _json_digest(assessment),
+            "template_spec_digest": template.spec_digest,
+            "runtime_adapter": template.runtime_adapter if has_programming else None,
+            "runtime_adapter_driver": template.runtime_adapter.driver if has_programming else "",
+            "runtime_adapter_config_ref": (
+                template.runtime_adapter.config_ref if has_programming else ""
             ),
-            "tasks": task_snapshots,
-        })
-
-    template_digest = _json_digest({
-        "template_version_id": template.public_id,
-        "template_spec_digest": template.spec_digest,
-        "runtime_type": template.runtime_type,
-        "runtime_adapter_id": template.runtime_adapter.public_id,
-        "runtime_adapter_driver": template.runtime_adapter.driver,
-        "runtime_adapter_config_ref": template.runtime_adapter.config_ref,
-        "image": {
-            "registry": image_snapshot["registry"],
-            "repository": image_snapshot["repository"],
-            "digest": image_snapshot["digest"],
-        },
-        "resource_profile": version_profile,
-        "execution_spec": dict(template.execution_spec or {}),
-        "network_policy": dict(template.network_policy or {}),
-        "workspace_capabilities": dict(template.workspace_capabilities or {}),
-        "chapters": chapter_snapshots,
-    })
-    return {
-        "chapters": chapter_snapshots,
-        "template_digest": template_digest,
-        "image": image_snapshot,
-        "resource_profile": version_profile,
-        "template_spec_digest": template.spec_digest,
-        "execution_spec": dict(template.execution_spec or {}),
-        "runtime_adapter": template.runtime_adapter,
-        "runtime_adapter_driver": template.runtime_adapter.driver,
-        "runtime_adapter_config_ref": template.runtime_adapter.config_ref,
-    }
+            "resource_profile": profile, "image": image,
+        }
+    raise PublicationValidationError(detail={"questions": "assessment_questions_required"})
 
 
 @transaction.atomic
@@ -420,42 +288,27 @@ def _runtime_snapshot(
 ) -> dict[str, Any]:
     """Capture mutable runtime inputs when a publication is frozen."""
 
+    if template.runtime_adapter_id is None or (
+        content is not None and content["runtime_adapter"] is None
+    ):
+        return {
+            "template_spec_digest": template.spec_digest,
+            "runtime_adapter": None, "runtime_adapter_driver": "",
+            "runtime_adapter_config_ref": "", "image": None, "image_registry": "",
+            "image_repository": "", "image_digest": "", "resource_profile": None,
+            "resource_profile_snapshot": {},
+        }
+
     adapter = template.runtime_adapter
     image = content["image"]["image"] if content is not None else template.image
     profile = template.resource_profile
     image_registry = content["image"]["registry"] if content is not None else image.registry
     image_repository = content["image"]["repository"] if content is not None else image.repository
     image_digest = content["image"]["digest"] if content is not None else image.digest
-    execution_spec = dict(
-        content["execution_spec"] if content is not None else template.execution_spec or {}
-    )
-    execution_spec["_runtime"] = {
-        "network_policy": dict(template.network_policy or {}),
-        "workspace_capabilities": dict(template.workspace_capabilities or {}),
-    }
-    if execution_spec.get("schema_version") == 2:
-        refs = list(execution_spec.get("materials", []))
-        if not refs and template.starter_asset_id:
-            refs = [{"asset_id": template.starter_asset.public_id, "role": "STUDENT_FILES"}]
-        assets = {
-            a.public_id: a
-            for a in ObjectAsset.objects.filter(public_id__in=[r["asset_id"] for r in refs])
-        }
-        execution_spec["_runtime"]["material_assets"] = [
-            {
-                **ref,
-                "digest": assets[ref["asset_id"]].digest_sha256,
-                "object_version": assets[ref["asset_id"]].object_version,
-                "bucket": assets[ref["asset_id"]].bucket,
-                "object_key": assets[ref["asset_id"]].object_key,
-            }
-            for ref in refs
-        ]
     return {
         "template_spec_digest": (
             content["template_spec_digest"] if content is not None else template.spec_digest
         ),
-        "execution_spec": execution_spec,
         "runtime_adapter": adapter,
         "runtime_adapter_driver": (
             content["runtime_adapter_driver"] if content is not None else adapter.driver
@@ -600,6 +453,10 @@ def _validate_dependencies(*, publication: TaskPublication) -> None:
     if template.status != TemplateVersion.Status.PUBLISHED or not template.spec_digest:
         raise PublicationValidationError(detail={"template_version_status": template.status})
     rubric = publication.rubric_version
+    if rubric is None:
+        if publication.report_required:
+            raise PublicationValidationError(detail={"rubric_version_id": "report_rubric_required"})
+        return
     if rubric.rubric.course_id != publication.course_id:
         raise PublicationValidationError(detail={"rubric_version_id": rubric.public_id})
     if rubric.status != RubricVersion.Status.PUBLISHED:
@@ -623,12 +480,15 @@ def create_publication(
         template = TemplateVersion.objects.select_related("template").get(
             public_id=data["template_version_id"]
         )
-        rubric = RubricVersion.objects.select_related("rubric").get(
-            public_id=data["rubric_version_id"]
+        rubric = (
+            RubricVersion.objects.select_related("rubric").get(public_id=data["rubric_version_id"])
+            if data.get("rubric_version_id") else None
         )
     except (TemplateVersion.DoesNotExist, RubricVersion.DoesNotExist) as exc:
         raise ResourceNotFound() from exc
-    if template.template.course_id != course.pk or rubric.rubric.course_id != course.pk:
+    if template.template.course_id != course.pk or (
+        rubric is not None and rubric.rubric.course_id != course.pk
+    ):
         raise PublicationValidationError(detail={"reason": "CROSS_COURSE_REFERENCE"})
     publication = TaskPublication.objects.create(
         course=course,
@@ -642,6 +502,7 @@ def create_publication(
         ),
         window_start=data["window_start"],
         window_end=data["window_end"],
+        score_release_at=data.get("score_release_at"),
         assignment_deadline=data.get("assignment_deadline"),
         report_required=bool(data.get("report_required", True)),
         review_mode=data["review_mode"],
@@ -699,6 +560,7 @@ def update_publication(
             "late_enrollment_policy",
             "window_start",
             "window_end",
+            "score_release_at",
             "assignment_deadline",
             "report_required",
             "review_mode",
@@ -725,6 +587,9 @@ def update_publication(
     candidate_start = changes.get("window_start", publication.window_start)
     candidate_end = changes.get("window_end", publication.window_end)
     candidate_deadline = changes.get("assignment_deadline", publication.assignment_deadline)
+    release = changes.get("score_release_at", publication.score_release_at)
+    if release is not None and release < candidate_end:
+        raise PublicationValidationError(detail={"score_release_at": "before_deadline"})
     if candidate_end <= candidate_start:
         raise PublicationValidationError(detail={"reason": "INVALID_WINDOW"})
     if candidate_deadline is not None and candidate_deadline > candidate_end:
@@ -862,23 +727,16 @@ def _create_task(
     *, publication: TaskPublication, enrollment: Enrollment, actor: User | None, context: Any
 ) -> ExperimentTask:
     template = publication.template_version
-    snapshot = _runtime_snapshot(template)
-    # Publications created before runtime snapshots have no snapshot columns. Keep those
-    # historical rows assignable while every new task is fully frozen.
-    if publication.runtime_adapter_id:
-        snapshot = {
-            "template_spec_digest": publication.template_spec_digest,
-            "execution_spec": dict(publication.execution_spec or {}),
-            "runtime_adapter": publication.runtime_adapter,
-            "runtime_adapter_driver": publication.runtime_adapter_driver,
-            "runtime_adapter_config_ref": publication.runtime_adapter_config_ref,
-            "image": publication.image,
-            "image_registry": publication.image_registry,
-            "image_repository": publication.image_repository,
-            "image_digest": publication.image_digest,
-            "resource_profile": publication.resource_profile,
-            "resource_profile_snapshot": dict(publication.resource_profile_snapshot or {}),
-        }
+    snapshot = {
+        "template_spec_digest": publication.template_spec_digest,
+        "runtime_adapter": publication.runtime_adapter,
+        "runtime_adapter_driver": publication.runtime_adapter_driver,
+        "runtime_adapter_config_ref": publication.runtime_adapter_config_ref,
+        "image": publication.image, "image_registry": publication.image_registry,
+        "image_repository": publication.image_repository, "image_digest": publication.image_digest,
+        "resource_profile": publication.resource_profile,
+        "resource_profile_snapshot": dict(publication.resource_profile_snapshot or {}),
+    }
     try:
         task = ExperimentTask.objects.create(
             course=publication.course,
@@ -888,7 +746,6 @@ def _create_task(
             template_version=template,
             runtime_type=template.runtime_type,
             template_spec_digest=snapshot["template_spec_digest"],
-            execution_spec=snapshot["execution_spec"],
             runtime_adapter=snapshot["runtime_adapter"],
             runtime_adapter_driver=snapshot["runtime_adapter_driver"],
             runtime_adapter_config_ref=snapshot["runtime_adapter_config_ref"],
@@ -957,6 +814,9 @@ def _copy_publication_snapshots(
                 description=task_snapshot["description"],
                 instructions=task_snapshot["instructions"],
                 task_type=task_snapshot["task_type"],
+                question_spec=task_snapshot["question_spec"],
+                marking_spec=task_snapshot["marking_spec"],
+                max_score=task_snapshot["max_score"],
                 sort_order=task_snapshot["sort_order"],
                 image_digest=task_snapshot["image_digest"],
                 resource_profile_snapshot=task_snapshot["resource_profile_snapshot"],
@@ -1073,17 +933,6 @@ def publish_publication(
         before={"status": publication.status},
         after={"status": next_status, "audience_count": len(enrollments)},
     )
-    if getattr(settings, "AUTO_PROVISION_ON_ASSIGNMENT", True):
-        from apps.provisioning.tasks import warmup_publication_image_task
-
-        transaction.on_commit(
-            lambda: warmup_publication_image_task.apply_async(
-                kwargs={
-                    "publication_id": published.public_id,
-                    "trace_id": _trace(context),
-                }
-            )
-        )
     return published, 202 if async_assignment else 201
 
 
@@ -1159,7 +1008,7 @@ def create_retake_publication(
         actor=actor,
         data={
             "template_version_id": source.template_version.public_id,
-            "rubric_version_id": source.rubric_version.public_id,
+            "rubric_version_id": source.rubric_version.public_id if source.rubric_version else None,
             "title": source.title,
             "description": source.description,
             "audience_mode": TaskPublication.AudienceMode.SELECTED,
@@ -1490,8 +1339,6 @@ def withdraw_publication(
 def _timestamp_changes(to_status: str) -> dict[str, Any]:
     now = timezone.now()
     return {
-        ExperimentTask.Status.PROVISIONING: {"started_at": now},
-        ExperimentTask.Status.READY: {"ready_at": now},
         ExperimentTask.Status.IN_PROGRESS: {"entered_at": now},
         ExperimentTask.Status.UNDER_REVIEW: {"submitted_at": now},
         ExperimentTask.Status.APPROVED: {"reviewed_at": now},
@@ -1569,19 +1416,6 @@ def allowed_actions(task: ExperimentTask, *, actor: User | None = None) -> list[
         or task.enrollment.status != Enrollment.Status.ACTIVE
     ):
         return actions
-    if task.status == ExperimentTask.Status.ASSIGNED:
-        actions.append("START")
-    if task.status in {
-        ExperimentTask.Status.READY,
-        ExperimentTask.Status.IN_PROGRESS,
-        ExperimentTask.Status.REPORT_DRAFT,
-    }:
-        # 工作区可用的三个状态都允许(重)进入:enter 对 READY 会推进 IN_PROGRESS,其余状态仅轮换会话
-        actions.append("ENTER")
-    if task.status == ExperimentTask.Status.FAILED and (task.current_failure or {}).get(
-        "retryable"
-    ):
-        actions.append("RETRY")
     if task.status not in {
         ExperimentTask.Status.COMPLETED,
         ExperimentTask.Status.CANCELLED,
@@ -1589,116 +1423,6 @@ def allowed_actions(task: ExperimentTask, *, actor: User | None = None) -> list[
     }:
         actions.append("REQUEST_EXTENSION")
     return actions
-
-
-@transaction.atomic
-def start_task(*, task_id: str, actor: User, expected_version: int, context: Any) -> ExperimentTask:
-    try:
-        task = (
-            ExperimentTask.objects.select_for_update()
-            .select_related("publication", "course", "enrollment", "student")
-            .get(public_id=task_id, student=actor)
-        )
-    except ExperimentTask.DoesNotExist as exc:
-        raise ResourceNotFound() from exc
-    if task.status != ExperimentTask.Status.ASSIGNED:
-        raise TaskStateConflict(detail={"status": task.status})
-    if task.publication.status != task.publication.Status.PUBLISHED:
-        raise TaskStateConflict(detail={"publication_status": task.publication.status})
-    if task.enrollment.status != Enrollment.Status.ACTIVE:
-        raise TaskStateConflict(detail={"enrollment_status": task.enrollment.status})
-    now = timezone.now()
-    if now < task.publication.window_start or now > task.effective_deadline:
-        raise TaskStateConflict(
-            detail={
-                "window_start": task.publication.window_start,
-                "effective_deadline": task.effective_deadline,
-            }
-        )
-    blockers = prerequisite_blockers_for_publication(publication=task.publication, student=actor)
-    if blockers:
-        raise PublicationPrerequisiteBlocked(detail={"blockers": blockers})
-    return transition_task(
-        task_id=task.public_id,
-        to_status=ExperimentTask.Status.PROVISIONING,
-        actor=actor,
-        expected_version=expected_version,
-        trigger="START",
-        reason="student started experiment",
-        context=context,
-    )
-
-
-def start_task_runtime(
-    *,
-    task_id: str,
-    actor: User,
-    context: Any,
-    expected_version: int | None = None,
-    overrides: Mapping[str, object] | None = None,
-    payload: Mapping[str, object] | None = None,
-) -> tuple[ExperimentTask, Any]:
-    """Start or reuse the student's runtime from the published task snapshot."""
-
-    from apps.provisioning.services import start_provisioning
-
-    try:
-        task = ExperimentTask.objects.get(public_id=task_id, student=actor)
-    except ExperimentTask.DoesNotExist as exc:
-        raise ResourceNotFound() from exc
-    requested = overrides if overrides is not None else payload
-    return start_provisioning(
-        task_id=task_id,
-        actor=actor,
-        expected_version=task.row_version if expected_version is None else expected_version,
-        context=context,
-        overrides=requested,
-    )
-
-
-@transaction.atomic
-def stop_task_runtime(
-    *, runtime_id: str, actor: User, context: Any, expected_version: int | None = None
-) -> Any:
-    """Revoke access immediately; let the Docker-enabled worker destroy the runtime."""
-
-    from apps.core.concurrency import compare_and_swap
-    from apps.provisioning.models import ProvisioningInstance
-    from apps.provisioning.tasks import destroy_student_runtime
-    from apps.workspaces.services import revoke_task_sessions
-
-    try:
-        instance = (
-            ProvisioningInstance.objects.select_for_update().select_related("task", "task__student")
-            .get(public_id=runtime_id, task__student=actor)
-        )
-    except ProvisioningInstance.DoesNotExist as exc:
-        raise ResourceNotFound() from exc
-    if expected_version is not None and instance.task.row_version != expected_version:
-        from apps.core.errors import RowVersionConflict
-
-        raise RowVersionConflict(
-            detail={
-                "expected_row_version": expected_version,
-                "actual_row_version": instance.task.row_version,
-            }
-        )
-    revoke_task_sessions(
-        task_id=instance.task.public_id,
-        reason="student stopped runtime",
-        context=context,
-    )
-    if instance.status == ProvisioningInstance.Status.DESTROYED:
-        return instance
-    if instance.status != ProvisioningInstance.Status.DESTROYING:
-        instance = compare_and_swap(
-            ProvisioningInstance, pk=instance.pk, expected_version=instance.row_version,
-            changes={"status": ProvisioningInstance.Status.DESTROYING, "endpoint": ""},
-        )
-    transaction.on_commit(lambda: destroy_student_runtime.delay(
-        runtime_id, actor.public_id, str(getattr(context, "trace_id", "")),
-    ))
-    return instance
 
 
 @transaction.atomic
@@ -1889,11 +1613,6 @@ def teaching_progress(*, course_id: str, actor: User) -> dict[str, Any]:
         .select_related("publication", "student")
         .order_by("publication__created_at", "student__display_name", "id")
     )
-    latest_decisions: dict[int, ReviewDecision] = {}
-    for decision in ReviewDecision.objects.filter(review__task__in=course_tasks).select_related(
-        "review"
-    ).order_by("review__task_id", "-review__round_no"):
-        latest_decisions.setdefault(decision.review.task_id, decision)
     grades = task_grades(course_tasks)
     for task in course_tasks:
         progress = experiments[task.publication.public_id]
@@ -1906,7 +1625,7 @@ def teaching_progress(*, course_id: str, actor: User) -> dict[str, Any]:
                 "progress": task.progress,
                 "completed_at": task.completed_at,
                 "decision": (
-                    latest_decisions[task.pk].decision if task.pk in latest_decisions else None
+                    None
                 ),
                 **grades[task.pk],
             }
@@ -1943,12 +1662,7 @@ def student_learning_history(*, actor: User) -> dict[str, Any]:
         .select_related("publication", "enrollment", "course__term")
         .order_by("created_at", "id")
     )
-    latest_decisions: dict[int, ReviewDecision] = {}
-    for decision in ReviewDecision.objects.filter(review__task__in=tasks).select_related(
-        "review"
-    ).order_by("review__task_id", "-review__round_no"):
-        latest_decisions.setdefault(decision.review.task_id, decision)
-    grades = task_grades(tasks)
+    grades = task_grades(tasks, student=True)
     tasks_by_enrollment: dict[int, list[ExperimentTask]] = {}
     for task in tasks:
         tasks_by_enrollment.setdefault(task.enrollment_id, []).append(task)
@@ -2004,11 +1718,7 @@ def student_learning_history(*, actor: User) -> dict[str, Any]:
                         "status": task.status,
                         "progress": task.progress,
                         "completed_at": task.completed_at,
-                        "decision": (
-                            latest_decisions[task.pk].decision
-                            if task.pk in latest_decisions
-                            else None
-                        ),
+                        "decision": None,
                         **grades[task.pk],
                     }
                     for task in course_tasks

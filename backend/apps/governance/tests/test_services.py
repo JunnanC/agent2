@@ -6,7 +6,7 @@ from django.test import TestCase, override_settings
 from django.utils import timezone
 
 from apps.core.errors import RowVersionConflict
-from apps.provisioning.adapters import fake_runtime, reset_fake_runtime
+from apps.core.tests.image_runtime import image_runtime, reset_image_runtime
 
 from ..errors import (
     GovernanceStateConflict,
@@ -216,23 +216,21 @@ class GovernanceServiceTests(TestCase):
             code="runtime/governance",
             name="Governance runtime",
             runtime_type=RuntimeAdapter.RuntimeType.CONTAINER,
-            driver=RuntimeAdapter.Driver.FAKE,
+            driver=RuntimeAdapter.Driver.DOCKER_LOCAL,
             status=RuntimeAdapter.Status.ENABLED,
-            config_ref="",
+            config_ref="test/local",
             change_reason="test",
         )
-        reset_fake_runtime()
+        reset_image_runtime()
 
         with patch(
-            "apps.governance.tasks._runtime_adapter_for_row", return_value=fake_runtime()
+            "apps.governance.tasks.runtime_for_driver", return_value=image_runtime()
         ) as resolver:
             result = probe_runtime_adapters.run(trace_id="governance-runtime-test")
 
         self.assertEqual(result, {"runtime/governance": "HEALTHY"})
         resolver.assert_called_once_with(
-            driver=RuntimeAdapter.Driver.FAKE,
-            config_ref="",
-            code="runtime/governance",
+            RuntimeAdapter.Driver.DOCKER_LOCAL, config_ref="test/local",
         )
 
     def test_reservation_uses_platform_course_user_intersection(self) -> None:
@@ -366,8 +364,11 @@ class GovernanceServiceTests(TestCase):
 
 class ImageDigestResolutionTests(TestCase):
     def setUp(self) -> None:
-        reset_fake_runtime()
-        self.addCleanup(reset_fake_runtime)
+        reset_image_runtime()
+        self.addCleanup(reset_image_runtime)
+        runtime = patch("apps.governance.services.runtime_for_driver", return_value=image_runtime())
+        runtime.start()
+        self.addCleanup(runtime.stop)
         self.admin = create_governance_admin(suffix="resolve-admin")
         self.context = ActorContext(self.admin.public_id, "PLATFORM", "r" * 32)
 
@@ -383,13 +384,14 @@ class ImageDigestResolutionTests(TestCase):
             context=self.context,
         )
 
-    def _enabled_fake_runtime(self) -> RuntimeAdapter:
+    def _enabled_image_runtime(self) -> RuntimeAdapter:
         return RuntimeAdapter.objects.create(
             code="RESOLVE-FAKE",
             name="Resolve fake runtime",
             runtime_type=RuntimeAdapter.RuntimeType.CONTAINER,
-            driver=RuntimeAdapter.Driver.FAKE,
+            driver=RuntimeAdapter.Driver.DOCKER_LOCAL,
             status=RuntimeAdapter.Status.ENABLED,
+            config_ref="test/local",
         )
 
     def test_create_image_without_digest_stays_pending_resolution(self) -> None:
@@ -399,7 +401,7 @@ class ImageDigestResolutionTests(TestCase):
         self.assertEqual(image.approval_status, ImageAsset.ApprovalStatus.PENDING)
 
     def test_resolve_image_digest_uses_enabled_runtime_and_locks_afterwards(self) -> None:
-        self._enabled_fake_runtime()
+        self._enabled_image_runtime()
         image = self._create_pending_image(with_digest=False)
         resolved = resolve_image_digest(
             image_id=image.public_id,
@@ -426,7 +428,7 @@ class ImageDigestResolutionTests(TestCase):
         self.assertTrue(unlocked.digest.startswith("sha256:"))
 
     def test_resolve_image_without_expected_version_uses_current_row(self) -> None:
-        self._enabled_fake_runtime()
+        self._enabled_image_runtime()
         image = self._create_pending_image(with_digest=False)
         resolved = resolve_image_digest(
             image_id=image.public_id,
@@ -436,7 +438,7 @@ class ImageDigestResolutionTests(TestCase):
         self.assertTrue(resolved.digest.startswith("sha256:"))
 
     def test_resolve_duplicate_content_marks_row_rejected_with_reference(self) -> None:
-        self._enabled_fake_runtime()
+        self._enabled_image_runtime()
         first = self._create_pending_image(with_digest=False)
         approved = resolve_image_digest(
             image_id=first.public_id,
@@ -473,7 +475,7 @@ class ImageDigestResolutionTests(TestCase):
             )
 
     def test_resolve_rejected_for_retired_image(self) -> None:
-        self._enabled_fake_runtime()
+        self._enabled_image_runtime()
         image = ImageAsset.objects.create(
             registry="docker.io",
             repository="library/retired",
@@ -489,7 +491,7 @@ class ImageDigestResolutionTests(TestCase):
             )
 
     def test_approval_blocked_until_digest_resolved(self) -> None:
-        self._enabled_fake_runtime()
+        self._enabled_image_runtime()
         image = self._create_pending_image(with_digest=False)
         scanned = update_image_scan(
             image_id=image.public_id,
@@ -527,7 +529,7 @@ class ImageDigestResolutionTests(TestCase):
         self.assertTrue(approved.is_ready)
 
     def test_reresolve_is_idempotent_when_digest_unchanged(self) -> None:
-        self._enabled_fake_runtime()
+        self._enabled_image_runtime()
         image = self._create_pending_image(with_digest=False)
         resolved = resolve_image_digest(
             image_id=image.public_id,
@@ -564,7 +566,7 @@ class ImageDigestResolutionTests(TestCase):
         self.assertEqual(revisited.row_version, before_version)
 
     def test_reresolve_updates_digest_and_resets_scan_approval(self) -> None:
-        self._enabled_fake_runtime()
+        self._enabled_image_runtime()
         image = self._create_pending_image(with_digest=True)
         scanned = update_image_scan(
             image_id=image.public_id,
@@ -598,7 +600,7 @@ class ImageDigestResolutionTests(TestCase):
         self.assertIsNone(result.approved_at)
 
     def test_reresolve_delegates_to_first_resolution_when_digest_missing(self) -> None:
-        self._enabled_fake_runtime()
+        self._enabled_image_runtime()
         image = self._create_pending_image(with_digest=False)
         result = reresolve_image_digest(
             image_id=image.public_id,
@@ -609,7 +611,7 @@ class ImageDigestResolutionTests(TestCase):
         self.assertEqual(result.approval_status, ImageAsset.ApprovalStatus.PENDING)
 
     def test_reresolve_conflicts_for_retired_image(self) -> None:
-        self._enabled_fake_runtime()
+        self._enabled_image_runtime()
         image = ImageAsset.objects.create(
             registry="docker.io",
             repository="library/retired",
@@ -625,7 +627,7 @@ class ImageDigestResolutionTests(TestCase):
             )
 
     def test_reresolve_conflicts_when_new_digest_collides_with_catalog(self) -> None:
-        self._enabled_fake_runtime()
+        self._enabled_image_runtime()
         holder = ImageAsset.objects.create(
             registry="docker.io",
             repository="library/holder",

@@ -21,7 +21,6 @@ beforeEach(() => {
   vi.mocked(teachingApi.progress).mockResolvedValue({ rows: [
     { public_id: "task-1", publication_id: "publication-1", student_id: "student-1", student_name: "Alice", status: "APPROVED" },
   ], total: 1, page: 1, pageSize: 100 } as never);
-  vi.mocked(teachingApi.reviews).mockResolvedValue({ rows: [], total: 0, page: 1, pageSize: 100 } as never);
   vi.mocked(teachingApi.enrollments).mockResolvedValue({ rows: [
     { public_id: "enrollment-1", student_id: "student-1", student_name: "Alice", status: "ACTIVE" },
     { public_id: "enrollment-2", student_id: "student-2", student_name: "Bob", status: "ACTIVE" },
@@ -96,5 +95,4 @@ it("counts the original experiment once and uses the server effective grade", as
   render(<QueryClientProvider client={client}><ToastProvider><MemoryRouter><GradeAnalysis courseId="course-1" /></MemoryRouter></ToastProvider></QueryClientProvider>);
   await screen.findByText("60.00");
   expect(screen.getAllByText("Alice")).toHaveLength(1);
-  expect(teachingApi.reviews).not.toHaveBeenCalled();
 });

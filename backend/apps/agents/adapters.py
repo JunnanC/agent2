@@ -220,13 +220,6 @@ class SafeToolExecutor:
             }
         if tool_name == "read_task_diagnostics":
             return {"tool": tool_name, "task_id": scope.get("task_id"), "diagnostics": []}
-        if tool_name == "workspace_draft":
-            return {
-                "tool": tool_name,
-                "task_id": scope.get("task_id"),
-                "created": False,
-                "preview": True,
-            }
         raise ValueError("tool is not implemented by the safe local adapter")
 
 

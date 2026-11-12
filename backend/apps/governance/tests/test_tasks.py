@@ -12,6 +12,10 @@ from .helpers import create_governance_admin
 
 class ImageDigestResolutionTaskTests(TestCase):
     def setUp(self) -> None:
+        from apps.core.tests.image_runtime import image_runtime
+        runtime = patch("apps.governance.services.runtime_for_driver", return_value=image_runtime())
+        runtime.start()
+        self.addCleanup(runtime.stop)
         self.admin = create_governance_admin(suffix="resolve-task-admin")
         self.context = ActorContext(self.admin.public_id, "PLATFORM", "t" * 32)
 
@@ -20,8 +24,9 @@ class ImageDigestResolutionTaskTests(TestCase):
             code="TASK-FAKE",
             name="Task fake runtime",
             runtime_type=RuntimeAdapter.RuntimeType.CONTAINER,
-            driver=RuntimeAdapter.Driver.FAKE,
+            driver=RuntimeAdapter.Driver.DOCKER_LOCAL,
             status=RuntimeAdapter.Status.ENABLED,
+            config_ref="test/local",
         )
 
     def _pending_image(self) -> ImageAsset:

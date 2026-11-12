@@ -43,7 +43,7 @@ Vite 代理 `/api`、`/files`、`/workspace`，按对应门户 Host 和后端 Or
 
 - 服务端数据统一进入查询缓存；SSE 触发相应刷新。断线、游标失效或 resync 后重新查询 REST，不能只根据事件修改业务事实。
 - 当前 Nginx 只放行学生端 SSE；教师端、管理端事件流被入口配置拒绝，不能把共享客户端存在写成三端实时更新已打通。
-- 学生工作台位于 `/experiments/:taskId/workbench`，采用全屏布局；代码入口是[workbench.tsx](../../frontend/apps/student-web/src/pages/workbench.tsx)。
+- 学生答题页位于 `/experiments/:taskId/assessment`，采用全屏布局；代码入口是[assessment.tsx](../../frontend/apps/student-web/src/pages/assessment.tsx)。CodeMirror 编辑和草稿保存不依赖容器会话。
 - 保存、恢复、语言切换、运行测试和完成提交均依据后端状态启用。运行中、失败和版本冲突需要明确反馈，保留尚未保存的编辑。
 - 优先复用 `@edu/ui` 及[共享样式](../../frontend/packages/ui/src/styles.css)。旧静态原型的页面、色值和布局不再作为当前规范。
 - 修改页面时检查加载、空态、错误、无权限、窄屏与键盘操作；不要另建一套重复组件或状态映射。

@@ -1,0 +1,25 @@
+ARG GO_BUILDER_IMAGE=public.ecr.aws/docker/library/golang:1.25.1-alpine3.22@sha256:546671046d6f9f786c24b83111ba1801b736ee4b01b23db33e4f3eb41d4f8883
+ARG PYTHON_BASE_IMAGE=public.ecr.aws/docker/library/python:3.14.0-slim-bookworm@sha256:9bbb8720ae0a24a6ca8dd678bfdf57818fe70caf54c52a53ec01d8db43405056
+FROM ${GO_BUILDER_IMAGE} AS go-toolchain
+FROM ${PYTHON_BASE_IMAGE}
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 HOME=/tmp \
+    PATH=/usr/local/go/bin:$PATH GOPROXY=off GOTOOLCHAIN=local GOMAXPROCS=1 GOFLAGS=-p=1
+COPY --from=go-toolchain /usr/local/go /usr/local/go
+RUN sed -i 's|http://deb.debian.org|https://deb.debian.org|g' /etc/apt/sources.list.d/debian.sources \
+    && apt-get -o Acquire::Retries=5 update \
+    && apt-get -o Acquire::Retries=5 install --no-install-recommends -y \
+       gcc-12=12.2.0-14+deb12u1 g++-12=12.2.0-14+deb12u1 openjdk-17-jdk-headless=17.0.21+9-1~deb12u1 \
+    && ln -s /usr/bin/gcc-12 /usr/local/bin/gcc \
+    && ln -s /usr/bin/g++-12 /usr/local/bin/g++ \
+    && groupadd --gid 10001 student \
+    && useradd --uid 10001 --gid student --home-dir /tmp student \
+    && mkdir /source /compiled /build /input \
+    && chmod 0555 /source /compiled /input \
+    && python -c 'import platform; assert platform.python_version() == "3.14.0"' \
+    && gcc -dumpfullversion | grep -Fx 12.2.0 \
+    && java -version 2>&1 | grep -F 17.0.21 \
+    && go version | grep -F go1.25.1 \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+USER 10001:10001
+WORKDIR /source
+ENTRYPOINT ["python"]

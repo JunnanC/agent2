@@ -1,4 +1,4 @@
-from django.urls import path
+from django.urls import path, re_path
 
 from .content_views import (
     QuestionAnswerView,
@@ -134,7 +134,8 @@ urlpatterns = [
     ),
     path("courses", PublicCourseListView.as_view(), name="course-list"),
     path(
-        "courses/invitations/resolve", CourseInvitationResolveView.as_view(),
+        "courses/invitations/resolve",
+        CourseInvitationResolveView.as_view(),
         name="course-invitation-resolve",
     ),
     path("courses/<str:course_id>", PublicCourseDetailView.as_view(), name="course-detail"),
@@ -348,8 +349,8 @@ urlpatterns = [
     ),
     # KEPT LAST: this dynamic two-segment catch-all must not shadow the
     # specific resources above (invitations, copy-jobs, prerequisites...).
-    path(
-        "teaching/courses/<str:course_id>/<str:resource>",
+    re_path(
+        r"^teaching/courses/(?P<course_id>[^/]+)/(?P<resource>chapters|materials|announcements|calendar-events|questions|prerequisites)$",
         TeachingContentCollectionView.as_view(),
         name="teaching-content-collection",
     ),

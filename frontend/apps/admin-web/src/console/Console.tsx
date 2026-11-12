@@ -14,7 +14,6 @@ import {
   type Course,
   type Image,
   type Runtime,
-  type Instance,
   type Audit,
   type Overview,
 } from "./api";
@@ -64,7 +63,6 @@ const accountsPath = "/platform/users",
   coursesPath = "/platform/courses",
   imagesPath = "/platform/images",
   runtimesPath = "/platform/runtime-adapters",
-  instancesPath = "/platform/instances",
   logsPath = "/platform/operations/audit";
 const accountStates: [string, string][] = [
   ["ACTIVE", "正常"],
@@ -239,7 +237,6 @@ function PageContent({
     courses = useList<Course>(coursesPath);
   const images = useList<Image>(imagesPath),
     runtimes = useList<Runtime>(runtimesPath),
-    instances = useList<Instance>(instancesPath),
     audits = useList<Audit>(logsPath);
   const overview = useQuery({
     queryKey: qk("/platform/operations/overview"),
@@ -256,11 +253,9 @@ function PageContent({
   const allCourses = courses.data ?? [],
     allImages = images.data ?? [],
     allRuntimes = runtimes.data ?? [],
-    allInstances = instances.data ?? [],
     allAudits = audits.data ?? [];
   const userName = (id: string) =>
     users.data?.find((u) => u.public_id === id)?.display_name ?? id;
-  const findCourse = (id: string) => allCourses.find((c) => c.public_id === id);
   const open = (value: Dialog) => {
     setDialog(value);
     setError("");
@@ -315,7 +310,7 @@ function PageContent({
           ? [images]
           : current === "logs"
             ? [audits]
-            : [runtimes, instances, overview];
+            : [runtimes, overview];
   const failure = required.find((q) => q.error);
   let content: ReactNode;
   if (failure) content = <ErrorState error={failure.error} retry={refresh} />;
@@ -640,40 +635,8 @@ function PageContent({
                 </section>
               ))}
             </div>
-            <h3>实验实例 · {allInstances.length} 个</h3>
-            <List
-              rows={allInstances}
-              text={(i) =>
-                `${i.public_id} ${i.course_id} ${i.student_id} ${i.runtime_driver}`
-              }
-              states={[...new Set(allInstances.map((i) => i.status))].map(
-                (s) => [s, s],
-              )}
-              state={(i) => i.status}
-              placeholder="搜索实例、课程或学生 ID"
-              headings={["实例 ID", "课程", "学生", "运行驱动", "状态"]}
-              render={(i) => (
-                <tr key={i.public_id}>
-                  <td className="mono">{i.public_id}</td>
-                  <td>
-                    {findCourse(i.course_id)
-                      ? action(findCourse(i.course_id)!.title, () =>
-                          open({
-                            kind: "course",
-                            course: findCourse(i.course_id)!,
-                          }),
-                        )
-                      : i.course_id}
-                    <div className="mono muted">{i.course_id}</div>
-                  </td>
-                  <td>{userName(i.student_id)}</td>
-                  <td>{i.runtime_driver}</td>
-                  <td>
-                    <Status value={i.status} />
-                  </td>
-                </tr>
-              )}
-            />
+            <p>学生编辑不创建常驻实例，代码执行与评分资源由 worker 按需申请和回收。</p>
+
           </>
         )}
       </>
@@ -691,13 +654,9 @@ function PageContent({
               `${allCourses.filter((c) => c.status === "PUBLISHED").length} 门进行中`,
             ],
             [
-              "运行实例",
-              instances.data
-                ? allInstances.filter(
-                    (i) => !["DESTROYED", "FAILED"].includes(i.status),
-                  ).length
-                : "—",
-              "来自运行实例记录",
+              "执行中作业",
+              (overview.data?.runtime?.runs?.RUNNING ?? 0) + (overview.data?.runtime?.grades?.RUNNING ?? 0),
+              "短生命周期运行与正式判题",
             ],
           ].map(([label, count, sub]) => (
             <div className="metric" key={label}>

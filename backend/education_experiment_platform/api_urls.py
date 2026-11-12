@@ -10,8 +10,6 @@ urlpatterns = [
     path("", include("apps.governance.urls")),
     path("", include("apps.labtemplates.urls")),
     path("", include("apps.experiments.urls")),
-    path("", include("apps.provisioning.urls")),
-    path("", include("apps.workspaces.urls")),
     path("", include("apps.reports.urls")),
     path("", include("apps.reviews.urls")),
     path("", include("apps.archives.urls")),

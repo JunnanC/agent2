@@ -91,7 +91,7 @@ class GovernanceModelTests(TestCase):
             rules={
                 "default_egress": "DENY_ALL",
                 "allow_privileged": False,
-                "require_workspace_gateway": True,
+                "require_execution_isolation": True,
             },
             updated_by=self.admin,
             change_reason="test",

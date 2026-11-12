@@ -28,6 +28,7 @@ const initialCreateForm = {
   description: "",
   window_start: "",
   window_end: "",
+  score_release_at: "",
   assignment_deadline: "",
   report_required: true,
   review_mode: "MANUAL",
@@ -61,6 +62,13 @@ export function Publishing() {
   const selectedTemplate: Template | undefined = (templates.data?.rows ?? [])
     .find((row) => row.public_id === createForm.templateId);
   const selectedRubric = (rubrics.data?.rows ?? []).find((row) => row.public_id === createForm.rubricId);
+  const selectedVersion = useQuery({
+    queryKey: keys.templateVersion(courseId, selectedTemplate?.current_version_id ?? ""),
+    queryFn: () => teachingApi.templateVersion(courseId, selectedTemplate!.current_version_id!),
+    enabled: Boolean(selectedTemplate?.current_version_id && createOpen),
+  });
+  const hasProgramming = selectedVersion.data?.chapters?.some((chapter) =>
+    chapter.tasks.some((task) => task.task_type === "PROGRAMMING" || !["SINGLE_CHOICE", "MULTIPLE_CHOICE"].includes(task.task_type))) ?? true;
 
   const rows = useMemo(() => publications.data?.rows ?? [], [publications.data]);
 
@@ -124,20 +132,21 @@ export function Publishing() {
     mutationFn: () => {
       const versionId = selectedTemplate?.current_version_id ?? "";
       const rubricVersionId = selectedRubric?.current_version_id ?? "";
-      if (!versionId || !rubricVersionId) {
-        return Promise.reject(new Error("请先选择模板当前版本与评分表"));
+      if (!versionId || (hasProgramming && createForm.report_required && !rubricVersionId)) {
+        return Promise.reject(new Error("请选择已发布模板；必填报告需要评分表"));
       }
       return teachingApi.createPublication(courseId, {
         template_version_id: versionId,
-        rubric_version_id: rubricVersionId,
+        rubric_version_id: hasProgramming && createForm.report_required ? rubricVersionId : null,
         title: createForm.title.trim(),
         description: createForm.description.trim(),
         audience_mode: "ALL_ACTIVE",
         late_enrollment_policy: "DO_NOT_ASSIGN",
         window_start: toIso(createForm.window_start),
         window_end: toIso(createForm.window_end),
+        score_release_at: createForm.score_release_at ? toIso(createForm.score_release_at) : null,
         assignment_deadline: createForm.assignment_deadline ? toIso(createForm.assignment_deadline) : undefined,
-        report_required: createForm.report_required,
+        report_required: hasProgramming && createForm.report_required,
         review_mode: createForm.review_mode,
         prerequisites: [],
       });
@@ -152,7 +161,7 @@ export function Publishing() {
   });
 
   const createReady = Boolean(
-    createForm.templateId && createForm.rubricId && createForm.title.trim()
+    createForm.templateId && (!hasProgramming || !createForm.report_required || createForm.rubricId) && createForm.title.trim()
     && createForm.window_start && createForm.window_end,
   );
 
@@ -317,7 +326,7 @@ export function Publishing() {
               </option>
             ))}
           </select>
-          <label className="form-label" htmlFor="pub-rubric">评分表 <span>必选</span></label>
+          <label className="form-label" htmlFor="pub-rubric">报告评分表 <span>必填报告时选择</span></label>
           <select id="pub-rubric" className="field" value={createForm.rubricId}
             onChange={(event) => setCreateForm((prev) => ({ ...prev, rubricId: event.target.value }))}>
             <option value="">选择评分表</option>
@@ -347,12 +356,17 @@ export function Publishing() {
             </div>
           </div>
           <div>
+            <label className="form-label" htmlFor="pub-release">编程成绩公布时间（留空为截止后）</label>
+            <input id="pub-release" className="field" type="datetime-local" value={createForm.score_release_at}
+              onChange={(event) => setCreateForm((prev) => ({ ...prev, score_release_at: event.target.value }))} />
+          </div>
+          <div>
             <label className="form-label" htmlFor="pub-assign">分配截止</label>
             <input id="pub-assign" className="field" type="datetime-local" value={createForm.assignment_deadline}
               onChange={(event) => setCreateForm((prev) => ({ ...prev, assignment_deadline: event.target.value }))} />
           </div>
           <label className="form-label" style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <input type="checkbox" checked={createForm.report_required}
+            <input type="checkbox" checked={hasProgramming && createForm.report_required} disabled={!hasProgramming}
               onChange={(event) => setCreateForm((prev) => ({ ...prev, report_required: event.target.checked }))} />
             需要提交实验报告(评审后完成)
           </label>

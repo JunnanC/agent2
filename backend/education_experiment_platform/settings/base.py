@@ -136,7 +136,7 @@ SPECTACULAR_SETTINGS: dict[str, object] = {
             ("SOCRATIC_HINT", "SOCRATIC_HINT"),
             ("DEBUG_ASSIST", "DEBUG_ASSIST"),
             ("REPORT_COACH", "REPORT_COACH"),
-            ("WORKSPACE_ASSIST", "WORKSPACE_ASSIST"),
+            ("CODE_ASSIST", "CODE_ASSIST"),
         ),
         "RuntimeNetworkModeEnum": (("DENY_ALL", "Deny All"), ("ALLOWLIST", "Allowlist")),
         "RuntimeTypeEnum": (("CONTAINER", "Container"), ("VM", "Vm")),
@@ -233,6 +233,8 @@ CELERY_TASK_DEFAULT_QUEUE = "q_default"
 CELERY_WORKER_PREFETCH_MULTIPLIER = 1
 CELERY_WORKER_HIJACK_ROOT_LOGGER = False
 CELERY_TASK_ROUTES = {
+    "apps.experiments.run_assessment_job": {"queue": "q_provision"},
+    "apps.experiments.cleanup_assessment_resources": {"queue": "q_provision"},
     "apps.provisioning.*": {"queue": "q_provision"},
     "apps.core.relay_outbox": {"queue": "q_relay"},
     "apps.governance.probe_runtime_adapters": {"queue": "q_provision"},
@@ -247,23 +249,28 @@ CELERY_TASK_ROUTES = {
     "apps.integrations.*": {"queue": "q_integrations"},
     "apps.notifications.*": {"queue": "q_default"},
     "apps.experiments.*": {"queue": "q_default"},
-    "apps.workspaces.execute_workspace_storage_job": {"queue": "q_workspace_storage"},
-    "apps.workspaces.execute_workspace_execution_run": {"queue": "q_provision"},
-    "apps.workspaces.reconcile_workspace_storage_jobs": {"queue": "q_default"},
-    "apps.workspaces.*": {"queue": "q_default"},
     "apps.reports.*": {"queue": "q_provision"},
-    "apps.reviews.run_auto_check": {"queue": "q_provision"},
-    "apps.reviews.run_similarity_check": {"queue": "q_analytics"},
-    "apps.reviews.purge_similarity_evidence": {"queue": "q_default"},
 }
 NOTIFICATION_DEADLINE_REMINDER_HOURS = int(env("NOTIFICATION_DEADLINE_REMINDER_HOURS", "24"))
 CELERY_BEAT_SCHEDULE = {
-    "remind-unfinished-experiments": {
-        "task": "apps.notifications.remind_unfinished_experiments",
+    "cleanup-assessment-objects": {
+        "task": "apps.experiments.cleanup_assessment_objects",
+        "schedule": 3600.0,
+    },
+    "archive-closed-assessments": {
+        "task": "apps.experiments.archive_closed_assessments",
         "schedule": 60.0,
     },
-    "scan-task-deadlines": {
-        "task": "apps.archives.scan_due_tasks",
+    "cleanup-assessment-resources": {
+        "task": "apps.experiments.cleanup_assessment_resources",
+        "schedule": 60.0,
+    },
+    "dispatch-assessments": {
+        "task": "apps.experiments.dispatch_assessments",
+        "schedule": 5.0,
+    },
+    "remind-unfinished-experiments": {
+        "task": "apps.notifications.remind_unfinished_experiments",
         "schedule": 60.0,
     },
     "reconcile-archives-and-runtime": {
@@ -277,10 +284,6 @@ CELERY_BEAT_SCHEDULE = {
     "purge-archive-retention": {
         "task": "apps.archives.purge_retention",
         "schedule": 3600.0,
-    },
-    "reconcile-workspace-storage": {
-        "task": "apps.workspaces.reconcile_workspace_storage_jobs",
-        "schedule": 30.0,
     },
     "refresh-analytics": {
         "task": "apps.analytics.refresh_projection",
@@ -307,33 +310,7 @@ SIMILARITY_RETENTION_DAYS = int(env("SIMILARITY_RETENTION_DAYS", "180"))
 AUTO_CHECK_MAX_ATTEMPTS = int(
     env("AUTO_CHECK_MAX_ATTEMPTS", env("P10_AUTO_CHECK_MAX_ATTEMPTS", "3"))
 )
-WORKSPACE_TOKEN_HMAC_KEY = env("WORKSPACE_TOKEN_HMAC_KEY", SECRET_KEY)
-WORKSPACE_SESSION_TTL_SECONDS = int(env("WORKSPACE_SESSION_TTL_SECONDS", "900"))
-WORKSPACE_COOKIE_NAME = env("WORKSPACE_COOKIE_NAME", "workspace_ticket")
-WORKSPACE_ALLOWED_ORIGINS = csv_env("WORKSPACE_ALLOWED_ORIGINS", ",".join(CSRF_TRUSTED_ORIGINS))
-WORKSPACE_UPSTREAM_TIMEOUT_SECONDS = int(env("WORKSPACE_UPSTREAM_TIMEOUT_SECONDS", "60"))
-WORKSPACE_INTERNAL_KEY = env("WORKSPACE_INTERNAL_KEY", SECRET_KEY)
-WORKSPACE_UPSTREAM_HMAC_KEY = env("WORKSPACE_UPSTREAM_HMAC_KEY", SECRET_KEY)
-WORKSPACE_AUTHORITY_URL = env("WORKSPACE_AUTHORITY_URL", "http://django:8000")
 WORKSPACE_SNAPSHOT_MAX_BYTES = int(env("WORKSPACE_SNAPSHOT_MAX_BYTES", str(20 * 1024 * 1024)))
-WORKSPACE_STORAGE_STALE_AFTER_SECONDS = max(
-    60, int(env("WORKSPACE_STORAGE_STALE_AFTER_SECONDS", "900"))
-)
-WORKSPACE_STORAGE_REDISPATCH_SECONDS = max(
-    30, int(env("WORKSPACE_STORAGE_REDISPATCH_SECONDS", "300"))
-)
-WORKSPACE_FINALIZE_TIMEOUT_SECONDS = max(
-    1, int(env("WORKSPACE_FINALIZE_TIMEOUT_SECONDS", "1200"))
-)
-WORKSPACE_VOLUME_RETENTION_SECONDS = max(
-    60, int(env("WORKSPACE_VOLUME_RETENTION_SECONDS", "900"))
-)
-WORKSPACE_SNAPSHOT_ALLOWED_MIME_TYPES = set(
-    csv_env(
-        "WORKSPACE_SNAPSHOT_ALLOWED_MIME_TYPES",
-        "text/plain,application/json,application/octet-stream,application/zip",
-    )
-)
 SSE_HEARTBEAT_SECONDS = int(env("SSE_HEARTBEAT_SECONDS", "20"))
 PUBLICATION_SYNC_LIMIT = int(
     env("PUBLICATION_SYNC_LIMIT", env("P06_PUBLICATION_SYNC_LIMIT", "100"))
@@ -392,14 +369,13 @@ SWARM_BOOT_TIMEOUT_SECONDS = int(env("SWARM_BOOT_TIMEOUT_SECONDS", "120"))
 SWARM_POLL_INTERVAL_SECONDS = float(env("SWARM_POLL_INTERVAL_SECONDS", "2"))
 SWARM_RUNTIME_NETWORK = env("SWARM_RUNTIME_NETWORK", "experimental-platform-swarm-runtime")
 if os.getenv("DJANGO_SETTINGS_MODULE", "").endswith(".prod"):
-    if RUNTIME_MODE != "swarm" or not RUNTIME_ADAPTER_CODE.strip():
-        raise RuntimeError("Production requires RUNTIME_MODE=swarm and RUNTIME_ADAPTER_CODE")
+    if RUNTIME_MODE not in {"local", "swarm"} or not RUNTIME_ADAPTER_CODE.strip():
+        raise RuntimeError("Production requires RUNTIME_MODE=local|swarm and RUNTIME_ADAPTER_CODE")
+    if RUNTIME_MODE == "local" and LOCAL_RUNTIME_MODE != "REAL":
+        raise RuntimeError("Production Docker Local requires LOCAL_RUNTIME_MODE=REAL")
     if RUNTIME_ADAPTER_CODE not in RUNTIME_ADAPTER_CONFIGS:
         raise RuntimeError("Production runtime adapter configuration is missing")
 RUNTIME_DEFAULT_TTL_SECONDS = int(env("RUNTIME_DEFAULT_TTL_SECONDS", "14400"))
-RUNTIME_WORKSPACE_PORT = int(env("RUNTIME_WORKSPACE_PORT", "8080"))
-RUNTIME_HEALTHCHECK_PATH = env("RUNTIME_HEALTHCHECK_PATH", "/healthz")
-AUTO_PROVISION_ON_ASSIGNMENT = bool_env("AUTO_PROVISION_ON_ASSIGNMENT", default=True)
 AGENT_DEFAULT_MAX_TOKENS = int(env("AGENT_DEFAULT_MAX_TOKENS", "2048"))
 AGENT_DEFAULT_DAILY_TOKENS = int(env("AGENT_DEFAULT_DAILY_TOKENS", "100000"))
 AGENT_DEFAULT_REQUESTS_PER_MINUTE = int(env("AGENT_DEFAULT_REQUESTS_PER_MINUTE", "30"))

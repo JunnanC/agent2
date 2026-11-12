@@ -9,7 +9,6 @@ import { formatDateTime, taskStatusLabel, taskStatusTone } from "@/lib/task-form
 const STATUS_FILTERS = [
   { value: "all", label: "全部状态" },
   { value: "ASSIGNED", label: "待开始" },
-  { value: "PROVISIONING", label: "准备环境" },
   { value: "READY", label: "已准备" },
   { value: "IN_PROGRESS", label: "进行中" },
   { value: "REPORT_DRAFT", label: "报告草稿" },
@@ -82,8 +81,8 @@ export function Experiments() {
                 {
                   key: "actions", header: "", align: "right", width: 150, render: (task) => (
                     <div className="table-actions">
-                      {task.allowed_actions.includes("enter") && !task.blockers.length
-                        ? <Link className="btn sm primary" to={`/experiments/${task.public_id}/workbench`}>进入工作台</Link>
+                      {task.assessment_available
+                        ? <Link className="btn sm primary" to={`/experiments/${task.public_id}/assessment`}>进入实验答题</Link>
                         : <Link className="btn sm" to={`/experiments/${task.public_id}`}>查看详情</Link>}
                     </div>
                   ),

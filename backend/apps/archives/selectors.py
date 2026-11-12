@@ -6,7 +6,6 @@ from apps.core.models import CompensationTask
 from apps.courses.models import Course, CourseStaffGrant
 from apps.courses.selectors import has_course_capability, visible_course
 from apps.experiments.models import ExperimentTask
-from apps.provisioning.models import ProvisioningInstance
 
 from .errors import ArchiveExportDenied
 from .models import ArchiveJob
@@ -63,12 +62,6 @@ def archive_for_course(*, actor: User, course_id: str, archive_id: str) -> Archi
         return archive_queryset().get(public_id=archive_id, course=course)
     except ArchiveJob.DoesNotExist as exc:
         raise ResourceNotFound() from exc
-
-
-def instance_rows() -> QuerySet[ProvisioningInstance]:
-    return ProvisioningInstance.objects.select_related(
-        "task", "task__student", "course", "runtime_adapter"
-    ).order_by("status", "updated_at", "id")
 
 
 def compensation_rows(*, status: str = "") -> QuerySet[CompensationTask]:

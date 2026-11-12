@@ -3,7 +3,6 @@ from unittest.mock import patch
 from django.test import Client, TestCase
 
 from apps.courses.tests.helpers import create_draft_course, create_teacher
-from apps.workspaces.serializers import ExecutionRunCreateSerializer
 
 from ..image_services import create_experiment_image
 from ..models import ExperimentImage, Template, TemplateVersion
@@ -15,13 +14,6 @@ PROXY_HEADERS = {"HTTP_X_PROXY_CONTEXT": "ingress-v1", "REMOTE_ADDR": "127.0.0.1
 
 class TemplateApiTests(TestCase):
     password = "ValidPassword!234"
-
-    def test_student_run_request_cannot_override_teacher_toolchain(self) -> None:
-        serializer = ExecutionRunCreateSerializer(
-            data={"language": "go", "toolchain_version": "1.25.1"}
-        )
-        self.assertFalse(serializer.is_valid())
-        self.assertEqual(set(serializer.errors), {"unknown"})
 
     def setUp(self) -> None:
         self.owner = create_teacher(suffix="templates-api-owner")

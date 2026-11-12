@@ -7,7 +7,7 @@ import { Button, EmptyState, Panel, RequestStateView, useToast } from "@edu/ui";
 
 const modeLabels: Record<AgentMode, string> = {
   KNOWLEDGE_QA: "课程问答", SOCRATIC_HINT: "启发提示", DEBUG_ASSIST: "调试辅助",
-  REPORT_COACH: "报告指导", WORKSPACE_ASSIST: "工作区助手",
+  REPORT_COACH: "报告指导", CODE_ASSIST: "工作区助手",
 };
 const toolStates: Record<string, string> = {
   PENDING_APPROVAL: "等待确认", QUEUED: "排队中", RUNNING: "执行中", SUCCEEDED: "已完成",

@@ -39,7 +39,6 @@ class ArchiveJob(VersionedModel):
     course = models.ForeignKey(Course, on_delete=models.PROTECT, related_name="archive_jobs")
     status = models.CharField(max_length=16, choices=Status.choices, default=Status.QUEUED)
     terminal_target = models.CharField(max_length=16, choices=ExperimentTask.TerminalTarget.choices)
-    safe_recycle_at = models.DateTimeField()
     attempt_count = models.PositiveIntegerField(default=0)
     max_attempts = models.PositiveIntegerField(default=5)
     failure_record = models.ForeignKey(
@@ -81,7 +80,6 @@ class ArchiveJob(VersionedModel):
         ]
         indexes = [
             models.Index(fields=("course", "status", "updated_at"), name="archives_job_course_idx"),
-            models.Index(fields=("status", "safe_recycle_at"), name="archives_job_recycle_idx"),
         ]
 
 

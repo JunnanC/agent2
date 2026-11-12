@@ -1,4 +1,3 @@
-import hashlib
 import inspect
 from typing import Any, cast
 from unittest.mock import patch
@@ -6,12 +5,10 @@ from unittest.mock import patch
 from django.test import TestCase, override_settings
 
 from apps.core.errors import RowVersionConflict
-from apps.core.identifiers import new_ulid
 from apps.core.models import ObjectAsset
-from apps.governance.models import ImageAsset, ResourceProfile
-from apps.provisioning.adapters import RuntimeAdapterFailure, fake_runtime, reset_fake_runtime
+from apps.core.tests.image_runtime import image_runtime, reset_image_runtime
+from apps.provisioning.adapters import RuntimeAdapterFailure
 
-from ..assets import _validate_declaration
 from ..errors import TemplateStateConflict, TemplateValidationError
 from ..image_services import (
     create_experiment_image,
@@ -19,140 +16,31 @@ from ..image_services import (
     resolve_external_digest,
 )
 from ..models import (
-    AutoCheckRule,
     ExperimentImage,
     TemplateChapter,
-    TemplatePrecheckRun,
     TemplateTask,
     TemplateVersion,
 )
 from ..selectors import options_for_course
 from ..serializers import version_data
 from ..services import (
-    _execution_material_snapshots,
-    _normalize_execution_spec,
-    build_execution_command,
-    build_execution_plan,
     clone_version,
     compute_spec_digest,
     create_chapter,
     create_task,
-    execute_precheck,
     publish_version,
     reorder_chapters,
     reorder_tasks,
-    replace_rules,
-    request_precheck,
     update_chapter,
     update_task,
     update_version,
 )
 from ..tasks import prepare_experiment_image_task
-from ..toolchains import TOOLCHAIN_CATALOG, TOOLCHAINS_BY_LANGUAGE
-from .helpers import add_valid_rule, context, create_template_version
+from ..toolchains import TOOLCHAIN_CATALOG
+from .helpers import context, create_template_version
 
 
 class TemplateServiceTests(TestCase):
-    def test_material_roles_validate_asset_purpose_and_snapshot_digest(self) -> None:
-        _owner, _course, _template, version = create_template_version(suffix="material-roles")
-        source = ObjectAsset.objects.create(
-            public_id=new_ulid(),
-            bucket="test-assets",
-            object_key=f"template-materials/{version.public_id}/hidden.zip",
-            object_version="hidden-v1",
-            digest_sha256="c" * 64,
-            size_bytes=128,
-            media_type="application/zip",
-            original_name="hidden.zip",
-            owner_type="TEMPLATE_VERSION",
-            owner_ref=version.public_id,
-            purpose="HIDDEN_SOURCE",
-            scan_status=ObjectAsset.ScanStatus.CLEAN,
-            status=ObjectAsset.Status.ACTIVE,
-        )
-        materials = _execution_material_snapshots(
-            version, [{"asset_id": source.public_id, "role": "HIDDEN_SOURCE"}]
-        )
-        self.assertEqual(materials[0]["role"], "HIDDEN_SOURCE")
-        self.assertEqual(materials[0]["asset"]["digest_sha256"], source.digest_sha256)
-        with self.assertRaises(TemplateValidationError):
-            _execution_material_snapshots(
-                version, [{"asset_id": source.public_id, "role": "PUBLIC_DATA"}]
-            )
-        self.assertEqual(
-            _validate_declaration(
-                purpose="PUBLIC_DATA",
-                file_name="records.csv",
-                media_type="text/csv",
-                size_bytes=32,
-                digest_sha256="d" * 64,
-            ),
-            "records.csv",
-        )
-
-    def test_v2_published_digest_covers_comparator_tolerances_and_material_roles(self) -> None:
-        _owner, _course, _template, version = create_template_version(suffix="v2-digest")
-        hidden = ObjectAsset.objects.create(
-            public_id=new_ulid(),
-            bucket="test-assets",
-            object_key=f"template-materials/{version.public_id}/hidden.zip",
-            object_version="hidden-v1",
-            digest_sha256="e" * 64,
-            size_bytes=128,
-            media_type="application/zip",
-            original_name="hidden.zip",
-            owner_type="TEMPLATE_VERSION",
-            owner_ref=version.public_id,
-            purpose="HIDDEN_SOURCE",
-            scan_status=ObjectAsset.ScanStatus.CLEAN,
-            status=ObjectAsset.Status.ACTIVE,
-        )
-        public_data = ObjectAsset.objects.create(
-            public_id=new_ulid(),
-            bucket="test-assets",
-            object_key=f"template-materials/{version.public_id}/records.csv",
-            object_version="data-v1",
-            digest_sha256="f" * 64,
-            size_bytes=32,
-            media_type="text/csv",
-            original_name="records.csv",
-            owner_type="TEMPLATE_VERSION",
-            owner_ref=version.public_id,
-            purpose="PUBLIC_DATA",
-            scan_status=ObjectAsset.ScanStatus.CLEAN,
-            status=ObjectAsset.Status.ACTIVE,
-        )
-        version.execution_spec = {
-            "schema_version": 2,
-            "language": "python",
-            "toolchain_version": "3.14.0",
-            "language_standard": "3",
-            "entrypoint": "main.py",
-            "timeout_seconds": 5,
-            "memory_mb": 256,
-            "cpu_millicores": 500,
-            "comparator": "token",
-            "absolute_tolerance": 1e-6,
-            "relative_tolerance": 1e-6,
-            "materials": [{"asset_id": hidden.public_id, "role": "HIDDEN_SOURCE"}],
-            "tests_asset": version.execution_spec["tests_asset"],
-            "network_mode": "DENY_ALL",
-        }
-        TemplateVersion.objects.filter(pk=version.pk).update(execution_spec=version.execution_spec)
-        version.refresh_from_db()
-        original = compute_spec_digest(version)
-        changed_tolerance = {**version.execution_spec, "absolute_tolerance": 0}
-        TemplateVersion.objects.filter(pk=version.pk).update(execution_spec=changed_tolerance)
-        version.refresh_from_db()
-        self.assertNotEqual(compute_spec_digest(version), original)
-        changed_role = {
-            **version.execution_spec,
-            "materials": [{"asset_id": public_data.public_id, "role": "PUBLIC_DATA"}],
-        }
-        TemplateVersion.objects.filter(pk=version.pk).update(execution_spec=changed_role)
-        version.refresh_from_db()
-        self.assertNotEqual(compute_spec_digest(version), original)
-
     def test_teacher_options_return_language_catalog(self) -> None:
         owner, course, _template, _version = create_template_version(suffix="toolchain-options")
         options = options_for_course(actor=owner, course_id=course.public_id)
@@ -170,207 +58,10 @@ class TemplateServiceTests(TestCase):
         self.assertEqual(
             [item["language"] for item in available], ["c", "cpp", "java", "python", "go"]
         )
-        self.assertTrue(all(
-            any(version["default"] for version in item["versions"]) for item in available
-        ))
-        self.assertTrue(all(len(item["versions"]) == 1 for item in TOOLCHAIN_CATALOG))
-
-    def test_versioned_execution_contract_resolves_teacher_selection_matrix(self) -> None:
-        base = {
-            "schema_version": 2,
-            "language": "python",
-            "toolchain_version": None,
-            "language_standard": None,
-            "entrypoint": "main.py",
-            "timeout_seconds": 5,
-            "memory_mb": 256,
-            "cpu_millicores": 500,
-            "comparator": "token",
-            "tests_asset": "A" * 26,
-            "network_mode": "DENY_ALL",
-        }
-        fixed = _normalize_execution_spec(base)
-        self.assertEqual(fixed["toolchain"]["mode"], "FIXED")
-        self.assertEqual(fixed["toolchain"]["toolchain_version"], "3.14.0")
-        self.assertEqual(_normalize_execution_spec(fixed), fixed)
-        with patch.dict(
-            TOOLCHAINS_BY_LANGUAGE["python"],
-            {
-                "versions": (
-                    {"version": "3.14.0", "default": False},
-                    {"version": "3.15.0", "default": True},
-                )
-            },
-        ):
-            self.assertEqual(_normalize_execution_spec(fixed), fixed)
-        self.assertEqual(build_execution_command(fixed), ["python", "main.py"])
-        explicit = _normalize_execution_spec({**base, "toolchain_version": "3.14.0"})
-        self.assertEqual(explicit["toolchain"]["toolchain_version"], "3.14.0")
-
-        student_select = _normalize_execution_spec({
-            **base,
-            "language": None,
-            "entrypoint": None,
-        })
-        self.assertEqual(student_select["toolchain"]["mode"], "STUDENT_SELECT")
-        self.assertEqual(
-            student_select["toolchain"]["allowed_languages"], ["c", "cpp", "java", "python", "go"]
+        self.assertTrue(
+            all(any(version["default"] for version in item["versions"]) for item in available)
         )
-        with self.assertRaises(TemplateValidationError):
-            build_execution_command(student_select)
-
-        with self.assertRaises(TemplateValidationError):
-            _normalize_execution_spec({
-                **base,
-                "language": None,
-                "toolchain_version": "14.4.0",
-                "entrypoint": None,
-            })
-
-        for language, entrypoint in (
-            ("c", "main.c"),
-            ("cpp", "main.cpp"),
-            ("java", "Main.java"),
-            ("go", "main.go"),
-        ):
-            selected = _normalize_execution_spec({
-                **base,
-                "language": language,
-                "entrypoint": entrypoint,
-            })
-            self.assertEqual(selected["toolchain"]["mode"], "FIXED")
-            self.assertEqual(selected["toolchain"]["language"], language)
-            with self.assertRaises(TemplateValidationError):
-                build_execution_command(selected)
-
-    def test_versioned_execution_contract_validates_comparator_tolerance_and_runtime(self) -> None:
-        spec = {
-            "schema_version": 2,
-            "language": "python",
-            "toolchain_version": None,
-            "language_standard": None,
-            "entrypoint": "main.py",
-            "timeout_seconds": 5,
-            "memory_mb": 256,
-            "cpu_millicores": 500,
-            "comparator": "numeric",
-            "absolute_tolerance": 0,
-            "relative_tolerance": 1e-6,
-            "tests_asset": "A" * 26,
-            "network_mode": "DENY_ALL",
-        }
-        normalized = _normalize_execution_spec(spec)
-        self.assertEqual(normalized["absolute_tolerance"], 0.0)
-        self.assertEqual(normalized["relative_tolerance"], 1e-6)
-        with self.assertRaises(TemplateValidationError):
-            build_execution_command(normalized)
-        with self.assertRaises(TemplateValidationError):
-            _normalize_execution_spec({**spec, "absolute_tolerance": float("nan")})
-        with self.assertRaises(TemplateValidationError):
-            _normalize_execution_spec({**spec, "relative_tolerance": float("inf")})
-        with self.assertRaises(TemplateValidationError):
-            _normalize_execution_spec({**spec, "absolute_tolerance": -1})
-        with self.assertRaises(TemplateValidationError):
-            _normalize_execution_spec({**spec, "shell_command": "python main.py"})
-        with self.assertRaises(TemplateValidationError):
-            _normalize_execution_spec({**spec, "language": "go", "entrypoint": "../main.go"})
-
-    def test_execution_plan_is_fixed_argv_for_supported_languages(self) -> None:
-        base = {
-            "schema_version": 2, "timeout_seconds": 5, "memory_mb": 256,
-            "cpu_millicores": 500, "comparator": "token", "tests_asset": "A" * 26,
-            "network_mode": "DENY_ALL",
-        }
-        expected = {
-            "python": {"compile": [], "run": ["python", "main.py"]},
-            "c": {
-                "compile": ["gcc", "-std=c17", "-O2", "main.c", "-o", "/tmp/.cache/program"],
-                "run": ["/tmp/.cache/program"],
-            },
-            "cpp": {
-                "compile": ["g++", "-std=c++20", "-O2", "main.cpp", "-o", "/tmp/.cache/program"],
-                "run": ["/tmp/.cache/program"],
-            },
-            "java": {
-                "compile": ["javac", "-d", "/tmp/.cache/classes", "Main.java"],
-                "run": ["java", "-cp", "/tmp/.cache/classes", "Main"],
-            },
-            "go": {
-                "compile": ["go", "build", "-o", "/tmp/.cache/program", "main.go"],
-                "run": ["/tmp/.cache/program"],
-            },
-        }
-        for language, plan in expected.items():
-            entrypoint = (
-                "Main.java" if language == "java"
-                else f"main.{language if language != 'python' else 'py'}"
-            )
-            spec = {**base, "language": language, "entrypoint": entrypoint}
-            self.assertEqual(build_execution_plan(spec), plan)
-
-    def test_v2_precheck_and_publish_accept_verified_languages_and_numeric_zero(self) -> None:
-        for language in ("c", "cpp", "java", "python", "go", None):
-            with self.subTest(language=language):
-                owner, course, _template, version = create_template_version(
-                    suffix=f"v2-precheck-{language}"
-                )
-                ImageAsset.objects.filter(pk=version.image_id).update(
-                    digest="sha256:" + hashlib.sha256(str(language).encode()).hexdigest()
-                )
-                entrypoint = (
-                    TOOLCHAINS_BY_LANGUAGE[language]["entrypoint"] if language else None
-                )
-                spec = {
-                    **version.execution_spec, "schema_version": 2, "language": language,
-                    "entrypoint": entrypoint, "comparator": "numeric",
-                    "absolute_tolerance": 0, "relative_tolerance": 0,
-                }
-                TemplateVersion.objects.filter(pk=version.pk).update(execution_spec=spec)
-                TemplateChapter.objects.create(
-                    template_version=version, title="Language acceptance", sort_order=1,
-                )
-                run = request_precheck(
-                    course_id=course.public_id, version_id=version.public_id, actor=owner,
-                    expected_version=version.row_version, context=context(owner),
-                )
-                completed = execute_precheck(run_id=run.public_id)
-                self.assertEqual(completed.status, "PASSED", completed.error_detail_masked)
-                version.refresh_from_db()
-                published = publish_version(
-                    course_id=course.public_id, version_id=version.public_id, actor=owner,
-                    expected_version=version.row_version, context=context(owner),
-                )
-                self.assertEqual(published.status, "PUBLISHED")
-                self.assertEqual(published.execution_spec["absolute_tolerance"], 0)
-
-    def test_published_digest_survives_catalog_default_version_change(self) -> None:
-        _owner, _course, _template, version = create_template_version(suffix="toolchain-freeze")
-        version.execution_spec = {
-            "schema_version": 2,
-            "language": "python",
-            "toolchain_version": "3.14.0",
-            "language_standard": "3",
-            "entrypoint": "main.py",
-            "timeout_seconds": 5,
-            "memory_mb": 256,
-            "cpu_millicores": 500,
-            "comparator": "token",
-            "tests_asset": version.execution_spec["tests_asset"],
-            "network_mode": "DENY_ALL",
-        }
-        TemplateVersion.objects.filter(pk=version.pk).update(execution_spec=version.execution_spec)
-        version.refresh_from_db()
-        original_digest = compute_spec_digest(version)
-        with patch.dict(
-            TOOLCHAINS_BY_LANGUAGE["python"],
-            {
-                "versions": (
-                    {"version": "3.14.0", "default": False},
-                    {"version": "3.15.0", "default": True},
-                )
-            },
-        ):
-            self.assertEqual(compute_spec_digest(version), original_digest)
+        self.assertTrue(all(len(item["versions"]) == 1 for item in TOOLCHAIN_CATALOG))
 
     def test_prepare_task_payload_contains_no_build_args(self) -> None:
         self.assertNotIn("build_args", str(inspect.signature(prepare_experiment_image_task.run)))
@@ -433,8 +124,9 @@ class TemplateServiceTests(TestCase):
                     context=context(owner, "image-invalid"),
                 )
         for repository, tag in (("labs/external:latest", "v1"), ("labs/external", "bad/tag")):
-            with self.subTest(repository=repository, tag=tag), self.assertRaises(
-                TemplateValidationError
+            with (
+                self.subTest(repository=repository, tag=tag),
+                self.assertRaises(TemplateValidationError),
             ):
                 create_experiment_image(
                     template_version=version,
@@ -584,7 +276,7 @@ class TemplateServiceTests(TestCase):
             actor=owner,
             context=context(owner, "image"),
         )
-        runtime = fake_runtime()
+        runtime = image_runtime()
         with (
             patch(
                 "apps.labtemplates.image_services.runtime_for_driver", side_effect=AssertionError
@@ -599,7 +291,7 @@ class TemplateServiceTests(TestCase):
 
     def test_external_reference_resolves_to_governed_ready_digest(self) -> None:
         owner, _course, _template, version = create_template_version(suffix="image-external")
-        reset_fake_runtime()
+        reset_image_runtime()
         image = create_experiment_image(
             template_version=version,
             source_type=ExperimentImage.SourceType.EXTERNAL_REFERENCE,
@@ -611,7 +303,7 @@ class TemplateServiceTests(TestCase):
         )
         with patch(
             "apps.labtemplates.image_services.runtime_for_driver",
-            return_value=fake_runtime(),
+            return_value=image_runtime(),
         ):
             prepared = prepare_experiment_image(image_id=image.public_id)
         self.assertEqual(prepared.status, ExperimentImage.Status.PENDING_APPROVAL)
@@ -643,15 +335,15 @@ class TemplateServiceTests(TestCase):
             actor=owner,
             context=context(owner, "build"),
         )
-        reset_fake_runtime()
+        reset_image_runtime()
         with patch(
             "apps.labtemplates.image_services.runtime_for_driver",
-            return_value=fake_runtime(),
+            return_value=image_runtime(),
         ):
             prepared = prepare_experiment_image(image_id=image.public_id)
         self.assertEqual(prepared.status, ExperimentImage.Status.FAILED)
         self.assertEqual(prepared.error_code, "TEMPLATE_ASSET_NOT_READY")
-        self.assertNotIn(("IMAGE_BUILD", "call"), fake_runtime().calls)
+        self.assertNotIn(("IMAGE_BUILD", "call"), image_runtime().calls)
 
     def test_versioned_content_orders_inherits_resources_and_serializes_nested(self) -> None:
         owner, course, _template, version = create_template_version(suffix="content")
@@ -678,7 +370,14 @@ class TemplateServiceTests(TestCase):
             chapter_id=first.public_id,
             actor=owner,
             expected_version=version.row_version,
-            data={"title": "Inherited task", "task_type": "CODE", "sort_order": 1},
+            data={
+                "title": "Inherited task",
+                "task_type": "SINGLE_CHOICE",
+                "max_score": "5",
+                "question_spec": {"options": [{"id": "a", "text": "A"}, {"id": "b", "text": "B"}]},
+                "marking_spec": {"correct_option_ids": ["b"]},
+                "sort_order": 1,
+            },
             context=context(owner, "c"),
         )
         version.refresh_from_db()
@@ -779,7 +478,13 @@ class TemplateServiceTests(TestCase):
             chapter_id=chapter.public_id,
             actor=owner,
             expected_version=version.row_version,
-            data={"title": "Task", "task_type": "CODE"},
+            data={
+                "title": "Task",
+                "task_type": "SINGLE_CHOICE",
+                "max_score": "5",
+                "question_spec": {"options": [{"id": "a", "text": "A"}, {"id": "b", "text": "B"}]},
+                "marking_spec": {"correct_option_ids": ["b"]},
+            },
             context=context(owner, "b"),
         )
         version.refresh_from_db()
@@ -845,146 +550,6 @@ class TemplateServiceTests(TestCase):
                 context=context(owner, "c"),
             )
 
-    def test_execution_spec_is_in_digest_and_only_generates_python_command(self) -> None:
-        owner, course, _template, version = create_template_version(suffix="execution")
-        version = add_valid_rule(owner=owner, course=course, version=version)
-        self.assertEqual(build_execution_command(version.execution_spec), ["python", "main.py"])
-        digest = compute_spec_digest(version)
-        self.assertEqual(len(digest), 64)
-        changed = dict(version.execution_spec)
-        changed["entrypoint"] = "solution.py"
-        version.execution_spec = changed
-        self.assertNotEqual(compute_spec_digest(version), digest)
-
-    def test_execution_spec_rejects_command_and_unscanned_tests_asset(self) -> None:
-        owner, course, _template, version = create_template_version(suffix="execution-guards")
-        with self.assertRaises(TemplateValidationError):
-            update_version(
-                course_id=course.public_id,
-                version_id=version.public_id,
-                actor=owner,
-                expected_version=version.row_version,
-                changes={
-                    "execution_spec": {
-                        **version.execution_spec,
-                        "command": "python main.py; curl http://example.invalid",
-                    }
-                },
-                context=context(owner),
-            )
-        tests_asset = ObjectAsset.objects.get(public_id=version.execution_spec["tests_asset"])
-        ObjectAsset.objects.filter(pk=tests_asset.pk).update(
-            scan_status=ObjectAsset.ScanStatus.PENDING
-        )
-        version = TemplateVersion.objects.get(pk=version.pk)
-        run = request_precheck(
-            course_id=course.public_id,
-            version_id=version.public_id,
-            actor=owner,
-            expected_version=version.row_version,
-            context=context(owner, "u"),
-        )
-        completed = execute_precheck(run_id=run.public_id)
-        self.assertEqual(completed.status, TemplatePrecheckRun.Status.FAILED)
-        self.assertEqual(completed.error_code, "TEMPLATE_ASSET_NOT_READY")
-
-    def test_failed_precheck_can_be_repaired_before_retry(self) -> None:
-        owner, course, _template, version = create_template_version(suffix="execution-retry")
-        tests_asset = ObjectAsset.objects.get(public_id=version.execution_spec["tests_asset"])
-        ObjectAsset.objects.filter(pk=tests_asset.pk).update(
-            scan_status=ObjectAsset.ScanStatus.PENDING
-        )
-        run = request_precheck(
-            course_id=course.public_id,
-            version_id=version.public_id,
-            actor=owner,
-            expected_version=version.row_version,
-            context=context(owner, "f"),
-        )
-        execute_precheck(run_id=run.public_id)
-        version.refresh_from_db()
-        ObjectAsset.objects.filter(pk=tests_asset.pk).update(
-            scan_status=ObjectAsset.ScanStatus.CLEAN
-        )
-        repaired = update_version(
-            course_id=course.public_id,
-            version_id=version.public_id,
-            actor=owner,
-            expected_version=version.row_version,
-            changes={"execution_spec": version.execution_spec},
-            context=context(owner, "g"),
-        )
-        self.assertEqual(repaired.status, TemplateVersion.Status.PRECHECK_FAILED)
-        retry = request_precheck(
-            course_id=course.public_id,
-            version_id=version.public_id,
-            actor=owner,
-            expected_version=repaired.row_version,
-            context=context(owner, "h"),
-        )
-        self.assertEqual(
-            execute_precheck(run_id=retry.public_id).status,
-            TemplatePrecheckRun.Status.PASSED,
-        )
-
-    def test_precheck_freezes_publish_and_clone_preserves_spec(self) -> None:
-        owner, course, _template, version = create_template_version(suffix="freeze")
-        TemplateChapter.objects.create(
-            template_version=version,
-            title="Freeze chapter",
-            description="",
-            learning_objectives=[],
-            sort_order=1,
-            status=TemplateChapter.Status.DRAFT,
-            resource_profile=version.resource_profile,
-        )
-        version = add_valid_rule(owner=owner, course=course, version=version)
-        run = request_precheck(
-            course_id=course.public_id,
-            version_id=version.public_id,
-            actor=owner,
-            expected_version=version.row_version,
-            context=context(owner, "r"),
-        )
-        completed = execute_precheck(run_id=run.public_id)
-        self.assertEqual(completed.status, TemplatePrecheckRun.Status.PASSED)
-        self.assertEqual(
-            [item["stage"] for item in completed.stage_results],
-            ["SCOPE", "ASSETS", "GOVERNANCE", "RULES", "POLICY", "DIGEST"],
-        )
-        version = TemplateVersion.objects.get(pk=version.pk)
-        self.assertEqual(version.status, TemplateVersion.Status.PRECHECK_PASSED)
-        self.assertEqual(len(version.spec_digest or ""), 64)
-
-        published = publish_version(
-            course_id=course.public_id,
-            version_id=version.public_id,
-            actor=owner,
-            expected_version=version.row_version,
-            context=context(owner),
-        )
-        with self.assertRaises(TemplateStateConflict):
-            update_version(
-                course_id=course.public_id,
-                version_id=published.public_id,
-                actor=owner,
-                expected_version=published.row_version,
-                changes={"retention_days": 60},
-                context=context(owner),
-            )
-        clone = clone_version(
-            course_id=course.public_id,
-            version_id=published.public_id,
-            actor=owner,
-            expected_version=published.row_version,
-            context=context(owner),
-        )
-        self.assertEqual(clone.status, TemplateVersion.Status.DRAFT)
-        self.assertIsNone(clone.spec_digest)
-        self.assertNotEqual(clone.public_id, published.public_id)
-        self.assertEqual(clone.execution_spec["entrypoint"], published.execution_spec["entrypoint"])
-        self.assertEqual(build_execution_command(clone.execution_spec), ["python", "main.py"])
-
     def test_publish_cascades_draft_chapters_and_tasks(self) -> None:
         owner, course, _template, version = create_template_version(suffix="cascade-publish")
         draft_chapter = TemplateChapter.objects.create(
@@ -1001,7 +566,14 @@ class TemplateServiceTests(TestCase):
             chapter_id=draft_chapter.public_id,
             actor=owner,
             expected_version=version.row_version,
-            data={"title": "Cascade task", "description": ""},
+            data={
+                "title": "Cascade task",
+                "description": "",
+                "task_type": "SINGLE_CHOICE",
+                "max_score": "5",
+                "question_spec": {"options": [{"id": "a", "text": "A"}, {"id": "b", "text": "B"}]},
+                "marking_spec": {"correct_option_ids": ["b"]},
+            },
             context=context(owner, "cascade"),
         )
         digest = compute_spec_digest(version)
@@ -1024,7 +596,7 @@ class TemplateServiceTests(TestCase):
 
     def test_publish_rejects_version_without_chapters(self) -> None:
         owner, course, _template, version = create_template_version(suffix="no-chapters")
-        digest = compute_spec_digest(version)
+        digest = "a" * 64
         TemplateVersion.objects.filter(pk=version.pk).update(
             status=TemplateVersion.Status.PRECHECK_PASSED, spec_digest=digest
         )
@@ -1059,7 +631,14 @@ class TemplateServiceTests(TestCase):
             chapter_id=chapter.public_id,
             actor=owner,
             expected_version=version.row_version,
-            data={"title": "Late task", "description": "added after precheck"},
+            data={
+                "title": "Late task",
+                "description": "added after precheck",
+                "task_type": "SINGLE_CHOICE",
+                "max_score": "5",
+                "question_spec": {"options": [{"id": "a", "text": "A"}, {"id": "b", "text": "B"}]},
+                "marking_spec": {"correct_option_ids": ["b"]},
+            },
             context=context(owner, "reopen"),
         )
         self.assertEqual(task.title, "Late task")
@@ -1067,116 +646,6 @@ class TemplateServiceTests(TestCase):
         self.assertEqual(reopened.status, TemplateVersion.Status.DRAFT)
         self.assertIsNone(reopened.spec_digest)
         self.assertNotEqual(reopened.row_version, version.row_version)
-
-    def test_precheck_uses_profile_limits_when_requests_are_smaller(self) -> None:
-        owner, course, _template, version = create_template_version(suffix="resource-limits")
-        ResourceProfile.objects.filter(pk=version.resource_profile_id).update(
-            cpu_millicores=250,
-            memory_mb=128,
-            cpu_request_millicores=125,
-            cpu_limit_millicores=750,
-            memory_request_mb=64,
-            memory_limit_mb=384,
-        )
-        version = add_valid_rule(owner=owner, course=course, version=version)
-        AutoCheckRule.objects.filter(template_version=version, is_active=True).update(
-            resource_limit={"cpu_millicores": 750, "memory_mb": 384, "disk_gb": 2}
-        )
-
-        run = request_precheck(
-            course_id=course.public_id,
-            version_id=version.public_id,
-            actor=owner,
-            expected_version=version.row_version,
-            context=context(owner, "limits"),
-        )
-
-        self.assertEqual(
-            execute_precheck(run_id=run.public_id).status,
-            TemplatePrecheckRun.Status.PASSED,
-        )
-
-    def test_invalid_schema_records_exact_failed_stage(self) -> None:
-        owner, course, _template, version = create_template_version(suffix="schema")
-        version = replace_rules(
-            course_id=course.public_id,
-            version_id=version.public_id,
-            actor=owner,
-            expected_version=version.row_version,
-            rules=[
-                {
-                    "position": 1,
-                    "checker_type": "PYTEST",
-                    "input_schema": {"type": "not-a-json-schema-type"},
-                    "output_schema": {"type": "object"},
-                    "timeout_seconds": 10,
-                    "resource_limit": {},
-                    "network_policy": {"mode": "DENY_ALL"},
-                    "display_policy": {},
-                    "failure_semantics": {"on_failure": "FAIL_CHECK"},
-                }
-            ],
-            context=context(owner),
-        )
-        run = request_precheck(
-            course_id=course.public_id,
-            version_id=version.public_id,
-            actor=owner,
-            expected_version=version.row_version,
-            context=context(owner),
-        )
-        completed = execute_precheck(run_id=run.public_id)
-        self.assertEqual(completed.status, TemplatePrecheckRun.Status.FAILED)
-        self.assertEqual(completed.current_stage, "RULES")
-        self.assertEqual(completed.error_code, "TEMPLATE_VALIDATION_ERROR")
-        self.assertEqual(completed.stage_results[-1]["result"], "FAILED")
-
-    def test_governance_retirement_is_rechecked_by_precheck(self) -> None:
-        owner, course, _template, version = create_template_version(suffix="retired")
-        version = add_valid_rule(owner=owner, course=course, version=version)
-        ResourceProfile.objects.filter(pk=version.resource_profile_id).update(status="RETIRED")
-        run = request_precheck(
-            course_id=course.public_id,
-            version_id=version.public_id,
-            actor=owner,
-            expected_version=version.row_version,
-            context=context(owner),
-        )
-        completed = execute_precheck(run_id=run.public_id)
-        self.assertEqual(completed.status, TemplatePrecheckRun.Status.FAILED)
-        self.assertEqual(completed.current_stage, "GOVERNANCE")
-
-    def test_rule_replacement_preserves_inactive_history(self) -> None:
-        owner, course, _template, version = create_template_version(suffix="history")
-        version = add_valid_rule(owner=owner, course=course, version=version)
-        first = AutoCheckRule.objects.get(template_version=version, is_active=True)
-        version = replace_rules(
-            course_id=course.public_id,
-            version_id=version.public_id,
-            actor=owner,
-            expected_version=version.row_version,
-            rules=[
-                {
-                    "position": 1,
-                    "checker_type": "SHELL",
-                    "input_schema": {"type": "object"},
-                    "output_schema": {"type": "object"},
-                    "timeout_seconds": 30,
-                    "resource_limit": {},
-                    "network_policy": {"mode": "DENY_ALL"},
-                    "display_policy": {},
-                    "failure_semantics": {"on_failure": "WARN"},
-                }
-            ],
-            context=context(owner),
-        )
-        self.assertEqual(AutoCheckRule.objects.filter(template_version=version).count(), 2)
-        first.refresh_from_db()
-        self.assertFalse(first.is_active)
-        self.assertEqual(
-            AutoCheckRule.objects.get(template_version=version, is_active=True).checker_type,
-            "SHELL",
-        )
 
     def test_cas_and_unavailable_resource_are_rejected(self) -> None:
         owner, course, template, version = create_template_version(suffix="guards")

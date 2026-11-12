@@ -16,7 +16,6 @@ config=/etc/agent2-cd
 # Require a reviewed server override rather than silently creating empty databases.
 test -r "$config/.env"
 test -r "$config/compose.override.yml"
-test -s "$config/secrets/workspace_upstream_token"
 test -d "$root/releases"
 exec 9>"$root/deploy.lock"
 flock -w 30 9
@@ -27,12 +26,9 @@ chmod 0755 "$release"
 git archive HEAD | (umask 022; tar -x -C "$release")
 cp "$config/.env" "$release/.env"
 cp "$config/compose.override.yml" "$release/server.yml"
-# An absolute host symlink is broken inside the /workspace bind mount.
-mkdir -m 0755 "$release/secrets"
-install -m 0444 "$config/secrets/workspace_upstream_token" "$release/secrets/workspace_upstream_token"
 export COMPOSE_PROJECT_NAME=edu-platform
 export GIT_REVISION="$RELEASE_SHA"
-export LOCAL_RUNTIME_IMAGE="$ACR_REGISTRY/$ACR_NAMESPACE/agent2-workspace:$RELEASE_SHA"
+export LOCAL_RUNTIME_IMAGE="$ACR_REGISTRY/$ACR_NAMESPACE/agent2-stdio:$RELEASE_SHA"
 export DOCKER_SOCKET_GID
 DOCKER_SOCKET_GID=$(stat -c '%g' /var/run/docker.sock)
 export CELERY_CONCURRENCY=1 RUNTIME_WORKER_CONCURRENCY=1
@@ -42,14 +38,12 @@ prefix = os.environ['ACR_REGISTRY'] + '/' + os.environ['ACR_NAMESPACE'] + '/agen
 sha = os.environ['RELEASE_SHA']
 services = {name: {'image': prefix + 'backend:' + sha} for name in (
     'migrate', 'core-check', 'django', 'celery', 'runtime-worker',
-    'workspace-storage-worker', 'workspace-gateway', 'celery-beat', 'log-ingest')}
+    'celery-beat', 'log-ingest')}
 services['nginx'] = {'image': prefix + 'web:' + sha}
-services['runtime-reference'] = {'image': prefix + 'reference:' + sha}
-services['runtime-algorithm-workspace'] = {'image': prefix + 'workspace:' + sha}
+services['runtime-stdio'] = {'image': prefix + 'stdio:' + sha}
 for name in ('mysql', 'redis', 'mongodb', 'minio', 'fluent-bit', 'kong', 'nginx',
              'mongo-keyfile', 'mongo-init', 'mysql-users', 'mysql-grants', 'minio-init',
-             'django', 'celery', 'migrate', 'runtime-worker', 'workspace-storage-worker',
-             'workspace-gateway', 'log-ingest', 'runtime-reference'):
+             'django', 'celery', 'migrate', 'runtime-worker', 'celery-beat', 'log-ingest', 'clamav'):
     services.setdefault(name, {})['container_name'] = 'edu-platform-' + name + '-1'
 with open(sys.argv[1], 'w') as f:
     json.dump({'services': services}, f)
@@ -65,13 +59,16 @@ python3 "$release/scripts/cd/check-existing-networks.py" "$release/resolved.json
 python3 - "$release/resolved.json" <<'PY'
 import json, subprocess, sys
 c = json.load(open(sys.argv[1]))
+retired = {'workspace-gateway', 'workspace-storage-worker', 'runtime-reference', 'runtime-algorithm-workspace'}
+if retired & c['services'].keys():
+    raise SystemExit('Remove retired services from the server override before deployment')
 for key in ('mysql-data', 'redis-data', 'mongo-data', 'mongo-keyfile', 'minio-data', 'clamav-data', 'fluent-bit-buffer'):
     v = c['volumes'][key]
     expected = 'edu-platform_' + key
     if not v.get('external') or v.get('name') != expected:
         raise SystemExit('Existing volume must be explicitly mapped: ' + expected)
     subprocess.run(['docker', 'volume', 'inspect', expected], check=True, stdout=subprocess.DEVNULL)
-for name in ('mysql', 'redis', 'mongodb', 'minio', 'fluent-bit'):
+for name in ('mysql', 'redis', 'mongodb', 'minio', 'fluent-bit', 'clamav'):
     ids = subprocess.check_output(['docker', 'ps', '-q', '--filter', 'label=com.docker.compose.project=edu-platform',
                                    '--filter', 'label=com.docker.compose.service=' + name], text=True).split()
     if len(ids) != 1:
@@ -90,9 +87,8 @@ DOCKER_CONFIG=$(mktemp -d)
 trap 'rm -rf "$DOCKER_CONFIG"' EXIT
 printf '%s' "$ACR_PASSWORD" | docker login "$ACR_REGISTRY" --username "$ACR_USERNAME" --password-stdin
 unset ACR_PASSWORD
-# Fetch all four images, including the workspace image used by dynamic labs.
-# Explicit service names do not start the optional monitoring/scanner services.
-"${compose[@]}" pull --policy always django nginx runtime-reference runtime-algorithm-workspace
+# Fetch the application and short-lived stdio execution images.
+"${compose[@]}" --profile tools pull --policy always django nginx runtime-stdio
 # A failed backup stops deployment before migrations or service changes.
 mkdir -p "$root/backups"
 backup="$root/backups/mysql-${RELEASE_SHA}-$(date -u +%Y%m%dT%H%M%SZ).sql.gz"
@@ -103,15 +99,22 @@ gzip -t "$backup"
 # The existing database, storage, Redis and logging containers stay running.
 # Stop application writers before schema changes. Failures after this point may
 # need manual recovery; reverting an image cannot undo database migrations.
-managed=(django celery runtime-worker workspace-storage-worker workspace-gateway log-ingest)
+managed=(django celery runtime-worker celery-beat log-ingest)
+for service in workspace-storage-worker workspace-gateway runtime-reference runtime-algorithm-workspace; do
+  mapfile -t retired_ids < <(docker ps -q \
+    --filter label=com.docker.compose.project=edu-platform \
+    --filter "label=com.docker.compose.service=$service")
+  if (( ${#retired_ids[@]} )); then
+    docker stop --time 30 "${retired_ids[@]}"
+  fi
+done
 "${compose[@]}" --profile runtime stop "${managed[@]}"
 for task in mysql-users migrate mysql-grants; do
   "${compose[@]}" run --rm --no-deps "$task"
 done
-# Do not start ClamAV, monitoring, beat or an idle algorithm workspace on this
-# 4 GiB host. Those require a separate capacity and lifecycle decision.
+# ClamAV must already be healthy; Beat dispatches durable assessment jobs.
 "${compose[@]}" --profile runtime up -d --no-deps --no-build --wait --wait-timeout 600 \
-  "${managed[@]}" runtime-reference kong nginx
+  "${managed[@]}" kong nginx
 "${compose[@]}" restart kong nginx
 for attempt in {1..12}; do
   if python3 "$release/scripts/cd/check-portal-entry.py" "$release/.env"; then break; fi

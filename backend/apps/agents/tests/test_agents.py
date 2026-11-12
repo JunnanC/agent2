@@ -74,7 +74,7 @@ class AgentSafetyTests(TestCase):
             student=self.student,
             template_version=self.template_version,
             runtime_type=self.template_version.runtime_type,
-            status=ExperimentTask.Status.READY,
+            status=ExperimentTask.Status.IN_PROGRESS,
         )
         self.route = ModelRoute.objects.create(
             key="local-rule-based",
@@ -92,9 +92,9 @@ class AgentSafetyTests(TestCase):
         self.policy = ToolPolicy.objects.create(
             key="workspace-draft",
             version_no=1,
-            tool_name="workspace_draft",
+            tool_name="read_task_diagnostics",
             risk=ToolPolicy.Risk.HIGH,
-            allowlist=["workspace_draft"],
+            allowlist=["read_task_diagnostics"],
             status=ToolPolicy.Status.ACTIVE,
             course=self.course,
         )
@@ -103,7 +103,7 @@ class AgentSafetyTests(TestCase):
             definition=self.definition,
             version_no=1,
             status=CourseAgentProfile.Status.ACTIVE,
-            modes=[AgentSession.Mode.KNOWLEDGE_QA, AgentSession.Mode.WORKSPACE_ASSIST],
+            modes=[AgentSession.Mode.KNOWLEDGE_QA, AgentSession.Mode.CODE_ASSIST],
             knowledge_base=self.knowledge,
             tool_policy=self.policy,
             model_route=self.route.public_id,
@@ -128,14 +128,14 @@ class AgentSafetyTests(TestCase):
             actor=self.student,
             course_id=self.course.public_id,
             task_id=self.task.public_id,
-            mode=AgentSession.Mode.WORKSPACE_ASSIST,
+            mode=AgentSession.Mode.CODE_ASSIST,
             context=self.context,
         )
         repeated = create_agent_session(
             actor=self.student,
             course_id=self.course.public_id,
             task_id=self.task.public_id,
-            mode=AgentSession.Mode.WORKSPACE_ASSIST,
+            mode=AgentSession.Mode.CODE_ASSIST,
             context=ActorContext(
                 actor_ref=self.student.public_id,
                 portal="USER",
@@ -149,13 +149,17 @@ class AgentSafetyTests(TestCase):
             AgentSession.objects.filter(
                 student=self.student,
                 task=self.task,
-                mode=AgentSession.Mode.WORKSPACE_ASSIST,
+                mode=AgentSession.Mode.CODE_ASSIST,
                 profile_version=self.profile.version_no,
             ).count(),
             1,
         )
 
     def test_high_risk_tool_requires_matching_approval(self) -> None:
+        ToolPolicy.objects.filter(pk=self.policy.pk).update(
+            tool_name="read_task_diagnostics", allowlist=["read_task_diagnostics"]
+        )
+        self.policy.refresh_from_db()
         session = AgentSession.objects.create(
             student=self.student,
             course=self.course,
@@ -164,7 +168,7 @@ class AgentSafetyTests(TestCase):
             profile=self.profile,
             definition=self.definition,
             profile_version=1,
-            mode=AgentSession.Mode.WORKSPACE_ASSIST,
+            mode=AgentSession.Mode.CODE_ASSIST,
             knowledge_base=self.knowledge,
             tool_policy=self.policy,
             model_route=self.route.public_id,
@@ -183,7 +187,7 @@ class AgentSafetyTests(TestCase):
             call = request_tool(
                 actor=self.student,
                 session_id=session.public_id,
-                tool_name="workspace_draft",
+                tool_name="read_task_diagnostics",
                 arguments={"path": "draft.md"},
                 context=self.context,
             )
@@ -198,10 +202,10 @@ class AgentSafetyTests(TestCase):
             )
         self.assertEqual(state.status, AgentToolCallState.Status.QUEUED)
         self.assertEqual(AgentToolCall.objects.count(), 1)
-        with patch("apps.agents.services._workspace_tool_scope_valid", return_value=True):
+        with patch("apps.agents.services._assessment_tool_scope_valid", return_value=True):
             completed = execute_tool_call(call_id=call.public_id, trace_id="agents-worker")
         self.assertEqual(completed.status, AgentToolCallState.Status.SUCCEEDED)
-        self.assertTrue(completed.output_masked["preview"])
+        self.assertEqual(completed.output_masked["diagnostics"], [])
 
     def test_session_freezes_latest_knowledge_versions(self) -> None:
         source = AgentSource.objects.create(

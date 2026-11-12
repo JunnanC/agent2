@@ -27,7 +27,6 @@ export default defineConfig({
     proxy: {
       "/api": { target: devApiTarget, headers: { host: portalHost, origin: `http://${portalHost}:8080` } },
       "/files": { target: devApiTarget, headers: { host: portalHost, origin: `http://${portalHost}:8080` } },
-      "/workspace": { target: devApiTarget, headers: { host: portalHost, origin: `http://${portalHost}:8080` }, ws: true },
     },
   },
   build: {

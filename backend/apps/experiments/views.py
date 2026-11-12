@@ -3,7 +3,6 @@ from typing import Any
 
 from django.db import models
 from django.http import HttpRequest
-from django.utils import timezone
 from drf_spectacular.utils import OpenApiParameter, extend_schema, extend_schema_view
 from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
@@ -59,8 +58,6 @@ from .services import (
     prerequisite_blockers_for_publication,
     publish_publication,
     request_extension,
-    start_task_runtime,
-    stop_task_runtime,
     student_learning_history,
     teaching_progress,
     update_publication,
@@ -497,7 +494,7 @@ class UserDashboardView(APIView):
         extensions={"x-portals": ["USER"]},
     )
     def get(self, request: HttpRequest) -> Response:
-        from apps.workspaces.selectors import weekly_study_minutes_for_student
+        from .study import weekly_study_minutes_for_student
 
         spec = PageSpec(page=1, page_size=5)
         tasks, _ = paged_user_tasks(actor=request.user, spec=spec)
@@ -625,73 +622,6 @@ class UserTaskTransitionsView(APIView):
         )
 
 
-class UserTaskStartView(APIView):
-    permission_classes = [IsUserPortal]
-
-    @extend_schema(
-        operation_id="tasks_start",
-        request=None,
-        responses={202: TaskDataSerializer},
-        parameters=[IF_MATCH, IDEMPOTENCY_KEY],
-        extensions={"x-portals": ["USER"]},
-    )
-    def post(self, request: HttpRequest, task_id: str) -> Response:
-        expected = parse_if_match(request.headers.get("If-Match"))
-
-        def operation() -> StoredResponse:
-            item, _job = start_task_runtime(
-                task_id=task_id,
-                actor=request.user,
-                expected_version=expected,
-                context=_context(request),
-                payload=request.data if isinstance(request.data, dict) else {},
-            )
-            item = task_for_user(actor=request.user, task_id=item.public_id)
-            return StoredResponse(
-                202,
-                _body(request, task_data(item, actions=allowed_actions(item, actor=request.user))),
-                {"ETag": etag_for_version(item.row_version)},
-            )
-
-        return _idempotent(request, payload={}, operation=operation)
-
-
-class UserTaskStopView(APIView):
-    permission_classes = [IsUserPortal]
-
-    @extend_schema(
-        operation_id="student_task_runtime_stop",
-        request=None,
-        responses=GenericResponseSerializer,
-        parameters=[IF_MATCH, IDEMPOTENCY_KEY],
-        extensions={"x-portals": ["USER"]},
-    )
-    def post(self, request: HttpRequest, runtime_id: str) -> Response:
-        expected = parse_if_match(request.headers.get("If-Match"))
-
-        def operation() -> StoredResponse:
-            instance = stop_task_runtime(
-                runtime_id=runtime_id,
-                actor=request.user,
-                context=_context(request),
-                expected_version=expected,
-            )
-            return StoredResponse(
-                202 if instance.status == "DESTROYING" else 200,
-                _body(
-                    request,
-                    {
-                        "runtime_id": instance.public_id,
-                        "task_id": instance.task.public_id,
-                        "status": instance.status,
-                    },
-                ),
-                {"ETag": etag_for_version(instance.task.row_version)},
-            )
-
-        return _idempotent(request, payload={}, operation=operation)
-
-
 class UserTaskExtensionListView(APIView):
     permission_classes = [IsUserPortal]
 
@@ -785,7 +715,7 @@ class PlatformTaskAnomalyView(APIView):
         archive_failures = (
             ArchiveJob.objects.filter(status=ArchiveJob.Status.FAILED)
             .select_related("task", "course", "failure_record", "compensation_task")
-            .order_by("safe_recycle_at", "id")[:100]
+            .order_by("updated_at", "id")[:100]
         )
         reconciliation: list[dict[str, object]] = []
         publications = (
@@ -840,8 +770,6 @@ class PlatformTaskAnomalyView(APIView):
                         "task_id": item.task.public_id,
                         "course_id": item.course.public_id,
                         "terminal_target": item.terminal_target,
-                        "safe_recycle_at": item.safe_recycle_at,
-                        "safe_recycle_due": item.safe_recycle_at <= timezone.now(),
                         "error_code": (
                             item.failure_record.error_code if item.failure_record else ""
                         ),

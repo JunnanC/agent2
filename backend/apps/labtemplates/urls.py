@@ -1,9 +1,13 @@
 from django.urls import path
 
+from .assessment_asset_views import AssessmentQuestionTestsView, AssessmentTestsAssetView
+from .choice_import_views import (
+    ChoiceImportConfirmView,
+    ChoiceImportPreviewView,
+    ChoiceImportTemplateView,
+)
 from .views import (
-    AutoCheckRuleView,
     CloneVersionView,
-    ExecutionSpecSaveView,
     ExperimentImageCollectionView,
     ExperimentImageDetailView,
     ExperimentImageEventsView,
@@ -31,6 +35,26 @@ from .views import (
 )
 
 urlpatterns = [
+    path(
+        "teaching/courses/<str:course_id>/template-versions/<str:version_id>/assessment-tests",
+        AssessmentTestsAssetView.as_view(), name="assessment-tests-store",
+    ),
+    path(
+        "teaching/courses/<str:course_id>/template-tasks/<str:question_id>/assessment-tests",
+        AssessmentQuestionTestsView.as_view(), name="assessment-tests-read",
+    ),
+    path(
+        "teaching/choice-import-template", ChoiceImportTemplateView.as_view(),
+        name="choice-import-template",
+    ),
+    path(
+        "teaching/courses/<str:course_id>/template-chapters/<str:chapter_id>/choice-import/preview",
+        ChoiceImportPreviewView.as_view(), name="choice-import-preview",
+    ),
+    path(
+        "teaching/courses/<str:course_id>/template-chapters/<str:chapter_id>/choice-import/confirm",
+        ChoiceImportConfirmView.as_view(), name="choice-import-confirm",
+    ),
     path(
         "teaching/courses/<str:course_id>/experiment-images",
         ExperimentImageCollectionView.as_view(),
@@ -77,10 +101,6 @@ urlpatterns = [
         TemplateVersionDetailView.as_view(),
     ),
     path(
-        "teaching/courses/<str:course_id>/template-versions/<str:version_id>/auto-check-rules",
-        AutoCheckRuleView.as_view(),
-    ),
-    path(
         "teaching/courses/<str:course_id>/template-versions/<str:version_id>/chapters",
         TemplateChapterCollectionView.as_view(),
     ),
@@ -107,10 +127,6 @@ urlpatterns = [
     path(
         "teaching/courses/<str:course_id>/template-versions/<str:version_id>/precheck",
         PrecheckView.as_view(),
-    ),
-    path(
-        "teaching/courses/<str:course_id>/template-versions/<str:version_id>/execution-spec",
-        ExecutionSpecSaveView.as_view(),
     ),
     path(
         "teaching/courses/<str:course_id>/template-versions/<str:version_id>/precheck-runs",

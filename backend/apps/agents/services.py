@@ -707,7 +707,6 @@ def create_agent_session(
         "CANCELLED",
         "EXPIRED",
         "ARCHIVING",
-        "DESTROYING",
     }:
         raise AgentScopeDenied(detail={"task_status": task.status})
     session, created = AgentSession.objects.get_or_create(
@@ -924,7 +923,9 @@ def request_tool(
     from .selectors import can_start_session, session_for_user
 
     session = session_for_user(actor=actor, session_id=session_id)
-    if not can_start_session(session=session) or session.mode != AgentSession.Mode.WORKSPACE_ASSIST:
+    if tool_name not in {"read_course_material", "read_task_diagnostics"}:
+        raise AgentToolDenied(detail={"tool_name": "unsupported"})
+    if not can_start_session(session=session) or session.mode != AgentSession.Mode.CODE_ASSIST:
         raise AgentToolDenied(detail={"session_id": session_id})
     day_start = timezone.now().replace(hour=0, minute=0, second=0, microsecond=0)
     daily_tool_calls = int((session.budget_snapshot or {}).get("daily_tool_calls", 100))
@@ -997,29 +998,19 @@ def request_tool(
     return call
 
 
-def _workspace_tool_scope_valid(call: AgentToolCall) -> bool:
-    if call.session.task_id is None:
-        return False
-    from apps.workspaces.models import WorkspaceSession
-
-    workspace = (
-        WorkspaceSession.objects.filter(
-            task=call.session.task,
-            student=call.session.student,
-            status=WorkspaceSession.Status.ACTIVE,
-            expires_at__gt=timezone.now(),
-        )
-        .order_by("-updated_at")
-        .first()
-    )
-    if workspace is None:
-        return False
-    capability = {
-        "read_course_material": "preview",
-        "read_task_diagnostics": "preview",
-        "workspace_draft": "snapshot",
-    }.get(call.tool_name)
-    return capability is not None and bool((workspace.capabilities or {}).get(capability))
+def _assessment_tool_scope_valid(call: AgentToolCall) -> bool:
+    from apps.experiments.models import PublicationTask
+    task = call.session.task
+    return bool(task and task.student_id == call.session.student_id
+                and task.course_id == call.session.course_id
+                and task.enrollment.status == "ACTIVE"
+                and task.publication.status == "PUBLISHED"
+                and task.status not in {"CANCELLED", "EXPIRED", "COMPLETED"}
+                and PublicationTask.objects.filter(
+                    publication_chapter__publication_id=task.publication_id,
+                    task_type="PROGRAMMING",
+                ).exists()
+                and call.tool_name in {"read_course_material", "read_task_diagnostics"})
 
 
 @transaction.atomic
@@ -1133,7 +1124,7 @@ def execute_tool_call(*, call_id: str, trace_id: str) -> AgentToolCallState:
                 "error_code": "AGENT_TOOL_POLICY_REVOKED",
             },
         )  # type: ignore[return-value]
-    if not _workspace_tool_scope_valid(call):
+    if not _assessment_tool_scope_valid(call):
         return compare_and_swap(
             AgentToolCallState,
             pk=state.pk,

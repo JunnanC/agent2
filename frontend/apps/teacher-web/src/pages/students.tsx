@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useNavigate, useParams } from "react-router-dom";
-import { teachingApi } from "@edu/api-client";
+import { assessmentTeachingApi, teachingApi } from "@edu/api-client";
 import { keys } from "@edu/query-keys";
 import {
   DataTable, Metric, Drawer, Modal, Panel, RequestStateView, StatusBadge, useToast, EmptyState,
@@ -21,7 +21,6 @@ interface ProgressRow {
 function workspaceChip(status: string): { label: string; tone: "good" | "warn" | "blue" | "neutral" } {
   if (["IN_PROGRESS", "REPORT_DRAFT"].includes(status)) return { label: "在线", tone: "good" };
   if (status === "READY") return { label: "准备就绪", tone: "blue" };
-  if (status === "PROVISIONING") return { label: "准备中", tone: "blue" };
   if (["SUBMITTED", "UNDER_REVIEW", "COMPLETED"].includes(status)) return { label: "已结束", tone: "neutral" };
   return { label: "未进入", tone: "neutral" };
 }
@@ -55,7 +54,7 @@ export function Students() {
   });
   const pendingReviews = useQuery({
     queryKey: keys.reviews(courseId, { status: "PENDING" }),
-    queryFn: () => teachingApi.reviews(courseId, { status: "PENDING" }),
+    queryFn: () => assessmentTeachingApi.reviews(courseId).then(rows => ({ rows: rows.filter(row => row.status === "SUBMITTED"), total: rows.filter(row => row.status === "SUBMITTED").length })),
   });
 
   const rows = useMemo(() => {
@@ -78,18 +77,8 @@ export function Students() {
   const [evidence, setEvidence] = useState<{ title: string; data: unknown } | null>(null);
 
   const previewMutation = useMutation({
-    mutationFn: (task: ProgressRow) => teachingApi.submissionPreview(courseId, task.public_id),
+    mutationFn: (task: ProgressRow) => assessmentTeachingApi.review(courseId, task.public_id),
     onSuccess: (data, task) => setEvidence({ title: `提交预览 · ${task.title}`, data }),
-    onError: (error) => toast.notify(apiErrorMessage(error), "error"),
-  });
-  const workspaceMutation = useMutation({
-    mutationFn: (task: ProgressRow) => teachingApi.studentTaskWorkspace(courseId, task.public_id),
-    onSuccess: (data, task) => setEvidence({ title: `工作区受控查看 · ${task.title}`, data }),
-    onError: (error) => toast.notify(apiErrorMessage(error), "error"),
-  });
-  const replayMutation = useMutation({
-    mutationFn: (task: ProgressRow) => teachingApi.operationReplay(courseId, task.public_id),
-    onSuccess: (data, task) => setEvidence({ title: `操作回放 · ${task.title}`, data }),
     onError: (error) => toast.notify(apiErrorMessage(error), "error"),
   });
 
@@ -149,7 +138,7 @@ export function Students() {
                   : "无截止时间"
               ) },
               {
-                key: "workspace", header: "工作区", render: (row: ProgressRow) => {
+                key: "assessment", header: "答题", render: (row: ProgressRow) => {
                   const chip = workspaceChip(row.status);
                   return <StatusBadge tone={chip.tone}>{chip.label}</StatusBadge>;
                 },
@@ -180,21 +169,14 @@ export function Students() {
         {detail ? (
           <>
             <div className="status-line is-ok" style={{ marginBottom: 10 }}>
-              ✓ 教师以受控方式查看学生工作区，不会影响学生操作。
+              ✓ 查看学生已交卷的固定代码和报告，不读取后续草稿。
             </div>
             <div style={{ display: "grid", gap: 8 }}>
               <button type="button" className="btn" disabled={previewMutation.isPending}
                 onClick={() => previewMutation.mutate(detail)}>
                 {previewMutation.isPending ? "载入中…" : "提交预览"}
               </button>
-              <button type="button" className="btn" disabled={workspaceMutation.isPending}
-                onClick={() => workspaceMutation.mutate(detail)}>
-                {workspaceMutation.isPending ? "载入中…" : "工作区受控查看"}
-              </button>
-              <button type="button" className="btn" disabled={replayMutation.isPending}
-                onClick={() => replayMutation.mutate(detail)}>
-                {replayMutation.isPending ? "载入中…" : "操作回放"}
-              </button>
+
             </div>
           </>
         ) : null}

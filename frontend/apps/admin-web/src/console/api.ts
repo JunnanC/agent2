@@ -51,15 +51,6 @@ export interface Runtime {
   available_memory_mb: number;
   last_health_at?: string;
 }
-export interface Instance {
-  public_id: string;
-  course_id: string;
-  student_id: string;
-  status: string;
-  runtime_driver: string;
-  runtime_health: string;
-  external_status: string;
-}
 export interface Audit {
   id: string;
   occurred_at: string;
@@ -70,10 +61,9 @@ export interface Audit {
   trace_id: string;
 }
 export interface Overview {
-  runtime?: { status?: string; error_code?: string; trace_id?: string; drivers?: Array<{ code: string; driver: string; status: string; error_code?: string }> };
+  runtime?: { runs?: Record<string, number>; grades?: Record<string, number>; status?: string; error_code?: string; trace_id?: string; drivers?: Array<{ code: string; driver: string; status: string; error_code?: string }> };
   logs?: { status?: string };
   alerts?: { code: string; message: string; severity: string }[];
-  instances?: Record<string, number>;
 }
 
 // Fetch every server page before applying local role filters; never label a partial page as a platform total.
