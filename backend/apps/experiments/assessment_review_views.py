@@ -6,7 +6,7 @@ from rest_framework.views import APIView
 
 from apps.accounts.permissions import IsTeachingPortal
 from apps.core.concurrency import parse_if_match
-from apps.core.errors import ResourceNotFound
+from apps.core.errors import ResourceNotFound, StateConflict
 from apps.core.idempotency import StoredResponse
 from apps.reviews.selectors import teaching_course
 
@@ -22,6 +22,67 @@ class AssessmentReviewWriteSerializer(serializers.Serializer):
     feedback = serializers.CharField(allow_blank=True, required=False, default="")
     return_until = serializers.DateTimeField(required=False, allow_null=True)
     retry_judge = serializers.BooleanField(required=False, default=False)
+
+
+class ReportSuggestionWriteSerializer(serializers.Serializer):
+    submission_version = serializers.IntegerField(min_value=1)
+
+
+class AssessmentReportSuggestionView(APIView):
+    permission_classes = [IsTeachingPortal]
+
+    @extend_schema(
+        request=ReportSuggestionWriteSerializer, responses=AssessmentResponseSerializer,
+        parameters=[IDEMPOTENCY_KEY],
+    )
+    def post(self, request: HttpRequest, course_id: str, task_id: str) -> Response:
+        from apps.agents.rubric_agent import assess_submission
+
+        serializer = ReportSuggestionWriteSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        course = teaching_course(actor=request.user, course_id=course_id)
+
+        def operation() -> StoredResponse:
+            try:
+                section = AssessmentSection.objects.select_related(
+                    "current_submission__report_version", "task__publication__rubric_version",
+                ).get(task__public_id=task_id, task__course=course, kind="PROGRAMMING")
+            except AssessmentSection.DoesNotExist as exc:
+                raise ResourceNotFound() from exc
+            submission = section.current_submission
+            if (
+                not submission
+                or submission.version_no != serializer.validated_data["submission_version"]
+                or not submission.report_version_id
+                or not section.task.publication.rubric_version_id
+            ):
+                raise StateConflict(detail={"submission": "report_or_current_version_required"})
+            rubric = [{
+                "criterion_id": item.public_id, "title": item.title,
+                "max_score": str(item.max_score),
+            } for item in section.task.publication.rubric_version.criteria.filter(is_active=True)]
+            try:
+                suggestion = assess_submission(
+                    report=submission.report_version.body_markdown, rubric=rubric,
+                )
+                maximum = {item["criterion_id"]: item["max_score"] for item in rubric}
+                from decimal import Decimal
+
+                if (
+                    len(suggestion.criteria) != len(maximum)
+                    or {item.criterion_id for item in suggestion.criteria} != set(maximum)
+                    or any(item.score > Decimal(maximum[item.criterion_id])
+                           for item in suggestion.criteria)
+                ):
+                    raise ValueError("invalid suggested scores")
+            except Exception as exc:
+                raise StateConflict(detail={"ai_report": "suggestion_unavailable"}) from exc
+            return StoredResponse(200, _body(request, {
+                "submission_version": submission.version_no,
+                "criteria": suggestion.model_dump(mode="json")["criteria"],
+            }), {})
+
+        return _idempotent(request, payload=serializer.validated_data, operation=operation)
 
 
 class AssessmentTeachingView(APIView):

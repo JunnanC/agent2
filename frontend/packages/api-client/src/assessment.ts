@@ -144,6 +144,12 @@ export interface AssessmentRun {
 }
 
 export const assessmentTeachingApi = {
+  reportSuggestion: (courseId: string, taskId: string, version: number, key: string) => request<{
+    submission_version: number;
+    criteria: Array<{ criterion_id: string; score: string; rationale: string; evidence: string }>;
+  }>(`/teaching/courses/${courseId}/tasks/${taskId}/assessment/report-suggestion`, {
+    method: "POST", body: { submission_version: version }, idempotencyKey: key,
+  }).then((r) => r.data),
   reorderQuestions: (courseId: string, chapterId: string, ids: string[], version: string | number) =>
     request(`/teaching/courses/${courseId}/template-chapters/${chapterId}/tasks/reorder`, {
       method: "POST", body: { ids }, ifMatch: version, idempotencyKey: newIdempotencyKey(),

@@ -1,6 +1,10 @@
 from django.urls import path
 
-from .assessment_review_views import AssessmentReviewListView, AssessmentTeachingView
+from .assessment_review_views import (
+    AssessmentReportSuggestionView,
+    AssessmentReviewListView,
+    AssessmentTeachingView,
+)
 from .assessment_views import (
     AssessmentDraftView,
     AssessmentHistoryView,
@@ -36,6 +40,10 @@ from .views import (
 )
 
 urlpatterns = [
+    path(
+        "teaching/courses/<str:course_id>/tasks/<str:task_id>/assessment/report-suggestion",
+        AssessmentReportSuggestionView.as_view(), name="assessment-report-suggestion",
+    ),
     path(
         "teaching/courses/<str:course_id>/assessment-reviews",
         AssessmentReviewListView.as_view(), name="assessment-review-list",

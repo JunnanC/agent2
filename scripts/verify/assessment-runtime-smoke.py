@@ -33,7 +33,7 @@ PROGRAMS = {
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--image", default="experimental-platform-workspace:local")
+    parser.add_argument("--image", default="experimental-platform-stdio:local")
     args = parser.parse_args()
     client = docker.from_env()
     for language, files in PROGRAMS.items():

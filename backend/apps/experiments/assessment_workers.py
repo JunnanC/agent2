@@ -105,7 +105,11 @@ def _executor(task: Any, owner: str) -> tuple[Any, StdioExecutor]:
     image_ref = f"{task.image_registry.rstrip('/')}/{task.image_repository}@{task.image_digest}"
     if image_ref.startswith("docker.io/library/"):
         image_ref = image_ref.removeprefix("docker.io/library/")
-    client.images.get(image_ref)
+    try:
+        client.images.get(image_ref)
+    except Exception:
+        client.close()
+        raise
     return client, StdioExecutor(client, image_ref, owner=owner)
 
 
@@ -239,6 +243,12 @@ def cleanup_assessment_resources() -> int:
                     _release(reservation, owner)
         finally:
             client.close()
+    # A crashed worker can leave only the admission record, with no Docker resources.
+    for reservation in QuotaReservation.objects.filter(
+        Q(status="ACTIVE") | Q(runtime_capacity_binding__status="ACTIVE"),
+        subject_type="ASSESSMENT", expires_at__lte=timezone.now(),
+    ):
+        _release(reservation, reservation.reservation_key)
     return cleaned
 
 

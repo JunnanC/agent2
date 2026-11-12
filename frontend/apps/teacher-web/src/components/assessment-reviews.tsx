@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { assessmentTeachingApi } from "@edu/api-client";
 import { useToast } from "@edu/ui";
+import { newIdempotencyKey } from "@edu/auth-client";
 
 export function AssessmentReviews({ courseId }: { courseId: string }) {
   const [taskId, setTaskId] = useState("");
@@ -9,6 +10,7 @@ export function AssessmentReviews({ courseId }: { courseId: string }) {
   const [feedback, setFeedback] = useState("");
   const [returnUntil, setReturnUntil] = useState("");
   const [busy, setBusy] = useState(false);
+  const [suggestion, setSuggestion] = useState<Awaited<ReturnType<typeof assessmentTeachingApi.reportSuggestion>> | null>(null);
   const toast = useToast();
   const rows = useQuery({ queryKey: ["assessment-reviews", courseId], queryFn: () => assessmentTeachingApi.reviews(courseId) });
   const detail = useQuery({ queryKey: ["assessment-review", courseId, taskId], queryFn: () => assessmentTeachingApi.review(courseId, taskId), enabled: !!taskId });
@@ -32,7 +34,7 @@ export function AssessmentReviews({ courseId }: { courseId: string }) {
     <h2>编程与报告卷评审</h2>
     {rows.error && <p role="alert">评审列表载入失败</p>}
     {!rows.data?.length && <p>暂无新答题链路的编程交卷。</p>}
-    <label>选择交卷<select className="field" value={taskId} onChange={(e) => { setTaskId(e.target.value); setScores({}); setFeedback(""); }}>
+    <label>选择交卷<select className="field" value={taskId} onChange={(e) => { setTaskId(e.target.value); setScores({}); setFeedback(""); setSuggestion(null); }}>
       <option value="">选择学生与实验</option>
       {rows.data?.map((row) => <option key={row.task_id} value={row.task_id}>{row.student_name} · {row.title} · 第 {row.version_no} 次</option>)}
     </select></label>
@@ -48,6 +50,16 @@ export function AssessmentReviews({ courseId }: { courseId: string }) {
       }}>重试平台失败的判题</button>
       {detail.data.sources?.map((source) => <details key={source.question_id}><summary>查看提交代码（{source.language}）</summary>{Object.entries(source.files).map(([path, code]) => <div key={path}><h4>{path}</h4><pre>{code}</pre></div>)}</details>)}
       <h3>本次总报告</h3><pre style={{ whiteSpace: "pre-wrap" }}>{detail.data.report?.body_markdown ?? "未附报告"}</pre>
+      <button className="btn" disabled={busy || !detail.data.report || section.status === "RETURNED"} onClick={() => {
+        setBusy(true);
+        void assessmentTeachingApi.reportSuggestion(courseId, taskId, section.submission_version!, newIdempotencyKey())
+          .then(setSuggestion).catch(() => toast.notify("报告 AI 建议暂不可用，请人工评分", "error")).finally(() => setBusy(false));
+      }}>获取报告 AI 建议</button>
+      {suggestion?.submission_version === section.submission_version && <div className="section">
+        <p>仅供教师参考，不修改代码分或报告正式成绩。</p>
+        {suggestion.criteria.map((item) => <p key={item.criterion_id}>{item.score} 分 · {item.rationale} · {item.evidence}</p>)}
+        <button className="btn" onClick={() => setScores(Object.fromEntries(suggestion.criteria.map((item) => [item.criterion_id, item.score])))}>填入建议，人工核对后保存</button>
+      </div>}
       {detail.data.report_criteria.map((criterion) => <label key={criterion.id}>{criterion.title}（满分 {criterion.max_score}）
         <input className="field" type="number" min="0" max={criterion.max_score} step="0.01" value={scores[criterion.id] ?? ""} onChange={(e) => setScores({ ...scores, [criterion.id]: e.target.value })} />
       </label>)}

@@ -90,6 +90,8 @@ def _writable(task: ExperimentTask, kind: str) -> None:
 
 def sync_assessment_status(task: ExperimentTask) -> None:
     """Keep the existing task projection usable without coupling it to container lifecycle."""
+    if task.status in {"ARCHIVING", "DESTROYING", "COMPLETED", "CANCELLED", "EXPIRED"}:
+        return
     kinds = {"CHOICE" if kind in CHOICE_TYPES else "PROGRAMMING" for kind in
              PublicationTask.objects.filter(
                  publication_chapter__publication_id=task.publication_id,

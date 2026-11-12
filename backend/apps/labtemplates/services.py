@@ -2255,6 +2255,24 @@ def copy_templates(
                 failure_semantics=rule.failure_semantics,
                 rule_digest=rule.rule_digest,
             )
+        from .assessment_assets import clone_marking_spec
+
+        for chapter in current.chapters.order_by("sort_order"):
+            copied_chapter = TemplateChapter.objects.create(
+                template_version=clone, title=chapter.title, description=chapter.description,
+                learning_objectives=chapter.learning_objectives, sort_order=chapter.sort_order,
+                resource_profile=chapter.resource_profile,
+            )
+            for question in chapter.tasks.filter(active=True).order_by("sort_order"):
+                TemplateTask.objects.create(
+                    chapter=copied_chapter, title=question.title, description=question.description,
+                    instructions=question.instructions, task_type=question.task_type,
+                    sort_order=question.sort_order, question_spec=question.question_spec,
+                    marking_spec=clone_marking_spec(question, clone), max_score=question.max_score,
+                    resource_profile=question.resource_profile,
+                    submission_policy=question.submission_policy,
+                    grading_policy=question.grading_policy,
+                )
         CourseCopyItem.objects.create(
             job=job,
             item_type="TEMPLATE_VERSION",

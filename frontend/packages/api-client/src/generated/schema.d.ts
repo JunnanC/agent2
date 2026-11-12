@@ -4297,6 +4297,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v2/teaching/courses/{course_id}/tasks/{task_id}/assessment/report-suggestion": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["api_v2_teaching_courses_tasks_assessment_report_suggestion_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v2/teaching/courses/{course_id}/tasks/{task_id}/operation-replay": {
         parameters: {
             query?: never;
@@ -6948,6 +6964,9 @@ export interface components {
                 [key: string]: number;
             };
             items: components["schemas"]["ReportScanAnomalyItem"][];
+        };
+        ReportSuggestionWrite: {
+            submission_version: number;
         };
         ReportVersionAttachmentData: {
             public_id: string;
@@ -16445,6 +16464,36 @@ export interface operations {
                 "application/json": components["schemas"]["AssessmentReviewWrite"];
                 "application/x-www-form-urlencoded": components["schemas"]["AssessmentReviewWrite"];
                 "multipart/form-data": components["schemas"]["AssessmentReviewWrite"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssessmentResponse"];
+                };
+            };
+        };
+    };
+    api_v2_teaching_courses_tasks_assessment_report_suggestion_create: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                course_id: string;
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReportSuggestionWrite"];
+                "application/x-www-form-urlencoded": components["schemas"]["ReportSuggestionWrite"];
+                "multipart/form-data": components["schemas"]["ReportSuggestionWrite"];
             };
         };
         responses: {

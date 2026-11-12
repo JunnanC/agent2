@@ -15870,6 +15870,77 @@
                 }
             }
         },
+        "/api/v2/teaching/courses/{course_id}/tasks/{task_id}/assessment/report-suggestion": {
+            "post": {
+                "operationId": "api_v2_teaching_courses_tasks_assessment_report_suggestion_create",
+                "parameters": [
+                    {
+                        "in": "header",
+                        "name": "Idempotency-Key",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "course_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "task_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "api"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ReportSuggestionWrite"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ReportSuggestionWrite"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ReportSuggestionWrite"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AssessmentResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
         "/api/v2/teaching/courses/{course_id}/tasks/{task_id}/operation-replay": {
             "get": {
                 "operationId": "api_v2_teaching_courses_tasks_operation_replay_list",
@@ -24989,6 +25060,18 @@
                 "required": [
                     "counts",
                     "items"
+                ]
+            },
+            "ReportSuggestionWrite": {
+                "type": "object",
+                "properties": {
+                    "submission_version": {
+                        "type": "integer",
+                        "minimum": 1
+                    }
+                },
+                "required": [
+                    "submission_version"
                 ]
             },
             "ReportVersionAttachmentData": {
