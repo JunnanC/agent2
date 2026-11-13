@@ -55,6 +55,8 @@ class RuntimeAdapter(GovernanceModel):
     available_cpu_millicores = models.PositiveBigIntegerField(default=0)
     capacity_memory_mb = models.PositiveBigIntegerField(default=0)
     available_memory_mb = models.PositiveBigIntegerField(default=0)
+    budget_cpu_millicores = models.PositiveBigIntegerField(default=0)
+    budget_memory_mb = models.PositiveBigIntegerField(default=0)
     last_health_at = models.DateTimeField(null=True, blank=True)
     health_detail = models.JSONField(default=dict)
     change_reason = models.CharField(max_length=500, blank=True, default="")

@@ -34,6 +34,15 @@ def _nonnegative_int(value: object) -> int:
         return 0
 
 
+def _capped_capacity(reported: int, configured: int) -> int:
+    """Keep the configured capacity as an upper bound; a probe may only lower it."""
+    if configured <= 0:
+        return reported
+    if reported <= 0:
+        return configured
+    return min(reported, configured)
+
+
 def _redis_client() -> Redis:
     return Redis.from_url(settings.REDIS_URL, decode_responses=True)
 
@@ -78,12 +87,24 @@ def probe_runtime_adapters(*, trace_id: str = "") -> dict[str, str]:
         status = str(health.get("status", RuntimeAdapter.HealthStatus.UNAVAILABLE))
         if status not in RuntimeAdapter.HealthStatus.values:
             status = RuntimeAdapter.HealthStatus.UNAVAILABLE
+        capacity_cpu = _capped_capacity(
+            _nonnegative_int(health.get("capacity_cpu_millicores", 0)),
+            adapter_config.budget_cpu_millicores,
+        )
+        capacity_memory = _capped_capacity(
+            _nonnegative_int(health.get("capacity_memory_mb", 0)),
+            adapter_config.budget_memory_mb,
+        )
         values = {
             "node_count": _nonnegative_int(health.get("node_count", 0)),
-            "capacity_cpu_millicores": _nonnegative_int(health.get("capacity_cpu_millicores", 0)),
-            "available_cpu_millicores": _nonnegative_int(health.get("available_cpu_millicores", 0)),
-            "capacity_memory_mb": _nonnegative_int(health.get("capacity_memory_mb", 0)),
-            "available_memory_mb": _nonnegative_int(health.get("available_memory_mb", 0)),
+            "capacity_cpu_millicores": capacity_cpu,
+            "available_cpu_millicores": min(
+                _nonnegative_int(health.get("available_cpu_millicores", 0)), capacity_cpu,
+            ),
+            "capacity_memory_mb": capacity_memory,
+            "available_memory_mb": min(
+                _nonnegative_int(health.get("available_memory_mb", 0)), capacity_memory,
+            ),
         }
         record_runtime_health(
             adapter_id=adapter_config.public_id,

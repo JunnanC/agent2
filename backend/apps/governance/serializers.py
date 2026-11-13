@@ -29,6 +29,8 @@ class RuntimeAdapterUpdateSerializer(serializers.Serializer):
     name = serializers.CharField(max_length=120, required=False)
     config_ref = serializers.CharField(max_length=128, required=False, allow_blank=True)
     status = serializers.ChoiceField(choices=RuntimeAdapter.Status.choices, required=False)
+    budget_cpu_millicores = serializers.IntegerField(min_value=0, required=False)
+    budget_memory_mb = serializers.IntegerField(min_value=0, required=False)
     reason = serializers.CharField(max_length=500)
 
 
@@ -165,6 +167,8 @@ class RuntimeAdapterDataSerializer(serializers.Serializer):
     available_cpu_millicores = serializers.IntegerField()
     capacity_memory_mb = serializers.IntegerField()
     available_memory_mb = serializers.IntegerField()
+    budget_cpu_millicores = serializers.IntegerField()
+    budget_memory_mb = serializers.IntegerField()
     last_health_at = serializers.DateTimeField(allow_null=True)
     row_version = serializers.IntegerField()
 
@@ -361,6 +365,8 @@ def runtime_adapter_data(item: RuntimeAdapter) -> dict[str, Any]:
         "available_cpu_millicores": item.available_cpu_millicores,
         "capacity_memory_mb": item.capacity_memory_mb,
         "available_memory_mb": item.available_memory_mb,
+        "budget_cpu_millicores": item.budget_cpu_millicores,
+        "budget_memory_mb": item.budget_memory_mb,
         "last_health_at": item.last_health_at,
         "row_version": item.row_version,
     }

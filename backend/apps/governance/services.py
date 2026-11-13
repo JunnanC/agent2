@@ -328,7 +328,11 @@ def update_runtime_adapter(
         adapter = RuntimeAdapter.objects.select_for_update().get(public_id=adapter_id)
     except RuntimeAdapter.DoesNotExist as exc:
         raise ResourceNotFound() from exc
-    clean = {key: changes[key] for key in ("name", "config_ref", "status") if key in changes}
+    clean = {
+        key: changes[key]
+        for key in ("name", "config_ref", "status", "budget_cpu_millicores", "budget_memory_mb")
+        if key in changes
+    }
     if "status" in clean and clean["status"] not in RuntimeAdapter.Status.values:
         raise GovernanceValidationError(detail={"status": clean["status"]})
     if "config_ref" in clean:
@@ -336,6 +340,20 @@ def update_runtime_adapter(
             runtime_type=adapter.runtime_type,
             driver=adapter.driver,
             config_ref=str(clean["config_ref"]),
+        )
+    if clean.get("budget_cpu_millicores", 0) > 0 and adapter.capacity_cpu_millicores:
+        clean["capacity_cpu_millicores"] = min(
+            adapter.capacity_cpu_millicores, clean["budget_cpu_millicores"],
+        )
+        clean["available_cpu_millicores"] = min(
+            adapter.available_cpu_millicores, clean["capacity_cpu_millicores"],
+        )
+    if clean.get("budget_memory_mb", 0) > 0 and adapter.capacity_memory_mb:
+        clean["capacity_memory_mb"] = min(
+            adapter.capacity_memory_mb, clean["budget_memory_mb"],
+        )
+        clean["available_memory_mb"] = min(
+            adapter.available_memory_mb, clean["capacity_memory_mb"],
         )
     clean["change_reason"] = _reason(reason)
     changed = compare_and_swap(
