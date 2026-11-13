@@ -88,6 +88,7 @@ export const assessmentApi = {
       question_id: string; selected_option_ids: string[]; language: string;
       snapshot_digest: string | null;
     }>;
+    report: string | null;
   }> }>(`/tasks/${taskId}/assessment/submissions`).then((r) => r.data.rows),
   choiceDraft: (taskId: string, questionId: string) =>
     request<ChoiceDraft>(`${questionPath(taskId, questionId)}/draft`).then((r) => r.data),

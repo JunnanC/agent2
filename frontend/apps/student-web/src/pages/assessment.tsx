@@ -288,6 +288,22 @@ export function AssessmentWorkbench() {
   return <AssessmentPage key={taskId} taskId={taskId} />;
 }
 
+function downloadSubmittedReport(
+  submission: { version_no: number; report: string | null },
+  taskId: string,
+) {
+  if (!submission.report) return;
+  const blob = new Blob([submission.report], { type: "text/markdown;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `experiment-report-${taskId}-v${submission.version_no}.md`;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
 function AssessmentPage({ taskId }: { taskId: string }) {
   const toast = useToast();
   const [section, setSection] = useState<"CHOICE" | "PROGRAMMING">("CHOICE");
@@ -311,6 +327,9 @@ function AssessmentPage({ taskId }: { taskId: string }) {
   const sectionState = data?.sections.find((s) => s.kind === selectedSection);
   const choiceSubmission = history.data?.find(
     (row) => row.kind === "CHOICE" && row.is_current,
+  ) ?? null;
+  const currentReport = history.data?.find(
+    (row) => row.kind === "PROGRAMMING" && row.is_current && row.report,
   ) ?? null;
   const serverNow = data ? new Date(data.server_time).getTime() + Date.now() - assessment.dataUpdatedAt : Date.now();
   const disabled = !!sectionState && (
@@ -397,6 +416,7 @@ function AssessmentPage({ taskId }: { taskId: string }) {
     <button className="btn primary" disabled={busy || disabled} onClick={() => void submit()}>{busy ? "提交中…" : selectedSection === "CHOICE" ? "提交选择题卷" : "提交编程与报告卷"}</button>
     <p>{data.all_submitted ? "两部分已交齐（或当前实验全部部分已提交）" : "尚未交齐全部部分"}</p>
     {sectionState?.score !== null && <p>本部分得分：{sectionState?.score} / {sectionState?.max_score ?? "—"}</p>}
+    {currentReport && <p><button className="btn" onClick={() => downloadSubmittedReport(currentReport, taskId)}>下载已提交报告</button> <span className="subtle">第 {currentReport.version_no} 次提交，不含后续草稿</span></p>}
     <details><summary>交卷历史</summary>{history.data?.map((submission) => <p key={`${submission.kind}:${submission.version_no}`}>
       {submission.kind === "CHOICE" ? "选择题" : "编程与报告"} · 第 {submission.version_no} 次 · {new Date(submission.submitted_at).toLocaleString()}{submission.is_current ? "（当前有效）" : ""}
       {submission.kind === "CHOICE" && <button className="btn sm" onClick={() => setViewing(submission)}>查看答卷</button>}
