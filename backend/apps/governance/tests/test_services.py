@@ -233,6 +233,46 @@ class GovernanceServiceTests(TestCase):
             RuntimeAdapter.Driver.DOCKER_LOCAL, config_ref="test/local",
         )
 
+    @override_settings(RUNTIME_MODE="fake", RUNTIME_ADAPTER_CODE="runtime/budget")
+    def test_runtime_probe_cannot_raise_configured_capacity(self) -> None:
+        from types import SimpleNamespace
+
+        adapter = RuntimeAdapter.objects.create(
+            code="runtime/budget",
+            name="Budgeted runtime",
+            runtime_type=RuntimeAdapter.RuntimeType.CONTAINER,
+            driver=RuntimeAdapter.Driver.DOCKER_LOCAL,
+            status=RuntimeAdapter.Status.ENABLED,
+            config_ref="test/budget",
+            budget_cpu_millicores=1000,
+            budget_memory_mb=1024,
+            change_reason="test",
+        )
+        health = {
+            "status": "HEALTHY",
+            "node_count": 1,
+            "capacity_cpu_millicores": 8000,
+            "available_cpu_millicores": 6000,
+            "capacity_memory_mb": 8192,
+            "available_memory_mb": 4096,
+        }
+        runtime = SimpleNamespace(health=lambda: health)
+
+        with patch("apps.governance.tasks.runtime_for_driver", return_value=runtime):
+            probe_runtime_adapters.run(trace_id="governance-budget-test")
+            adapter.refresh_from_db()
+            self.assertEqual(adapter.capacity_cpu_millicores, 1000)
+            self.assertEqual(adapter.available_cpu_millicores, 1000)
+            self.assertEqual(adapter.capacity_memory_mb, 1024)
+            self.assertEqual(adapter.available_memory_mb, 1024)
+
+            health["capacity_cpu_millicores"] = 500
+            health["available_cpu_millicores"] = 400
+            probe_runtime_adapters.run(trace_id="governance-budget-test-2")
+            adapter.refresh_from_db()
+            self.assertEqual(adapter.capacity_cpu_millicores, 500)
+            self.assertEqual(adapter.available_cpu_millicores, 400)
+
     def test_reservation_uses_platform_course_user_intersection(self) -> None:
         reservation = self._reserve("reservation-1")
         self.assertEqual(reservation.status, QuotaReservation.Status.ACTIVE)
