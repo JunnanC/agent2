@@ -7,7 +7,7 @@ import { keys } from "@edu/query-keys";
 import {
   DataTable, Metric, Drawer, Modal, Panel, RequestStateView, StatusBadge, useToast, EmptyState,
 } from "@edu/ui";
-import { apiErrorMessage } from "@/lib/format";
+import { ASSESSMENT_STATUS_LABEL, GRADING_STATUS_LABEL, REPORT_REVIEW_STATUS_LABEL, apiErrorMessage } from "@/lib/format";
 import { formatDateTime } from "@/lib/task-format";
 
 interface ProgressRow {
@@ -30,8 +30,8 @@ function workspaceChip(status: string): { label: string; tone: "good" | "warn" |
 function reportChip(status: string, required = true): { label: string; tone: "good" | "warn" | "neutral" } {
   if (!required) return { label: "不适用", tone: "neutral" };
   if (status === "REPORT_DRAFT") return { label: "草稿", tone: "warn" };
-  if (["SUBMITTED", "UNDER_REVIEW", "APPROVED"].includes(status)) return { label: "已提交", tone: "good" };
-  if (status === "COMPLETED") return { label: "已评阅", tone: "good" };
+  if (["SUBMITTED", "UNDER_REVIEW"].includes(status)) return { label: "已提交", tone: "good" };
+  if (["COMPLETED", "APPROVED"].includes(status)) return { label: "已评阅", tone: "good" };
   return { label: "未提交", tone: "neutral" };
 }
 
@@ -58,8 +58,9 @@ export function Students() {
   const pendingReviews = useQuery({
     queryKey: keys.reviews(courseId, { status: "PENDING" }),
     queryFn: () => assessmentTeachingApi.reviews(courseId).then(rows => ({
-      rows: rows.filter(row => row.kind === "PROGRAMMING" && row.status === "SUBMITTED"),
-      total: rows.filter(row => row.kind === "PROGRAMMING" && row.status === "SUBMITTED").length,
+      allRows: rows,
+      rows: rows.filter(row => row.kind === "PROGRAMMING" && row.review_status === "PENDING"),
+      total: rows.filter(row => row.kind === "PROGRAMMING" && row.review_status === "PENDING").length,
     })),
   });
 
@@ -151,7 +152,10 @@ export function Students() {
               },
               {
                 key: "report", header: "报告", render: (row: ProgressRow) => {
-                  const chip = reportChip(row.status, row.report_required !== false);
+                  const review = pendingReviews.data?.allRows.find(item => item.task_id === row.public_id && item.kind === "PROGRAMMING");
+                  const chip = review?.review_status
+                    ? { label: REPORT_REVIEW_STATUS_LABEL[review.review_status] ?? "状态未知", tone: ["RETURNED", "PENDING"].includes(review.review_status) ? "warn" as const : "good" as const }
+                    : reportChip(row.status, row.report_required !== false);
                   return <StatusBadge tone={chip.tone}>{chip.label}</StatusBadge>;
                 },
               },
@@ -207,18 +211,19 @@ export function SubmissionEvidence({ review }: { review: TeacherAssessmentReview
           <Metric key={section.kind}
             label={section.kind === "CHOICE" ? "选择题" : "编程与报告"}
             value={section.score ?? "—"}
-            sub={`满分 ${section.max_score} · ${section.grading_status}`} />
+            sub={`满分 ${section.max_score} · ${GRADING_STATUS_LABEL[section.grading_status] ?? "状态未知"}`} />
         ))}
       </div>
       {sections.map((section) => (
         <Panel key={section.kind} title={section.kind === "CHOICE" ? "选择题答卷" : "编程与报告答卷"}>
-          <p className="subtle">答题状态：{section.status} · 评分状态：{section.grading_status}</p>
+          <p className="subtle">答题状态：{ASSESSMENT_STATUS_LABEL[section.status] ?? "状态未知"} · 评分状态：{GRADING_STATUS_LABEL[section.grading_status] ?? "状态未知"}</p>
+          {section.kind === "PROGRAMMING" && section.review_status && <p>报告评审：{REPORT_REVIEW_STATUS_LABEL[section.review_status] ?? "状态未知"}</p>}
           {section.questions.length > 0 ? (
             <DataTable
               rows={section.questions}
               rowKey={(question) => question.id}
               columns={[
-                { key: "question", header: "题目", render: (question) => question.id },
+                { key: "question", header: "题目", render: (question) => question.title || "未命名题目" },
                 { key: "language", header: "语言", render: (question) => question.language || "—" },
                 { key: "score", header: "得分", render: (question) => (
                   question.score == null ? "待评分" : `${question.score} / ${question.max_score}`

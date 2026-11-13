@@ -381,6 +381,7 @@ class AssessmentTests(TestCase):
             scores={}, feedback="Reviewed", trace_id="d" * 32,
         )
         assert reviewed["score"] == "10.00"
+        assert reviewed["questions"][0]["title"] == "Code"
         section.refresh_from_db()
         hidden = section_result(section, student=True)
         assert hidden["score"] is None
@@ -400,6 +401,7 @@ class AssessmentTests(TestCase):
         )
         section.refresh_from_db()
         assert section.status == "RETURNED"
+        assert section_result(section, student=False)["review_status"] == "RETURNED"
         assert section_result(section, student=False)["score"] is None
         with self.assertRaises(StateConflict):
             review_programming(
@@ -421,3 +423,35 @@ class AssessmentTests(TestCase):
         assert rows[0]["correct_option_ids"] == ["b"]
         assert rows[0]["options"] == self.public["options"]
         assert Decimal(rows[0]["score"]) == Decimal("5")
+
+    def test_report_review_status_is_independent_of_code_grading(self) -> None:
+        from ..assessment import section_result
+        from ..models import QuestionSubmission, ReportGrade
+
+        section = AssessmentSection.objects.create(
+            task=self.task, kind="PROGRAMMING", status="SUBMITTED",
+        )
+        submission = SectionSubmission.objects.create(
+            section=section, version_no=1, submitted_at=timezone.now(), trace_id="bug7",
+        )
+        AssessmentSection.objects.filter(pk=section.pk).update(current_submission=submission)
+        section.refresh_from_db()
+        answer = QuestionSubmission.objects.create(submission=submission, question=self.question)
+        QuestionGrade.objects.create(answer=answer, status="PENDING")
+        grade = ReportGrade.objects.create(submission=submission)
+        assert section_result(section, student=False)["review_status"] == "PENDING"
+        ReportGrade.objects.filter(pk=grade.pk).update(score=Decimal("0"))
+        section.refresh_from_db()
+        result = section_result(section, student=False)
+        assert result["review_status"] == "COMPLETED"
+        assert result["grading_status"] == "PENDING"
+        assert "review_status" not in section_result(section, student=True)
+
+        from ..assessment_review_views import AssessmentReviewListView
+
+        request = SimpleNamespace(user=self.owner, query_params={})
+        response = AssessmentReviewListView().get(request, self.course.public_id)
+        assert response.data["data"]["rows"][0]["review_status"] == "COMPLETED"
+        AssessmentSection.objects.filter(pk=section.pk).update(status="RETURNED")
+        response = AssessmentReviewListView().get(request, self.course.public_id)
+        assert response.data["data"]["rows"][0]["review_status"] == "RETURNED"

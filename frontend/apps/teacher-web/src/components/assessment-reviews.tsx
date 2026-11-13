@@ -1,9 +1,11 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { assessmentTeachingApi } from "@edu/api-client";
 import type { TeacherAssessmentReview } from "@edu/api-client";
 import { useToast } from "@edu/ui";
 import { newIdempotencyKey } from "@edu/auth-client";
+
+import { GRADING_STATUS_LABEL, REPORT_REVIEW_STATUS_LABEL } from "@/lib/format";
 
 export function AssessmentReviews({ courseId, publicationId = "" }: { courseId: string; publicationId?: string }) {
   const [taskId, setTaskId] = useState("");
@@ -13,6 +15,7 @@ export function AssessmentReviews({ courseId, publicationId = "" }: { courseId: 
   const [busy, setBusy] = useState(false);
   const [suggestion, setSuggestion] = useState<Awaited<ReturnType<typeof assessmentTeachingApi.reportSuggestion>> | null>(null);
   const toast = useToast();
+  const client = useQueryClient();
   const rows = useQuery({ queryKey: ["assessment-reviews", courseId, publicationId], queryFn: () => assessmentTeachingApi.reviews(courseId, publicationId) });
   const detail = useQuery({ queryKey: ["assessment-review", courseId, taskId], queryFn: () => assessmentTeachingApi.review(courseId, taskId), enabled: !!taskId });
   const section = detail.data?.sections.find((s) => s.kind === "PROGRAMMING");
@@ -26,7 +29,12 @@ export function AssessmentReviews({ courseId, publicationId = "" }: { courseId: 
         submission_version: section.submission_version, scores, feedback,
         ...(returned ? { return_until: new Date(returnUntil).toISOString() } : {}),
       }, section.row_version);
-      await detail.refetch(); await rows.refetch(); toast.notify(returned ? "编程卷已退回，选择题提交保持有效" : "报告评分已保存");
+      await Promise.all([
+        detail.refetch(), rows.refetch(),
+        client.invalidateQueries({ queryKey: ["teaching-reviews", courseId] }),
+        client.invalidateQueries({ queryKey: ["teaching-analytics", courseId, "progress"] }),
+        client.invalidateQueries({ queryKey: ["teaching-courses", "overview-summary"] }),
+      ]); toast.notify(returned ? "编程卷已退回，选择题提交保持有效" : "报告评分已保存");
     } catch (error) { toast.notify(error instanceof Error ? error.message : "操作失败", "error"); }
     finally { setBusy(false); }
   }
@@ -37,13 +45,14 @@ export function AssessmentReviews({ courseId, publicationId = "" }: { courseId: 
     {!rows.data?.length && <p>暂无可评审的答题交卷。</p>}
     <label>选择交卷<select className="field" value={taskId} onChange={(e) => { setTaskId(e.target.value); setScores({}); setFeedback(""); setSuggestion(null); }}>
       <option value="">选择学生与实验</option>
-      {rows.data?.map((row) => <option key={row.task_id} value={row.task_id}>{row.student_name} · {row.title} · {row.kind === "CHOICE" ? "选择题" : "编程与报告"} · 第 {row.version_no} 次</option>)}
+      {rows.data?.map((row) => <option key={`${row.task_id}:${row.kind}`} value={row.task_id}>{row.student_name} · {row.title} · {row.kind === "CHOICE" ? "选择题" : "编程与报告"} · 第 {row.version_no} 次 · {REPORT_REVIEW_STATUS_LABEL[row.review_status ?? ""] ?? "状态未知"}</option>)}
     </select></label>
     {detail.data && detail.data.choice_answers?.length > 0 && <ChoiceReview data={detail.data} />}
     {detail.data && section && <>
       <h3>{detail.data.student_name} · 第 {section.submission_version} 次提交</h3>
-      <p>代码自动评分：{section.grading_status}，教师不直接修改代码得分。</p>
-      {section.questions.map((q) => <p key={q.id}>题目 {q.id}（{q.language}）：{q.score ?? "待判题"} / {q.max_score}</p>)}
+      <p>报告评审：{REPORT_REVIEW_STATUS_LABEL[section.review_status ?? ""] ?? "状态未知"}</p>
+      <p>综合评分状态：{GRADING_STATUS_LABEL[section.grading_status] ?? "状态未知"}，教师不直接修改代码得分。</p>
+      {section.questions.map((q) => <p key={q.id}>{q.title || "未命名题目"}（{q.language}）：{q.score ?? "待判题"} / {q.max_score}</p>)}
       <button className="btn" disabled={busy} onClick={() => {
         setBusy(true);
         void assessmentTeachingApi.saveReview(courseId, taskId, {

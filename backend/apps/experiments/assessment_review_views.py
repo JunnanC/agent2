@@ -10,7 +10,7 @@ from apps.core.errors import ResourceNotFound, StateConflict
 from apps.core.idempotency import StoredResponse
 from apps.reviews.selectors import teaching_course
 
-from .assessment import choice_review_data, review_programming, section_result
+from .assessment import choice_review_data, report_review_status, review_programming, section_result
 from .assessment_views import AssessmentResponseSerializer
 from .models import AssessmentSection, ExperimentTask
 from .views import IDEMPOTENCY_KEY, IF_MATCH, _body, _idempotent, _response
@@ -212,8 +212,8 @@ class AssessmentReviewListView(APIView):
             )
             .select_related(
                 "task__student",
-                "task__publication",
-                "current_submission",
+                "task__publication__rubric_version",
+                "current_submission__report_grade",
             )
             .order_by("-updated_at")
         )
@@ -231,6 +231,7 @@ class AssessmentReviewListView(APIView):
                         "title": section.task.publication.title,
                         "kind": section.kind,
                         "status": section.status,
+                        "review_status": report_review_status(section),
                         "version_no": section.current_submission.version_no,
                     }
                     for section in sections[:500]
