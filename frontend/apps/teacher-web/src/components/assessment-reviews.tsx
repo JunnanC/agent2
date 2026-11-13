@@ -54,11 +54,28 @@ export function AssessmentReviews({ courseId, publicationId = "" }: { courseId: 
       <h3>本次总报告</h3><pre style={{ whiteSpace: "pre-wrap" }}>{detail.data.report?.body_markdown ?? "未附报告"}</pre>
       <button className="btn" disabled={!detail.data.report} onClick={() => {
         if (!detail.data.report) return;
-        const blob = new Blob([detail.data.report.body_markdown], { type: "text/markdown;charset=utf-8" });
+        const report = detail.data.report;
+        const sectionData = detail.data.sections.find((item) => item.kind === "PROGRAMMING");
+        const version = detail.data.history?.find((item) => item.kind === "PROGRAMMING")
+          ?.versions.find((item) => item.version_no === report.version_no);
+        const submittedAt = version ? new Date(version.submitted_at).toLocaleString("zh-CN") : "—";
+        const header = [
+          "# 实验报告",
+          "",
+          `- 学生：${detail.data.student_name}`,
+          `- 任务：${taskId}`,
+          `- 提交版本：第 ${report.version_no} 次`,
+          `- 提交时间：${submittedAt}`,
+          `- 报告得分：${sectionData?.report_score == null ? "待评分" : `${sectionData.report_score} / ${sectionData.report_max_score ?? "—"}`}`,
+          "",
+          "---",
+          "",
+        ].join("\n");
+        const blob = new Blob([header + report.body_markdown], { type: "text/markdown;charset=utf-8" });
         const url = URL.createObjectURL(blob);
         const link = document.createElement("a");
         link.href = url;
-        link.download = `experiment-report-${taskId}-v${detail.data.report.version_no}.md`;
+        link.download = `experiment-report-${taskId}-v${report.version_no}.md`;
         document.body.append(link);
         link.click();
         link.remove();

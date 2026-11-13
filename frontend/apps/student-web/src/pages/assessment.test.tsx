@@ -114,7 +114,10 @@ it("downloads the current submitted report version, not the editable draft", asy
     reader.onload = () => resolve(String(reader.result));
     reader.readAsText(blobs[0]!);
   });
-  expect(text).toBe("# 已提交报告");
+  expect(text).toContain("- 提交版本：第 2 次");
+  expect(text).toContain("- 提交时间：");
+  expect(text).toContain("- 本部分得分：");
+  expect(text).toContain("# 已提交报告");
   expect(click).toHaveBeenCalled();
   click.mockRestore();
   client.clear();

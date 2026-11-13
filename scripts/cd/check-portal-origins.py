@@ -38,6 +38,26 @@ def main(env_path: str, compose_path: str) -> None:
     ]
     if missing:
         raise SystemExit("Missing DJANGO_TRUSTED_ORIGINS: " + ", ".join(missing))
+    gateway = services.get("workspace-gateway")
+    if gateway:
+        gateway_env = gateway.get("environment") or {}
+        allowed_value = gateway_env.get("WORKSPACE_ALLOWED_ORIGINS", "")
+        if isinstance(allowed_value, list):
+            allowed_value = ",".join(str(item) for item in allowed_value)
+        allowed = {
+            value.strip().rstrip("/")
+            for value in str(allowed_value).split(",")
+            if value.strip()
+        }
+        missing_gateway = [
+            f"https://{host}"
+            for host in normalized_hosts
+            if f"https://{host}" not in allowed
+        ]
+        if missing_gateway:
+            raise SystemExit(
+                "Missing WORKSPACE_ALLOWED_ORIGINS: " + ", ".join(missing_gateway)
+            )
 
 
 if __name__ == "__main__":

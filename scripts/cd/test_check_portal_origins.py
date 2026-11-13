@@ -59,3 +59,35 @@ class PortalOriginTests(unittest.TestCase):
             data["services"]["django"]["environment"]["DJANGO_TRUSTED_ORIGINS"] += ",https://a.example"
             compose.write_text(json.dumps(data))
             module.main(str(env), str(compose))
+
+    def test_workspace_gateway_must_allow_every_portal_origin(self):
+        with tempfile.TemporaryDirectory() as directory:
+            env = Path(directory, ".env")
+            compose = Path(directory, "resolved.json")
+            env.write_text("STUDENT_HOST=s.example\nTEACHER_HOST=t.example\nADMIN_HOST=a.example\n")
+            data = {"services": {
+                "django": {"environment": {
+                    "DJANGO_TRUSTED_ORIGINS": "https://s.example,https://t.example,https://a.example"
+                }},
+                "workspace-gateway": {"environment": {
+                    "WORKSPACE_ALLOWED_ORIGINS": "https://s.example,https://t.example"
+                }},
+            }}
+            compose.write_text(json.dumps(data))
+            with self.assertRaisesRegex(SystemExit, "https://a.example"):
+                module.main(str(env), str(compose))
+            data["services"]["workspace-gateway"]["environment"][
+                "WORKSPACE_ALLOWED_ORIGINS"
+            ] += ",https://a.example"
+            compose.write_text(json.dumps(data))
+            module.main(str(env), str(compose))
+
+    def test_no_workspace_gateway_skips_its_origin_check(self):
+        with tempfile.TemporaryDirectory() as directory:
+            env = Path(directory, ".env")
+            compose = Path(directory, "resolved.json")
+            env.write_text("STUDENT_HOST=s.example\nTEACHER_HOST=t.example\nADMIN_HOST=a.example\n")
+            compose.write_text(json.dumps({"services": {"django": {"environment": {
+                "DJANGO_TRUSTED_ORIGINS": "https://s.example,https://t.example,https://a.example"
+            }}}}))
+            module.main(str(env), str(compose))
