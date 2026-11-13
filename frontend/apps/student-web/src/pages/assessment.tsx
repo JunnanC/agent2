@@ -289,15 +289,27 @@ export function AssessmentWorkbench() {
 }
 
 function downloadSubmittedReport(
-  submission: { version_no: number; report: string | null },
-  taskId: string,
+  submission: { version_no: number; submitted_at: string; report: string | null },
+  taskId: string, score: string | null, maxScore: string | null,
 ) {
   if (!submission.report) return;
-  const blob = new Blob([submission.report], { type: "text/markdown;charset=utf-8" });
+  const submittedAt = new Date(submission.submitted_at).toLocaleString("zh-CN");
+  const header = [
+    "# 实验报告",
+    "",
+    `- 任务：${taskId}`,
+    `- 提交版本：第 ${submission.version_no} 次`,
+    `- 提交时间：${submittedAt}`,
+    `- 本部分得分：${score == null ? "待评分" : `${score} / ${maxScore ?? "—"}`}`,
+    "",
+    "---",
+    "",
+  ].join("\n");
+  const blob = new Blob([header + submission.report], { type: "text/markdown;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = `experiment-report-${taskId}-v${submission.version_no}.md`;
+  link.download = `experiment-report-${taskId}-v${submission.version_no}-${new Date(submission.submitted_at).toISOString().slice(0, 10)}.md`;
   document.body.append(link);
   link.click();
   link.remove();
@@ -331,6 +343,7 @@ function AssessmentPage({ taskId }: { taskId: string }) {
   const currentReport = history.data?.find(
     (row) => row.kind === "PROGRAMMING" && row.is_current && row.report,
   ) ?? null;
+  const programmingState = data?.sections.find((s) => s.kind === "PROGRAMMING");
   const serverNow = data ? new Date(data.server_time).getTime() + Date.now() - assessment.dataUpdatedAt : Date.now();
   const disabled = !!sectionState && (
     sectionState.editable === false || serverNow >= new Date(sectionState.deadline).getTime()
@@ -416,7 +429,7 @@ function AssessmentPage({ taskId }: { taskId: string }) {
     <button className="btn primary" disabled={busy || disabled} onClick={() => void submit()}>{busy ? "提交中…" : selectedSection === "CHOICE" ? "提交选择题卷" : "提交编程与报告卷"}</button>
     <p>{data.all_submitted ? "两部分已交齐（或当前实验全部部分已提交）" : "尚未交齐全部部分"}</p>
     {sectionState?.score !== null && <p>本部分得分：{sectionState?.score} / {sectionState?.max_score ?? "—"}</p>}
-    {currentReport && <p><button className="btn" onClick={() => downloadSubmittedReport(currentReport, taskId)}>下载已提交报告</button> <span className="subtle">第 {currentReport.version_no} 次提交，不含后续草稿</span></p>}
+    {currentReport && <p><button className="btn" onClick={() => downloadSubmittedReport(currentReport, taskId, programmingState?.score ?? null, programmingState?.max_score ?? null)}>下载已提交报告</button> <span className="subtle">第 {currentReport.version_no} 次提交，不含后续草稿</span></p>}
     <details><summary>交卷历史</summary>{history.data?.map((submission) => <p key={`${submission.kind}:${submission.version_no}`}>
       {submission.kind === "CHOICE" ? "选择题" : "编程与报告"} · 第 {submission.version_no} 次 · {new Date(submission.submitted_at).toLocaleString()}{submission.is_current ? "（当前有效）" : ""}
       {submission.kind === "CHOICE" && <button className="btn sm" onClick={() => setViewing(submission)}>查看答卷</button>}

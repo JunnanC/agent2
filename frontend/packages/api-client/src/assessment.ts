@@ -226,6 +226,7 @@ export interface TeacherAssessmentReview {
     report_score: string | null; report_max_score: string; feedback: string;
   }>;
   report: { body_markdown: string; version_no: number } | null;
+  history?: Array<{ kind: string; versions: Array<{ version_no: number; submitted_at: string }> }>;
   choice_answers: Array<{
     question_id: string; title: string; task_type: string;
     options: Array<{ id: string; text: string }>;
