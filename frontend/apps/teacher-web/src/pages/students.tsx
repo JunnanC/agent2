@@ -17,18 +17,20 @@ interface ProgressRow {
   status: string;
   progress: number;
   effective_deadline?: string | null;
+  report_required?: boolean;
 }
 
 function workspaceChip(status: string): { label: string; tone: "good" | "warn" | "blue" | "neutral" } {
   if (["IN_PROGRESS", "REPORT_DRAFT"].includes(status)) return { label: "在线", tone: "good" };
   if (status === "READY") return { label: "准备就绪", tone: "blue" };
-  if (["SUBMITTED", "UNDER_REVIEW", "COMPLETED"].includes(status)) return { label: "已结束", tone: "neutral" };
+  if (["SUBMITTED", "UNDER_REVIEW", "COMPLETED", "APPROVED"].includes(status)) return { label: "已结束", tone: "neutral" };
   return { label: "未进入", tone: "neutral" };
 }
 
-function reportChip(status: string): { label: string; tone: "good" | "warn" | "neutral" } {
+function reportChip(status: string, required = true): { label: string; tone: "good" | "warn" | "neutral" } {
+  if (!required) return { label: "不适用", tone: "neutral" };
   if (status === "REPORT_DRAFT") return { label: "草稿", tone: "warn" };
-  if (["SUBMITTED", "UNDER_REVIEW"].includes(status)) return { label: "已提交", tone: "good" };
+  if (["SUBMITTED", "UNDER_REVIEW", "APPROVED"].includes(status)) return { label: "已提交", tone: "good" };
   if (status === "COMPLETED") return { label: "已评阅", tone: "good" };
   return { label: "未提交", tone: "neutral" };
 }
@@ -36,7 +38,7 @@ function reportChip(status: string): { label: string; tone: "good" | "warn" | "n
 function riskChip(row: ProgressRow): { label: string; tone: "good" | "warn" } {
   if (["FAILED", "REJECTED"].includes(row.status)) return { label: "需要关注", tone: "warn" };
   if (row.effective_deadline && new Date(row.effective_deadline).getTime() < Date.now()
-    && !["COMPLETED", "SUBMITTED", "UNDER_REVIEW"].includes(row.status)) {
+    && !["COMPLETED", "SUBMITTED", "UNDER_REVIEW", "APPROVED"].includes(row.status)) {
     return { label: "逾期未完成", tone: "warn" };
   }
   return { label: "正常", tone: "good" };
@@ -55,7 +57,10 @@ export function Students() {
   });
   const pendingReviews = useQuery({
     queryKey: keys.reviews(courseId, { status: "PENDING" }),
-    queryFn: () => assessmentTeachingApi.reviews(courseId).then(rows => ({ rows: rows.filter(row => row.status === "SUBMITTED"), total: rows.filter(row => row.status === "SUBMITTED").length })),
+    queryFn: () => assessmentTeachingApi.reviews(courseId).then(rows => ({
+      rows: rows.filter(row => row.kind === "PROGRAMMING" && row.status === "SUBMITTED"),
+      total: rows.filter(row => row.kind === "PROGRAMMING" && row.status === "SUBMITTED").length,
+    })),
   });
 
   const rows = useMemo(() => {
@@ -66,7 +71,7 @@ export function Students() {
 
   const inProgressCount = (progress.data?.rows ?? []).filter((row) => ["IN_PROGRESS", "REPORT_DRAFT", "READY"].includes(row.status)).length;
   const staleCount = (progress.data?.rows ?? []).filter((row) => {
-    if (["COMPLETED", "SUBMITTED", "UNDER_REVIEW"].includes(row.status)) return false;
+    if (["COMPLETED", "SUBMITTED", "UNDER_REVIEW", "APPROVED"].includes(row.status)) return false;
     const deadline = row.effective_deadline ? new Date(row.effective_deadline).getTime() : 0;
     return deadline > 0 && deadline < Date.now() - 7 * 86_400_000;
   }).length;
@@ -146,7 +151,7 @@ export function Students() {
               },
               {
                 key: "report", header: "报告", render: (row: ProgressRow) => {
-                  const chip = reportChip(row.status);
+                  const chip = reportChip(row.status, row.report_required !== false);
                   return <StatusBadge tone={chip.tone}>{chip.label}</StatusBadge>;
                 },
               },

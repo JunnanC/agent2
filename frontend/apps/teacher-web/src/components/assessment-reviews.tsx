@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { assessmentTeachingApi } from "@edu/api-client";
+import type { TeacherAssessmentReview } from "@edu/api-client";
 import { useToast } from "@edu/ui";
 import { newIdempotencyKey } from "@edu/auth-client";
 
@@ -31,13 +32,14 @@ export function AssessmentReviews({ courseId, publicationId = "" }: { courseId: 
   }
 
   return <section className="panel" aria-label="分卷评审">
-    <h2>编程与报告卷评审</h2>
+    <h2>答题评审</h2>
     {rows.error && <p role="alert">评审列表载入失败</p>}
-    {!rows.data?.length && <p>暂无新答题链路的编程交卷。</p>}
+    {!rows.data?.length && <p>暂无可评审的答题交卷。</p>}
     <label>选择交卷<select className="field" value={taskId} onChange={(e) => { setTaskId(e.target.value); setScores({}); setFeedback(""); setSuggestion(null); }}>
       <option value="">选择学生与实验</option>
-      {rows.data?.map((row) => <option key={row.task_id} value={row.task_id}>{row.student_name} · {row.title} · 第 {row.version_no} 次</option>)}
+      {rows.data?.map((row) => <option key={row.task_id} value={row.task_id}>{row.student_name} · {row.title} · {row.kind === "CHOICE" ? "选择题" : "编程与报告"} · 第 {row.version_no} 次</option>)}
     </select></label>
+    {detail.data && detail.data.choice_answers?.length > 0 && <ChoiceReview data={detail.data} />}
     {detail.data && section && <>
       <h3>{detail.data.student_name} · 第 {section.submission_version} 次提交</h3>
       <p>代码自动评分：{section.grading_status}，教师不直接修改代码得分。</p>
@@ -81,4 +83,26 @@ export function AssessmentReviews({ courseId, publicationId = "" }: { courseId: 
       <button className="btn" disabled={busy || !returnUntil} onClick={() => void save(true)}>退回编程与报告卷</button>
     </>}
   </section>;
+}
+
+function ChoiceReview({ data }: { data: TeacherAssessmentReview }) {
+  const optionText = (options: Array<{ id: string; text: string }>, ids: string[]) =>
+    options.filter((option) => ids.includes(option.id)).map((option) => option.text).join("；") || "未作答";
+  return <div className="section" aria-label="选择题答卷">
+    <h3>{data.student_name} · 选择题答卷</h3>
+    <table className="data-table">
+      <thead><tr><th>题目</th><th>学生选择</th><th>正确答案</th><th>得分</th></tr></thead>
+      <tbody>
+        {data.choice_answers.map((answer) => (
+          <tr key={answer.question_id}>
+            <td>{answer.title}</td>
+            <td>{optionText(answer.options, answer.selected_option_ids)}</td>
+            <td>{optionText(answer.options, answer.correct_option_ids)}</td>
+            <td>{answer.score == null ? "待评分" : `${answer.score} / ${answer.max_score}`}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+    <p className="subtle">选择题由平台自动评分，教师可只读核对作答与答案，无需人工打分。</p>
+  </div>;
 }

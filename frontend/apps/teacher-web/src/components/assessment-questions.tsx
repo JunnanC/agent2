@@ -3,6 +3,7 @@ import { assessmentTeachingApi, teachingApi } from "@edu/api-client";
 import type { AssessmentLanguage, HiddenGroup, TeacherQuestion, TemplateVersion } from "@edu/api-client";
 import { newIdempotencyKey } from "@edu/auth-client";
 import { useToast } from "@edu/ui";
+import { importErrorText } from "@/lib/import-errors";
 
 const languages: AssessmentLanguage[] = ["python", "c", "cpp", "java", "go"];
 const entrypoints = { python: "main.py", c: "main.c", cpp: "main.cpp", java: "Main.java", go: "main.go" };
@@ -134,15 +135,18 @@ export function AssessmentQuestions({ courseId, templateId, version, refresh }: 
         {chapters.map((c) => <option key={c.public_id} value={c.public_id}>{c.title}</option>)}
       </select></label>
       <a className="btn" href="/api/v2/teaching/choice-import-template" download>下载 Excel 模板</a>
+      <p className="subtle">多选题的正确答案用英文逗号分隔，例如 A,C；答案必须是该题已填写的选项。</p>
       <input aria-label="导入选择题 Excel" type="file" accept=".xlsx" onChange={(e) => { setImportFile(e.target.files?.[0] ?? null); setImportPreview(null); }} />
       <button className="btn" disabled={!importFile || !selectedChapter} onClick={() => void act(async () => {
         const result = await assessmentTeachingApi.previewImport(courseId, selectedChapter, importFile!);
         setImportPreview(result); setImportKey(newIdempotencyKey());
       })}>预检导入</button>
       {importPreview && <div className="section">
-        <p>将追加 {importPreview.count} 道题，共 {importPreview.total_score} 分。</p>
+        {importPreview.errors.length > 0
+          ? <p>预检通过 {importPreview.rows.length} 道题，共 {importPreview.total_score} 分；有 {importPreview.errors.length} 行错误，修正全部错误后才能追加。</p>
+          : <p>将追加 {importPreview.count} 道题，共 {importPreview.total_score} 分。</p>}
         {importPreview.rows.map((q, i) => <p key={i}>{i + 1}. {q.description}（{q.max_score} 分）</p>)}
-        {importPreview.errors.map((error) => <p role="alert" key={error.row}>第 {error.row} 行：{JSON.stringify(error.error)}</p>)}
+        {importPreview.errors.map((error) => <p role="alert" key={error.row}>第 {error.row} 行：{importErrorText(error.error)}</p>)}
         <button className="btn primary" disabled={!importPreview.token} onClick={() => void act(async () => {
           await assessmentTeachingApi.confirmImport(courseId, selectedChapter, importFile!, importPreview.token!, importKey);
           setImportPreview(null);
