@@ -470,6 +470,21 @@ def request_run(
     return run
 
 
+def report_review_status(section: AssessmentSection) -> str:
+    if section.status == "RETURNED":
+        return "RETURNED"
+    publication = section.task.publication
+    if (
+        section.kind != "PROGRAMMING" or not publication.report_required
+        or not publication.rubric_version_id or publication.rubric_version.total_score == 0
+    ):
+        return "NOT_REQUIRED"
+    if not section.current_submission_id:
+        return "NOT_SUBMITTED"
+    report = getattr(section.current_submission, "report_grade", None)
+    return "COMPLETED" if report is not None and report.score is not None else "PENDING"
+
+
 def section_result(section: AssessmentSection, *, student: bool) -> dict[str, Any]:
     task = section.task
     submission = section.current_submission
@@ -496,6 +511,8 @@ def section_result(section: AssessmentSection, *, student: bool) -> dict[str, An
         "grading_status": "NOT_SUBMITTED", "visible": visible,
         "submission_version": submission.version_no if submission else None,
     }
+    if not student:
+        result["review_status"] = report_review_status(section)
     if not submission:
         if timezone.now() >= _deadline(task, section.kind):
             result["grading_status"] = "COMPLETED"
@@ -517,7 +534,8 @@ def section_result(section: AssessmentSection, *, student: bool) -> dict[str, An
     if not visible:
         return result
     result["questions"] = [{
-        "id": answer.question.public_id, "score": str(answer.grade.score)
+        "id": answer.question.public_id, "title": answer.question.title,
+        "score": str(answer.grade.score)
         if answer.grade.status == "COMPLETED" else None,
         "max_score": str(answer.question.max_score), "language": answer.language,
         **({"private_result": answer.grade.private_result} if not student else {}),

@@ -33,14 +33,15 @@ export interface Assessment {
   sections: Array<{
     kind: "CHOICE" | "PROGRAMMING";
     status: "NOT_SUBMITTED" | "SUBMITTED" | "RETURNED";
+    review_status?: "NOT_REQUIRED" | "NOT_SUBMITTED" | "PENDING" | "COMPLETED" | "RETURNED";
     submission_version: number | null;
-    grading_status: "NOT_SUBMITTED" | "PENDING" | "COMPLETED";
+    grading_status: "NOT_SUBMITTED" | "PENDING" | "COMPLETED" | "RETURNED";
     score: string | null;
     max_score?: string;
     deadline: string;
     editable?: boolean;
     feedback?: string;
-    questions?: Array<{ id: string; score: string | null; max_score: string; language: string }>;
+    questions?: Array<{ id: string; title?: string; score: string | null; max_score: string; language: string }>;
   }>;
   all_submitted: boolean;
   server_time: string;
@@ -162,7 +163,7 @@ export const assessmentTeachingApi = {
       method: "POST", body: { ids }, ifMatch: version, idempotencyKey: newIdempotencyKey(),
     }).then((r) => r.data),
   reviews: (courseId: string, publicationId?: string) => request<{ rows: Array<{
-    task_id: string; student_name: string; title: string; kind: string; status: string; version_no: number;
+    task_id: string; student_name: string; title: string; kind: string; status: string; review_status?: string; version_no: number;
   }> }>(`/teaching/courses/${courseId}/assessment-reviews`, { query: { publication_id: publicationId || undefined } }).then((r) => r.data.rows),
   review: (courseId: string, taskId: string) => request<TeacherAssessmentReview>(
     `/teaching/courses/${courseId}/tasks/${taskId}/assessment`,
@@ -222,7 +223,7 @@ export interface TeacherAssessmentReview {
   student_name: string;
   sections: Array<Assessment["sections"][number] & {
     row_version: number; max_score: string;
-    questions: Array<{ id: string; score: string | null; max_score: string; language: string }>;
+    questions: Array<{ id: string; title?: string; score: string | null; max_score: string; language: string }>;
     report_score: string | null; report_max_score: string; feedback: string;
   }>;
   report: { body_markdown: string; version_no: number } | null;

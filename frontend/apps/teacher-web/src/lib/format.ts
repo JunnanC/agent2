@@ -57,3 +57,16 @@ export function apiErrorMessage(error: unknown): string {
   }
   return fallback;
 }
+
+export const ASSESSMENT_STATUS_LABEL: Record<string, string> = {
+  NOT_SUBMITTED: "未交卷", SUBMITTED: "已交卷", RETURNED: "已退回",
+};
+
+export const GRADING_STATUS_LABEL: Record<string, string> = {
+  NOT_SUBMITTED: "未交卷", PENDING: "评分中", COMPLETED: "评分完成", RETURNED: "已退回",
+};
+
+export const REPORT_REVIEW_STATUS_LABEL: Record<string, string> = {
+  NOT_REQUIRED: "无需评审", NOT_SUBMITTED: "未提交", PENDING: "待评审",
+  COMPLETED: "已完成评审", RETURNED: "已退回",
+};

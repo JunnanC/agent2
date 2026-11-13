@@ -80,3 +80,19 @@ it("shows a read-only answer sheet for choice submissions", async () => {
   expect(screen.getByText("5 / 5")).toBeInTheDocument();
   client.clear();
 });
+
+it("shows returned reports in the submission list and detail", async () => {
+  vi.mocked(assessmentTeachingApi.reviews).mockResolvedValue([{
+    task_id: "task", student_name: "学生", title: "实验", kind: "PROGRAMMING",
+    version_no: 2, status: "RETURNED", review_status: "RETURNED",
+  }]);
+  vi.mocked(assessmentTeachingApi.review).mockResolvedValue({
+    student_name: "学生", sections: [{ kind: "PROGRAMMING", status: "RETURNED",
+      review_status: "RETURNED", submission_version: 2, row_version: 7, questions: [], grading_status: "RETURNED" }],
+    sources: [], report: { body_markdown: "固定报告" }, report_criteria: [],
+  } as never);
+  await show();
+  expect(screen.getByRole("option", { name: /已退回/ })).toBeInTheDocument();
+  expect(screen.getByText("报告评审：已退回")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "保存报告评分" })).toBeDisabled();
+});

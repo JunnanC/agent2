@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import { beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { ToastProvider } from "@edu/ui";
 import { assessmentTeachingApi, teachingApi } from "@edu/api-client";
 import { Students } from "./students";
@@ -10,6 +10,8 @@ vi.mock("@edu/api-client", () => ({
   teachingApi: { progress: vi.fn() },
   assessmentTeachingApi: { reviews: vi.fn() },
 }));
+
+afterEach(cleanup);
 
 beforeEach(() => {
   vi.resetAllMocks();
@@ -34,5 +36,26 @@ it("treats an approved choice task as finished, with report marked not applicabl
   expect(screen.getByText("不适用")).toBeTruthy();
   expect(screen.getByText("正常")).toBeTruthy();
   expect(screen.queryByText("逾期未完成")).toBeNull();
+  client.clear();
+});
+
+it("counts only reports awaiting review and shows completed and returned reports", async () => {
+  vi.mocked(teachingApi.progress).mockResolvedValue({ rows: [
+    { public_id: "done", student_name: "已评分学生", title: "实验", status: "APPROVED", progress: 100 },
+    { public_id: "returned", student_name: "退回学生", title: "实验", status: "REPORT_DRAFT", progress: 0 },
+  ], total: 2 } as never);
+  vi.mocked(assessmentTeachingApi.reviews).mockResolvedValue([
+    { task_id: "done", kind: "PROGRAMMING", status: "SUBMITTED", review_status: "COMPLETED" },
+    { task_id: "returned", kind: "PROGRAMMING", status: "RETURNED", review_status: "RETURNED" },
+    { task_id: "pending", kind: "PROGRAMMING", status: "SUBMITTED", review_status: "PENDING" },
+    { task_id: "choice", kind: "CHOICE", status: "SUBMITTED", review_status: "NOT_REQUIRED" },
+  ] as never);
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(<QueryClientProvider client={client}><ToastProvider><MemoryRouter initialEntries={["/courses/course/students"]}>
+    <Routes><Route path="/courses/:courseId/students" element={<Students />} /></Routes>
+  </MemoryRouter></ToastProvider></QueryClientProvider>);
+  expect(await screen.findByText("已完成评审")).toBeTruthy();
+  expect(screen.getByText("已退回")).toBeTruthy();
+  expect(screen.getByText("报告待审").closest(".metric")?.textContent).toContain("1");
   client.clear();
 });
