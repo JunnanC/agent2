@@ -82,6 +82,7 @@ export const assessmentApi = {
     request<Assessment>(`/tasks/${encodeURIComponent(taskId)}/assessment`).then((r) => r.data),
   history: (taskId: string) => request<{ rows: Array<{
     kind: string; version_no: number; submitted_at: string; is_current: boolean;
+    report: string | null;
   }> }>(`/tasks/${taskId}/assessment/submissions`).then((r) => r.data.rows),
   choiceDraft: (taskId: string, questionId: string) =>
     request<ChoiceDraft>(`${questionPath(taskId, questionId)}/draft`).then((r) => r.data),

@@ -50,6 +50,18 @@ export function AssessmentReviews({ courseId, publicationId = "" }: { courseId: 
       }}>重试平台失败的判题</button>
       {detail.data.sources?.map((source) => <details key={source.question_id}><summary>查看提交代码（{source.language}）</summary>{Object.entries(source.files).map(([path, code]) => <div key={path}><h4>{path}</h4><pre>{code}</pre></div>)}</details>)}
       <h3>本次总报告</h3><pre style={{ whiteSpace: "pre-wrap" }}>{detail.data.report?.body_markdown ?? "未附报告"}</pre>
+      <button className="btn" disabled={!detail.data.report} onClick={() => {
+        if (!detail.data.report) return;
+        const blob = new Blob([detail.data.report.body_markdown], { type: "text/markdown;charset=utf-8" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `experiment-report-${taskId}-v${detail.data.report.version_no}.md`;
+        document.body.append(link);
+        link.click();
+        link.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 0);
+      }}>下载报告</button>
       <button className="btn" disabled={busy || !detail.data.report || section.status === "RETURNED"} onClick={() => {
         setBusy(true);
         void assessmentTeachingApi.reportSuggestion(courseId, taskId, section.submission_version!, newIdempotencyKey())
