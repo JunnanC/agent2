@@ -2,7 +2,7 @@ import { useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { meApi } from "@edu/api-client";
 import { keys } from "@edu/query-keys";
-import { Breadcrumbs, Button, EmptyState, Icon, Modal, Panel, RequestStateView, StatusBadge, useToast } from "@edu/ui";
+import { Breadcrumbs, Button, EmptyState, Icon, Modal, Panel, RequestStateView, StatusBadge, isSafeUrl, useToast } from "@edu/ui";
 import type { IconName } from "@edu/ui";
 import { formatDateTime } from "@/lib/task-format";
 
@@ -128,11 +128,12 @@ export function Notifications() {
             {!selected.read && <Button size="sm" disabled={markRead.isPending} onClick={() => markAsRead(selected)}>
               {markRead.isPending ? "标记中…" : "标记已读"}
             </Button>}
-            {(selected.links ?? []).filter((link) => link.task_id || link.course_id || link.url).map((link, index) => {
+            {(selected.links ?? []).filter((link) => link.task_id || link.course_id || link.url).map((link) => {
               const href = link.url || (link.task_id ? `/experiments/${link.task_id}` : `/courses/${link.course_id}`);
+              if (!isSafeUrl(href)) return null;
               const label = href.startsWith("/experiments/") ? "查看实验任务"
                 : href.startsWith("/courses/") ? "查看课程" : link.label && link.label !== "查看详情" ? link.label : "打开相关页面";
-              return <a key={index} className="btn sm" href={href}>{label}</a>;
+              return <a key={link.url ?? link.task_id ?? link.course_id ?? href} className="btn sm" href={href}>{label}</a>;
             })}
           </div>
         </>}

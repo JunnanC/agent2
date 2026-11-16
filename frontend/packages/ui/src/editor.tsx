@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef } from "react";
 import type { ReactNode } from "react";
+import DOMPurify from "dompurify";
 
 export interface RichTextEditorProps {
   ariaLabel: string;
@@ -29,7 +30,7 @@ export function RichTextEditor({
 
   useEffect(() => {
     if (editorRef.current && !dirtyRef.current) {
-      editorRef.current.innerHTML = initialHtml;
+      editorRef.current.innerHTML = DOMPurify.sanitize(initialHtml);
       lastHtmlRef.current = editorRef.current.innerHTML;
     }
   }, [initialHtml]);

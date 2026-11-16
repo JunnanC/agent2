@@ -4,7 +4,7 @@ import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { fileApi, studentApi, taskApi } from "@edu/api-client";
 import type { Material } from "@edu/api-client";
 import { keys } from "@edu/query-keys";
-import { Breadcrumbs, Button, EmptyState, Panel, RequestStateView, StatusBadge, useToast } from "@edu/ui";
+import { Breadcrumbs, Button, EmptyState, Panel, RequestStateView, StatusBadge, isSafeUrl, useToast } from "@edu/ui";
 import { formatDate, formatDateTime, taskStatusLabel, taskStatusTone } from "@/lib/task-format";
 import { CourseDiscussion } from "@/components/course-discussion";
 import { CourseAgent } from "@/components/course-agent";
@@ -211,8 +211,10 @@ export function CourseDetail({ discussionPage = false }: { discussionPage?: bool
                   {(materials.data?.rows ?? []).map((material) => (
                     <div className="item" key={material.public_id}>
                       <div>
-                        {material.kind === "LINK" && material.link_url ? (
+                        {material.kind === "LINK" && isSafeUrl(material.link_url) ? (
                           <a className="task-title" href={material.link_url} target="_blank" rel="noreferrer">{material.title}</a>
+                        ) : material.kind === "LINK" ? (
+                          <span className="task-title">{material.title}</span>
                         ) : material.kind === "TEXT" ? (
                           <Button size="sm" onClick={() => setOpenTextMaterialId((current) => current === material.public_id ? null : material.public_id)}>{material.title}</Button>
                         ) : (
