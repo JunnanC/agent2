@@ -59,7 +59,10 @@ TASK_TRANSITIONS: dict[str, set[str]] = {
     "UNDER_REVIEW": {"APPROVED", "REPORT_DRAFT", "FAILED", "ARCHIVING"},
     "APPROVED": {"REPORT_DRAFT", "ARCHIVING"},
     "ARCHIVING": {"COMPLETED", "CANCELLED", "EXPIRED", "FAILED"},
-    "FAILED": set(), "COMPLETED": set(), "CANCELLED": set(), "EXPIRED": set(),
+    "FAILED": set(),
+    "COMPLETED": set(),
+    "CANCELLED": set(),
+    "EXPIRED": set(),
 }
 
 
@@ -139,9 +142,7 @@ def _resource_snapshot(
     profile: ResourceProfile | None, *, runtime_type: str, source_id: str
 ) -> dict[str, Any]:
     if profile is None:
-        raise PublicationValidationError(
-            detail={"resource_profile_id": {source_id: "required"}}
-        )
+        raise PublicationValidationError(detail={"resource_profile_id": {source_id: "required"}})
     request_limit_valid = (
         profile.cpu_request_millicores > 0
         and profile.cpu_request_millicores <= profile.cpu_limit_millicores
@@ -175,7 +176,8 @@ def _resource_snapshot(
 
 def _ready_image_snapshot(template: TemplateVersion) -> dict[str, Any]:
     image = (
-        ExperimentImage.objects.filter(
+        ExperimentImage.objects
+        .filter(
             template_version=template,
             status=ExperimentImage.Status.READY,
         )
@@ -207,37 +209,61 @@ def _content_snapshot(template: TemplateVersion) -> dict[str, Any]:
         if _digest(assessment) != template.spec_digest:
             raise PublicationValidationError(detail={"template": "precheck_digest_mismatch"})
         has_programming = any(q["task_type"] == "PROGRAMMING" for q in assessment["questions"])
-        image = _ready_image_snapshot(template) if has_programming else {
-            "image": None, "registry": "", "repository": "", "digest": "",
-        }
-        profile = _resource_snapshot(
-            template.resource_profile, runtime_type=template.runtime_type,
-            source_id=template.public_id,
-        ) if has_programming else {}
+        image = (
+            _ready_image_snapshot(template)
+            if has_programming
+            else {
+                "image": None,
+                "registry": "",
+                "repository": "",
+                "digest": "",
+            }
+        )
+        profile = (
+            _resource_snapshot(
+                template.resource_profile,
+                runtime_type=template.runtime_type,
+                source_id=template.public_id,
+            )
+            if has_programming
+            else {}
+        )
         return {
-            "chapters": [{
-                "source_chapter_id": chapter["id"], "title": chapter["title"],
-                "description": chapter["description"],
-                "learning_objectives": chapter["learning_objectives"],
-                "sort_order": chapter["sort_order"], "resource_profile_snapshot": {},
-                "tasks": [{
-                    "source_task_id": question["id"], "title": question["title"],
-                    "description": question["description"],
-                    "instructions": question["instructions"], "task_type": question["task_type"],
-                    "sort_order": question["sort_order"],
-                    "image_digest": (
-                        image["digest"] if question["task_type"] == "PROGRAMMING" else ""
-                    ),
-                    "resource_profile_snapshot": profile,
-                    "execution_snapshot": {
-                        "tests_digest": question.get("tests_digest", ""),
-                    },
-                    "submission_policy": {}, "grading_policy": {},
-                    "question_spec": question["question_spec"],
-                    "marking_spec": question["marking_spec"], "max_score": question["max_score"],
-                } for question in assessment["questions"]
-                    if question["chapter_id"] == chapter["id"]],
-            } for chapter in assessment["chapters"]],
+            "chapters": [
+                {
+                    "source_chapter_id": chapter["id"],
+                    "title": chapter["title"],
+                    "description": chapter["description"],
+                    "learning_objectives": chapter["learning_objectives"],
+                    "sort_order": chapter["sort_order"],
+                    "resource_profile_snapshot": {},
+                    "tasks": [
+                        {
+                            "source_task_id": question["id"],
+                            "title": question["title"],
+                            "description": question["description"],
+                            "instructions": question["instructions"],
+                            "task_type": question["task_type"],
+                            "sort_order": question["sort_order"],
+                            "image_digest": (
+                                image["digest"] if question["task_type"] == "PROGRAMMING" else ""
+                            ),
+                            "resource_profile_snapshot": profile,
+                            "execution_snapshot": {
+                                "tests_digest": question.get("tests_digest", ""),
+                            },
+                            "submission_policy": {},
+                            "grading_policy": {},
+                            "question_spec": question["question_spec"],
+                            "marking_spec": question["marking_spec"],
+                            "max_score": question["max_score"],
+                        }
+                        for question in assessment["questions"]
+                        if question["chapter_id"] == chapter["id"]
+                    ],
+                }
+                for chapter in assessment["chapters"]
+            ],
             "template_digest": _json_digest(assessment),
             "template_spec_digest": template.spec_digest,
             "runtime_adapter": template.runtime_adapter if has_programming else None,
@@ -245,7 +271,8 @@ def _content_snapshot(template: TemplateVersion) -> dict[str, Any]:
             "runtime_adapter_config_ref": (
                 template.runtime_adapter.config_ref if has_programming else ""
             ),
-            "resource_profile": profile, "image": image,
+            "resource_profile": profile,
+            "image": image,
         }
     raise PublicationValidationError(detail={"questions": "assessment_questions_required"})
 
@@ -263,7 +290,8 @@ def precheck_template_version(
         raise PublicationValidationError(detail={"template_version_id": "required"})
     try:
         locked_template = (
-            TemplateVersion.objects.select_for_update()
+            TemplateVersion.objects
+            .select_for_update()
             .select_related("template", "runtime_adapter", "resource_profile")
             .get(**lookup)
         )
@@ -273,9 +301,7 @@ def precheck_template_version(
         locked_template.status != TemplateVersion.Status.PUBLISHED
         or not locked_template.spec_digest
     ):
-        raise PublicationValidationError(
-            detail={"template_version_status": locked_template.status}
-        )
+        raise PublicationValidationError(detail={"template_version_status": locked_template.status})
     return _content_snapshot(locked_template)
 
 
@@ -293,9 +319,14 @@ def _runtime_snapshot(
     ):
         return {
             "template_spec_digest": template.spec_digest,
-            "runtime_adapter": None, "runtime_adapter_driver": "",
-            "runtime_adapter_config_ref": "", "image": None, "image_registry": "",
-            "image_repository": "", "image_digest": "", "resource_profile": None,
+            "runtime_adapter": None,
+            "runtime_adapter_driver": "",
+            "runtime_adapter_config_ref": "",
+            "image": None,
+            "image_registry": "",
+            "image_repository": "",
+            "image_digest": "",
+            "resource_profile": None,
             "resource_profile_snapshot": {},
         }
 
@@ -482,7 +513,8 @@ def create_publication(
         )
         rubric = (
             RubricVersion.objects.select_related("rubric").get(public_id=data["rubric_version_id"])
-            if data.get("rubric_version_id") else None
+            if data.get("rubric_version_id")
+            else None
         )
     except (TemplateVersion.DoesNotExist, RubricVersion.DoesNotExist) as exc:
         raise ResourceNotFound() from exc
@@ -490,8 +522,19 @@ def create_publication(
         rubric is not None and rubric.rubric.course_id != course.pk
     ):
         raise PublicationValidationError(detail={"reason": "CROSS_COURSE_REFERENCE"})
+    from apps.courses.models import Chapter
+
+    chapter = None
+    if data.get("course_chapter_id"):
+        try:
+            chapter = Chapter.objects.get(public_id=data["course_chapter_id"], course=course)
+        except Chapter.DoesNotExist as exc:
+            raise PublicationValidationError(
+                detail={"course_chapter_id": "cross_course_or_missing"}
+            ) from exc
     publication = TaskPublication.objects.create(
         course=course,
+        course_chapter=chapter,
         template_version=template,
         rubric_version=rubric,
         title=str(data["title"]).strip(),
@@ -538,7 +581,8 @@ def update_publication(
     try:
         course = Course.objects.select_for_update().get(public_id=course_id)
         publication = (
-            TaskPublication.objects.select_for_update()
+            TaskPublication.objects
+            .select_for_update()
             .select_related("template_version__template", "rubric_version__rubric", "course")
             .get(public_id=publication_id, course=course)
         )
@@ -566,6 +610,22 @@ def update_publication(
             "review_mode",
         }
     }
+    if "course_chapter_id" in data:
+        from apps.courses.models import Chapter
+
+        try:
+            changes["course_chapter"] = (
+                Chapter.objects.get(
+                    public_id=data["course_chapter_id"],
+                    course=course,
+                )
+                if data["course_chapter_id"]
+                else None
+            )
+        except Chapter.DoesNotExist as exc:
+            raise PublicationValidationError(
+                detail={"course_chapter_id": "cross_course_or_missing"}
+            ) from exc
     if "template_version_id" in data:
         try:
             changes["template_version"] = TemplateVersion.objects.get(
@@ -616,7 +676,8 @@ def _audience_enrollments(
                 detail={"selected_enrollment_ids": "全部在读学生模式不能指定单独受众"}
             )
         return list(
-            Enrollment.objects.filter(course=publication.course, status=Enrollment.Status.ACTIVE)
+            Enrollment.objects
+            .filter(course=publication.course, status=Enrollment.Status.ACTIVE)
             .select_related("student")
             .order_by("id")
         )
@@ -629,7 +690,8 @@ def _audience_enrollments(
             detail={"selected_enrollment_ids": "指定学生列表不能包含重复记录"}
         )
     enrollments = list(
-        Enrollment.objects.filter(
+        Enrollment.objects
+        .filter(
             course=publication.course, status=Enrollment.Status.ACTIVE, public_id__in=selected_ids
         )
         .select_related("student")
@@ -700,9 +762,12 @@ def _link_retake_task(
 ) -> None:
     if publication.retake_of_id is None:
         return
-    source_task = ExperimentTask.objects.select_for_update().filter(
-        publication_id=publication.retake_of_id, student=enrollment.student
-    ).first()
+    source_task = (
+        ExperimentTask.objects
+        .select_for_update()
+        .filter(publication_id=publication.retake_of_id, student=enrollment.student)
+        .first()
+    )
     if source_task is None:
         raise PublicationValidationError(detail={"retake_source_task": "原实验任务不存在"})
     try:
@@ -732,8 +797,10 @@ def _create_task(
         "runtime_adapter": publication.runtime_adapter,
         "runtime_adapter_driver": publication.runtime_adapter_driver,
         "runtime_adapter_config_ref": publication.runtime_adapter_config_ref,
-        "image": publication.image, "image_registry": publication.image_registry,
-        "image_repository": publication.image_repository, "image_digest": publication.image_digest,
+        "image": publication.image,
+        "image_registry": publication.image_registry,
+        "image_repository": publication.image_repository,
+        "image_digest": publication.image_digest,
         "resource_profile": publication.resource_profile,
         "resource_profile_snapshot": dict(publication.resource_profile_snapshot or {}),
     }
@@ -791,9 +858,7 @@ def _create_task(
     return task
 
 
-def _copy_publication_snapshots(
-    *, publication: TaskPublication, content: dict[str, Any]
-) -> None:
+def _copy_publication_snapshots(*, publication: TaskPublication, content: dict[str, Any]) -> None:
     for chapter_snapshot in content["chapters"]:
         chapter = PublicationChapter.objects.create(
             publication=publication,
@@ -844,7 +909,8 @@ def publish_publication(
     try:
         course = Course.objects.select_for_update().get(public_id=course_id)
         publication = (
-            TaskPublication.objects.select_for_update()
+            TaskPublication.objects
+            .select_for_update()
             .select_related("course", "rubric_version__rubric", "retake_of")
             .get(public_id=publication_id, course=course)
         )
@@ -857,7 +923,8 @@ def publish_publication(
         raise PublicationStateConflict(detail={"status": publication.status})
     try:
         template = (
-            TemplateVersion.objects.select_for_update()
+            TemplateVersion.objects
+            .select_for_update()
             .select_related("template", "runtime_adapter", "image", "resource_profile")
             .get(pk=publication.template_version_id)
         )
@@ -952,7 +1019,8 @@ def create_retake_publication(
     try:
         course = Course.objects.select_for_update().get(public_id=course_id)
         source = (
-            TaskPublication.objects.select_for_update()
+            TaskPublication.objects
+            .select_for_update()
             .select_related("course", "template_version", "rubric_version")
             .get(public_id=publication_id, course=course)
         )
@@ -975,7 +1043,8 @@ def create_retake_publication(
         raise PublicationValidationError(detail={"selected_enrollment_ids": "不能包含重复选课记录"})
 
     enrollments = list(
-        Enrollment.objects.select_for_update()
+        Enrollment.objects
+        .select_for_update()
         .filter(
             course=course,
             status=Enrollment.Status.ACTIVE,
@@ -989,7 +1058,8 @@ def create_retake_publication(
             detail={"selected_enrollment_ids": "只能选择本课程有效选课学生"}
         )
     source_tasks = list(
-        ExperimentTask.objects.select_for_update()
+        ExperimentTask.objects
+        .select_for_update()
         .filter(publication=source, student_id__in=[item.student_id for item in enrollments])
         .select_related("enrollment")
         .order_by("id")
@@ -1008,6 +1078,7 @@ def create_retake_publication(
         actor=actor,
         data={
             "template_version_id": source.template_version.public_id,
+            "course_chapter_id": source.course_chapter.public_id if source.course_chapter else None,
             "rubric_version_id": source.rubric_version.public_id if source.rubric_version else None,
             "title": source.title,
             "description": source.description,
@@ -1084,7 +1155,8 @@ def execute_publication_assignment_chunk(
     *, publication_id: str, enrollment_ids: list[str], context: Any
 ) -> TaskPublication:
     publication = (
-        TaskPublication.objects.select_for_update()
+        TaskPublication.objects
+        .select_for_update()
         .select_related("course", "template_version", "published_by")
         .prefetch_related("audience")
         .get(public_id=publication_id)
@@ -1113,7 +1185,8 @@ def execute_publication_assignment_chunk(
 @transaction.atomic
 def execute_publication_assignment(*, publication_id: str, context: Any) -> TaskPublication:
     publication = (
-        TaskPublication.objects.select_for_update()
+        TaskPublication.objects
+        .select_for_update()
         .select_related("course", "template_version", "published_by")
         .prefetch_related("audience")
         .get(public_id=publication_id)
@@ -1168,7 +1241,8 @@ def retry_publication_assignment_compensation(task: CompensationTask) -> None:
 def assign_late_enrollment(enrollment: Enrollment, context: Any) -> None:
     now = timezone.now()
     publication_ids = list(
-        TaskPublication.objects.filter(
+        TaskPublication.objects
+        .filter(
             course=enrollment.course,
             status=TaskPublication.Status.PUBLISHED,
             late_enrollment_policy=TaskPublication.LateEnrollmentPolicy.ASSIGN_UNTIL_DEADLINE,
@@ -1198,16 +1272,18 @@ def assign_late_enrollment_task(
 ) -> ExperimentTask | None:
     try:
         enrollment = (
-            Enrollment.objects.select_for_update()
+            Enrollment.objects
+            .select_for_update()
             .select_related("course", "student")
             .get(public_id=enrollment_id)
         )
         publication = (
-            TaskPublication.objects.select_for_update()
+            TaskPublication.objects
+            .select_for_update()
             .select_related("course", "template_version")
             .get(public_id=publication_id)
         )
-    except (Enrollment.DoesNotExist, TaskPublication.DoesNotExist):
+    except Enrollment.DoesNotExist, TaskPublication.DoesNotExist:
         return None
     if (
         enrollment.status != Enrollment.Status.ACTIVE
@@ -1298,7 +1374,8 @@ def withdraw_publication(
         },
     )
     for task in (
-        ExperimentTask.objects.select_for_update()
+        ExperimentTask.objects
+        .select_for_update()
         .filter(publication=publication)
         .exclude(
             status__in=(
@@ -1360,7 +1437,8 @@ def transition_task(
     detail: dict[str, Any] | None = None,
 ) -> ExperimentTask:
     task = (
-        ExperimentTask.objects.select_for_update()
+        ExperimentTask.objects
+        .select_for_update()
         .select_related("course", "publication", "enrollment", "student")
         .get(public_id=task_id)
     )
@@ -1431,7 +1509,8 @@ def request_extension(
 ) -> TaskExtensionRequest:
     try:
         task = (
-            ExperimentTask.objects.select_for_update()
+            ExperimentTask.objects
+            .select_for_update()
             .select_related("publication", "course", "student")
             .get(public_id=task_id, student=actor)
         )
@@ -1482,7 +1561,8 @@ def decide_extension(
     try:
         course = Course.objects.select_for_update().get(public_id=course_id)
         request = (
-            TaskExtensionRequest.objects.select_for_update()
+            TaskExtensionRequest.objects
+            .select_for_update()
             .select_related("task", "task__publication", "task__student", "task__course")
             .get(public_id=request_id, task__course=course)
         )
@@ -1584,15 +1664,15 @@ def teaching_progress(*, course_id: str, actor: User) -> dict[str, Any]:
     )
     counts = {
         item["status"]: item["count"]
-        for item in ExperimentTask.objects.filter(
-            course=course, publication__retake_of__isnull=True
-        )
+        for item in ExperimentTask.objects
+        .filter(course=course, publication__retake_of__isnull=True)
         .values("status")
         .annotate(count=Count("id"))
     }
     experiments: dict[str, dict[str, Any]] = {}
     for item in (
-        ExperimentTask.objects.filter(course=course, publication__retake_of__isnull=True)
+        ExperimentTask.objects
+        .filter(course=course, publication__retake_of__isnull=True)
         .values("publication__public_id", "publication__title", "status")
         .annotate(count=Count("id"))
     ):
@@ -1609,32 +1689,30 @@ def teaching_progress(*, course_id: str, actor: User) -> dict[str, Any]:
         progress["task_counts"][item["status"]] = item["count"]
         progress["total"] += item["count"]
     course_tasks = list(
-        ExperimentTask.objects.filter(course=course, publication__retake_of__isnull=True)
+        ExperimentTask.objects
+        .filter(course=course, publication__retake_of__isnull=True)
         .select_related("publication", "student")
         .order_by("publication__created_at", "student__display_name", "id")
     )
     grades = task_grades(course_tasks)
     for task in course_tasks:
         progress = experiments[task.publication.public_id]
-        progress.setdefault("students", []).append(
-            {
-                "task_id": task.public_id,
-                "student_id": task.student.public_id,
-                "student_name": task.student.display_name,
-                "status": task.status,
-                "progress": task.progress,
-                "completed_at": task.completed_at,
-                "decision": (
-                    None
-                ),
-                **grades[task.pk],
-            }
-        )
+        progress.setdefault("students", []).append({
+            "task_id": task.public_id,
+            "student_id": task.student.public_id,
+            "student_name": task.student.display_name,
+            "status": task.status,
+            "progress": task.progress,
+            "completed_at": task.completed_at,
+            "decision": (None),
+            **grades[task.pk],
+        })
     return {
         "course_id": course.public_id,
         "task_counts": counts,
         "total": sum(counts.values()),
-        "student_count": ExperimentTask.objects.filter(course=course)
+        "student_count": ExperimentTask.objects
+        .filter(course=course)
         .values("student_id")
         .distinct()
         .count(),
@@ -1644,7 +1722,8 @@ def teaching_progress(*, course_id: str, actor: User) -> dict[str, Any]:
 
 def student_learning_history(*, actor: User) -> dict[str, Any]:
     enrollments = list(
-        Enrollment.objects.filter(
+        Enrollment.objects
+        .filter(
             student=actor,
             status__in=(
                 Enrollment.Status.ACTIVE,
@@ -1656,9 +1735,8 @@ def student_learning_history(*, actor: User) -> dict[str, Any]:
         .order_by("course__term__starts_at", "course__title", "cycle_no")
     )
     tasks = list(
-        ExperimentTask.objects.filter(
-            enrollment__in=enrollments, publication__retake_of__isnull=True
-        )
+        ExperimentTask.objects
+        .filter(enrollment__in=enrollments, publication__retake_of__isnull=True)
         .select_related("publication", "enrollment", "course__term")
         .order_by("created_at", "id")
     )
@@ -1697,32 +1775,30 @@ def student_learning_history(*, actor: User) -> dict[str, Any]:
             {"term_id": term.public_id, "code": term.code, "name": term.name, "courses": []},
         )
         course_tasks = tasks_by_enrollment.get(enrollment.pk, [])
-        term_data["courses"].append(
-            {
-                "course_id": enrollment.course.public_id,
-                "course_code": enrollment.course.code,
-                "course_title": enrollment.course.title,
-                "class_type": "TEACHING",
-                "enrollment": {
-                    "public_id": enrollment.public_id,
-                    "cycle_no": enrollment.cycle_no,
-                    "status": enrollment.status,
-                    "activated_at": enrollment.activated_at,
-                    "ended_at": enrollment.ended_at,
-                },
-                "experiments": [
-                    {
-                        "task_id": task.public_id,
-                        "publication_id": task.publication.public_id,
-                        "title": task.publication.title,
-                        "status": task.status,
-                        "progress": task.progress,
-                        "completed_at": task.completed_at,
-                        "decision": None,
-                        **grades[task.pk],
-                    }
-                    for task in course_tasks
-                ],
-            }
-        )
+        term_data["courses"].append({
+            "course_id": enrollment.course.public_id,
+            "course_code": enrollment.course.code,
+            "course_title": enrollment.course.title,
+            "class_type": "TEACHING",
+            "enrollment": {
+                "public_id": enrollment.public_id,
+                "cycle_no": enrollment.cycle_no,
+                "status": enrollment.status,
+                "activated_at": enrollment.activated_at,
+                "ended_at": enrollment.ended_at,
+            },
+            "experiments": [
+                {
+                    "task_id": task.public_id,
+                    "publication_id": task.publication.public_id,
+                    "title": task.publication.title,
+                    "status": task.status,
+                    "progress": task.progress,
+                    "completed_at": task.completed_at,
+                    "decision": None,
+                    **grades[task.pk],
+                }
+                for task in course_tasks
+            ],
+        })
     return {"years": [{**year, "terms": list(year["terms"].values())} for year in years]}

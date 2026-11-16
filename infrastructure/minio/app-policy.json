@@ -24,6 +24,7 @@
       ],
       "Resource": [
         "arn:aws:s3:::edu-platform/template-assets/*",
+        "arn:aws:s3:::edu-platform/course-materials/*",
         "arn:aws:s3:::edu-platform/workspaces/*",
         "arn:aws:s3:::edu-platform/assessment/*",
         "arn:aws:s3:::edu-platform/assessment-tests/*",

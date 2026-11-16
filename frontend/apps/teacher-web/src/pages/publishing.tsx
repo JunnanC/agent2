@@ -1,8 +1,9 @@
+import { request, newIdempotencyKey } from "@edu/auth-client";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { teachingApi } from "@edu/api-client";
-import type { Publication, Template } from "@edu/api-client";
+import type { Chapter, Publication, Template } from "@edu/api-client";
 import { keys } from "@edu/query-keys";
 import {
   ConfirmDialog, EmptyState, Modal, Panel, RequestStateView, StatusBadge, useToast,
@@ -22,6 +23,7 @@ function toIso(value: string): string {
 }
 
 const initialCreateForm = {
+  chapterId: "",
   templateId: "",
   rubricId: "",
   title: "",
@@ -48,6 +50,7 @@ export function Publishing() {
     queryFn: () => teachingApi.publications(courseId, {}),
   });
 
+  const courseChapters = useQuery({ queryKey: keys.courseResource(courseId, "chapters"), queryFn: () => teachingApi.courseResource<Chapter>(courseId, "chapters") });
   const templates = useQuery({
     queryKey: keys.templates(courseId),
     queryFn: () => teachingApi.templates(courseId),
@@ -128,6 +131,11 @@ export function Publishing() {
     onError: (error) => toast.notify(apiErrorMessage(error), "error"),
   });
 
+  const assignChapter = useMutation({
+    mutationFn: ({publication, chapterId}: {publication: Publication; chapterId: string}) => request(`/teaching/courses/${courseId}/experiments/${publication.public_id}/course-chapter`, {method:"PATCH", body:{chapter_id:chapterId}, ifMatch:publication.row_version, idempotencyKey:newIdempotencyKey()}),
+    onSuccess: () => { void publications.refetch(); toast.notify("实验所属章节已更新"); },
+    onError: (error: Error) => toast.notify(apiErrorMessage(error), "error"),
+  });
   const createPublication = useMutation({
     mutationFn: () => {
       const versionId = selectedTemplate?.current_version_id ?? "";
@@ -139,6 +147,7 @@ export function Publishing() {
         template_version_id: versionId,
         rubric_version_id: hasProgramming && createForm.report_required ? rubricVersionId : null,
         title: createForm.title.trim(),
+        course_chapter_id: createForm.chapterId,
         description: createForm.description.trim(),
         audience_mode: "ALL_ACTIVE",
         late_enrollment_policy: "DO_NOT_ASSIGN",
@@ -161,7 +170,7 @@ export function Publishing() {
   });
 
   const createReady = Boolean(
-    createForm.templateId && (!hasProgramming || !createForm.report_required || createForm.rubricId) && createForm.title.trim()
+    createForm.chapterId && createForm.templateId && (!hasProgramming || !createForm.report_required || createForm.rubricId) && createForm.title.trim()
     && createForm.window_start && createForm.window_end,
   );
 
@@ -196,7 +205,9 @@ export function Publishing() {
                   const allowed = row.allowed_actions ?? [];
                   return (
                     <tr key={row.public_id}>
-                      <td><strong>{row.title}</strong><small style={{ display: "block" }}>{row.template_name ?? row.template_version_id}</small></td>
+                      <td><strong>{row.title}</strong><small style={{ display: "block" }}>{row.template_name ?? row.template_version_id}</small>
+                        <select className="field" aria-label={`${row.title} 所属课程章节`} value={row.course_chapter_id ?? ""} disabled={assignChapter.isPending} onChange={event => assignChapter.mutate({publication:row,chapterId:event.target.value})}><option value="" disabled>尚未归入章节</option>{courseChapters.data?.rows.map(chapter => <option key={chapter.public_id} value={chapter.public_id}>{chapter.title}</option>)}</select>
+                      </td>
                       <td>{row.version_no ? `v${row.version_no}` : "—"}</td>
                       <td>
                         {row.audience_count
@@ -336,6 +347,9 @@ export function Publishing() {
               </option>
             ))}
           </select>
+          <label className="form-label" htmlFor="pub-chapter">所属课程章节</label>
+          <select id="pub-chapter" className="field" value={createForm.chapterId} onChange={event => setCreateForm(prev => ({ ...prev, chapterId: event.target.value }))}><option value="">请选择课程章节</option>{courseChapters.data?.rows.map(chapter => <option key={chapter.public_id} value={chapter.public_id}>{chapter.title}</option>)}</select>
+          {courseChapters.error ? <p role="alert">章节加载失败，请重新打开表单重试。</p> : courseChapters.isSuccess && !courseChapters.data.rows.length ? <p>请先创建课程章节。</p> : null}
           <label className="form-label" htmlFor="pub-title">发布标题 <span>必填</span></label>
           <input id="pub-title" className="field" value={createForm.title}
             onChange={(event) => setCreateForm((prev) => ({ ...prev, title: event.target.value }))}

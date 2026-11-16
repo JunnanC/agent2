@@ -59,7 +59,8 @@ def publication_for_course(*, actor: User, course_id: str, publication_id: str) 
     )
     try:
         return (
-            TaskPublication.objects.select_related(
+            TaskPublication.objects
+            .select_related(
                 "course",
                 "template_version__template",
                 "rubric_version__rubric",
@@ -82,7 +83,8 @@ def publications_for_course(*, actor: User, course_id: str) -> QuerySet[TaskPubl
         capability=CourseStaffGrant.Capability.PUBLISH_EXPERIMENT,
     )
     return (
-        TaskPublication.objects.filter(course=course)
+        TaskPublication.objects
+        .filter(course=course)
         .select_related(
             "course",
             "template_version__template",
@@ -99,15 +101,23 @@ def publications_for_course(*, actor: User, course_id: str) -> QuerySet[TaskPubl
 
 def task_for_user(*, actor: User, task_id: str) -> ExperimentTask:
     try:
-        return ExperimentTask.objects.select_related(
-            "course",
-            "publication",
-            "enrollment",
-            "template_version__template",
-            "runtime_adapter",
-            "image",
-            "resource_profile",
-        ).get(public_id=task_id, student=actor)
+        return (
+            ExperimentTask.objects
+            .select_related(
+                "course",
+                "publication",
+                "enrollment",
+                "template_version__template",
+                "runtime_adapter",
+                "image",
+                "resource_profile",
+            )
+            .filter(
+                Q(publication__course_chapter__isnull=True)
+                | Q(publication__course_chapter__status="PUBLISHED")
+            )
+            .get(public_id=task_id, student=actor)
+        )
     except ExperimentTask.DoesNotExist as exc:
         raise ResourceNotFound() from exc
 
@@ -157,22 +167,33 @@ def paged_user_tasks(
     runtime_type: str = "",
     query: str = "",
 ) -> tuple[QuerySet[ExperimentTask], int]:
-    tasks = ExperimentTask.objects.select_related(
-        "course",
-        "publication",
-        "template_version__template",
-        "enrollment",
-        "student",
-        "runtime_adapter",
-        "image",
-        "resource_profile",
-    ).filter(student=actor).filter(
-        Q(enrollment__status=Enrollment.Status.ACTIVE)
-        | Q(status__in=(
-            ExperimentTask.Status.COMPLETED,
-            ExperimentTask.Status.CANCELLED,
-            ExperimentTask.Status.EXPIRED,
-        ))
+    tasks = (
+        ExperimentTask.objects
+        .select_related(
+            "course",
+            "publication",
+            "template_version__template",
+            "enrollment",
+            "student",
+            "runtime_adapter",
+            "image",
+            "resource_profile",
+        )
+        .filter(student=actor)
+        .filter(
+            Q(enrollment__status=Enrollment.Status.ACTIVE)
+            | Q(
+                status__in=(
+                    ExperimentTask.Status.COMPLETED,
+                    ExperimentTask.Status.CANCELLED,
+                    ExperimentTask.Status.EXPIRED,
+                )
+            )
+        )
+    )
+    tasks = tasks.filter(
+        Q(publication__course_chapter__isnull=True)
+        | Q(publication__course_chapter__status="PUBLISHED")
     )
     if course_id:
         tasks = tasks.filter(course__public_id=course_id)

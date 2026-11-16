@@ -75,6 +75,7 @@ GRANT SELECT, INSERT ON \`${MYSQL_DATABASE}\`.courses_course_staff_grant_event T
 GRANT SELECT, INSERT, UPDATE ON \`${MYSQL_DATABASE}\`.courses_enrollment TO '${MYSQL_APP_USER}'@'%';
 GRANT SELECT, INSERT ON \`${MYSQL_DATABASE}\`.courses_enrollment_event TO '${MYSQL_APP_USER}'@'%';
 GRANT SELECT, INSERT, UPDATE ON \`${MYSQL_DATABASE}\`.courses_chapter TO '${MYSQL_APP_USER}'@'%';
+GRANT SELECT, INSERT ON \`${MYSQL_DATABASE}\`.courses_chapter_draft TO '${MYSQL_APP_USER}'@'%';
 GRANT SELECT, INSERT, UPDATE ON \`${MYSQL_DATABASE}\`.courses_material TO '${MYSQL_APP_USER}'@'%';
 GRANT SELECT, INSERT, UPDATE ON \`${MYSQL_DATABASE}\`.courses_material_version TO '${MYSQL_APP_USER}'@'%';
 GRANT SELECT, INSERT, UPDATE ON \`${MYSQL_DATABASE}\`.courses_announcement TO '${MYSQL_APP_USER}'@'%';

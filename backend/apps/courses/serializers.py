@@ -5,12 +5,14 @@ from .ports import Blocker
 
 
 class CourseCreateSerializer(serializers.Serializer):
-    code = serializers.CharField(max_length=64)
+    code = serializers.CharField(max_length=64, required=False, allow_blank=True)
     title = serializers.CharField(max_length=160)
     summary = serializers.CharField(max_length=500, required=False, allow_blank=True)
     description = serializers.CharField(required=False, allow_blank=True)
     visibility = serializers.ChoiceField(choices=Course.Visibility.choices)
-    enrollment_mode = serializers.ChoiceField(choices=Course.EnrollmentMode.choices)
+    enrollment_mode = serializers.ChoiceField(
+        choices=Course.EnrollmentMode.choices, required=False, default="APPROVAL"
+    )
     capacity = serializers.IntegerField(required=False, allow_null=True, min_value=1)
     enrollment_start = serializers.DateTimeField(required=False, allow_null=True)
     enrollment_end = serializers.DateTimeField(required=False, allow_null=True)
@@ -43,6 +45,9 @@ class CourseUpdateSerializer(serializers.Serializer):
     enrollment_end = serializers.DateTimeField(required=False, allow_null=True)
     teaching_start = serializers.DateTimeField(required=False, allow_null=True)
     teaching_end = serializers.DateTimeField(required=False, allow_null=True)
+
+    def validate_enrollment_mode(self, value):
+        return Course.EnrollmentMode.APPROVAL
 
 
 class OwnershipTransferSerializer(serializers.Serializer):

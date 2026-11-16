@@ -2377,6 +2377,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v2/teaching/course-invitations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["api_v2_teaching_course_invitations_retrieve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v2/teaching/courses": {
         parameters: {
             query?: never;
@@ -2937,6 +2953,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v2/teaching/courses/{course_id}/chapter-drafts/generate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["api_v2_teaching_courses_chapter_drafts_generate_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/teaching/courses/{course_id}/chapters/{chapter_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch: operations["api_v2_teaching_courses_chapters_partial_update"];
+        trace?: never;
+    };
     "/api/v2/teaching/courses/{course_id}/chapters/{chapter_id}/{status}": {
         parameters: {
             query?: never;
@@ -2947,6 +2995,22 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["teaching_chapter_status"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/teaching/courses/{course_id}/chapters/{chapter_id}/materials/upload": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["api_v2_teaching_courses_chapters_materials_upload_create"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3027,6 +3091,22 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["teaching_course_copy_jobs_execute"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/teaching/courses/{course_id}/direct-invitations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["api_v2_teaching_courses_direct_invitations_create"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3271,6 +3351,22 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/v2/teaching/courses/{course_id}/experiments/{publication_id}/course-chapter": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch: operations["api_v2_teaching_courses_experiments_course_chapter_partial_update"];
         trace?: never;
     };
     "/api/v2/teaching/courses/{course_id}/experiments/{publication_id}/publish": {
@@ -3913,6 +4009,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v2/teaching/courses/{course_id}/template-versions/{version_id}/import-course-chapter": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["api_v2_teaching_courses_template_versions_import_course_chapter_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v2/teaching/courses/{course_id}/template-versions/{version_id}/precheck": {
         parameters: {
             query?: never;
@@ -4436,6 +4548,9 @@ export interface components {
          * @enum {string}
          */
         CapabilityEnum: "MANAGE_ENROLLMENT" | "MANAGE_CONTENT" | "MODERATE_QA" | "MANAGE_TEMPLATE" | "PUBLISH_EXPERIMENT" | "MANAGE_EXTENSION" | "VIEW_PROGRESS" | "REVIEW_SUBMISSION" | "EXPORT_RESULT" | "MANAGE_AGENT";
+        ChapterGenerate: {
+            title: string;
+        };
         CheckData: {
             allowed: boolean;
             blockers: components["schemas"]["BlockerData"][];
@@ -4499,6 +4614,7 @@ export interface components {
         ContentWrite: {
             title?: string;
             summary?: string;
+            content?: string;
             body?: string;
             position?: number;
             kind?: components["schemas"]["ContentWriteKindEnum"];
@@ -4568,11 +4684,12 @@ export interface components {
             };
         };
         CourseCreate: {
-            code: string;
+            code?: string;
             title: string;
             summary?: string;
             description?: string;
             visibility: components["schemas"]["VisibilityEnum"];
+            /** @default APPROVAL */
             enrollment_mode: components["schemas"]["EnrollmentModeEnum"];
             capacity?: number | null;
             /** Format: date-time */
@@ -4643,6 +4760,9 @@ export interface components {
             };
             weekly_study: components["schemas"]["WeeklyStudyData"];
             next_tasks: components["schemas"]["TaskData"][];
+        };
+        DirectInvite: {
+            identity: string;
         };
         DownloadGrantData: {
             grant_id: string;
@@ -5047,6 +5167,11 @@ export interface components {
             identifier: string;
             password: string;
         };
+        MaterialUpload: {
+            title: string;
+            /** Format: uri */
+            file: string;
+        };
         MeData: {
             public_id: string;
             /** Format: email */
@@ -5106,6 +5231,18 @@ export interface components {
             status?: components["schemas"]["AdminAssignmentUpdateStatusEnum"];
             reason?: string;
         };
+        PatchedContentWrite: {
+            title?: string;
+            summary?: string;
+            content?: string;
+            body?: string;
+            position?: number;
+            kind?: components["schemas"]["ContentWriteKindEnum"];
+            text_content?: string;
+            link_url?: string;
+            object_asset_id?: string;
+            pinned?: boolean;
+        };
         PatchedCourseUpdate: {
             title?: string;
             summary?: string;
@@ -5157,6 +5294,7 @@ export interface components {
             display_name?: string;
         };
         PatchedPublicationPatch: {
+            course_chapter_id?: string | null;
             /** Format: date-time */
             score_release_at?: string | null;
             template_version_id?: string;
@@ -5217,11 +5355,16 @@ export interface components {
             name?: string;
             config_ref?: string;
             status?: components["schemas"]["RuntimeAdapterUpdateStatusEnum"];
+            budget_cpu_millicores?: number;
+            budget_memory_mb?: number;
             reason?: string;
         };
         PatchedTeacherQualificationUpdate: {
             status?: components["schemas"]["TeacherQualificationUpdateStatusEnum"];
             reason?: string;
+        };
+        PatchedTemplateChapterImport: {
+            chapter_id?: string;
         };
         PatchedTemplateChapterWrite: {
             title?: string;
@@ -5424,6 +5567,7 @@ export interface components {
             tasks: components["schemas"]["PublicationTaskSnapshot"][];
         };
         PublicationData: {
+            course_chapter_id?: string | null;
             /** Format: date-time */
             score_release_at: string | null;
             public_id: string;
@@ -5502,6 +5646,7 @@ export interface components {
             };
         };
         PublicationWrite: {
+            course_chapter_id?: string | null;
             template_version_id: string;
             rubric_version_id?: string | null;
             /** Format: date-time */
@@ -5887,6 +6032,8 @@ export interface components {
             available_cpu_millicores: number;
             capacity_memory_mb: number;
             available_memory_mb: number;
+            budget_cpu_millicores: number;
+            budget_memory_mb: number;
             /** Format: date-time */
             last_health_at: string | null;
             row_version: number;
@@ -5986,6 +6133,7 @@ export interface components {
          */
         TargetTypeEnum: "HOST" | "CIDR";
         TaskData: {
+            course_chapter_id?: string | null;
             assessment_available: boolean;
             public_id: string;
             course_id: string;
@@ -6120,6 +6268,9 @@ export interface components {
             effective_resource_profile_id: string | null;
             row_version: number;
             tasks: components["schemas"]["TemplateTaskData"][];
+        };
+        TemplateChapterImport: {
+            chapter_id: string;
         };
         TemplateChapterListResponse: {
             data: components["schemas"]["TemplateChapterData"][];
@@ -10843,6 +10994,25 @@ export interface operations {
             };
         };
     };
+    api_v2_teaching_course_invitations_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CourseContentResponse"];
+                };
+            };
+        };
+    };
     teaching_courses_list: {
         parameters: {
             query?: never;
@@ -11979,6 +12149,61 @@ export interface operations {
             };
         };
     };
+    api_v2_teaching_courses_chapter_drafts_generate_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChapterGenerate"];
+                "application/x-www-form-urlencoded": components["schemas"]["ChapterGenerate"];
+                "multipart/form-data": components["schemas"]["ChapterGenerate"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CourseContentResponse"];
+                };
+            };
+        };
+    };
+    api_v2_teaching_courses_chapters_partial_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                chapter_id: string;
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["PatchedContentWrite"];
+                "application/x-www-form-urlencoded": components["schemas"]["PatchedContentWrite"];
+                "multipart/form-data": components["schemas"]["PatchedContentWrite"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CourseContentResponse"];
+                };
+            };
+        };
+    };
     teaching_chapter_status: {
         parameters: {
             query?: never;
@@ -11991,6 +12216,32 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CourseContentResponse"];
+                };
+            };
+        };
+    };
+    api_v2_teaching_courses_chapters_materials_upload_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                chapter_id: string;
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["MaterialUpload"];
+            };
+        };
         responses: {
             200: {
                 headers: {
@@ -12135,6 +12386,33 @@ export interface operations {
         requestBody?: never;
         responses: {
             202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CourseContentResponse"];
+                };
+            };
+        };
+    };
+    api_v2_teaching_courses_direct_invitations_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DirectInvite"];
+                "application/x-www-form-urlencoded": components["schemas"]["DirectInvite"];
+                "multipart/form-data": components["schemas"]["DirectInvite"];
+            };
+        };
+        responses: {
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -12602,6 +12880,34 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PublicationData"];
+                };
+            };
+        };
+    };
+    api_v2_teaching_courses_experiments_course_chapter_partial_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                course_id: string;
+                publication_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["PatchedTemplateChapterImport"];
+                "application/x-www-form-urlencoded": components["schemas"]["PatchedTemplateChapterImport"];
+                "multipart/form-data": components["schemas"]["PatchedTemplateChapterImport"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CourseContentResponse"];
                 };
             };
         };
@@ -13990,6 +14296,34 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TemplateVersionResponse"];
+                };
+            };
+        };
+    };
+    api_v2_teaching_courses_template_versions_import_course_chapter_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                course_id: string;
+                version_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TemplateChapterImport"];
+                "application/x-www-form-urlencoded": components["schemas"]["TemplateChapterImport"];
+                "multipart/form-data": components["schemas"]["TemplateChapterImport"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CourseContentResponse"];
                 };
             };
         };

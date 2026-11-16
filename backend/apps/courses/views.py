@@ -320,6 +320,9 @@ class CourseEnrollmentApplyView(APIView):
     def post(self, request: HttpRequest, course_id: str) -> Response:
         serializer = EnrollmentApplySerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        if not serializer.validated_data.get("invitation_code", "").strip():
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError({"invitation_code": "请输入课程邀请码，提交后等待教师审核"})
 
         def operation() -> StoredResponse:
             enrollment = apply_for_course(
@@ -512,7 +515,7 @@ class TeachingCourseListView(APIView):
             data = serializer.validated_data
             value = create_course_service(
                 actor=request.user,
-                code=data["code"],
+                code="",
                 title=data["title"],
                 summary=data.get("summary", ""),
                 description=data.get("description", ""),
