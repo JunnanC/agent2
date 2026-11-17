@@ -57,6 +57,8 @@ export function Splitter({
   };
 
   return (
+    // A focusable ARIA separator is a keyboard-operated splitter; the rule treats every separator as static.
+    // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions
     <div
       className={`workbench-splitter ${orientation === "vertical" ? "report-workbench-splitter" : "workspace-tests-splitter"}${dragging ? " is-dragging" : ""}`}
       role="separator"
@@ -65,6 +67,7 @@ export function Splitter({
       aria-valuemin={minSize}
       aria-valuemax={maxSize}
       aria-valuenow={Math.round(currentSize)}
+      // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- Focusable separator supports arrow keys.
       tabIndex={0}
       onPointerDown={startDrag}
       onKeyDown={onKeyDown}

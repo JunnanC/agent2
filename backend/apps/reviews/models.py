@@ -35,6 +35,9 @@ class Rubric(VersionedModel):
         related_name="current_for_rubrics",
     )
 
+    def __str__(self) -> str:
+        return self.name
+
     class Meta:
         db_table = "reviews_rubric"
         constraints = [
@@ -73,6 +76,9 @@ class RubricVersion(VersionedModel):
     )
     published_at = models.DateTimeField(null=True, blank=True)
 
+    def __str__(self) -> str:
+        return f"{self.title} (v{self.version_no})"
+
     class Meta:
         db_table = "reviews_rubric_version"
         constraints = [
@@ -103,6 +109,9 @@ class RubricCriterion(VersionedModel):
     guidance = models.TextField(blank=True, default="")
     max_score = models.DecimalField(max_digits=9, decimal_places=2)
     weight_basis_points = models.PositiveIntegerField()
+
+    def __str__(self) -> str:
+        return self.title
 
     class Meta:
         db_table = "reviews_rubric_criterion"

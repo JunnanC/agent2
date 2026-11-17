@@ -5,6 +5,7 @@ import { Button } from "./controls";
 import { Icon } from "./icons";
 import { EmptyState, ErrorState, LoadingState, RequestStateView } from "./states";
 import { Metric, Panel, StatusBadge } from "./primitives";
+import { Drawer } from "./dialogs";
 
 function ToastProbe() {
   const toast = useToast();
@@ -12,6 +13,14 @@ function ToastProbe() {
 }
 
 describe("ui 组件", () => {
+  it("Drawer 以标题提供可访问名称并支持 Escape 关闭", () => {
+    const onClose = vi.fn();
+    render(<Drawer open onClose={onClose} title="评分详情">内容</Drawer>);
+    expect(screen.getByRole("dialog", { name: "评分详情" })).toBeInTheDocument();
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
   it("ToastProvider 显示并隐藏提示", () => {
     vi.useFakeTimers();
     render(<ToastProvider><ToastProbe /></ToastProvider>);

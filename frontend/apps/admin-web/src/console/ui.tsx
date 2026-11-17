@@ -190,6 +190,8 @@ export function Modal({
     return () => dialog?.close();
   }, []);
   return (
+    // Native dialog handles Escape via onCancel and has an explicit close button; this click only dismisses the backdrop.
+    // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions
     <dialog
       ref={ref}
       className={wide ? "detail" : undefined}
