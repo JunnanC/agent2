@@ -165,3 +165,8 @@
 @media(max-width:760px){.student-portal .btn:not(.sm){min-height:44px}}
 
 @media(max-width:760px){.student-portal .side-nav-shell .nav-item{min-height:44px}}
+
+/* Course cards are the surfaces; the browser wrapper is not a second panel. */
+.student-portal .panel.courses-browser{background:transparent;border:0;padding:0;border-radius:0}
+.student-portal .course-card-grid{grid-template-columns:repeat(auto-fill,minmax(340px,420px));justify-content:start;gap:24px}
+.student-portal .course-card{border:1px solid var(--line);border-radius:12px;background:#fff;overflow:hidden}

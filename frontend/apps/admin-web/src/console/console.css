@@ -114,11 +114,11 @@
   align-items: center;
   min-height: 40px;
   padding: 8px 12px;
-  color: #59625e;
+  color: var(--muted);
 }
 .admin-console .nav button.active {
-  background: #e2e7e3;
-  color: #243d32;
+  background: var(--teal-soft);
+  color: var(--teal);
   font-weight: 600;
 }
 .admin-console .nav svg {
@@ -162,12 +162,12 @@
   margin-right: 8px;
 }
 .admin-console .sheet {
-  margin: 0 8px 8px 248px;
-  min-height: calc(100vh - 72px);
+  margin: 0 16px 16px 248px;
+  min-height: calc(100vh - 80px);
   background: #fff;
-  border: 1px solid #e0e5e1;
-  border-radius: 16px;
-  padding: 32px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 24px 32px 32px;
   max-width: 1664px;
 }
 .admin-console .heading {
@@ -208,13 +208,16 @@
 .admin-console .metrics {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  border-bottom: 1px solid var(--line);
-  padding: 0 0 28px;
-  margin-bottom: 28px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+  padding: 8px 24px;
+  margin-bottom: 24px;
   gap: 24px;
 }
 .admin-console .metric {
   border-right: 1px solid var(--line);
+  padding: 16px 0;
 }
 .admin-console .metric:last-child {
   border: 0;
