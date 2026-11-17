@@ -37,7 +37,7 @@ body {
   min-height: 100%;
   background: var(--paper);
   color: var(--ink);
-  font-family: "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+  font-family: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
   line-height: 1.45;
   -webkit-font-smoothing: antialiased;
 }
@@ -859,4 +859,5 @@ body.layout-resizing.resize-rows { cursor: row-resize; }
 }
 
 .side-nav-shell .nav-item, .side-nav-shell .nav-item.active { border-bottom: 0; }
+
 

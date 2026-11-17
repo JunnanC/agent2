@@ -1,7 +1,7 @@
 ﻿/* unslop by Damir Sokolovsky (@heydamir), CC BY 4.0; https://heydamir.design/unslop */
 
 .admin-console {
-  font-family: "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+  font-family: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
   color: #252b2a;
   background: #f1f3f2;
   font-size: 14px;
@@ -805,6 +805,7 @@
 /* Admin content now lives inside the shared AppShell. */
 .admin-console{background:transparent;padding:0;min-width:0}.admin-console .crumb{padding:24px 0 0;margin-bottom:0}.admin-console .heading{margin-top:20px}
 @media (max-width:760px){.admin-console .crumb{padding-top:16px}.admin-console .heading{margin-top:16px}}
+
 
 
 
