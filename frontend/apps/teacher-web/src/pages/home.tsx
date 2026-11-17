@@ -27,6 +27,14 @@ function lastSevenDayLabels(): string[] {
   return labels;
 }
 
+function lastSevenIsoDays(): string[] {
+  return Array.from({ length: 7 }, (_, index) => {
+    const date = new Date();
+    date.setDate(date.getDate() - 6 + index);
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+  });
+}
+
 interface TodoItem {
   key: string;
   title: string;
@@ -47,12 +55,13 @@ export function Home() {
     queryFn: async () => {
       const targets = courses.data?.rows ?? [];
       return Promise.all(targets.map(async (course) => {
-        const [publications, pendingReviews, progress] = await Promise.all([
+        const [publications, pendingReviews, progress, trend] = await Promise.all([
           teachingApi.publications(course.public_id, {}).catch(() => ({ rows: [], page: 1, pageSize: 20, total: 0 })),
           assessmentTeachingApi.reviews(course.public_id).then(rows => ({ rows: rows.filter(row => row.kind === "PROGRAMMING" && row.review_status === "PENDING"), total: rows.filter(row => row.kind === "PROGRAMMING" && row.review_status === "PENDING").length })).catch(() => ({ rows: [], total: 0 })),
           teachingApi.progress(course.public_id, {}).catch(() => ({ rows: [], page: 1, pageSize: 20, total: 0 })),
+          teachingApi.analyticsSeries?.(course.public_id, 7).catch(() => null) ?? Promise.resolve(null),
         ]);
-        return { course, publications: publications.rows as Publication[], pendingReviews: pendingReviews as { rows: PendingReviewRow[]; total: number }, progress };
+        return { course, publications: publications.rows as Publication[], pendingReviews: pendingReviews as { rows: PendingReviewRow[]; total: number }, progress, trend };
       }));
     },
     enabled: rows.length > 0,
@@ -116,9 +125,24 @@ export function Home() {
     return items.slice(0, 4);
   }, [perCourse]);
 
-  const chartSeries: ChartSeries[] = [
-    { name: "班级实验完成率（%）", color: "var(--teal)", data: lastSevenDayLabels().map(() => null) },
-  ];
+  const chartSeries: ChartSeries[] = useMemo(() => {
+    const days = lastSevenIsoDays();
+    const buckets = new Map(days.map((day) => [day, { done: 0, total: 0 }]));
+    for (const item of perCourse) {
+      for (const row of item.trend?.series ?? []) {
+        const bucket = buckets.get(row.period_start.slice(0, 10));
+        if (!bucket) continue;
+        const metrics = row.metrics as { tasks?: Record<string, number>; task_total?: number };
+        bucket.done += (metrics.tasks?.APPROVED ?? 0) + (metrics.tasks?.COMPLETED ?? 0);
+        bucket.total += metrics.task_total ?? 0;
+      }
+    }
+    const data = days.map((day) => {
+      const bucket = buckets.get(day)!;
+      return bucket.total > 0 ? Math.round((bucket.done / bucket.total) * 100) : null;
+    });
+    return [{ name: "班级实验完成率（%）", color: "var(--teal)", data }];
+  }, [perCourse]);
   const hasChartData = chartSeries.some((series) => series.data.some((value) => value != null));
 
   return (

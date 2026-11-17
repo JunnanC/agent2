@@ -829,3 +829,16 @@ body.layout-resizing.resize-rows { cursor: row-resize; }
   .btn:not(.sm), .field, input.field, select.field { min-height: 44px; }
   .icon-btn { width: 44px; height: 44px; }
 }
+
+/* Signature: a notebook margin rule marks the current location. */
+.side-nav-shell .nav-item { position: relative; }
+.side-nav-shell .nav-item.active::before {
+  content: "";
+  position: absolute;
+  left: 2px;
+  top: 10px;
+  bottom: 10px;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--teal);
+}

@@ -558,14 +558,14 @@ function PageContent({
           ]}
           render={(l) => (
             <tr key={l.id}>
-              <td className="mono muted">{date(l.occurred_at)}</td>
-              <td>{userName(l.actor)}</td>
-              <td className="break">{l.action}</td>
-              <td className="break mono">{l.target}</td>
-              <td>
+              <td className="mono muted" data-label="操作时间">{date(l.occurred_at)}</td>
+              <td data-label="操作者">{userName(l.actor)}</td>
+              <td className="break" data-label="操作类型">{l.action}</td>
+              <td className="break mono" data-label="操作对象">{l.target}</td>
+              <td data-label="结果">
                 <Status value={l.result} />
               </td>
-              <td>{action("详情", () => open({ kind: "audit", audit: l }))}</td>
+              <td data-label="操作">{action("详情", () => open({ kind: "audit", audit: l }))}</td>
             </tr>
           )}
           />
