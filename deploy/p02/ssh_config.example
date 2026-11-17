@@ -1,0 +1,8 @@
+Host p02-lab
+    HostName 192.168.100.3
+    User hk
+    Port 5422
+    IdentityFile "<absolute path to p02/id_ed25519>"
+    IdentitiesOnly yes
+    BatchMode yes
+    ConnectTimeout 10

@@ -138,3 +138,10 @@ evidence/**/*.txt
 
 # Local redesign audit screenshots and measurements.
 /redesign-audit/
+
+# Private company-server configuration and generated release evidence
+/deploy/p02/server-info.json
+/deploy/p02/release-lock.json
+/deploy/p02/validation.json
+**/id_ed25519*
+/deploy/p02/probe-result.json

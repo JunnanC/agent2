@@ -9,6 +9,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
+from django.conf import settings
 from docker.errors import NotFound
 
 OUTPUT_LIMIT = 65536
@@ -84,8 +85,10 @@ class StdioExecutor:
         self.owner = owner
         self.containers: list[Any] = []
         self.volumes: list[Any] = []
+        self.resource_prefix = settings.RUNTIME_RESOURCE_PREFIX
         self.labels = {
             "edu.platform.managed": "true", "edu.platform.kind": "assessment-stdio",
+            "edu.platform.project": self.resource_prefix,
             "edu.platform.assessment": owner,
             "edu.platform.expires_at": str(int(time.time()) + 3600),
         }
@@ -93,7 +96,7 @@ class StdioExecutor:
     def _container(self, *, memory_mb: int, volumes: dict[str, Any]) -> Any:
         container = self.client.containers.create(
             self.image, entrypoint=["python", "-c", "import time; time.sleep(900)"],
-            name="experimental-platform-stdio-" + uuid.uuid4().hex,
+            name=self.resource_prefix + "-stdio-" + uuid.uuid4().hex,
             user="10001:10001", network_mode="none", read_only=True,
             cap_drop=["ALL"], security_opt=["no-new-privileges:true"],
             mem_limit=f"{memory_mb}m", memswap_limit=f"{memory_mb}m",
@@ -115,7 +118,7 @@ class StdioExecutor:
 
     def _volume(self, files: Mapping[str, bytes]) -> Any:
         volume = self.client.volumes.create(
-            name="experimental-platform-stdio-data-" + uuid.uuid4().hex, labels=self.labels,
+            name=self.resource_prefix + "-stdio-data-" + uuid.uuid4().hex, labels=self.labels,
         )
         self.volumes.append(volume)
         stager = self._container(

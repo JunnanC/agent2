@@ -1,0 +1,681 @@
+# 02 组专用部署配置
+name: p02
+services:
+  mysql:
+    container_name: p02-mysql
+    image: p02-mysql:${RELEASE_TAG:?run p02.py init}
+    command:
+    - --character-set-server=utf8mb4
+    - --collation-server=utf8mb4_0900_ai_ci
+    - --binlog-format=ROW
+    environment:
+      MYSQL_DATABASE: p02_platform
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?run p02.py init}
+      MYSQL_MIGRATION_USER: p02_migration
+      MYSQL_MIGRATION_PASSWORD: ${MYSQL_MIGRATION_PASSWORD:?run p02.py init}
+      MYSQL_APP_USER: p02_app
+      MYSQL_APP_PASSWORD: ${MYSQL_APP_PASSWORD:?run p02.py init}
+    networks:
+    - p02
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    restart: unless-stopped
+    pids_limit: 256
+    cpus: '1.0'
+    mem_limit: 1g
+    volumes:
+    - mysql_data:/var/lib/mysql
+  mysql-users:
+    container_name: p02-mysql-users
+    image: p02-mysql:${RELEASE_TAG:?run p02.py init}
+    command:
+    - bash
+    - /scripts/configure-users.sh
+    - prepare
+    environment:
+      MYSQL_DATABASE: p02_platform
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?run p02.py init}
+      MYSQL_MIGRATION_USER: p02_migration
+      MYSQL_MIGRATION_PASSWORD: ${MYSQL_MIGRATION_PASSWORD:?run p02.py init}
+      MYSQL_APP_USER: p02_app
+      MYSQL_APP_PASSWORD: ${MYSQL_APP_PASSWORD:?run p02.py init}
+    tmpfs:
+    - /var/lib/mysql
+    networks:
+    - p02
+    depends_on:
+      mysql:
+        condition: service_healthy
+    restart: 'no'
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    pids_limit: 256
+    cpus: '0.5'
+    mem_limit: 512m
+  redis:
+    container_name: p02-redis
+    image: ${REDIS_IMAGE:-redis:7.4-alpine}
+    command:
+    - redis-server
+    - --appendonly
+    - 'yes'
+    - --maxmemory
+    - 160mb
+    - --maxmemory-policy
+    - noeviction
+    networks:
+    - p02
+    healthcheck:
+      test:
+      - CMD
+      - redis-cli
+      - ping
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    restart: unless-stopped
+    pids_limit: 256
+    cpus: '0.5'
+    mem_limit: 256m
+    volumes:
+    - redis_data:/data
+  mongo-keyfile:
+    container_name: p02-mongo-keyfile
+    image: ${MONGO_IMAGE:-mongo:8.0}
+    user: root
+    environment:
+      MONGO_REPLICA_SET_KEY: ${MONGO_REPLICA_SET_KEY:?run p02.py init}
+    command:
+    - bash
+    - -ec
+    - printf '%s' "$$MONGO_REPLICA_SET_KEY" > /keyfile/keyfile && chmod 400 /keyfile/keyfile && chown 999:999 /keyfile/keyfile
+    tmpfs:
+    - /data/db
+    - /data/configdb
+    restart: 'no'
+    networks:
+    - p02
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    pids_limit: 256
+    cpus: '0.5'
+    mem_limit: 512m
+    volumes:
+    - mongo_keyfile:/keyfile
+  mongodb:
+    container_name: p02-mongodb
+    image: ${MONGO_IMAGE:-mongo:8.0}
+    command:
+    - mongod
+    - --replSet
+    - rs0
+    - --keyFile
+    - /keyfile/keyfile
+    - --bind_ip_all
+    - --wiredTigerCacheSizeGB
+    - '0.25'
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: p02_logger
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD:?run p02.py init}
+    tmpfs:
+    - /data/configdb
+    networks:
+    - p02
+    depends_on:
+      mongo-keyfile:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - mongosh --quiet --username $$MONGO_INITDB_ROOT_USERNAME --password $$MONGO_INITDB_ROOT_PASSWORD --authenticationDatabase
+        admin --eval 'db.adminCommand({ping:1}).ok' | grep 1
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    restart: unless-stopped
+    pids_limit: 256
+    cpus: '0.75'
+    mem_limit: 768m
+    volumes:
+    - mongo_data:/data/db
+    - mongo_keyfile:/keyfile:ro
+  mongo-init:
+    container_name: p02-mongo-init
+    image: ${MONGO_IMAGE:-mongo:8.0}
+    environment:
+      MONGO_USER: p02_logger
+      MONGO_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD:?run p02.py init}
+    command:
+    - bash
+    - -ec
+    - "mongosh --host mongodb:27017 --username \"$$MONGO_USER\" --password \"$$MONGO_PASSWORD\" --authenticationDatabase\
+      \ admin --eval '\n  try { rs.status() } catch (error) { rs.initiate({_id:\"rs0\",members:[{_id:0,host:\"mongodb:27017\"\
+      }]}) }\n'\n"
+    networks:
+    - p02
+    tmpfs:
+    - /data/db
+    - /data/configdb
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    restart: 'no'
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    pids_limit: 256
+    cpus: '0.5'
+    mem_limit: 512m
+  minio:
+    container_name: p02-minio
+    image: ${MINIO_IMAGE:-bitnamilegacy/minio:latest}
+    command: server /data --console-address :9001
+    environment:
+      MINIO_ROOT_USER: p02-root
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?run p02.py init}
+      MINIO_API_CORS_ALLOW_ORIGIN: http://student.p02.test:1025,http://teacher.p02.test:1025,http://admin.p02.test:1025
+    tmpfs:
+    - /bitnami/minio/data:uid=1001,gid=1001
+    - /certs:uid=1001,gid=1001
+    networks:
+    - p02
+    healthcheck:
+      test:
+      - CMD
+      - curl
+      - -fsS
+      - http://127.0.0.1:9000/minio/health/live
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    restart: unless-stopped
+    pids_limit: 256
+    cpus: '0.5'
+    mem_limit: 512m
+    volumes:
+    - minio_data:/data
+  minio-init:
+    container_name: p02-minio-init
+    image: p02-minio-tools:${RELEASE_TAG:?run p02.py init}
+    environment:
+      MINIO_ROOT_USER: p02-root
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?run p02.py init}
+      MINIO_BUCKET: p02-platform
+      MINIO_APP_ACCESS_KEY: p02-app
+      MINIO_APP_SECRET_KEY: ${MINIO_APP_SECRET_KEY:?run p02.py init}
+    entrypoint:
+    - /bin/sh
+    - /scripts/p02-minio-init.sh
+    networks:
+    - p02
+    depends_on:
+      minio:
+        condition: service_healthy
+    restart: 'no'
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    pids_limit: 256
+    cpus: '0.5'
+    mem_limit: 512m
+  clamav:
+    container_name: p02-clamav
+    image: ${CLAMAV_IMAGE:-clamav/clamav:1.4}
+    networks:
+    - p02
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - printf 'PING\n' | nc 127.0.0.1 3310 | grep PONG
+      interval: 15s
+      timeout: 5s
+      retries: 40
+      start_period: 60s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    restart: unless-stopped
+    pids_limit: 256
+    cpus: '1.0'
+    mem_limit: 2g
+    volumes:
+    - clamav_data:/var/lib/clamav
+    environment:
+      CLAMAV_NO_FRESHCLAMD: 'true'
+  migrate:
+    container_name: p02-migrate
+    image: p02-backend:${RELEASE_TAG:?run p02.py init}
+    command:
+    - python
+    - manage.py
+    - migrate
+    - --noinput
+    environment:
+      APP_ENV: p02-lab
+      APP_VERSION: ${APP_VERSION:-0.15.0-p15}
+      OPENAPI_REVISION: ${OPENAPI_REVISION:-v2-p15}
+      SIMILARITY_ALGORITHM_VERSION: ${SIMILARITY_ALGORITHM_VERSION:-char-5gram-jaccard-v1}
+      SIMILARITY_THRESHOLD: ${SIMILARITY_THRESHOLD:-0.30}
+      SIMILARITY_RETENTION_DAYS: ${SIMILARITY_RETENTION_DAYS:-180}
+      AUTO_CHECK_MAX_ATTEMPTS: ${AUTO_CHECK_MAX_ATTEMPTS:-${P10_AUTO_CHECK_MAX_ATTEMPTS:-3}}
+      RUBRIC_AI_MODEL_NAME: ''
+      RUBRIC_AI_BASE_URL: ''
+      RUBRIC_AI_API_KEY: ''
+      RUBRIC_AI_TIMEOUT_SECONDS: ${RUBRIC_AI_TIMEOUT_SECONDS:-60}
+      CHAPTER_AI_MODEL_NAME: ${CHAPTER_AI_MODEL_NAME:-}
+      CHAPTER_AI_BASE_URL: ${CHAPTER_AI_BASE_URL:-}
+      CHAPTER_AI_API_KEY: ${CHAPTER_AI_API_KEY:-}
+      ARCHIVE_RETENTION_DAYS: ${ARCHIVE_RETENTION_DAYS:-365}
+      ARCHIVE_SAFE_RECYCLE_SECONDS: ${ARCHIVE_SAFE_RECYCLE_SECONDS:-900}
+      ARCHIVE_EXPORT_TTL_SECONDS: ${ARCHIVE_EXPORT_TTL_SECONDS:-300}
+      ARCHIVE_MAX_ATTEMPTS: ${ARCHIVE_MAX_ATTEMPTS:-5}
+      RUNTIME_EXECUTION_RETENTION_DAYS: ${RUNTIME_EXECUTION_RETENTION_DAYS:-30}
+      RUNTIME_CLEANUP_MAX_ATTEMPTS: ${RUNTIME_CLEANUP_MAX_ATTEMPTS:-10}
+      GIT_REVISION: ${GIT_REVISION:-development}
+      BUILD_TIME: ${BUILD_TIME:-development}
+      DJANGO_SETTINGS_MODULE: education_experiment_platform.settings.p02_lab
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?run p02.py init}
+      IDENTITY_HMAC_KEY: ${IDENTITY_HMAC_KEY:?run p02.py init}
+      COURSE_INVITATION_HMAC_KEY: ${COURSE_INVITATION_HMAC_KEY:?run p02.py init}
+      DJANGO_ALLOWED_HOSTS: django,localhost,127.0.0.1,student.localhost,teacher.localhost,admin.localhost,student.p02.test,teacher.p02.test,admin.p02.test
+      DJANGO_TRUSTED_ORIGINS: http://student.p02.test:1025,http://teacher.p02.test:1025,http://admin.p02.test:1025
+      EMAIL_BACKEND: django.core.mail.backends.dummy.EmailBackend
+      EMAIL_HOST: ${EMAIL_HOST:-}
+      EMAIL_PORT: ${EMAIL_PORT:-587}
+      EMAIL_HOST_USER: ${EMAIL_HOST_USER:-}
+      EMAIL_HOST_PASSWORD: ${EMAIL_HOST_PASSWORD:-}
+      EMAIL_USE_TLS: ${EMAIL_USE_TLS:-true}
+      DEFAULT_FROM_EMAIL: ${DEFAULT_FROM_EMAIL:-no-reply@example.edu}
+      STUDENT_PUBLIC_URL: http://student.p02.test:1025
+      TEACHER_PUBLIC_URL: http://teacher.p02.test:1025
+      TRUSTED_PROXY_CIDRS: ${P02_PROXY_CIDRS:-127.0.0.1/32}
+      MYSQL_DATABASE: p02_platform
+      MYSQL_USER: p02_migration
+      MYSQL_PASSWORD: ${MYSQL_MIGRATION_PASSWORD:?run p02.py init}
+      MYSQL_HOST: mysql
+      MYSQL_PORT: '3306'
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+      MONGODB_URI: mongodb://p02_logger:${MONGO_INITDB_ROOT_PASSWORD:?run p02.py init}@mongodb:27017/observability?authSource=admin&replicaSet=rs0
+      MONGODB_LOG_DATABASE: observability
+      MONGODB_LOG_COLLECTION: runtime_logs
+      MONGODB_LOG_TTL_DAYS: ${MONGODB_LOG_TTL_DAYS:-30}
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_INTERNAL_ENDPOINT: http://minio:9000
+      MINIO_PUBLIC_ENDPOINT: http://files.p02.test:1025
+      MINIO_BUCKET: p02-platform
+      MINIO_APP_ACCESS_KEY: p02-app
+      MINIO_APP_SECRET_KEY: ${MINIO_APP_SECRET_KEY:?run p02.py init}
+      CLAMAV_HOST: clamav
+      CLAMAV_PORT: '3310'
+      LOG_LEVEL: INFO
+      RUNTIME_MODE: local
+      RUNTIME_ADAPTER_CODE: runtime/p02-docker
+      LOCAL_RUNTIME_IMAGE: p02-stdio:${RELEASE_TAG:?run p02.py init}
+      LOCAL_RUNTIME_NETWORK: p02_p02
+      LOCAL_DOCKER_HOST: unix:///var/run/docker.sock
+      LOCAL_RUNTIME_MODE: REAL
+      RUNTIME_ADAPTER_CONFIGS: '{"runtime/p02-docker":{"base_url":"unix:///var/run/docker.sock","pids_limit":128}}'
+      AUDIT_IP_HASH_SALT: ${AUDIT_IP_HASH_SALT:?run p02.py init}
+      RUNTIME_RESOURCE_PREFIX: p02
+      RUNTIME_IMAGE_OPERATIONS_ENABLED: 'false'
+      RUNTIME_CAPACITY_CPU_MILLICORES: ${P02_RUNTIME_CPU_MILLICORES:-0}
+      RUNTIME_CAPACITY_MEMORY_MB: ${P02_RUNTIME_MEMORY_MB:-0}
+      P02_RUNTIME_APPROVED: ${P02_RUNTIME_APPROVED:-false}
+    networks:
+    - p02
+    depends_on:
+      mysql-users:
+        condition: service_completed_successfully
+    restart: 'no'
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    pids_limit: 256
+    cpus: '0.5'
+    mem_limit: 512m
+  mysql-grants:
+    container_name: p02-mysql-grants
+    image: p02-mysql:${RELEASE_TAG:?run p02.py init}
+    command:
+    - bash
+    - /scripts/configure-users.sh
+    - restrict
+    environment:
+      MYSQL_DATABASE: p02_platform
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?run p02.py init}
+      MYSQL_MIGRATION_USER: p02_migration
+      MYSQL_MIGRATION_PASSWORD: ${MYSQL_MIGRATION_PASSWORD:?run p02.py init}
+      MYSQL_APP_USER: p02_app
+      MYSQL_APP_PASSWORD: ${MYSQL_APP_PASSWORD:?run p02.py init}
+    tmpfs:
+    - /var/lib/mysql
+    networks:
+    - p02
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: 'no'
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    pids_limit: 256
+    cpus: '0.5'
+    mem_limit: 512m
+  django:
+    container_name: p02-django
+    image: p02-backend:${RELEASE_TAG:?run p02.py init}
+    environment: &id001
+      APP_ENV: p02-lab
+      APP_VERSION: ${APP_VERSION:-0.15.0-p15}
+      OPENAPI_REVISION: ${OPENAPI_REVISION:-v2-p15}
+      SIMILARITY_ALGORITHM_VERSION: ${SIMILARITY_ALGORITHM_VERSION:-char-5gram-jaccard-v1}
+      SIMILARITY_THRESHOLD: ${SIMILARITY_THRESHOLD:-0.30}
+      SIMILARITY_RETENTION_DAYS: ${SIMILARITY_RETENTION_DAYS:-180}
+      AUTO_CHECK_MAX_ATTEMPTS: ${AUTO_CHECK_MAX_ATTEMPTS:-${P10_AUTO_CHECK_MAX_ATTEMPTS:-3}}
+      RUBRIC_AI_MODEL_NAME: ''
+      RUBRIC_AI_BASE_URL: ''
+      RUBRIC_AI_API_KEY: ''
+      RUBRIC_AI_TIMEOUT_SECONDS: ${RUBRIC_AI_TIMEOUT_SECONDS:-60}
+      CHAPTER_AI_MODEL_NAME: ${CHAPTER_AI_MODEL_NAME:-}
+      CHAPTER_AI_BASE_URL: ${CHAPTER_AI_BASE_URL:-}
+      CHAPTER_AI_API_KEY: ${CHAPTER_AI_API_KEY:-}
+      ARCHIVE_RETENTION_DAYS: ${ARCHIVE_RETENTION_DAYS:-365}
+      ARCHIVE_SAFE_RECYCLE_SECONDS: ${ARCHIVE_SAFE_RECYCLE_SECONDS:-900}
+      ARCHIVE_EXPORT_TTL_SECONDS: ${ARCHIVE_EXPORT_TTL_SECONDS:-300}
+      ARCHIVE_MAX_ATTEMPTS: ${ARCHIVE_MAX_ATTEMPTS:-5}
+      RUNTIME_EXECUTION_RETENTION_DAYS: ${RUNTIME_EXECUTION_RETENTION_DAYS:-30}
+      RUNTIME_CLEANUP_MAX_ATTEMPTS: ${RUNTIME_CLEANUP_MAX_ATTEMPTS:-10}
+      GIT_REVISION: ${GIT_REVISION:-development}
+      BUILD_TIME: ${BUILD_TIME:-development}
+      DJANGO_SETTINGS_MODULE: education_experiment_platform.settings.p02_lab
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?run p02.py init}
+      IDENTITY_HMAC_KEY: ${IDENTITY_HMAC_KEY:?run p02.py init}
+      COURSE_INVITATION_HMAC_KEY: ${COURSE_INVITATION_HMAC_KEY:?run p02.py init}
+      DJANGO_ALLOWED_HOSTS: django,localhost,127.0.0.1,student.localhost,teacher.localhost,admin.localhost,student.p02.test,teacher.p02.test,admin.p02.test
+      DJANGO_TRUSTED_ORIGINS: http://student.p02.test:1025,http://teacher.p02.test:1025,http://admin.p02.test:1025
+      EMAIL_BACKEND: django.core.mail.backends.dummy.EmailBackend
+      EMAIL_HOST: ${EMAIL_HOST:-}
+      EMAIL_PORT: ${EMAIL_PORT:-587}
+      EMAIL_HOST_USER: ${EMAIL_HOST_USER:-}
+      EMAIL_HOST_PASSWORD: ${EMAIL_HOST_PASSWORD:-}
+      EMAIL_USE_TLS: ${EMAIL_USE_TLS:-true}
+      DEFAULT_FROM_EMAIL: ${DEFAULT_FROM_EMAIL:-no-reply@example.edu}
+      STUDENT_PUBLIC_URL: http://student.p02.test:1025
+      TEACHER_PUBLIC_URL: http://teacher.p02.test:1025
+      TRUSTED_PROXY_CIDRS: ${P02_PROXY_CIDRS:-127.0.0.1/32}
+      MYSQL_DATABASE: p02_platform
+      MYSQL_USER: p02_app
+      MYSQL_PASSWORD: ${MYSQL_APP_PASSWORD:?run p02.py init}
+      MYSQL_HOST: mysql
+      MYSQL_PORT: '3306'
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+      MONGODB_URI: mongodb://p02_logger:${MONGO_INITDB_ROOT_PASSWORD:?run p02.py init}@mongodb:27017/observability?authSource=admin&replicaSet=rs0
+      MONGODB_LOG_DATABASE: observability
+      MONGODB_LOG_COLLECTION: runtime_logs
+      MONGODB_LOG_TTL_DAYS: ${MONGODB_LOG_TTL_DAYS:-30}
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_INTERNAL_ENDPOINT: http://minio:9000
+      MINIO_PUBLIC_ENDPOINT: http://files.p02.test:1025
+      MINIO_BUCKET: p02-platform
+      MINIO_APP_ACCESS_KEY: p02-app
+      MINIO_APP_SECRET_KEY: ${MINIO_APP_SECRET_KEY:?run p02.py init}
+      CLAMAV_HOST: clamav
+      CLAMAV_PORT: '3310'
+      LOG_LEVEL: INFO
+      RUNTIME_MODE: local
+      RUNTIME_ADAPTER_CODE: runtime/p02-docker
+      LOCAL_RUNTIME_IMAGE: p02-stdio:${RELEASE_TAG:?run p02.py init}
+      LOCAL_RUNTIME_NETWORK: p02_p02
+      LOCAL_DOCKER_HOST: unix:///var/run/docker.sock
+      LOCAL_RUNTIME_MODE: REAL
+      RUNTIME_ADAPTER_CONFIGS: '{"runtime/p02-docker":{"base_url":"unix:///var/run/docker.sock","pids_limit":128}}'
+      AUDIT_IP_HASH_SALT: ${AUDIT_IP_HASH_SALT:?run p02.py init}
+      RUNTIME_RESOURCE_PREFIX: p02
+      RUNTIME_IMAGE_OPERATIONS_ENABLED: 'false'
+      RUNTIME_CAPACITY_CPU_MILLICORES: ${P02_RUNTIME_CPU_MILLICORES:-0}
+      RUNTIME_CAPACITY_MEMORY_MB: ${P02_RUNTIME_MEMORY_MB:-0}
+      P02_RUNTIME_APPROVED: ${P02_RUNTIME_APPROVED:-false}
+    networks:
+    - p02
+    depends_on:
+      mysql-grants:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+      - CMD
+      - curl
+      - -fsS
+      - http://127.0.0.1:8000/api/v2/health
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    restart: unless-stopped
+    pids_limit: 256
+    cpus: '1.0'
+    mem_limit: 768m
+  celery:
+    container_name: p02-celery
+    image: p02-backend:${RELEASE_TAG:?run p02.py init}
+    command:
+    - celery
+    - -A
+    - education_experiment_platform
+    - worker
+    - --loglevel=INFO
+    - --concurrency=1
+    - --queues=q_default,q_relay,q_agent,q_content,q_analytics,q_integrations,q_scan,q_archive,q_compensate
+    environment: *id001
+    networks:
+    - p02
+    depends_on:
+      mysql-grants:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    restart: unless-stopped
+    pids_limit: 256
+    cpus: '1.0'
+    mem_limit: 768m
+  celery-beat:
+    container_name: p02-celery-beat
+    image: p02-backend:${RELEASE_TAG:?run p02.py init}
+    command:
+    - celery
+    - -A
+    - education_experiment_platform
+    - beat
+    - --loglevel=INFO
+    - --schedule=/state/celerybeat-schedule
+    environment: *id001
+    networks:
+    - p02
+    depends_on:
+      mysql-grants:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    restart: unless-stopped
+    pids_limit: 256
+    cpus: '0.25'
+    mem_limit: 256m
+    volumes:
+    - beat_data:/state
+  log-ingest:
+    container_name: p02-log-ingest
+    image: p02-backend:${RELEASE_TAG:?run p02.py init}
+    command:
+    - python
+    - -m
+    - education_experiment_platform.log_ingest
+    environment: *id001
+    networks:
+    - p02
+    depends_on:
+      mongo-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+      - CMD
+      - curl
+      - -fsS
+      - http://127.0.0.1:8081/health
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    restart: unless-stopped
+    pids_limit: 256
+    cpus: '0.25'
+    mem_limit: 256m
+  kong:
+    container_name: p02-kong
+    image: p02-kong:${RELEASE_TAG:?run p02.py init}
+    environment:
+      KONG_DATABASE: 'off'
+      KONG_DECLARATIVE_CONFIG: /kong/declarative/kong.yml
+      KONG_PROXY_LISTEN: 0.0.0.0:8000
+      KONG_ADMIN_LISTEN: 'off'
+      KONG_STATUS_LISTEN: 0.0.0.0:8100
+      KONG_NGINX_WORKER_PROCESSES: '1'
+      KONG_LOG_LEVEL: ${KONG_LOG_LEVEL:-notice}
+      KONG_PROXY_ACCESS_LOG: /dev/stdout
+      KONG_PROXY_ERROR_LOG: /dev/stderr
+      KONG_ADMIN_ACCESS_LOG: 'off'
+    networks:
+    - p02
+    depends_on:
+      django:
+        condition: service_healthy
+    healthcheck:
+      test:
+      - CMD
+      - kong
+      - health
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    restart: unless-stopped
+    pids_limit: 256
+    cpus: '0.5'
+    mem_limit: 512m
+  nginx:
+    container_name: p02-nginx
+    image: p02-frontend:${RELEASE_TAG:?run p02.py init}
+    read_only: true
+    tmpfs:
+    - /tmp
+    - /var/cache/nginx
+    networks:
+    - p02
+    depends_on:
+      kong:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    healthcheck:
+      test:
+      - CMD
+      - wget
+      - -q
+      - -O
+      - /dev/null
+      - http://127.0.0.1:8080/healthz
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    restart: unless-stopped
+    pids_limit: 256
+    cpus: '0.25'
+    mem_limit: 128m
+    ports:
+    - 1025:8080
+networks:
+  p02:
+    driver: bridge
+    internal: true
+volumes:
+  mysql_data: {}
+  redis_data: {}
+  mongo_data: {}
+  mongo_keyfile: {}
+  minio_data: {}
+  clamav_data: {}
+  beat_data: {}

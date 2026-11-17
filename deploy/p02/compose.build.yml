@@ -1,0 +1,51 @@
+# 本机目标架构镜像构建
+name: p02-build
+services:
+  backend:
+    image: p02-backend:${RELEASE_TAG:?run p02.py init}
+    platform: ${TARGET_PLATFORM:-linux/amd64}
+    build:
+      context: ../..
+      dockerfile: deploy/p02/Dockerfile.backend
+      args:
+        PYTHON_BASE_IMAGE: ${PYTHON_BASE_IMAGE:-public.ecr.aws/docker/library/python:3.14-slim}
+        DEBIAN_MIRROR: ${DEBIAN_MIRROR:-https://mirrors.aliyun.com/debian}
+        DEBIAN_SECURITY_MIRROR: ${DEBIAN_SECURITY_MIRROR:-https://mirrors.aliyun.com/debian-security}
+  frontend:
+    image: p02-frontend:${RELEASE_TAG:?run p02.py init}
+    platform: ${TARGET_PLATFORM:-linux/amd64}
+    build:
+      context: ../..
+      dockerfile: deploy/p02/Dockerfile.frontend
+      args:
+        NGINX_IMAGE: ${NGINX_IMAGE:-nginx:1.29-alpine}
+  mysql:
+    image: p02-mysql:${RELEASE_TAG:?run p02.py init}
+    platform: ${TARGET_PLATFORM:-linux/amd64}
+    build:
+      context: ../..
+      dockerfile: deploy/p02/Dockerfile.mysql
+      args:
+        MYSQL_IMAGE: ${MYSQL_IMAGE:-public.ecr.aws/docker/library/mysql:8.4}
+  minio-tools:
+    image: p02-minio-tools:${RELEASE_TAG:?run p02.py init}
+    platform: ${TARGET_PLATFORM:-linux/amd64}
+    build:
+      context: ../..
+      dockerfile: deploy/p02/Dockerfile.minio-tools
+      args:
+        MINIO_CLIENT_IMAGE: ${MINIO_CLIENT_IMAGE:-bitnamilegacy/minio-client:latest}
+  kong:
+    image: p02-kong:${RELEASE_TAG:?run p02.py init}
+    platform: ${TARGET_PLATFORM:-linux/amd64}
+    build:
+      context: ../..
+      dockerfile: deploy/p02/Dockerfile.kong
+      args:
+        KONG_IMAGE: ${KONG_IMAGE:-kong:3.9}
+  stdio:
+    image: p02-stdio:${RELEASE_TAG:?run p02.py init}
+    platform: ${TARGET_PLATFORM:-linux/amd64}
+    build:
+      context: ../../runtime/algorithm-workspace
+      dockerfile: Dockerfile.stdio

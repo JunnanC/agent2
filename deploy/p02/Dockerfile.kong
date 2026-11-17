@@ -1,0 +1,3 @@
+ARG KONG_IMAGE=kong:3.9
+FROM ${KONG_IMAGE}
+COPY infrastructure/kong/kong.yml /kong/declarative/kong.yml

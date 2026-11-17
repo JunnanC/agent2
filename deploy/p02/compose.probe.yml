@@ -1,0 +1,22 @@
+# 02 组专用；使用 p02.py 显式选择 Context 与配置文件。
+name: p02
+services:
+  probe:
+    image: ${NGINX_IMAGE:-nginx:1.29-alpine}
+    container_name: p02-probe
+    networks:
+    - p02
+    ports:
+    - 1025:80
+    cpus: '0.25'
+    mem_limit: 64m
+    pids_limit: 64
+    logging:
+      driver: json-file
+      options:
+        max-size: 1m
+        max-file: '2'
+networks:
+  p02:
+    driver: bridge
+    internal: true

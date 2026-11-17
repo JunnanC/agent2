@@ -1,0 +1,4 @@
+ARG MINIO_CLIENT_IMAGE=bitnamilegacy/minio-client:latest
+FROM ${MINIO_CLIENT_IMAGE}
+COPY deploy/p02/minio-policy.json /policies/app-policy.json
+COPY deploy/p02/minio-init.sh /scripts/p02-minio-init.sh

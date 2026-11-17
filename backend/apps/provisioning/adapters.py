@@ -165,6 +165,8 @@ class DockerLocalAdapter:
         context: Mapping[str, Any],
         build_args: Mapping[str, Any],
     ) -> Mapping[str, Any]:
+        if not settings.RUNTIME_IMAGE_OPERATIONS_ENABLED:
+            raise RuntimeAdapterFailure("RUNTIME_IMAGE_OPERATIONS_DISABLED", retryable=False)
         archive = context.get("archive")
         if not isinstance(archive, (bytes, bytearray)):
             raise RuntimeAdapterFailure("RUNTIME_IMAGE_CONTEXT_UNAVAILABLE", retryable=False)
@@ -187,6 +189,8 @@ class DockerLocalAdapter:
         return _docker_image_result(output, self.client, reference)
 
     def resolve_image(self, *, registry: str, repository: str, tag: str) -> Mapping[str, Any]:
+        if not settings.RUNTIME_IMAGE_OPERATIONS_ENABLED:
+            raise RuntimeAdapterFailure("RUNTIME_IMAGE_OPERATIONS_DISABLED", retryable=False)
         reference = f"{registry.rstrip('/')}/{repository.lstrip('/')}:{tag}"
 
         def _pull_and_resolve() -> Mapping[str, Any]:
@@ -209,13 +213,19 @@ class DockerLocalAdapter:
         try:
             self.client.ping()
             info = self.client.info()
+            cpu = int(info.get("NCPU", 0)) * 1000
+            memory = int(info.get("MemTotal", 0)) // (1024 * 1024)
+            if settings.RUNTIME_CAPACITY_CPU_MILLICORES > 0:
+                cpu = min(cpu, settings.RUNTIME_CAPACITY_CPU_MILLICORES)
+            if settings.RUNTIME_CAPACITY_MEMORY_MB > 0:
+                memory = min(memory, settings.RUNTIME_CAPACITY_MEMORY_MB)
             return {
                 "status": "HEALTHY",
                 "node_count": 1,
-                "capacity_cpu_millicores": int(info.get("NCPU", 0)) * 1000,
-                "available_cpu_millicores": int(info.get("NCPU", 0)) * 1000,
-                "capacity_memory_mb": int(info.get("MemTotal", 0)) // (1024 * 1024),
-                "available_memory_mb": int(info.get("MemTotal", 0)) // (1024 * 1024),
+                "capacity_cpu_millicores": cpu,
+                "available_cpu_millicores": cpu,
+                "capacity_memory_mb": memory,
+                "available_memory_mb": memory,
                 "driver": "DOCKER_LOCAL",
                 "config_ref": self.config_ref,
             }

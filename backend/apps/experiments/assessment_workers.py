@@ -226,9 +226,12 @@ def cleanup_assessment_resources() -> int:
             owners = set()
             filters = {"label": [
                 "edu.platform.managed=true", "edu.platform.kind=assessment-stdio",
+                f"edu.platform.project={settings.RUNTIME_RESOURCE_PREFIX}",
             ]}
             for container in client.containers.list(all=True, filters=filters):
                 labels = container.labels
+                if labels.get("edu.platform.project") != settings.RUNTIME_RESOURCE_PREFIX:
+                    continue
                 if int(labels.get("edu.platform.expires_at", "0")) > time.time():
                     continue
                 container.remove(force=True)
@@ -236,6 +239,8 @@ def cleanup_assessment_resources() -> int:
                 cleaned += 1
             for volume in client.volumes.list(filters=filters):
                 labels = volume.attrs.get("Labels") or {}
+                if labels.get("edu.platform.project") != settings.RUNTIME_RESOURCE_PREFIX:
+                    continue
                 if int(labels.get("edu.platform.expires_at", "0")) > time.time():
                     continue
                 volume.remove(force=True)
