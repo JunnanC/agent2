@@ -259,8 +259,8 @@ function PageContent({
     content = <>
       {classId ? <><button className="link" onClick={() => setParams({})}>返回班级列表</button><h2>{members.data?.class.name ?? "班级学生名单"}</h2>
         {members.isPending ? <p role="status">正在加载名单</p> : members.error ? <ErrorState error={members.error} retry={() => void members.refetch()} /> : <Table headings={["学生", "账号状态", "操作"]} empty={!members.data?.members.length}>
-          {(members.data?.members ?? []).map((member) => { const user = users.data?.find((item) => item.public_id === member.student_id); return <tr key={member.public_id}><td>{member.student_name}<span className="mono muted">{member.student_id}</span></td><td><Status value={user?.account_status} /></td><td>{user && action("详情", () => open({ kind: "person", account: user, teacher: false }))}</td></tr>; })}
-        </Table>}</> : classes.isPending ? <p role="status">正在加载班级</p> : classes.error ? <ErrorState error={classes.error} retry={() => void classes.refetch()} /> : <List rows={[...allCourses.filter((course) => ["PUBLISHED", "CLOSED"].includes(course.status)).map((course) => ({ public_id: course.public_id, name: course.title, code: course.code, type: "teaching" })), ...(classes.data ?? []).filter((item) => item.status === "ACTIVE").map((item) => ({ ...item, type: "administrative" }))]} text={(item) => `${item.name} ${item.code}`} placeholder="搜索班级名称或代码" headings={["班级", "代码", "类型", "操作"]} render={(item) => <tr key={`${item.type}-${item.public_id}`}><td>{item.name}</td><td>{item.code}</td><td>{item.type === "teaching" ? "教学班" : "行政班"}</td><td>{action("查看学生名单", () => setParams({ class: item.public_id, type: item.type }))}</td></tr>} />}
+          {(members.data?.members ?? []).map((member) => { const user = users.data?.find((item) => item.public_id === member.student_id); return <tr key={member.public_id}><td data-label="成员">{member.student_name}<span className="mono muted">{member.student_id}</span></td><td data-label="账号状态"><Status value={user?.account_status} /></td><td data-label="操作">{user && action("详情", () => open({ kind: "person", account: user, teacher: false }))}</td></tr>; })}
+        </Table>}</> : classes.isPending ? <p role="status">正在加载班级</p> : classes.error ? <ErrorState error={classes.error} retry={() => void classes.refetch()} /> : <List rows={[...allCourses.filter((course) => ["PUBLISHED", "CLOSED"].includes(course.status)).map((course) => ({ public_id: course.public_id, name: course.title, code: course.code, type: "teaching" })), ...(classes.data ?? []).filter((item) => item.status === "ACTIVE").map((item) => ({ ...item, type: "administrative" }))]} text={(item) => `${item.name} ${item.code}`} placeholder="搜索班级名称或代码" headings={["班级", "代码", "类型", "操作"]} render={(item) => <tr key={`${item.type}-${item.public_id}`}><td data-label="班级">{item.name}</td><td data-label="代码">{item.code}</td><td data-label="类型">{item.type === "teaching" ? "教学班" : "行政班"}</td><td data-label="操作">{action("查看学生名单", () => setParams({ class: item.public_id, type: item.type }))}</td></tr>} />}
     </>;
   } else if (current === "teachers") {
     const isTeacher = current === "teachers",
@@ -283,20 +283,20 @@ function PageContent({
         ]}
         render={(u) => (
           <tr key={u.public_id}>
-            <td>
+            <td data-label={isTeacher ? "教师 / ID" : "学生 / ID"}>
               <strong>{u.display_name}</strong>
               <span className="mono muted">{u.public_id}</span>
             </td>
-            <td>{u.email}</td>
+            <td data-label="邮箱">{u.email}</td>
             {isTeacher && (
-              <td className="num">
+              <td className="num" data-label="创建课程">
                 {allCourses.filter((c) => c.owner_id === u.public_id).length}
               </td>
             )}
-            <td>
+            <td data-label="账号状态">
               <Status value={u.account_status} />
             </td>
-            <td className="actions">
+            <td className="actions" data-label="操作">
               {action("详情", () =>
                 open({ kind: "person", account: u, teacher: isTeacher }),
               )}
@@ -340,17 +340,17 @@ function PageContent({
           ]}
           render={(c) => (
             <tr key={c.public_id}>
-              <td>
+              <td data-label="课程 / ID">
                 <strong>{c.title}</strong>
                 <span className="mono muted">{c.public_id}</span>
               </td>
-              <td>{c.owner_name}</td>
-              <td className="num">{c.active_enrollment_count}</td>
-              <td>
+              <td data-label="任课教师">{c.owner_name}</td>
+              <td className="num" data-label="学生人数">{c.active_enrollment_count}</td>
+              <td data-label="课程状态">
                 <Status value={c.status} />
               </td>
-              <td className="mono muted">{date(c.teaching_start)}</td>
-              <td className="actions">
+              <td className="mono muted" data-label="教学时间">{date(c.teaching_start)}</td>
+              <td className="actions" data-label="操作">
                 {action("详情", () => open({ kind: "course", course: c }))}
                 <button
                   className="link danger"
@@ -402,23 +402,23 @@ function PageContent({
           ]}
           render={(i) => (
             <tr key={i.public_id}>
-              <td>
+              <td data-label="镜像 / ID">
                 <strong>{i.repository.split("/").at(-1)}</strong>
                 <span className="mono muted">{i.public_id}</span>
               </td>
-              <td>
+              <td data-label="地址及版本">
                 <div className="mono break">
                   {i.registry}/{i.repository}
                 </div>
                 <span className="mono muted">{i.display_tag || "—"}</span>
               </td>
-              <td>
+              <td data-label="扫描状态">
                 <Status value={i.scan_status} />
               </td>
-              <td>
+              <td data-label="使用状态">
                 <Status value={i.approval_status} />
               </td>
-              <td className="actions">
+              <td className="actions" data-label="操作">
                 {action("详情", () => open({ kind: "image", image: i }))}
                 <button
                   className="link"
@@ -453,7 +453,6 @@ function PageContent({
     content = (
       <>
         <div className="logs-table">
-          <p className="table-scroll-hint">左右滑动查看完整表格</p>
           <List
           rows={data}
           text={(l) => `${l.action} ${l.target} ${l.actor} ${l.trace_id}`}
@@ -528,16 +527,16 @@ function PageContent({
             >
               {allRuntimes.map((r) => (
                 <tr key={r.public_id}>
-                  <td>
+                  <td data-label="运行适配器">
                     <strong>{r.name}</strong>
                     <span className="mono muted">{r.code}</span>
                   </td>
-                  <td>{r.driver}</td>
-                  <td>
+                  <td data-label="驱动">{r.driver}</td>
+                  <td data-label="健康状态">
                     <Status value={r.health_status} />
                   </td>
-                  <td>{date(r.last_health_at)}</td>
-                  <td>
+                  <td data-label="最近检查">{date(r.last_health_at)}</td>
+                  <td data-label="操作">
                     {action("详情", () =>
                       open({ kind: "runtime", runtime: r }),
                     )}
@@ -744,14 +743,14 @@ function PageContent({
                 >
                   {owned.map((c) => (
                     <tr key={c.public_id}>
-                      <td>
+                      <td data-label="课程">
                         {action(c.title, () =>
                           open({ kind: "course", course: c }),
                         )}
                         <div className="mono muted">{c.public_id}</div>
                       </td>
-                      <td className="num">{c.active_enrollment_count}</td>
-                      <td>
+                      <td className="num" data-label="学生人数">{c.active_enrollment_count}</td>
+                      <td data-label="状态">
                         <Status value={c.status} />
                       </td>
                     </tr>
