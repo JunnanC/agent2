@@ -1667,7 +1667,7 @@ def _redis_client() -> Redis:
 def rebuild_quota_cache(*, client: Redis | None = None) -> int:
     redis_client = client or _redis_client()
     count = 0
-    for quota in Quota.objects.all():
+    for quota in Quota.objects.select_related("course", "user").all():
         course = quota.course if quota.scope_type == Quota.ScopeType.COURSE else None
         user = quota.user if quota.scope_type == Quota.ScopeType.USER else None
         redis_client.set(

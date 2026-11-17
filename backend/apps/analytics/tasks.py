@@ -29,19 +29,27 @@ def _rebuild_or_record_failure(*, course_id: str | None, trace_id: str) -> int:
 
 
 @shared_task(
-    base=TraceTask, bind=True, acks_late=True, name="apps.analytics.rebuild_course_analytics"
+    base=TraceTask, bind=True, acks_late=True, name="apps.analytics.rebuild_course_analytics",
+    autoretry_for=(Exception,), retry_kwargs={"max_retries": 2}, retry_backoff=True,
+    retry_jitter=True,
 )
 def rebuild_analytics(_task: TraceTask, *, course_id: str | None = None, trace_id: str = "") -> int:
     return _rebuild_or_record_failure(course_id=course_id, trace_id=trace_id)
 
 
-@shared_task(base=TraceTask, bind=True, acks_late=True, name="apps.analytics.refresh_projection")
+@shared_task(
+    base=TraceTask, bind=True, acks_late=True, name="apps.analytics.refresh_projection",
+    autoretry_for=(Exception,), retry_kwargs={"max_retries": 2}, retry_backoff=True,
+    retry_jitter=True,
+)
 def refresh_projection(_task: TraceTask, *, trace_id: str = "") -> int:
     return _rebuild_or_record_failure(course_id=None, trace_id=trace_id)
 
 
 @shared_task(
-    base=TraceTask, bind=True, acks_late=True, name="apps.analytics.replay_projection"
+    base=TraceTask, bind=True, acks_late=True, name="apps.analytics.replay_projection",
+    autoretry_for=(Exception,), retry_kwargs={"max_retries": 2}, retry_backoff=True,
+    retry_jitter=True,
 )
 def replay_projection(
     _task: TraceTask, *, course_id: str | None = None, trace_id: str = ""

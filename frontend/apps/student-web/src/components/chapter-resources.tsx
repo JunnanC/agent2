@@ -2,7 +2,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { studentApi, taskApi, fileApi } from "@edu/api-client";
 import { keys } from "@edu/query-keys";
-import { Button, EmptyState, Panel, RequestStateView, useToast } from "@edu/ui";
+import { Button, EmptyState, Panel, RequestStateView, isSafeUrl, useToast } from "@edu/ui";
 
 export function ChapterResources({ courseId, chapterId }: { courseId: string; chapterId: string }) {
   const toast = useToast();
@@ -28,7 +28,7 @@ export function ChapterResources({ courseId, chapterId }: { courseId: string; ch
     <Panel title={<h2>学习材料</h2>}>
       <RequestStateView loading={materials.isLoading} error={materials.error} onRetry={() => void materials.refetch()} empty={!files.length} emptyState={<EmptyState title="本章暂无已发布材料" />}>
         {files.map(material => <div className="item" key={material.public_id}>
-          {material.kind === "LINK" && material.link_url ? <a href={material.link_url} target="_blank" rel="noreferrer">{material.title}</a> : material.kind === "TEXT" ? <details><summary>{material.title}</summary><p className="course-chapter-description">{material.text_content}</p></details> : <Button disabled={!material.object_asset_id || open.isPending} onClick={() => open.mutate(material.object_asset_id!)}>{material.title}</Button>}
+          {material.kind === "LINK" ? (isSafeUrl(material.link_url) ? <a href={material.link_url} target="_blank" rel="noreferrer">{material.title}</a> : <span>{material.title}</span>) : material.kind === "TEXT" ? <details><summary>{material.title}</summary><p className="course-chapter-description">{material.text_content}</p></details> : <Button disabled={!material.object_asset_id || open.isPending} onClick={() => open.mutate(material.object_asset_id!)}>{material.title}</Button>}
         </div>)}
       </RequestStateView>
     </Panel>

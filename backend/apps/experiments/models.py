@@ -163,6 +163,9 @@ class TaskPublication(VersionedModel):
     withdrawn_at = models.DateTimeField(null=True, blank=True)
     publication_error = models.JSONField(default=dict, blank=True)
 
+    def __str__(self) -> str:
+        return self.title
+
     class Meta:
         db_table = "experiments_task_publication"
         constraints = [
@@ -452,6 +455,9 @@ class ExperimentTask(VersionedModel):
     reviewed_at = models.DateTimeField(null=True, blank=True)
     archived_at = models.DateTimeField(null=True, blank=True)
     completed_at = models.DateTimeField(null=True, blank=True)
+
+    def __str__(self) -> str:
+        return self.public_id
 
     class Meta:
         db_table = "experiments_experiment_task"

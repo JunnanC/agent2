@@ -117,10 +117,7 @@ def active_staff(*, course: Course, actor: User) -> CourseStaff | None:
     )
 
 
-def has_course_capability(*, course: Course, actor: User, capability: str) -> bool:
-    staff = active_staff(course=course, actor=actor)
-    if staff is None:
-        return False
+def _staff_has_capability(staff: CourseStaff, capability: str) -> bool:
     if staff.role == CourseStaff.Role.OWNER:
         return True
     now = timezone.now()
@@ -135,13 +132,16 @@ def has_course_capability(*, course: Course, actor: User, capability: str) -> bo
     )
 
 
+def has_course_capability(*, course: Course, actor: User, capability: str) -> bool:
+    staff = active_staff(course=course, actor=actor)
+    if staff is None:
+        return False
+    return _staff_has_capability(staff, capability)
+
+
 def require_course_capability(*, course: Course, actor: User, capability: str) -> CourseStaff:
     staff = active_staff(course=course, actor=actor)
-    if staff is None or not has_course_capability(
-        course=course,
-        actor=actor,
-        capability=capability,
-    ):
+    if staff is None or not _staff_has_capability(staff, capability):
         raise CourseGrantRequired(detail={"course_id": course.public_id, "capability": capability})
     return staff
 

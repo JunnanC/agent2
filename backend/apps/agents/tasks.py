@@ -9,18 +9,23 @@ from apps.core.concurrency import compare_and_swap
 from .services import execute_eval_run, execute_tool_call, process_agent_message
 
 
-@shared_task(bind=True, acks_late=True, queue="q_content")
+@shared_task(bind=True, max_retries=2, acks_late=True, queue="q_content")
 def run_ingestion(self: Any, run_id: str, trace_id: str = "") -> str:
     from .adapters import KeywordKnowledgeRetriever
     from .models import AgentSourceVersion, IngestionRun
 
     run = IngestionRun.objects.select_related("source_version").get(public_id=run_id)
-    running = compare_and_swap(
-        IngestionRun,
-        pk=run.pk,
-        expected_version=run.row_version,
-        changes={"status": IngestionRun.Status.RUNNING, "started_at": timezone.now()},
-    )
+    if run.status == IngestionRun.Status.SUCCEEDED:
+        return run.public_id
+    if run.status == IngestionRun.Status.RUNNING:
+        running = run
+    else:
+        running = compare_and_swap(
+            IngestionRun,
+            pk=run.pk,
+            expected_version=run.row_version,
+            changes={"status": IngestionRun.Status.RUNNING, "started_at": timezone.now()},
+        )
     try:
         count = KeywordKnowledgeRetriever().rebuild(
             source_version_id=running.source_version.public_id
@@ -58,7 +63,9 @@ def run_ingestion(self: Any, run_id: str, trace_id: str = "") -> str:
                 expected_version=knowledge_base.row_version,
                 changes={"status": knowledge_base.Status.ACTIVE},
             )
-    except Exception:
+    except Exception as exc:
+        if self.request.retries < self.max_retries:
+            raise self.retry(exc=exc, countdown=2**self.request.retries) from exc
         current_run = IngestionRun.objects.get(pk=run.pk)
         compare_and_swap(
             IngestionRun,
@@ -88,11 +95,13 @@ def scan_agent_source_asset(self: Any, asset_id: str, trace_id: str = "") -> str
     return scan_source_asset(asset_id=asset_id, trace_id=trace_id).public_id
 
 
-@shared_task(bind=True, acks_late=True, queue="q_agent")
+@shared_task(bind=True, max_retries=2, acks_late=True, queue="q_agent")
 def run_agent_message(self: Any, message_id: str, trace_id: str = "") -> str:
     try:
         return process_agent_message(message_id=message_id, trace_id=trace_id).public_id
-    except Exception:
+    except Exception as exc:
+        if self.request.retries < self.max_retries:
+            raise self.retry(exc=exc, countdown=2**self.request.retries) from exc
         from .models import AgentMessage
 
         source = AgentMessage.objects.select_related("session").get(
@@ -116,11 +125,21 @@ def run_agent_message(self: Any, message_id: str, trace_id: str = "") -> str:
         raise
 
 
-@shared_task(bind=True, acks_late=True, queue="q_agent")
+@shared_task(bind=True, max_retries=2, acks_late=True, queue="q_agent")
 def execute_agent_tool(self: Any, call_id: str, trace_id: str = "") -> str:
-    return execute_tool_call(call_id=call_id, trace_id=trace_id).public_id
+    try:
+        return execute_tool_call(call_id=call_id, trace_id=trace_id).public_id
+    except Exception as exc:
+        if self.request.retries < self.max_retries:
+            raise self.retry(exc=exc, countdown=2**self.request.retries) from exc
+        raise
 
 
-@shared_task(bind=True, acks_late=True, queue="q_agent")
+@shared_task(bind=True, max_retries=2, acks_late=True, queue="q_agent")
 def run_agent_eval(self: Any, run_id: str, trace_id: str = "") -> str:
-    return execute_eval_run(run_id=run_id, trace_id=trace_id).public_id
+    try:
+        return execute_eval_run(run_id=run_id, trace_id=trace_id).public_id
+    except Exception as exc:
+        if self.request.retries < self.max_retries:
+            raise self.retry(exc=exc, countdown=2**self.request.retries) from exc
+        raise

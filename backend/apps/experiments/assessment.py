@@ -75,11 +75,12 @@ def _kind(question: PublicationTask) -> str:
     return "CHOICE" if question.task_type in CHOICE_TYPES else "PROGRAMMING"
 
 
-def _deadline(task: ExperimentTask, kind: str) -> Any:
+def _deadline(task: ExperimentTask, kind: str, section: Any = None) -> Any:
     deadline = task.effective_deadline or task.publication.window_end
     if kind == "CHOICE":
         return min(deadline, task.publication.window_end)
-    section = AssessmentSection.objects.filter(task=task, kind=kind).first()
+    if section is None:
+        section = AssessmentSection.objects.filter(task=task, kind=kind).first()
     if section and section.resubmit_until:
         deadline = max(deadline, section.resubmit_until)
     return deadline
@@ -99,7 +100,9 @@ def sync_assessment_status(task: ExperimentTask) -> None:
                  publication_chapter__publication_id=task.publication_id,
                  task_type__in=QUESTION_TYPES,
              ).values_list("task_type", flat=True)}
-    sections = list(AssessmentSection.objects.filter(task=task))
+    sections = list(
+        AssessmentSection.objects.filter(task=task).select_related("current_submission")
+    )
     submitted = sum(section.status == "SUBMITTED" for section in sections)
     all_submitted = submitted == len(kinds)
     returned = any(section.status == "RETURNED" for section in sections)
@@ -192,7 +195,10 @@ def assessment_data(*, actor: User, task_id: str) -> dict[str, Any]:
         raise ResourceNotFound()
     now = timezone.now()
     answer_visible = now >= task.publication.window_end
-    section_rows = {row.kind: row for row in AssessmentSection.objects.filter(task=task)}
+    section_rows = {
+        row.kind: row
+        for row in AssessmentSection.objects.filter(task=task).select_related("current_submission")
+    }
     kinds = sorted({_kind(question) for question in questions})
     selections = {row.question_id: row.selected_language for row in AnswerDraft.objects.filter(
         task=task, question__task_type="PROGRAMMING",
@@ -213,11 +219,12 @@ def assessment_data(*, actor: User, task_id: str) -> dict[str, Any]:
         section = section_rows.get(kind) or AssessmentSection(
             task=task, kind=kind, status="NOT_SUBMITTED",
         )
+        deadline = _deadline(task, kind, section)
         sections.append({
-            **section_result(section, student=True), "deadline": _deadline(task, kind),
+            **section_result(section, student=True), "deadline": deadline,
             "editable": task.publication.status == "PUBLISHED" and task.status not in {
                 "COMPLETED", "CANCELLED", "EXPIRED", "FAILED", "ARCHIVING",
-            } and now < _deadline(task, kind),
+            } and now < deadline,
         })
     return {
         "task_id": task.public_id, "questions": values, "sections": sections,
@@ -514,7 +521,7 @@ def section_result(section: AssessmentSection, *, student: bool) -> dict[str, An
     if not student:
         result["review_status"] = report_review_status(section)
     if not submission:
-        if timezone.now() >= _deadline(task, section.kind):
+        if timezone.now() >= _deadline(task, section.kind, section):
             result["grading_status"] = "COMPLETED"
             result["missing"] = True
             if visible:
@@ -589,7 +596,12 @@ def assessment_results(task: ExperimentTask, *, student: bool) -> list[dict[str,
                  publication_chapter__publication_id=task.publication_id,
                  task_type__in=QUESTION_TYPES,
              ).values_list("task_type", flat=True)}
-    sections = {section.kind: section for section in AssessmentSection.objects.filter(task=task)}
+    sections = {
+        section.kind: section
+        for section in (
+            AssessmentSection.objects.filter(task=task).select_related("current_submission")
+        )
+    }
     return [section_result(
         sections.get(kind) or AssessmentSection(task=task, kind=kind), student=student,
     ) for kind in sorted(kinds)]

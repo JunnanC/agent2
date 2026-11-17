@@ -5,7 +5,7 @@ from django.test import Client, TestCase
 from apps.courses.tests.helpers import create_draft_course, create_teacher
 
 from ..image_services import create_experiment_image
-from ..models import ExperimentImage, Template, TemplateVersion
+from ..models import ExperimentImage, Template, TemplateChapter, TemplateTask, TemplateVersion
 from ..services import create_template, create_version
 from .helpers import context, create_resources
 
@@ -104,6 +104,39 @@ class TemplateApiTests(TestCase):
             **self._headers(),
         )
         self.assertEqual(stale.status_code, 412)
+
+    def test_clone_bulk_create_replays_without_duplicate_content(self) -> None:
+        source = self._version("clone-idempotency")
+        chapter = TemplateChapter.objects.create(
+            template_version=source, title="Chapter", sort_order=1,
+        )
+        TemplateTask.objects.create(chapter=chapter, title="Task", sort_order=1)
+        TemplateVersion.objects.filter(pk=source.pk).update(status=TemplateVersion.Status.PUBLISHED)
+        url = (
+            f"/api/v2/teaching/courses/{self.course.public_id}"
+            f"/template-versions/{source.public_id}/clone"
+        )
+
+        def post(key):
+            return self.client.post(
+                url, {}, content_type="application/json", HTTP_IDEMPOTENCY_KEY=key,
+                HTTP_IF_MATCH=f'"{source.row_version}"', **self._headers(),
+            )
+
+        first = post("clone-replay")
+        self.assertEqual(first.status_code, 201, first.content)
+        replay = post("clone-replay")
+        self.assertEqual(replay.status_code, 201, replay.content)
+        self.assertEqual(replay["X-Idempotent-Replayed"], "true")
+        self.assertEqual(first.json(), replay.json())
+        self.assertEqual(TemplateVersion.objects.count(), 2)
+        self.assertEqual(TemplateChapter.objects.count(), 2)
+        self.assertEqual(TemplateTask.objects.count(), 2)
+        # A new key represents a deliberate new clone, even with identical content.
+        another = post("clone-again")
+        self.assertEqual(another.status_code, 201, another.content)
+        self.assertEqual(TemplateVersion.objects.count(), 3)
+        self.assertEqual(TemplateTask.objects.count(), 3)
 
     def test_cross_course_template_is_hidden(self) -> None:
         create = self.client.post(

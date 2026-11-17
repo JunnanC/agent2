@@ -34,7 +34,6 @@ from .security import (
     opaque_login_subject,
 )
 from .selectors import (
-    eligible_portals,
     paged_admin_assignments,
     paged_teacher_qualifications,
     paged_users,
@@ -139,10 +138,18 @@ def _me_data(user: User, portal: str) -> dict[str, object]:
 
     teacher = TeacherQualification.objects.filter(user=user).first()
     admin = PlatformAdminAssignment.objects.filter(user=user).first()
+    portals: list[str] = []
+    if user.account_status == User.AccountStatus.ACTIVE:
+        if user.registration_role != User.RegistrationRole.TEACHER:
+            portals.append("USER")
+        if teacher and teacher.status == TeacherQualification.Status.ACTIVE:
+            portals.append("TEACHING")
+        if admin and admin.status == PlatformAdminAssignment.Status.ACTIVE:
+            portals.append("PLATFORM")
     return {
         **user_data(user),
         "portal": portal,
-        "eligible_portals": eligible_portals(user),
+        "eligible_portals": portals,
         "teacher_qualification": teacher.status if teacher else None,
         "platform_admin_assignment": admin.status if admin else None,
         "permissions": portal_permissions(portal),

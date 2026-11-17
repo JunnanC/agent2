@@ -101,7 +101,7 @@ export function AssessmentReviews({ courseId, publicationId = "" }: { courseId: 
         <button className="btn" onClick={() => setScores(Object.fromEntries(suggestion.criteria.map((item) => [item.criterion_id, item.score])))}>填入建议，人工核对后保存</button>
       </div>}
       {detail.data.report_criteria.map((criterion) => <label key={criterion.id}>{criterion.title}（满分 {criterion.max_score}）
-        <input className="field" type="number" min="0" max={criterion.max_score} step="0.01" value={scores[criterion.id] ?? ""} onChange={(e) => setScores({ ...scores, [criterion.id]: e.target.value })} />
+        <input className="field" type="number" min="0" max={criterion.max_score} step="0.01" value={scores[criterion.id] ?? ""} onChange={(e) => { const value = e.target.value; setScores((previous) => ({ ...previous, [criterion.id]: value })); }} />
       </label>)}
       <label>评语<textarea className="field" value={feedback} onChange={(e) => setFeedback(e.target.value)} /></label>
       <button className="btn primary" disabled={busy || section.status === "RETURNED"} onClick={() => void save(false)}>保存报告评分</button>

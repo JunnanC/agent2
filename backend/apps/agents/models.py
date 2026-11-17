@@ -234,8 +234,16 @@ class PromptTemplate(VersionedModel):
     platform_managed = models.BooleanField(default=False)
     status = models.CharField(max_length=16, choices=Status.choices, default=Status.ACTIVE)
 
+    def __str__(self) -> str:
+        return self.name
+
     class Meta:
         db_table = "agents_prompt_template"
+        indexes = [
+            models.Index(
+                fields=("course", "status", "name"), name="agents_prompt_scope_status_idx"
+            ),
+        ]
         constraints = [
             models.UniqueConstraint(
                 fields=("course", "name"), name="agents_prompt_template_scope_name_uniq"

@@ -9,6 +9,8 @@ vi.mock("@edu/api-client", () => ({
   studentApi: { courseMaterials: vi.fn(async () => ({ rows: [
     {public_id:"m1", chapter_id:"ch1", kind:"TEXT", title:"本章指南", text_content:"学习步骤"},
     {public_id:"m2", chapter_id:"ch2", kind:"TEXT", title:"其他章节材料"},
+    {public_id:"m3", chapter_id:"ch1", kind:"LINK", title:"安全链接", link_url:"https://example.edu/guide"},
+    {public_id:"m4", chapter_id:"ch1", kind:"LINK", title:"不安全链接", link_url:"javascript:alert(1)"},
   ] })) },
   taskApi: { list: vi.fn(async () => ({ rows: [
     {public_id:"t1", course_chapter_id:"ch1", title:"本章实验", assessment_available:true},
@@ -25,5 +27,8 @@ it("only displays the selected chapter's materials and assigned experiments", as
   expect(screen.getByRole("link", {name:"进入实验答题"})).toHaveAttribute("href", "/experiments/t1/assessment");
   expect(screen.queryByText("其他章节材料")).not.toBeInTheDocument();
   expect(screen.queryByText("其他章节实验")).not.toBeInTheDocument();
+  expect(screen.getByRole("link", {name:"安全链接"})).toHaveAttribute("href", "https://example.edu/guide");
+  expect(screen.getByText("不安全链接")).toBeInTheDocument();
+  expect(screen.queryByRole("link", {name:"不安全链接"})).not.toBeInTheDocument();
   client.clear();
 });

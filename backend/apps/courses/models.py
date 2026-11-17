@@ -37,6 +37,9 @@ class AcademicTerm(VersionedModel):
         db_persist=True,
     )
 
+    def __str__(self) -> str:
+        return self.name
+
     class Meta:
         db_table = "courses_academic_term"
         constraints = [
@@ -109,6 +112,9 @@ class Course(VersionedModel):
     published_at = models.DateTimeField(null=True, blank=True)
     closed_at = models.DateTimeField(null=True, blank=True)
     archived_at = models.DateTimeField(null=True, blank=True)
+
+    def __str__(self) -> str:
+        return f"{self.code}: {self.title}"
 
     class Meta:
         db_table = "courses_course"
@@ -302,7 +308,10 @@ class CourseStaffGrant(VersionedModel):
             ),
         ]
         indexes = [
-            models.Index(fields=("status", "expires_at"), name="courses_grant_expiry_idx"),
+            models.Index(
+                fields=("course_staff", "status", "expires_at"),
+                name="courses_grant_staff_expiry_idx",
+            ),
         ]
 
 
@@ -447,6 +456,9 @@ class AdministrativeClass(VersionedModel):
     created_by = models.ForeignKey(
         User, on_delete=models.PROTECT, related_name="created_administrative_classes"
     )
+
+    def __str__(self) -> str:
+        return self.name
 
     class Meta:
         db_table = "courses_administrative_class"
@@ -654,6 +666,9 @@ class Chapter(VersionedModel):
     published_at = models.DateTimeField(null=True, blank=True)
     withdrawn_at = models.DateTimeField(null=True, blank=True)
 
+    def __str__(self) -> str:
+        return self.title
+
     class Meta:
         db_table = "courses_chapter"
         constraints = [
@@ -685,6 +700,9 @@ class Material(VersionedModel):
         blank=True,
         related_name="current_for",
     )
+
+    def __str__(self) -> str:
+        return self.title
 
     class Meta:
         db_table = "courses_material"
@@ -766,13 +784,20 @@ class CalendarEvent(VersionedModel):
         User, on_delete=models.PROTECT, related_name="created_calendar_events"
     )
 
+    def __str__(self) -> str:
+        return self.title
+
     class Meta:
         db_table = "courses_calendar_event"
         constraints = [
             models.CheckConstraint(
                 condition=models.Q(ends_at__gt=models.F("starts_at")),
                 name="courses_calendar_time_ck",
-            )
+            ),
+            models.CheckConstraint(
+                condition=models.Q(status__in=("ACTIVE", "CANCELLED")),
+                name="courses_calendar_status_ck",
+            ),
         ]
         indexes = [models.Index(fields=("course", "starts_at"), name="courses_calendar_idx")]
 
@@ -826,6 +851,9 @@ class Question(VersionedModel):
     status = models.CharField(max_length=16, choices=Status.choices, default=Status.OPEN)
     pinned = models.BooleanField(default=False)
 
+    def __str__(self) -> str:
+        return self.title
+
     class Meta:
         db_table = "courses_question"
         indexes = [
@@ -842,6 +870,12 @@ class Answer(VersionedModel):
 
     class Meta:
         db_table = "courses_answer"
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(status__in=("VISIBLE", "HIDDEN")),
+                name="courses_answer_status_ck",
+            ),
+        ]
         indexes = [models.Index(fields=("question", "created_at"), name="courses_answer_idx")]
 
 
@@ -857,6 +891,9 @@ class ModerationEvent(AppendOnlyModel):
 
     class Meta:
         db_table = "courses_moderation_event"
+        indexes = [
+            models.Index(fields=("question", "created_at"), name="courses_moderation_q_idx"),
+        ]
 
 
 class Invitation(VersionedModel):
@@ -882,6 +919,10 @@ class Invitation(VersionedModel):
             models.CheckConstraint(
                 condition=models.Q(used_count__lte=models.F("max_uses")),
                 name="courses_invite_used_ck",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(status__in=("ACTIVE", "REVOKED")),
+                name="courses_invite_status_ck",
             ),
         ]
         indexes = [
@@ -911,6 +952,11 @@ class EnrollmentImportJob(VersionedModel):
 
     class Meta:
         db_table = "courses_enrollment_import_job"
+        indexes = [
+            models.Index(
+                fields=("course", "status", "created_at"), name="courses_import_job_status_idx"
+            ),
+        ]
 
 
 class EnrollmentImportItem(VersionedModel):
@@ -947,6 +993,11 @@ class CourseCopyJob(VersionedModel):
 
     class Meta:
         db_table = "courses_copy_job"
+        indexes = [
+            models.Index(
+                fields=("source_course", "status", "created_at"), name="courses_copy_job_status_idx"
+            ),
+        ]
 
 
 class CourseCopyItem(AppendOnlyModel):
@@ -959,6 +1010,12 @@ class CourseCopyItem(AppendOnlyModel):
 
     class Meta:
         db_table = "courses_copy_item"
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(status__in=("PENDING", "SUCCEEDED", "FAILED")),
+                name="courses_copy_item_status_ck",
+            ),
+        ]
 
 
 class ChapterDraft(VersionedModel):

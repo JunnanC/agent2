@@ -61,7 +61,7 @@ export function Modal({ open, onClose, title, eyebrow, children, actions, wide }
   const containerRef = useModalFocus(open, onClose);
   if (!open) return null;
   return (
-    <div className="modal-backdrop open" onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+    <div role="presentation" className="modal-backdrop open" onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
       <div className={wide ? "modal wide" : "modal"} role="dialog" aria-modal="true" aria-labelledby={titleId} ref={containerRef}>
         {eyebrow ? <div className="modal-eyebrow">{eyebrow}</div> : null}
         <h2 id={titleId}>{title}</h2>
@@ -115,10 +115,10 @@ export function Drawer({ open, onClose, title, children }: DrawerProps) {
   const containerRef = useModalFocus(open, onClose);
   if (!open) return null;
   return (
-    <div className="drawer-backdrop" onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+    <div role="presentation" className="drawer-backdrop" onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
       <aside className="drawer" role="dialog" aria-modal="true" aria-labelledby={titleId} ref={containerRef}>
         <div className="panel-title">
-          <h2>{title}</h2>
+          <h2 id={titleId}>{title}</h2>
           <button type="button" className="icon-btn" onClick={onClose} aria-label="关闭抽屉">
             <Icon name="x" />
           </button>

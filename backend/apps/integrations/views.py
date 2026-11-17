@@ -157,11 +157,25 @@ class OpenCoursesView(IntegrationsAPIView):
 
     @extend_schema(tags=["external-api"], extensions={"x-portals": ["INTEGRATION"]})
     def get(self, request: HttpRequest) -> Response:
-        courses = [
-            course
-            for course in Course.objects.filter(status=Course.Status.PUBLISHED)
-            if _course_granted(request, course)
-        ]
+        requested_scopes = {"courses:read", "course:read", "*"}
+        if not any(_has_scope(request, scope) for scope in requested_scopes):
+            courses: list[Course] = []
+        else:
+            principal: IntegrationPrincipal = request.user
+            grants = APIClientGrant.objects.filter(
+                client=principal.client, status="ACTIVE", scope__in=requested_scopes,
+            )
+            platform_granted = grants.filter(resource_scope="PLATFORM").exists()
+            granted_course_ids = set(
+                grants.exclude(resource_scope="PLATFORM").values_list("course_id", flat=True)
+            )
+            courses = list(
+                Course.objects.filter(status=Course.Status.PUBLISHED)
+                if platform_granted
+                else Course.objects.filter(
+                    status=Course.Status.PUBLISHED, pk__in=granted_course_ids,
+                )
+            )
         return Response(
             _body(
                 request,

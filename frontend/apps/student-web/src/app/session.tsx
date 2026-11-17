@@ -14,9 +14,9 @@ export interface SessionState {
 }
 
 export function useSession(): SessionState {
-  const [reloadFlag, setReloadFlag] = useState(false);
+  const [reloadFlag, setReloadFlag] = useState(0);
   const query = useQuery({
-    queryKey: [...keys.me(), reloadFlag ? "reloaded" : "current"],
+    queryKey: [...keys.me(), reloadFlag],
     queryFn: () => meApi.retrieve(),
     retry: false,
   });
@@ -27,7 +27,7 @@ export function useSession(): SessionState {
     me: query.data,
     loading: query.isPending,
     error,
-    reload: () => setReloadFlag(true),
+    reload: () => setReloadFlag((n) => n + 1),
     logout: async () => {
       try { await authFlow.logout(); } finally {
         queryClient.clear();

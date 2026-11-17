@@ -38,6 +38,9 @@ class Template(VersionedModel):
         related_name="current_for_templates",
     )
 
+    def __str__(self) -> str:
+        return self.name
+
     class Meta:
         db_table = "labtemplates_template"
         constraints = [
@@ -126,6 +129,9 @@ class TemplateVersion(VersionedModel):
     )
     withdrawn_at = models.DateTimeField(null=True, blank=True)
 
+    def __str__(self) -> str:
+        return f"{self.public_id} (v{self.version_no})"
+
     class Meta:
         db_table = "labtemplates_template_version"
         constraints = [
@@ -178,6 +184,9 @@ class TemplateChapter(VersionedModel):
         related_name="template_chapters",
     )
 
+    def __str__(self) -> str:
+        return self.title
+
     class Meta:
         db_table = "labtemplates_template_chapter"
         constraints = [
@@ -222,6 +231,9 @@ class TemplateTask(VersionedModel):
     marking_spec = models.JSONField(default=dict, blank=True)
     max_score = models.DecimalField(max_digits=7, decimal_places=2, default=0)
     active = models.BooleanField(default=True)
+
+    def __str__(self) -> str:
+        return self.title
 
     class Meta:
         db_table = "labtemplates_template_task"

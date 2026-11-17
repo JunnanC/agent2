@@ -38,6 +38,9 @@ class User(VersionedModel):
     last_login_at = models.DateTimeField(null=True, blank=True)
     security_version = models.PositiveBigIntegerField(default=1, editable=False)
 
+    def __str__(self) -> str:
+        return self.username
+
     class Meta:
         db_table = "accounts_user"
         constraints = [

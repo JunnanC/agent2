@@ -246,7 +246,10 @@ function ReportAnswer({ taskId, register, disabled }: { taskId: string; register
   const [uploading, setUploading] = useState(false);
   const attachments = useQuery({
     queryKey: ["assessment-attachments", taskId], queryFn: () => assessmentApi.reportDraft(taskId),
-    refetchInterval: 3000,
+    refetchInterval: (query) => {
+      const data = query.state.data as { attachments?: Array<{ scan_status: string }> } | undefined;
+      return (data?.attachments ?? []).some((a) => a.scan_status === "PENDING") ? 3000 : false;
+    },
   });
   const draft = useAutosave<string>({
     draftKey: "report", register,
