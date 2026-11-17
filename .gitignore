@@ -135,3 +135,6 @@ evidence/**/*.txt
 
 # Local database backups before demo data cleanup.
 /backups/
+
+# Local redesign audit screenshots and measurements.
+/redesign-audit/

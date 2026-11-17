@@ -6,6 +6,7 @@ import type { AssessmentLanguage, ChoiceQuestion, ProgrammingQuestion } from "@e
 import { newIdempotencyKey } from "@edu/auth-client";
 import { keys } from "@edu/query-keys";
 import { CodeEditor, LoadingState, Modal, useToast } from "@edu/ui";
+import { formatDateTime } from "@/lib/task-format";
 
 type Flush = () => Promise<boolean>;
 type Register = (key: string, flush: Flush | null) => void;
@@ -116,7 +117,7 @@ function ChoiceAnswer({ taskId, question, register, disabled, submittedSelected,
     <pre style={{ whiteSpace: "pre-wrap", fontFamily: "inherit" }}>{question.description}</pre>
     <fieldset disabled={disabled || draft.value === null}>
       <legend>{question.task_type === "SINGLE_CHOICE" ? "单选题" : "多选题（完全正确才得分）"}</legend>
-      {question.options.map((option) => <label className="item" key={option.id}>
+      {question.options.map((option) => <label className="item choice-option" key={option.id}>
         <input type={question.task_type === "SINGLE_CHOICE" ? "radio" : "checkbox"} name={question.id}
           checked={selected?.includes(option.id) ?? false} onChange={(event) => {
             const current = draft.value ?? [];
@@ -426,7 +427,12 @@ function AssessmentPage({ taskId }: { taskId: string }) {
       {choices.length > 0 && <button className="btn" onClick={() => void switchView(() => setSection("CHOICE"))}>选择题</button>}
       {programs.length > 0 && <button className="btn" onClick={() => void switchView(() => setSection("PROGRAMMING"))}>编程与报告</button>}
     </nav>
-    <p role="status">{STATUS_LABEL[sectionState?.status ?? ""]} · {STATUS_LABEL[sectionState?.grading_status ?? ""]} · 截止 {sectionState?.deadline ? new Date(sectionState.deadline).toLocaleString() : "—"}</p>
+    <p role="status" className="assessment-meta">
+      <span>{STATUS_LABEL[sectionState?.status ?? ""] ?? sectionState?.status ?? "—"}</span>
+      <span aria-hidden="true">·</span>
+      <span>{STATUS_LABEL[sectionState?.grading_status ?? ""] ?? sectionState?.grading_status ?? "—"}</span>
+      {sectionState?.deadline ? <><span aria-hidden="true">·</span><span>截止 {formatDateTime(sectionState.deadline)}</span></> : null}
+    </p>
     {sectionState?.feedback && <p role="note">教师评语：{sectionState.feedback}</p>}
     {selectedSection === "CHOICE" ? choices.map((question) => <ChoiceAnswer key={question.id} taskId={taskId} question={question} register={register} disabled={disabled}
       submittedSelected={disabled ? choiceSubmission?.answers.find((answer) => answer.question_id === question.id)?.selected_option_ids ?? [] : undefined}
@@ -443,7 +449,7 @@ function AssessmentPage({ taskId }: { taskId: string }) {
     {sectionState?.score !== null && <p>本部分得分：{sectionState?.score} / {sectionState?.max_score ?? "—"}</p>}
     {currentReport && <p><button className="btn" onClick={() => downloadSubmittedReport(currentReport, taskId, programmingState?.score ?? null, programmingState?.max_score ?? null)}>下载已提交报告</button> <span className="subtle">第 {currentReport.version_no} 次提交，不含后续草稿</span></p>}
     <details><summary>交卷历史</summary>{history.data?.map((submission) => <p key={`${submission.kind}:${submission.version_no}`}>
-      {submission.kind === "CHOICE" ? "选择题" : "编程与报告"} · 第 {submission.version_no} 次 · {new Date(submission.submitted_at).toLocaleString()}{submission.is_current ? "（当前有效）" : ""}
+      {submission.kind === "CHOICE" ? "选择题" : "编程与报告"} · 第 {submission.version_no} 次 · {formatDateTime(submission.submitted_at)}{submission.is_current ? "（当前有效）" : ""}
       {submission.kind === "CHOICE" && <button className="btn sm" onClick={() => setViewing(submission)}>查看答卷</button>}
     </p>)}</details>
     <Modal open={viewing !== null} onClose={() => setViewing(null)} wide

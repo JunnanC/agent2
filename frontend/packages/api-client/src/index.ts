@@ -150,7 +150,7 @@ export const studentApi = {
   courseChapters: (courseId: string) =>
     request<Array<Chapter & { content?: string; summary?: string; position?: number }>>(`/courses/${courseId}/chapters`).then((r) => {
       const list = toList(r);
-      return { ...list, rows: list.rows.map((chapter) => ({ ...chapter, description: chapter.content || chapter.summary || chapter.description, sort_order: chapter.position ?? chapter.sort_order })) };
+      return { ...list, rows: list.rows.map((chapter) => ({ ...chapter, description: chapter.summary || chapter.description, sort_order: chapter.position ?? chapter.sort_order })) };
     }),
 
   courseMaterials: (courseId: string) =>
