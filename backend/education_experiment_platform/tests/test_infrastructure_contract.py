@@ -399,6 +399,7 @@ def test_workspaces_minio_policy_scopes_versioned_workspace_objects() -> None:
     object_statement = policy["Statement"][1]
     assert set(object_statement["Resource"]) == {
         "arn:aws:s3:::edu-platform/template-assets/*",
+        "arn:aws:s3:::edu-platform/course-materials/*",
         "arn:aws:s3:::edu-platform/workspaces/*",
         "arn:aws:s3:::edu-platform/assessment/*",
         "arn:aws:s3:::edu-platform/assessment-tests/*",
