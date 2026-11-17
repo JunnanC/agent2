@@ -786,7 +786,7 @@ EXPERIMENTS = [
         "description": "覆盖排序、分治、回溯、动态规划与贪心的选型判断，并完成归并排序与 0-1 背包两道编程题。",
         "course_chapters": [8, 9, 10, 11],
         "report_required": False,
-        "window_days": (2, 16),
+        "window_days": (-2, 16),
         "close_after_seed": False,
         "chapters": [
             {
@@ -850,3 +850,4 @@ COURSE_SCHEDULES = [
     (3, 3, 4, "东二 305"),
     (5, 1, 2, "东二 305"),
 ]
+

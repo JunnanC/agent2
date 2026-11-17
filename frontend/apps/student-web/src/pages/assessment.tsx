@@ -406,7 +406,16 @@ function AssessmentPage({ taskId }: { taskId: string }) {
   }
 
   if (assessment.isPending) return <LoadingState label="正在载入实验题目" />;
-  if (!data) return <div className="state-block"><p role="alert">实验暂时无法打开</p><button className="btn" onClick={() => void assessment.refetch()}>重试</button><Link to="/experiments">返回实验列表</Link></div>;
+  if (!data) {
+    const error = assessment.error as { payload?: { message?: string; detail?: { window?: string } } } | null;
+    const windowState = error?.payload?.detail?.window;
+    const message = windowState === "not_started"
+      ? "实验尚未开放，请在开放时间后再进入。"
+      : windowState === "ended"
+        ? "实验已截止，无法再进入答题。"
+        : error?.payload?.message ?? "实验暂时无法打开";
+    return <div className="state-block"><p role="alert">{message}</p><button className="btn" onClick={() => void assessment.refetch()}>重试</button><Link to="/experiments">返回实验列表</Link></div>;
+  }
   return <main className="app-shell" style={{ padding: 24, maxWidth: 1500, margin: "auto" }}>
     <Modal open={confirmation !== null} onClose={() => { if (!busy) setConfirmation(null); }} title="确认交卷"
       actions={<><button className="btn" disabled={busy} onClick={() => setConfirmation(null)}>继续检查</button><button className="btn primary" disabled={busy} onClick={() => void confirmSubmit()}>{busy ? "提交中…" : "确认交卷"}</button></>}>
