@@ -503,62 +503,74 @@ function PageContent({
       </>
     );
   } else if (current === "logs") {
+    const isIsoDate = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value);
     const data = allAudits.filter(
       (l) =>
-        (!from ||
+        (!isIsoDate(from) ||
           new Date(l.occurred_at).toLocaleDateString("sv-SE", {
             timeZone: "Asia/Shanghai",
           }) >= from) &&
-        (!to ||
+        (!isIsoDate(to) ||
           new Date(l.occurred_at).toLocaleDateString("sv-SE", {
             timeZone: "Asia/Shanghai",
           }) <= to),
     );
     content = (
-      <List
-        rows={data}
-        text={(l) => `${l.action} ${l.target} ${l.actor} ${l.trace_id}`}
-        states={[...new Set(allAudits.map((l) => l.action))].map((s) => [s, s])}
-        state={(l) => l.action}
-        placeholder="搜索操作、对象或操作者"
-        extra={
-          <>
-            <input
-              type="date"
-              aria-label="开始日期"
-              value={from}
-              onChange={(e) => setFrom(e.target.value)}
-            />
-            <span className="muted">至</span>
-            <input
-              type="date"
-              aria-label="结束日期"
-              value={to}
-              onChange={(e) => setTo(e.target.value)}
-            />
-          </>
-        }
-        headings={[
-          "操作时间",
-          "操作者",
-          "操作类型",
-          "操作对象",
-          "结果",
-          "操作",
-        ]}
-        render={(l) => (
-          <tr key={l.id}>
-            <td className="mono muted">{date(l.occurred_at)}</td>
-            <td>{userName(l.actor)}</td>
-            <td className="break">{l.action}</td>
-            <td className="break mono">{l.target}</td>
-            <td>
-              <Status value={l.result} />
-            </td>
-            <td>{action("详情", () => open({ kind: "audit", audit: l }))}</td>
-          </tr>
-        )}
-      />
+      <>
+        <div className="logs-table">
+          <p className="table-scroll-hint">左右滑动查看完整表格</p>
+          <List
+          rows={data}
+          text={(l) => `${l.action} ${l.target} ${l.actor} ${l.trace_id}`}
+          states={[...new Set(allAudits.map((l) => l.action))].map((s) => [s, s])}
+          state={(l) => l.action}
+          placeholder="搜索操作、对象或操作者"
+          extra={
+            <>
+              <input
+                type="text"
+                inputMode="numeric"
+                maxLength={10}
+                placeholder="YYYY-MM-DD"
+                aria-label="开始日期（YYYY-MM-DD）"
+                value={from}
+                onChange={(e) => setFrom(e.target.value)}
+              />
+              <span className="muted">至</span>
+              <input
+                type="text"
+                inputMode="numeric"
+                maxLength={10}
+                placeholder="YYYY-MM-DD"
+                aria-label="结束日期（YYYY-MM-DD）"
+                value={to}
+                onChange={(e) => setTo(e.target.value)}
+              />
+            </>
+          }
+          headings={[
+            "操作时间",
+            "操作者",
+            "操作类型",
+            "操作对象",
+            "结果",
+            "操作",
+          ]}
+          render={(l) => (
+            <tr key={l.id}>
+              <td className="mono muted">{date(l.occurred_at)}</td>
+              <td>{userName(l.actor)}</td>
+              <td className="break">{l.action}</td>
+              <td className="break mono">{l.target}</td>
+              <td>
+                <Status value={l.result} />
+              </td>
+              <td>{action("详情", () => open({ kind: "audit", audit: l }))}</td>
+            </tr>
+          )}
+          />
+        </div>
+      </>
     );
   } else if (current === "resources") {
     content = (

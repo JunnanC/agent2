@@ -28,3 +28,4 @@ export type { CodeEditorProps } from "./code-editor";
 export { isSafeUrl } from "./url-safety";
 
 export { PlatformMark } from "./platform-mark";
+export { Markdown } from "./markdown";
