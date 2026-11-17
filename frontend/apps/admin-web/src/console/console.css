@@ -988,3 +988,7 @@
 }
 
 @media (max-width: 760px) { .admin-console .nav button { min-height: 44px; } }
+
+/* Admin content now lives inside the shared AppShell. */
+.admin-console{background:transparent;padding:8px 0 0;min-width:0}
+@media (max-width:760px){.admin-console{padding-top:0}}

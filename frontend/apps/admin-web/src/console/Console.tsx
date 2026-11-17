@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { request, ApiError } from "@edu/auth-client";
+import { AppShell } from "@edu/ui";
 import { useSession } from "../app/session";
 import { useRecentAuthGuard } from "../lib/recent-auth";
 import {
@@ -31,16 +32,15 @@ const names = {
   logs: "操作日志",
 };
 type Page = keyof typeof names;
-const glyphs: Record<Page, string> = {
-  overview: "M3 3h6v6H3zM13 3h6v6h-6zM3 13h6v6H3zM13 13h6v6h-6z",
-  courses: "M3 4h7l2 2 2-2h7v15h-7l-2 2-2-2H3zM12 6v15",
-  students:
-    "M8 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM1 21v-3a7 7 0 0 1 14 0v3M16 4a4 4 0 0 1 0 8M18 15a6 6 0 0 1 5 6",
-  teachers: "M12 3 1 8l11 5 11-5-11-5zM5 10v7c4 4 10 4 14 0v-7M23 8v9",
-  images: "m12 2 10 5v10l-10 5L2 17V7l10-5zM2 7l10 5 10-5M12 12v10",
-  resources: "M3 3h18v7H3zM3 14h18v7H3zM6 6h1M6 17h1M11 6h7M11 17h7",
-  logs: "M5 3h14v19H5zM9 8h6M9 12h6M9 16h4",
-};
+const navIcons = {
+  overview: "layers",
+  courses: "book",
+  students: "users",
+  teachers: "user",
+  images: "box",
+  resources: "server",
+  logs: "list",
+} as const;
 const descriptions: Record<Page, string> = {
   overview: "关注教学实验的运行情况与需要处理的问题",
   courses: "每门课程对应一个教学班，教学内容与学生名单由任课教师维护",
@@ -78,14 +78,6 @@ type Dialog =
   | { kind: "audit"; audit: Audit }
   | { kind: "runtime"; runtime: Runtime };
 
-function BrandIcon() {
-  return (
-    <svg viewBox="0 0 28 28" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
-      <path d="M4 5h8v18H4zM16 5h8v18h-8zM8 9v10M20 9v10M12 14h4" />
-    </svg>
-  );
-}
-
 export default function Console() {
   const location = useLocation(),
     navigate = useNavigate(),
@@ -104,107 +96,50 @@ export default function Console() {
   const current: Page = Object.hasOwn(names, candidate)
     ? (candidate as Page)
     : (aliases[candidate] ?? "overview");
-  const [menu, setMenu] = useState(false);
-  const [collapsed, setCollapsed] = useState(false);
   useEffect(() => {
     document.title = names[current] + " · 教学实验平台管理";
   }, [current]);
   function go(page: Page, tab?: string) {
     navigate(page === "overview" ? "/" : `/${page}${tab ? `?tab=${tab}` : ""}`);
-    setMenu(false);
   }
+  const adminNav = (Object.keys(names) as Page[]).map((page) => ({
+    label: names[page],
+    path: page,
+    icon: navIcons[page],
+  }));
   return (
-    <div className={`admin-console${collapsed ? " nav-collapsed" : ""}`}>
-      <a className="console-skip" href="#console-main">
-        跳到主要内容
-      </a>
-      {menu && (
-        <button
-          className="console-backdrop"
-          aria-label="关闭导航"
-          onClick={() => setMenu(false)}
-        />
-      )}
-      <aside className={`sidebar ${menu ? "open" : ""}`}>
-        <div className="brand">
-          {collapsed ? (
-            <button type="button" className="brand-expand" aria-label="展开导航栏"
-              title="展开导航栏" aria-expanded={false} aria-controls="admin-primary-nav"
-              onClick={() => setCollapsed(false)}><BrandIcon /></button>
-          ) : <BrandIcon />}
-          <div>
-            教学实验平台<small>运维管理控制台</small>
-          </div>
-          {!collapsed && <button type="button" className="nav-collapse" aria-label="收起导航栏" title="收起导航栏" aria-expanded={true} aria-controls="admin-primary-nav" onClick={() => setCollapsed(true)}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path d="m14 6-6 6 6 6" /></svg>
-          </button>}
-        </div>
-        <div className="nav-label">平台管理</div>
-        <nav id="admin-primary-nav" className="nav" aria-label="平台管理">
-          {(Object.keys(names) as Page[]).map((key) => (
-            <button
-              key={key}
-              title={names[key]}
-              aria-label={names[key]}
-              className={current === key ? "active" : ""}
-              aria-current={current === key ? "page" : undefined}
-              onClick={() => go(key)}
-            >
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                aria-hidden="true"
-              >
-                <path d={glyphs[key]} />
-              </svg>
-              {names[key]}
-            </button>
-          ))}
-        </nav>
-        <div className="sidebar-bottom">
-          <div className="scope">平台范围 · 全部课程</div>运维管理员
-          <br />
-          服务与资源仅供查看
-        </div>
-      </aside>
-      <header className="topbar">
-        <div>
-          <button
-            className="mobile-menu"
-            aria-label="切换导航"
-            aria-expanded={menu}
-            onClick={() => setMenu(!menu)}
-          >
-            菜单
-          </button>
-          <span className="desktop">管理控制台</span>
-          <span>/ {names[current]}</span>
-        </div>
-        <div>
-          <span className="avatar">
-            {session.me?.display_name?.slice(0, 1) || "运"}
-          </span>
-          <span className="desktop">
-            {session.me?.display_name || "运维管理员"}
-          </span>
-          <button
-            className="link"
-            onClick={() =>
-              void session.logout().then(() => {
-                client.clear();
-                navigate("/login");
-              })
-            }
-          >
-            退出
-          </button>
-        </div>
-      </header>
-      <main id="console-main" className="sheet" tabIndex={-1}>
-        <PageContent key={current} current={current} go={go} />
-      </main>
-    </div>
+    <AppShell
+      brand="教学实验平台"
+      domainLabel="运维管理控制台"
+      nav={adminNav}
+      activePath={current}
+      onNavigate={(path) => go(path as Page)}
+      avatar={{
+        name: session.me?.display_name || "运维管理员",
+        role: "运维管理员",
+        badge: session.me?.display_name?.slice(0, 1) || "运",
+      }}
+      avatarItems={[
+        {
+          label: "退出",
+          onClick: () =>
+            void session.logout().then(() => {
+              client.clear();
+              navigate("/login");
+            }),
+        },
+      ]}
+      navigationPosition="side"
+      collapsible
+      collapseStorageKey="admin-console-nav-collapsed"
+    >
+      <a className="console-skip" href="#console-main">跳到主要内容</a>
+      <div className="admin-console">
+        <main id="console-main" tabIndex={-1}>
+          <PageContent key={current} current={current} go={go} />
+        </main>
+      </div>
+    </AppShell>
   );
 }
 

@@ -46,16 +46,15 @@ it("shows classes first then the selected class members", async () => {
 it("折叠后只通过品牌按钮展开，不保留独立箭头", async () => {
   const client = show("/");
   for (let cycle = 0; cycle < 2; cycle++) {
-    fireEvent.click(screen.getByRole("button", { name: "收起导航栏" }));
-    expect(document.querySelector(".admin-console")).toHaveClass("nav-collapsed");
-    expect(document.querySelector(".nav-collapse")).not.toBeInTheDocument();
-    const brand = screen.getByRole("button", { name: "展开导航栏" });
+    fireEvent.click(screen.getByRole("button", { name: "收起导航" }));
+    expect(document.querySelector(".side-nav-shell")).toHaveClass("nav-collapsed");
+    const brand = screen.getByRole("button", { name: "展开导航" });
     expect(brand).toHaveClass("brand-expand");
     expect(brand.querySelector("svg")).toBeInTheDocument();
     expect(brand).toHaveAttribute("aria-expanded", "false");
     fireEvent.click(brand);
-    expect(document.querySelector(".admin-console")).not.toHaveClass("nav-collapsed");
-    expect(screen.queryByRole("button", { name: "展开导航栏" })).not.toBeInTheDocument();
+    expect(document.querySelector(".side-nav-shell")).not.toHaveClass("nav-collapsed");
+    expect(screen.queryByRole("button", { name: "展开导航" })).not.toBeInTheDocument();
   }
   client.clear();
 });
