@@ -861,3 +861,7 @@ body.layout-resizing.resize-rows { cursor: row-resize; }
 .side-nav-shell .nav-item, .side-nav-shell .nav-item.active { border-bottom: 0; }
 
 
+
+/* Brand lockup: same outline mark and wordmark in every portal. */
+.side-nav-shell .brand-mark { background: transparent; color: var(--teal); border-radius: 0; }
+.side-nav-shell .brand-name { font-size: 16px; font-weight: 600; }
