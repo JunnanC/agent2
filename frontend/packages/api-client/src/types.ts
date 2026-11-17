@@ -223,6 +223,7 @@ export interface Material {
   object_asset_id?: string | null;
   version_status?: string | null;
   asset_name?: string;
+  size_bytes?: number | null;
   row_version?: string;
 }
 
