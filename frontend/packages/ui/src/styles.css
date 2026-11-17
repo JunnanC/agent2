@@ -794,7 +794,8 @@ body.layout-resizing.resize-rows { cursor: row-resize; }
 
 /* Shared portal navigation: quiet chrome, white working surfaces. */
 .brand-expand { border: 0; cursor: pointer; padding: 0; }
-.sidebar-toggle { display: flex; align-items: center; gap: 12px; min-height: 36px; padding: 8px 16px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--muted); font: inherit; cursor: pointer; }
+.sidebar-toggle { display: flex; align-items: center; justify-content: center; gap: 8px; width: 36px; min-height: 36px; padding: 0; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--muted); font: inherit; cursor: pointer; }
+.sidebar-toggle .nav-label { display: none; }
 .sidebar-toggle:hover { background: var(--surface-soft); color: var(--ink); }
 .side-nav-shell > .topbar { background: var(--paper); }
 .side-nav-shell .nav-item { display: flex; align-items: center; gap: 12px; }

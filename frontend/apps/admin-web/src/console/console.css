@@ -600,15 +600,14 @@
 }
 .admin-console .console-skip {
   position: fixed;
-  left: 260px;
+  left: -9999px;
   top: 8px;
   z-index: 100;
   background: white;
   padding: 8px 16px;
-  transform: translateY(-200%);
 }
 .admin-console .console-skip:focus {
-  transform: none;
+  left: 260px;
 }
 .admin-console dialog:modal {
   position: fixed;
@@ -677,7 +676,7 @@
   .admin-console .activity {
     grid-template-columns: 104px 1fr;
   }
-  .admin-console .console-skip {
+  .admin-console .console-skip:focus {
     left: 16px;
   }
   .admin-console .mono {
@@ -804,6 +803,7 @@
 
 
 /* Admin content now lives inside the shared AppShell. */
-.admin-console{background:transparent;padding:8px 0 0;min-width:0}
-@media (max-width:760px){.admin-console{padding-top:0}}
+.admin-console{background:transparent;padding:16px 0 0;min-width:0}
+@media (max-width:760px){.admin-console{padding-top:8px}}
+
 

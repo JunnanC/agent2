@@ -133,8 +133,8 @@ export default function Console() {
       collapsible
       collapseStorageKey="admin-console-nav-collapsed"
     >
-      <a className="console-skip" href="#console-main">跳到主要内容</a>
       <div className="admin-console">
+        <a className="console-skip" href="#console-main">跳到主要内容</a>
         <main id="console-main" tabIndex={-1}>
           <PageContent key={current} current={current} go={go} />
         </main>
