@@ -1,5 +1,5 @@
-/* Student portal refinement. Method: unslop by @heydamir, CC BY 4.0. */
-.teacher-portal{--paper:#f7f8f7;--surface-soft:#f4f6f5;--muted:#6e787e;--line:#e3e7e5;--radius:12px;--radius-input:8px;--panel-gap:24px;--panel-pad:24px;--content-pad:40px}
+﻿/* Student portal refinement. Method: unslop by @heydamir, CC BY 4.0. */
+.teacher-portal{--content-pad:32px}
 .teacher-portal body{font-family:'Segoe UI','Microsoft YaHei','PingFang SC',sans-serif;line-height:1.6}
 .teacher-portal h1,.teacher-portal h2,.teacher-portal h3{font-weight:500}
 .teacher-portal .brand-name{font-weight:600}
@@ -13,12 +13,12 @@
 .teacher-portal .sidebar-toggle:hover{background:var(--surface-soft);color:var(--ink)}
 .teacher-portal .crumb{padding:24px 0 0;margin-bottom:0}
 .teacher-portal .student-overview-heading{display:flex;justify-content:space-between;align-items:center;gap:24px;padding:32px 0}
-.teacher-portal .student-overview-heading h1{font-size:32px;line-height:1.25;margin-bottom:12px}
+.teacher-portal .student-overview-heading h1{font-size:24px;line-height:1.3;margin-bottom:8px}
 .teacher-portal .student-overview-heading p{margin:0;color:#536168}
 .teacher-portal .student-overview-heading time{color:var(--muted);font-size:12px;font-variant-numeric:tabular-nums}
 .teacher-portal .student-overview-heading+.section{margin-top:0}
 .teacher-portal .metric-strip .metric{padding:0 24px}
-.teacher-portal .metric .value{font-size:36px;font-weight:500;font-variant-numeric:tabular-nums}
+.teacher-portal .metric .value{font-size:32px;font-weight:500;font-variant-numeric:tabular-nums}
 .teacher-portal .eyebrow{text-transform:none;letter-spacing:0;font-size:12px;font-weight:500}
 .teacher-portal .panel-title h2{font-size:18px}
 .teacher-portal .student-overview-grid{grid-template-columns:minmax(0,.95fr) minmax(0,1.2fr);margin-top:32px}
@@ -41,7 +41,7 @@
 .teacher-portal .calendar-focus-task .calendar-focus-course{color:var(--muted);font-size:12px;font-weight:400}
 .teacher-portal .profile-trigger-text strong{font-size:14px;font-weight:500}
 .teacher-portal .profile-trigger-text small{font-size:12px}
-.teacher-portal .btn{gap:8px;padding:8px 16px;min-height:36px}
+.teacher-portal .btn{gap:8px;padding:8px 14px;min-height:40px}
 @media(min-width:1051px){
 .teacher-portal .side-nav-shell.nav-collapsed{grid-template-columns:80px minmax(0,1fr)}
 .teacher-portal .nav-collapsed>.topbar{width:80px;min-width:0;padding:32px 16px;align-items:center}
@@ -59,14 +59,14 @@
 .teacher-portal .student-overview-grid{grid-template-columns:minmax(0,1fr)}
 }
 @media(max-width:760px){
-.teacher-portal{--content-pad:20px;--panel-pad:20px}
+.teacher-portal{--content-pad:16px;--panel-pad:16px}
 .teacher-portal .side-nav-shell>.topbar{height:auto;flex-wrap:wrap;padding:16px 20px;gap:12px;position:relative}
 .teacher-portal .side-nav-shell .brand-name{display:inline;font-size:14px}
 .teacher-portal .side-nav-shell .primary-nav{order:3;flex-basis:100%;justify-content:space-between}
 .teacher-portal .side-nav-shell .topbar-actions{margin-left:auto}
 .teacher-portal .side-nav-shell .nav-item{font-size:13px;gap:8px}
 .teacher-portal .student-overview-heading{padding:24px 0}
-.teacher-portal .student-overview-heading h1{font-size:28px}
+.teacher-portal .student-overview-heading h1{font-size:20px}
 .teacher-portal .student-overview-heading time{display:none}
 .teacher-portal .metric-strip{grid-template-columns:repeat(2,minmax(0,1fr));gap:0}
 .teacher-portal .metric-strip .metric{padding:16px}
@@ -76,11 +76,11 @@
 .teacher-portal .calendar-focus-task{align-items:flex-start}
 .teacher-portal .calendar-focus-task strong{font-size:14px}
 }
-.teacher-portal .metric strong{font-size:36px;font-weight:500;letter-spacing:0;font-variant-numeric:tabular-nums}
+.teacher-portal .metric strong{font-size:32px;font-weight:500;letter-spacing:0;font-variant-numeric:tabular-nums}
 @media(max-width:760px){.teacher-portal .metric-strip .metric{border-top:0;border-bottom:0}.teacher-portal .metric-strip .metric:nth-child(-n+2){border-bottom:1px solid var(--line)}.teacher-portal .metric strong{font-size:32px}}
 
 /* Teacher workspace. unslop by @heydamir, CC BY 4.0. */
-.teacher-portal .course-context{padding:24px 0}.teacher-portal .course-context h1{font-size:28px;margin:24px 0 8px}.teacher-portal .course-tabs{display:flex;gap:24px;border-bottom:1px solid var(--line);margin-top:24px;overflow:auto}.teacher-portal .course-tabs a{padding:12px 0;white-space:nowrap;color:var(--muted)}.teacher-portal .course-tabs a.active{color:var(--teal);border-bottom:2px solid var(--teal)}.teacher-portal .teacher-summary{display:grid;grid-template-columns:repeat(3,1fr);background:white;border:1px solid var(--line);border-radius:12px;padding:24px;margin-bottom:24px}.teacher-portal .teacher-summary>div{padding:0 24px}.teacher-portal .teacher-summary strong{display:block;font-size:36px;font-weight:500;font-variant-numeric:tabular-nums}.teacher-portal .teacher-summary span{color:var(--muted)}.teacher-portal .teacher-courses{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px}.teacher-portal .teacher-course{padding:24px;border:1px solid var(--line);border-radius:12px;background:white}.teacher-portal .teacher-course h2{font-size:24px;font-weight:500;margin:20px 0}.teacher-portal .teacher-course footer{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;border-top:1px solid var(--line);padding-top:20px;margin-top:24px}.teacher-portal .side-nav-shell>.topbar{position:sticky}.teacher-portal .sidebar-toggle{position:absolute;right:12px;top:28px;padding:4px;width:28px;border:0}.teacher-portal .sidebar-toggle .nav-label{display:none}.teacher-portal .brand-lockup{padding-right:20px!important}.teacher-portal .context-dot{display:none}.teacher-portal .brand-mark{display:inline-flex;background:transparent;color:var(--teal)}.teacher-portal .brand-name{font-size:16px}.teacher-portal .nav-collapsed .sidebar-toggle{position:static;width:40px}.teacher-portal .nav-collapsed .brand-lockup{display:flex;justify-content:center;padding:0!important}.teacher-portal .batch-toolbar{display:flex;gap:12px;flex-wrap:wrap;align-items:center;padding:16px 0}.teacher-portal .teacher-notice{padding:16px;background:var(--surface-soft);border-left:2px solid var(--teal);margin-bottom:24px;line-height:1.7}
+.teacher-portal .course-context{padding:24px 0}.teacher-portal .course-context h1{font-size:24px;margin:24px 0 8px}.teacher-portal .course-tabs{display:flex;gap:24px;border-bottom:1px solid var(--line);margin-top:24px;overflow:auto}.teacher-portal .course-tabs a{padding:12px 0;white-space:nowrap;color:var(--muted)}.teacher-portal .course-tabs a.active{color:var(--teal);border-bottom:2px solid var(--teal)}.teacher-portal .teacher-summary{display:grid;grid-template-columns:repeat(3,1fr);background:white;border:1px solid var(--line);border-radius:12px;padding:24px;margin-bottom:24px}.teacher-portal .teacher-summary>div{padding:0 24px}.teacher-portal .teacher-summary strong{display:block;font-size:32px;font-weight:500;font-variant-numeric:tabular-nums}.teacher-portal .teacher-summary span{color:var(--muted)}.teacher-portal .teacher-courses{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px}.teacher-portal .teacher-course{padding:24px;border:1px solid var(--line);border-radius:12px;background:white}.teacher-portal .teacher-course h2{font-size:20px;font-weight:500;margin:20px 0}.teacher-portal .teacher-course footer{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;border-top:1px solid var(--line);padding-top:20px;margin-top:24px}.teacher-portal .side-nav-shell>.topbar{position:sticky}.teacher-portal .sidebar-toggle{position:absolute;right:12px;top:28px;padding:4px;width:28px;border:0}.teacher-portal .sidebar-toggle .nav-label{display:none}.teacher-portal .brand-lockup{padding-right:20px!important}.teacher-portal .context-dot{display:none}.teacher-portal .brand-mark{display:inline-flex;background:transparent;color:var(--teal)}.teacher-portal .brand-name{font-size:16px}.teacher-portal .nav-collapsed .sidebar-toggle{position:static;width:40px}.teacher-portal .nav-collapsed .brand-lockup{display:flex;justify-content:center;padding:0!important}.teacher-portal .batch-toolbar{display:flex;gap:12px;flex-wrap:wrap;align-items:center;padding:16px 0}.teacher-portal .teacher-notice{padding:16px;background:var(--surface-soft);border-left:2px solid var(--teal);margin-bottom:24px;line-height:1.7}
 @media(max-width:760px){.teacher-portal .teacher-courses{grid-template-columns:1fr}.teacher-portal .teacher-summary{padding:16px}.teacher-portal .teacher-summary>div{padding:0 8px}.teacher-portal .teacher-summary strong{font-size:28px}.teacher-portal .sidebar-toggle{display:none}}
 
 @media(min-width:1051px){
@@ -91,3 +91,19 @@
 .teacher-portal .nav-collapsed .profile-popover{min-width:180px}
 }
 @media(max-width:1050px){.teacher-portal .side-nav-shell>.topbar{position:relative}}
+
+
+
+/* Compact empty states instead of a full-height chart frame. */
+.teacher-portal .chart-empty{display:flex;flex-direction:column;gap:6px;justify-content:center;min-height:140px;padding:24px;background:var(--surface-soft);border-radius:8px}
+.teacher-portal .chart-empty strong{font-size:14px;font-weight:600}
+.teacher-portal .chart-empty p{margin:0;color:var(--muted);font-size:13px}
+.teacher-portal .state-block{min-height:140px;padding:24px}
+
+.teacher-portal .overview-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin:8px 0 24px}
+.teacher-portal .overview-heading h1{margin:0}
+.teacher-portal .overview-heading .page-actions{margin:0}
+
+@media(max-width:760px){.teacher-portal .btn:not(.sm){min-height:44px}.teacher-portal .course-context h1{font-size:20px}}
+
+@media(max-width:760px){.teacher-portal .side-nav-shell .nav-item{min-height:44px}}

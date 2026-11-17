@@ -1,7 +1,7 @@
 /* unslop by Damir Sokolovsky (@heydamir), CC BY 4.0; https://heydamir.design/unslop */
 
 .admin-console {
-  font-family: "Segoe UI", "Microsoft YaHei UI", sans-serif;
+  font-family: "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", sans-serif;
   color: #252b2a;
   background: #f1f3f2;
   font-size: 14px;
@@ -37,6 +37,7 @@
   background: white;
   border: 1px solid #dce1de;
   border-radius: 8px;
+  min-height: 40px;
   padding: 8px 12px;
   color: inherit;
   transition: background 0.15s;
@@ -111,7 +112,7 @@
   display: flex;
   gap: 12px;
   align-items: center;
-  height: 36px;
+  min-height: 40px;
   padding: 8px 12px;
   color: #59625e;
 }
@@ -315,7 +316,8 @@
   border: 1px solid #dce1de;
   background: white;
   border-radius: 8px;
-  padding: 10px 12px;
+  min-height: 40px;
+  padding: 9px 12px;
   min-width: 0;
   color: #333c37;
 }
@@ -340,7 +342,7 @@
   border-bottom: 1px solid var(--line);
 }
 .admin-console td {
-  padding: 18px 16px;
+  padding: 15px 16px;
   border-bottom: 1px solid var(--line);
   font-size: 13px;
 }
@@ -965,3 +967,12 @@
   }
   .admin-console .logs-table tbody tr:hover td:first-child { background: #fbfcfb; }
 }
+
+
+@media (max-width: 760px) {
+  .admin-console h1 { font-size: 20px; }
+  .admin-console button:not(.link) { min-height: 44px; }
+  .admin-console input, .admin-console select { min-height: 44px; }
+}
+
+@media (max-width: 760px) { .admin-console .nav button { min-height: 44px; } }

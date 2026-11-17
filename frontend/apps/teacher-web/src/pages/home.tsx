@@ -119,13 +119,17 @@ export function Home() {
   const chartSeries: ChartSeries[] = [
     { name: "班级实验完成率（%）", color: "var(--teal)", data: lastSevenDayLabels().map(() => null) },
   ];
+  const hasChartData = chartSeries.some((series) => series.data.some((value) => value != null));
 
   return (
     <>
       <Breadcrumbs items={[]} current="教学概览" />
-      <div className="page-actions align-end">
-        <Link className="btn" to={rows.length > 0 ? `/courses/${rows[0]!.public_id}/analytics` : "/courses"}>查看教学分析</Link>
-        <Link className="btn primary" to="/courses">新建实验模板</Link>
+      <div className="overview-heading">
+        <h1>教学概览</h1>
+        <div className="page-actions align-end">
+          <Link className="btn" to={rows.length > 0 ? `/courses/${rows[0]!.public_id}/analytics` : "/courses"}>查看教学分析</Link>
+          <Link className="btn primary" to="/courses">新建实验模板</Link>
+        </div>
       </div>
 
       <Panel className="section">
@@ -151,8 +155,15 @@ export function Home() {
             error={overview.error}
             onRetry={() => void overview.refetch()}
             empty={false} emptyState={null}>
-            <LineChart labels={lastSevenDayLabels()} series={chartSeries} unit="%"
-              emptyHint="完成率按课程的每日聚合生成，当前还没有历史数据" />
+            {hasChartData ? (
+              <LineChart labels={lastSevenDayLabels()} series={chartSeries} unit="%"
+                emptyHint="完成率按课程的每日聚合生成，当前还没有历史数据" />
+            ) : (
+              <div className="chart-empty" role="status">
+                <strong>暂无历史数据</strong>
+                <p>完成率按课程的每日聚合生成，积累一天学习记录后显示。</p>
+              </div>
+            )}
           </RequestStateView>
         </Panel>
         <Panel title={<><h2>需要你处理</h2>
