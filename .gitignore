@@ -132,3 +132,6 @@ evidence/image-promotion/
 evidence/swarm/
 # Raw host output and personal/internal project material stay local.
 evidence/**/*.txt
+
+# Local database backups before demo data cleanup.
+/backups/

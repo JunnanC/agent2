@@ -31,8 +31,11 @@ const TASK_STATUS_LABEL: Record<string, string> = {
   REPORT_DRAFT: "报告草稿",
   SUBMITTED: "已提交",
   UNDER_REVIEW: "评审中",
+  APPROVED: "已通过",
   COMPLETED: "已完成",
   REJECTED: "需修改",
+  EXPIRED: "已过期",
+  CANCELLED: "已撤回",
   FAILED: "需处理",
   WITHDRAWN: "已撤回",
 };
@@ -43,8 +46,11 @@ const TASK_STATUS_TONE: Record<string, "good" | "warn" | "blue" | "bad" | "neutr
   REPORT_DRAFT: "good",
   SUBMITTED: "blue",
   UNDER_REVIEW: "blue",
+  APPROVED: "good",
   COMPLETED: "good",
   REJECTED: "bad",
+  EXPIRED: "neutral",
+  CANCELLED: "neutral",
   FAILED: "bad",
   WITHDRAWN: "neutral",
 };

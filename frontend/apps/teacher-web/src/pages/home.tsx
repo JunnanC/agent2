@@ -8,7 +8,7 @@ import {
   Breadcrumbs, LineChart, Metric, Panel, RequestStateView, StatusBadge,
 } from "@edu/ui";
 import type { ChartSeries } from "@edu/ui";
-import { PUBLICATION_STATUS_LABEL } from "@/lib/format";
+import { COURSE_STATUS_LABEL, PUBLICATION_STATUS_LABEL } from "@/lib/format";
 
 interface PendingReviewRow {
   public_id: string;
@@ -68,7 +68,7 @@ export function Home() {
     const total = typeof item.pendingReviews.total === "number" ? item.pendingReviews.total : item.pendingReviews.rows.length;
     return sum + total;
   }, 0);
-  const activeCourses = rows.filter((course) => course.status === "ACTIVE").length;
+  const activeCourses = rows.filter((course) => course.status !== "ARCHIVED").length;
 
   const completionPercent = useMemo(() => {
     let done = 0;
@@ -200,7 +200,7 @@ export function Home() {
               <tbody>
                 {rows.map((course) => {
                   const item = perCourse.find((entry) => entry.course.public_id === course.public_id);
-                  const done = ((item?.progress.rows ?? []) as Array<{ status: string }>).filter((progress) => progress.status === "COMPLETED").length;
+                  const done = ((item?.progress.rows ?? []) as Array<{ status: string }>).filter((progress) => ["COMPLETED", "APPROVED"].includes(progress.status)).length;
                   const total = ((item?.progress.rows ?? []) as Array<{ status: string }>).length;
                   const rate = total > 0 ? Math.round((done / total) * 100) : null;
                   const pending = item ? (typeof item.pendingReviews.total === "number" ? item.pendingReviews.total : item.pendingReviews.rows.length) : 0;
@@ -214,10 +214,9 @@ export function Home() {
                       <td>{rate != null ? `${rate}%` : "—"}</td>
                       <td>{pending > 0 ? `${pending} 份` : "0 份"}</td>
                       <td>
-                        <StatusBadge tone={course.status === "ACTIVE" ? "good"
-                          : course.status === "FROZEN" ? "bad" : course.status === "PUBLISHING" ? "blue" : "neutral"}>
-                          {course.status === "ACTIVE" ? "进行中" : course.status === "FROZEN" ? "已冻结"
-                            : course.status === "PUBLISHING" ? "评审中" : course.status}
+                        <StatusBadge tone={course.status === "PUBLISHED" ? "good"
+                          : course.status === "DRAFT" ? "warn" : "neutral"}>
+                          {COURSE_STATUS_LABEL[course.status] ?? course.status}
                         </StatusBadge>
                       </td>
                     </tr>

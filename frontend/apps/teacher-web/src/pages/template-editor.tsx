@@ -5,7 +5,11 @@ import { teachingApi } from "@edu/api-client";
 import { keys } from "@edu/query-keys";
 import { Breadcrumbs, Panel, RequestStateView, useToast } from "@edu/ui";
 import { AssessmentQuestions } from "@/components/assessment-questions";
-import { apiErrorMessage } from "@/lib/format";
+import {
+  PRECHECK_STATUS_LABEL,
+  TEMPLATE_VERSION_STATUS_LABEL,
+  apiErrorMessage,
+} from "@/lib/format";
 
 export function TemplateEditor() {
   const { courseId = "", templateId = "" } = useParams();
@@ -36,7 +40,7 @@ export function TemplateEditor() {
       <h1>实验题目与发布版本</h1>
       <RequestStateView loading={versions.isLoading} error={versions.error} empty={false} emptyState={null} onRetry={() => void versions.refetch()} />
       <label>版本<select className="field" value={version?.public_id ?? ""} onChange={e => { setSelected(e.target.value); setAdapter(""); setImage(""); setProfile(""); }}>
-        {versions.data?.rows.map(v => <option key={v.public_id} value={v.public_id}>第 {v.version_no} 版 · {v.status}</option>)}
+        {versions.data?.rows.map(v => <option key={v.public_id} value={v.public_id}>第 {v.version_no} 版 · {TEMPLATE_VERSION_STATUS_LABEL[v.status] ?? v.status}</option>)}
       </select></label>
       <button className="btn" disabled={busy} onClick={() => void act(async () => {
         const created = await teachingApi.createTemplateVersion(courseId, templateId, {});
@@ -71,7 +75,7 @@ export function TemplateEditor() {
       <Panel className="section"><h2>预检与发布</h2>
         <button className="btn" disabled={locked} onClick={() => void act(() => teachingApi.precheck(courseId, version.public_id, version.row_version))}>执行预检</button>
         <button className="btn primary" disabled={busy || version.status !== "PRECHECK_PASSED"} onClick={() => void act(() => teachingApi.publishTemplateVersion(courseId, version.public_id, version.row_version))}>发布模板版本</button>
-        {checks.data?.rows.map(check => <p key={check.public_id}>{check.status}</p>)}
+        {checks.data?.rows.map(check => <p key={check.public_id}>{PRECHECK_STATUS_LABEL[check.status] ?? check.status}</p>)}
         <Link className="btn" to={`/courses/${courseId}/publishing`}>配置实验发布、报告与截止时间</Link>
       </Panel>
     </>}

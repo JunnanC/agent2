@@ -26,10 +26,52 @@ export const PUBLICATION_STATUS_LABEL: Record<string, string> = {
   DRAFT: "草稿",
   PRECHECK: "待预检",
   READY: "待发布",
+  PUBLISHING: "发布中",
   PUBLISHED: "已发布",
+  PUBLISH_FAILED: "发布失败",
   WITHDRAWN: "已撤回",
   CLOSED: "已关闭",
   FAILED: "发布失败",
+};
+
+export const COURSE_STATUS_LABEL: Record<string, string> = {
+  DRAFT: "草稿",
+  PUBLISHED: "已发布",
+  CLOSED: "已关闭",
+  ARCHIVED: "已归档",
+  ACTIVE: "进行中",
+};
+
+export const TASK_STATUS_LABEL: Record<string, string> = {
+  ASSIGNED: "待开始",
+  IN_PROGRESS: "进行中",
+  REPORT_DRAFT: "报告草稿",
+  SUBMITTED: "已提交",
+  UNDER_REVIEW: "评审中",
+  APPROVED: "已通过",
+  COMPLETED: "已完成",
+  ARCHIVED: "已归档",
+  EXPIRED: "已过期",
+  CANCELLED: "已取消",
+  WITHDRAWN: "已撤回",
+  FAILED: "异常",
+};
+
+export const TEMPLATE_VERSION_STATUS_LABEL: Record<string, string> = {
+  DRAFT: "草稿",
+  PRECHECKING: "预检中",
+  PRECHECK_FAILED: "预检失败",
+  PRECHECK_PASSED: "预检通过",
+  PUBLISHED: "已发布",
+  WITHDRAWN: "已撤回",
+};
+
+export const PRECHECK_STATUS_LABEL: Record<string, string> = {
+  QUEUED: "排队中",
+  RUNNING: "预检中",
+  RETRY: "重试中",
+  PASSED: "已通过",
+  FAILED: "未通过",
 };
 
 export const REVIEW_STATUS_LABEL: Record<string, string> = {

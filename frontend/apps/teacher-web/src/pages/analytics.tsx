@@ -54,12 +54,12 @@ export function Analytics() {
     let total = 0;
     for (const row of rows) {
       total += 1;
-      if (row.status === "COMPLETED") done += 1;
+      if (["COMPLETED", "APPROVED"].includes(row.status)) done += 1;
     }
     const completion = total > 0 ? Math.round((done / total) * 100) : null;
     const perPublication = (publications.data?.rows ?? []).map((publication) => {
       const pubRows = rows.filter((row) => row.publication_id === publication.public_id);
-      const pubDone = pubRows.filter((row) => row.status === "COMPLETED").length;
+      const pubDone = pubRows.filter((row) => ["COMPLETED", "APPROVED"].includes(row.status)).length;
       const rate = pubRows.length ? Math.round((pubDone / pubRows.length) * 100) : null;
       return {
         key: publication.public_id,

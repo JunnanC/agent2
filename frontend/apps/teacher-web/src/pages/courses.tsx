@@ -5,7 +5,7 @@ import { teachingApi } from "@edu/api-client";
 import { keys } from "@edu/query-keys";
 import { Button, Modal, Breadcrumbs, Panel, RequestStateView, useToast } from "@edu/ui";
 import { CourseInvitation } from "@/components/course-invitation";
-import { apiErrorMessage } from "@/lib/format";
+import { COURSE_STATUS_LABEL, apiErrorMessage } from "@/lib/format";
 
 export function Courses() {
   const toast = useToast();
@@ -51,7 +51,7 @@ export function Courses() {
           )}
         >
           <div className="page-actions"><input className="field" aria-label="搜索课程" placeholder="搜索课程" value={search} onChange={e => setSearch(e.target.value)} /></div>
-          <div className="teacher-courses">{(courses.data?.rows ?? []).filter(course => `${course.title} ${course.code}`.includes(search.trim())).map(course => <article className="teacher-course" key={course.public_id}><small>{course.code} · {course.status === "ACTIVE" ? "进行中" : course.status}</small><h2>{course.title}</h2><p className="subtle">{course.summary || "管理课程实验、学生与教学数据"}</p><p>{course.active_enrollment_count} 名学生 · 教师邀请 / 邀请码审核</p><CourseInvitation courseId={course.public_id} /><footer><Link to={`/courses/${course.public_id}/analytics`}>教学分析</Link><Link className="btn primary" to={`/courses/${course.public_id}`}>进入课程</Link></footer></article>)}</div>
+          <div className="teacher-courses">{(courses.data?.rows ?? []).filter(course => `${course.title} ${course.code}`.includes(search.trim())).map(course => <article className="teacher-course" key={course.public_id}><small>{course.code} · {COURSE_STATUS_LABEL[course.status] ?? course.status}</small><h2>{course.title}</h2><p className="subtle">{course.summary || "管理课程实验、学生与教学数据"}</p><p>{course.active_enrollment_count} 名学生 · 教师邀请 / 邀请码审核</p><CourseInvitation courseId={course.public_id} /><footer><Link to={`/courses/${course.public_id}/analytics`}>教学分析</Link><Link className="btn primary" to={`/courses/${course.public_id}`}>进入课程</Link></footer></article>)}</div>
         </RequestStateView>
       </Panel>
 
