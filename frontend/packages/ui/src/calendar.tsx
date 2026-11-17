@@ -25,6 +25,7 @@ export interface CalendarItem {
   subtitle?: string;
   statusLabel?: string;
   statusTone?: "good" | "warn" | "blue" | "bad" | "neutral";
+  done?: boolean;
   onClick?: () => void;
 }
 

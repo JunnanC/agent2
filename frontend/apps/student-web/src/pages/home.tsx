@@ -7,12 +7,14 @@ import { Breadcrumbs, Button, DateCalendar, Metric, Panel, RequestStateView, Sta
 import type { CalendarItem } from "@edu/ui";
 import { isTaskActionable, taskStatusLabel, taskStatusTone, formatDate } from "@/lib/task-format";
 const TERMINAL_STATUSES = new Set(["COMPLETED", "WITHDRAWN"]);
+const UNFINISHED_STATUSES = new Set(["ASSIGNED", "IN_PROGRESS", "REPORT_DRAFT", "REJECTED", "FAILED"]);
 const FOCUSED_TASKS_PAGE_SIZE = 3;
 
 export function Home() {
   const navigate = useNavigate();
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [taskPagination, setTaskPagination] = useState({ date: selectedDate, page: 1 });
+  const [manualDate, setManualDate] = useState(false);
 
   const tasksQuery = useQuery({ queryKey: keys.tasks({ scope: "my" }), queryFn: () => taskApi.list({ page_size: 50 }) });
   const enrollmentsQuery = useQuery({ queryKey: keys.enrollments({ status: "ACTIVE" }), queryFn: () => studentApi.myEnrollments({ status: "ACTIVE", page_size: 100 }) });
@@ -93,6 +95,7 @@ export function Home() {
           subtitle: `完成度 ${task.progress}% · 截止 ${formatDate(deadline)}`,
           statusLabel: taskStatusLabel(task.status),
           statusTone: taskStatusTone(task.status),
+          done: !UNFINISHED_STATUSES.has(task.status),
           onClick: () => navigate(task.assessment_available
             ? `/experiments/${task.public_id}/assessment`
             : `/experiments/${task.public_id}`),
@@ -103,14 +106,19 @@ export function Home() {
     return rows;
   }, [tasks, courseNames, navigate]);
 
-  const firstTaskDate = useMemo(
-    () => calendarItems.map((item) => item.date).sort()[0] ?? null,
-    [calendarItems],
-  );
+  const todayKey = useMemo(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  }, []);
+
+  const focusDate = useMemo(() => {
+    const dates = calendarItems.filter((item) => !item.done).map((item) => item.date).sort();
+    return dates.find((date) => date <= todayKey) ?? dates[0] ?? null;
+  }, [calendarItems, todayKey]);
 
   useEffect(() => {
-    if (!selectedDate && firstTaskDate) setSelectedDate(firstTaskDate);
-  }, [firstTaskDate, selectedDate]);
+    if (!manualDate) setSelectedDate(focusDate);
+  }, [focusDate, manualDate]);
 
   const focusedItems = selectedDate ? calendarItems.filter((item) => item.date === selectedDate) : [];
   const taskPageCount = Math.max(1, Math.ceil(focusedItems.length / FOCUSED_TASKS_PAGE_SIZE));
@@ -150,6 +158,7 @@ export function Home() {
             onRetry={() => void tasksQuery.refetch()} empty={!calendarItems.length}
             emptyState={<div className="state-block"><strong>暂无待办任务</strong><p>实验发布后，开放区间内每天都会显示对应待办。</p></div>}>
             <DateCalendar items={calendarItems} selectedDate={selectedDate} onDateSelect={(date) => {
+              setManualDate(true);
               setSelectedDate(date);
               setTaskPagination({ date, page: 1 });
             }} showPopover={false} />
