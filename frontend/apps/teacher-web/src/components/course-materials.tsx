@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { teachingApi } from "@edu/api-client";
 import { newIdempotencyKey, request } from "@edu/auth-client";
-import { Button, EmptyState, Panel, RequestStateView, useToast } from "@edu/ui";
+import { Button, EmptyState, Panel, RequestStateView, isSafeUrl, useToast } from "@edu/ui";
 import { keys } from "@edu/query-keys";
 
 type Chapter = { public_id: string; title: string; status: string; row_version: number };
@@ -49,7 +49,14 @@ export function CourseMaterials({ courseId }: { courseId: string }) {
     <p className="subtle">发布的材料供本课程学生查看。附件可选用实验设计中已上传且扫描通过的指导书、报告模板等文件。</p>
     <RequestStateView loading={chapters.isLoading || materials.isLoading} error={chapters.error ?? materials.error} onRetry={() => { void chapters.refetch(); void materials.refetch(); }} empty={false}>
       <label className="form-label">新章节名称<input className="field" value={chapterTitle} onChange={(event) => setChapterTitle(event.target.value)} /></label><Button disabled={!chapterTitle.trim() || addChapter.isPending} onClick={() => addChapter.mutate()}>创建并发布章节</Button>
-      <form className="section" onSubmit={(event) => { event.preventDefault(); create.mutate(); }}>
+      <form className="section" onSubmit={(event) => {
+        event.preventDefault();
+        if (kind === "LINK" && !isSafeUrl(content)) {
+          toast.notify("链接地址须以 http:// 或 https:// 开头", "error");
+          return;
+        }
+        create.mutate();
+      }}>
         <label className="form-label">所属章节<select className="field" value={chapterId} onChange={(event) => setChapterId(event.target.value)}><option value="">选择已发布章节</option>{chapters.data?.rows.filter((row) => row.status === "PUBLISHED").map((row) => <option key={row.public_id} value={row.public_id}>{row.title}</option>)}</select></label>
         <label className="form-label">材料标题<input className="field" value={title} onChange={(event) => setTitle(event.target.value)} /></label>
         <label className="form-label">材料类型<select className="field" value={kind} onChange={(event) => { setKind(event.target.value); setContent(""); }}><option value="TEXT">在线文本</option><option value="LINK">外部链接</option><option value="FILE">已上传附件</option></select></label>

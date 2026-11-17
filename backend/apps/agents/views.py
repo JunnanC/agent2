@@ -938,7 +938,7 @@ class TeachingEvalSuiteView(AgentAPIView):
     @extend_schema(tags=["teaching-agents"])
     def get(self, request: HttpRequest, course_id: str) -> Response:
         course = teaching_course(actor=request.user, course_id=course_id)
-        suites = EvalSuite.objects.filter(course=course).order_by("name", "id")
+        suites = EvalSuite.objects.filter(course=course).order_by("name", "id")[:200]
         return _response(request, [eval_suite_data(item) for item in suites])
 
     @extend_schema(
@@ -1083,7 +1083,7 @@ class PlatformAgentToolPolicyView(AgentAPIView):
                 tool_policy_data(item)
                 for item in ToolPolicy.objects.filter(course__isnull=True).order_by(
                     "tool_name", "-version_no"
-                )
+                )[:200]
             ],
         )
 
@@ -1138,7 +1138,10 @@ class PlatformAgentModelRouteView(AgentAPIView):
     def get(self, request: HttpRequest) -> Response:
         return _response(
             request,
-            [model_route_data(item) for item in ModelRoute.objects.order_by("key", "-version_no")],
+            [
+                model_route_data(item)
+                for item in ModelRoute.objects.order_by("key", "-version_no")[:200]
+            ],
         )
 
     @extend_schema(
@@ -1192,7 +1195,7 @@ class PlatformEvalSuiteView(AgentAPIView):
     def get(self, request: HttpRequest) -> Response:
         suites = EvalSuite.objects.filter(platform_managed=True, course__isnull=True).order_by(
             "name", "id"
-        )
+        )[:200]
         return _response(request, [eval_suite_data(item) for item in suites])
 
     @extend_schema(

@@ -994,8 +994,7 @@ function PageContent({
     } else if (dialog.kind === "image-toggle") {
       const i = dialog.image,
         disabling = i.approval_status === "APPROVED",
-        ready = !!i.digest && i.scan_status === "CLEAN",
-        key = crypto.randomUUID();
+        ready = !!i.digest && i.scan_status === "CLEAN";
       title = disabling ? "停用镜像" : "启用镜像";
       wide = false;
       body = (
@@ -1027,7 +1026,7 @@ function PageContent({
                     request(`${imagesPath}/${i.public_id}/decide`, {
                       method: "POST",
                       ifMatch: String(i.row_version),
-                      idempotencyKey: key,
+                      idempotencyKey: crypto.randomUUID(),
                       body: {
                         decision: disabling ? "RETIRED" : "APPROVED",
                         reason: disabling
