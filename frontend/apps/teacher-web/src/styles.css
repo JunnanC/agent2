@@ -91,8 +91,3 @@
 .teacher-portal .nav-collapsed .profile-popover{min-width:180px}
 }
 @media(max-width:1050px){.teacher-portal .side-nav-shell>.topbar{position:relative}}
-
-.chapter-authoring { display:grid; grid-template-columns:220px minmax(0,1fr); gap:24px; align-items:start; }
-.chapter-authoring-nav { border-right:1px solid var(--border, #dde3e9); padding-right:20px; }
-.chapter-authoring-nav .btn { white-space:normal; text-align:left; }
-@media(max-width:760px) { .chapter-authoring { grid-template-columns:minmax(0,1fr); } .chapter-authoring-nav { border-right:0; border-bottom:1px solid #dde3e9; padding:0 0 16px; } }

@@ -88,6 +88,12 @@ def _data(item: Any) -> dict[str, object]:
             "object_asset_id": (
                 current.object_asset.public_id if current and current.object_asset else None
             ),
+            "asset_name": current.object_asset.original_name
+            if current and current.object_asset
+            else "",
+            "size_bytes": current.object_asset.size_bytes
+            if current and current.object_asset
+            else None,
             "version_status": current.status if current else None,
             "row_version": item.row_version,
         }
@@ -139,7 +145,8 @@ def _data(item: Any) -> dict[str, object]:
             "row_version": item.row_version,
             "answers": [
                 _data(answer)
-                for answer in item.answers.filter(status="VISIBLE")
+                for answer in item.answers
+                .filter(status="VISIBLE")
                 .select_related("author")
                 .order_by("created_at")
             ],
@@ -248,7 +255,7 @@ class UserCourseContentView(APIView):
                         course=course,
                         chapter__status=Chapter.Status.PUBLISHED,
                         current_version__status=MaterialVersion.Status.PUBLISHED,
-                    ).select_related("course", "chapter", "current_version")
+                    ).select_related("course", "chapter", "current_version__object_asset")
                 ),
             )
         if resource == "announcements":
@@ -256,7 +263,8 @@ class UserCourseContentView(APIView):
             return _list(
                 request,
                 list(
-                    course.announcements.filter(status=Announcement.Status.PUBLISHED)
+                    course.announcements
+                    .filter(status=Announcement.Status.PUBLISHED)
                     .filter(publish_at__lte=now)
                     .order_by("-pinned", "-publish_at")
                 ),
@@ -269,9 +277,8 @@ class UserCourseContentView(APIView):
             return _list(
                 request,
                 list(
-                    course.questions.exclude(
-                        status__in=(Question.Status.HIDDEN, Question.Status.LOCKED)
-                    )
+                    course.questions
+                    .exclude(status__in=(Question.Status.HIDDEN, Question.Status.LOCKED))
                     .select_related("author")
                     .order_by("-pinned", "-created_at")
                 ),
@@ -383,7 +390,7 @@ class TeachingContentCollectionView(APIView):
                 request,
                 list(
                     course.materials.select_related(
-                        "course", "chapter", "current_version"
+                        "course", "chapter", "current_version__object_asset"
                     ).order_by("chapter__position", "title")
                 ),
             )
@@ -730,7 +737,8 @@ class TeachingImportDetailView(APIView):
     def get(self, request: HttpRequest, course_id: str, job_id: str) -> Response:
         try:
             job = (
-                EnrollmentImportJob.objects.select_related("course")
+                EnrollmentImportJob.objects
+                .select_related("course")
                 .prefetch_related("items__enrollment")
                 .get(public_id=job_id, course__public_id=course_id)
             )
@@ -812,7 +820,8 @@ class TeachingCopyJobDetailView(APIView):
     def get(self, request: HttpRequest, course_id: str, job_id: str) -> Response:
         try:
             job = (
-                CourseCopyJob.objects.select_related("source_course", "target_course")
+                CourseCopyJob.objects
+                .select_related("source_course", "target_course")
                 .prefetch_related("items")
                 .get(public_id=job_id, source_course__public_id=course_id)
             )

@@ -124,6 +124,8 @@ class TeachingAuthoringTests(TestCase):
         self.assertEqual(response.data["data"]["chapter_id"], self.chapter.public_id)
         self.assertEqual(response.data["data"]["version_status"], "DRAFT")
         self.assertEqual(ObjectAsset.objects.get().scan_status, "CLEAN")
+        self.assertEqual(response.data["data"]["asset_name"], "guide.txt")
+        self.assertEqual(response.data["data"]["size_bytes"], 7)
 
     @patch(
         "apps.courses.teaching_views.ClamAVScanner.scan", return_value=AntivirusResult(clean=False)
