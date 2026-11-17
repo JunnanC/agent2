@@ -1,7 +1,7 @@
-/* unslop by Damir Sokolovsky (@heydamir), CC BY 4.0; https://heydamir.design/unslop */
+﻿/* unslop by Damir Sokolovsky (@heydamir), CC BY 4.0; https://heydamir.design/unslop */
 
 .admin-console {
-  font-family: "Segoe UI", "Microsoft YaHei UI", sans-serif;
+  font-family: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
   color: #252b2a;
   background: #f1f3f2;
   font-size: 14px;
@@ -37,6 +37,7 @@
   background: white;
   border: 1px solid #dce1de;
   border-radius: 8px;
+  min-height: 40px;
   padding: 8px 12px;
   color: inherit;
   transition: background 0.15s;
@@ -66,14 +67,6 @@
   color: var(--accent);
   text-decoration: none;
 }
-.admin-console .sidebar {
-  width: 248px;
-  position: fixed;
-  inset: 0 auto 0 0;
-  padding: 28px 16px;
-  display: flex;
-  flex-direction: column;
-}
 .admin-console .brand {
   display: flex;
   gap: 12px;
@@ -93,81 +86,6 @@
   font-weight: 400;
   color: var(--muted);
   margin-top: 4px;
-}
-.admin-console .nav-label {
-  font-size: 12px;
-  color: var(--muted);
-  padding: 12px;
-}
-.admin-console .nav {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.admin-console .nav button {
-  text-align: left;
-  border: 0;
-  background: none;
-  display: flex;
-  gap: 12px;
-  align-items: center;
-  height: 36px;
-  padding: 8px 12px;
-  color: #59625e;
-}
-.admin-console .nav button.active {
-  background: #e2e7e3;
-  color: #243d32;
-  font-weight: 600;
-}
-.admin-console .nav svg {
-  width: 16px;
-  height: 16px;
-  stroke-width: 1.5;
-}
-.admin-console .sidebar-bottom {
-  margin-top: auto;
-  padding: 24px 12px 0;
-  font-size: 12px;
-  color: var(--muted);
-  line-height: 1.9;
-}
-.admin-console .scope {
-  border-top: 1px solid #dce2dd;
-  padding-top: 16px;
-  color: #414b46;
-}
-.admin-console .topbar {
-  margin-left: 248px;
-  height: 64px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 32px;
-  font-size: 12px;
-  color: var(--muted);
-}
-.admin-console .topbar span + span {
-  margin-left: 16px;
-}
-.admin-console .avatar {
-  display: inline-grid;
-  place-items: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  background: #e0e5e1;
-  color: #405047;
-  margin-right: 8px;
-}
-.admin-console .sheet {
-  margin: 0 8px 8px 248px;
-  min-height: calc(100vh - 72px);
-  background: #fff;
-  border: 1px solid #e0e5e1;
-  border-radius: 16px;
-  padding: 32px;
-  max-width: 1664px;
 }
 .admin-console .heading {
   display: flex;
@@ -207,13 +125,16 @@
 .admin-console .metrics {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  border-bottom: 1px solid var(--line);
-  padding: 0 0 28px;
-  margin-bottom: 28px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+  padding: 8px 24px;
+  margin-bottom: 24px;
   gap: 24px;
 }
 .admin-console .metric {
   border-right: 1px solid var(--line);
+  padding: 16px 0;
 }
 .admin-console .metric:last-child {
   border: 0;
@@ -315,7 +236,8 @@
   border: 1px solid #dce1de;
   background: white;
   border-radius: 8px;
-  padding: 10px 12px;
+  min-height: 40px;
+  padding: 9px 12px;
   min-width: 0;
   color: #333c37;
 }
@@ -340,7 +262,7 @@
   border-bottom: 1px solid var(--line);
 }
 .admin-console td {
-  padding: 18px 16px;
+  padding: 15px 16px;
   border-bottom: 1px solid var(--line);
   font-size: 13px;
 }
@@ -554,9 +476,6 @@
 .admin-console .hidden {
   display: none;
 }
-.admin-console .mobile-menu {
-  display: none;
-}
 .admin-console .footer-note {
   margin-top: 28px;
   color: #69716e;
@@ -574,17 +493,6 @@
   margin-bottom: 28px;
 }
 @media (max-width: 1100px) {
-  .admin-console .sidebar {
-    width: 216px;
-  }
-  .admin-console .sheet {
-    margin-left: 216px;
-    padding: 24px;
-  }
-  .admin-console .topbar {
-    margin-left: 216px;
-    padding: 0 24px;
-  }
   .admin-console .grid {
     grid-template-columns: 1fr;
   }
@@ -596,31 +504,6 @@
   }
 }
 @media (max-width: 720px) {
-  .admin-console .sidebar {
-    display: none;
-    background: #f1f3f2;
-    z-index: 20;
-    width: 248px;
-    border-right: 1px solid var(--line);
-  }
-  .admin-console .sidebar.open {
-    display: flex;
-  }
-  .admin-console .sheet {
-    margin: 0 8px 8px;
-    padding: 20px;
-    min-height: calc(100vh - 72px);
-  }
-  .admin-console .topbar {
-    margin: 0;
-    padding: 0 20px;
-  }
-  .admin-console .mobile-menu {
-    display: inline-block;
-  }
-  .admin-console .topbar .desktop {
-    display: none;
-  }
   .admin-console .metrics {
     grid-template-columns: 1fr 1fr;
     row-gap: 24px;
@@ -696,9 +579,6 @@
   font-size: 14px;
   line-height: 1.5;
 }
-.admin-console .sheet {
-  outline: none;
-}
 .admin-console .console-feedback {
   padding: 12px 16px;
   background: #eef5f0;
@@ -720,18 +600,14 @@
 }
 .admin-console .console-skip {
   position: fixed;
-  left: 260px;
+  left: -9999px;
   top: 8px;
   z-index: 100;
   background: white;
   padding: 8px 16px;
-  transform: translateY(-200%);
 }
 .admin-console .console-skip:focus {
-  transform: none;
-}
-.admin-console .console-backdrop {
-  display: none;
+  left: 260px;
 }
 .admin-console dialog:modal {
   position: fixed;
@@ -755,10 +631,6 @@
   box-shadow: none;
   min-height: auto;
 }
-.admin-console .sidebar {
-  overflow-y: auto;
-  z-index: 10;
-}
 .admin-console .brand svg {
   flex-shrink: 0;
 }
@@ -780,20 +652,8 @@
 .admin-console .detail-grid dd {
   white-space: normal;
 }
-.admin-console .sheet h1 {
-  color: #252b2a;
-}
 .admin-console .heading h1 {
   line-height: 1.4;
-}
-.admin-console .topbar {
-  position: static;
-  background: transparent;
-  border: 0;
-}
-.admin-console .nav button {
-  width: 100%;
-  justify-content: flex-start;
 }
 .admin-console .panel {
   box-shadow: none;
@@ -813,22 +673,10 @@
   min-width: 0;
 }
 @media (max-width: 720px) {
-  .admin-console .console-backdrop {
-    display: block;
-    position: fixed;
-    inset: 0;
-    background: #17251e55;
-    z-index: 15;
-    border: 0;
-    border-radius: 0;
-  }
-  .admin-console .sidebar.open {
-    z-index: 20;
-  }
   .admin-console .activity {
     grid-template-columns: 104px 1fr;
   }
-  .admin-console .console-skip {
+  .admin-console .console-skip:focus {
     left: 16px;
   }
   .admin-console .mono {
@@ -872,17 +720,6 @@
 .admin-console .bar i {
   position: static;
 }
-.admin-console .sidebar {
-  background: #f1f3f2;
-  border: 0;
-}
-.admin-console .sidebar-bottom {
-  border: 0;
-}
-.admin-console .nav-label {
-  font-weight: 400;
-  letter-spacing: 0;
-}
 .admin-console small {
   font-style: normal;
 }
@@ -901,9 +738,6 @@
 .admin-console .resource-line .bar {
   height: 6px;
 }
-.admin-console .sheet {
-  background: white;
-}
 .admin-console input::placeholder {
   color: #69716e;
 }
@@ -917,51 +751,61 @@
 .admin-console .brand{gap:8px;padding-left:8px;padding-right:0}
 .admin-console .brand>svg{width:24px;min-width:24px}
 .admin-console .brand>div{white-space:nowrap}
-.admin-console .nav-collapse{margin-left:auto;padding:4px;width:28px;height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:center;border:0;background:transparent}
-.admin-console .brand .nav-collapse svg{width:18px;height:18px}
-@media(min-width:721px){
-.admin-console.nav-collapsed .sidebar{width:80px}
-.admin-console.nav-collapsed .brand{flex-direction:column;padding:0 0 28px;gap:12px}
-.admin-console.nav-collapsed .brand>div,.admin-console.nav-collapsed .nav-label,.admin-console.nav-collapsed .sidebar-bottom{display:none}
-.admin-console.nav-collapsed .nav-collapse{margin:0}
-.admin-console.nav-collapsed .nav button{font-size:0;justify-content:center;gap:0;padding:8px}
-.admin-console.nav-collapsed .nav button svg{width:18px;min-width:18px}
-.admin-console.nav-collapsed .topbar{margin-left:80px}
-.admin-console.nav-collapsed .sheet{margin-left:80px}
-}
-@media(max-width:720px){.admin-console .nav-collapse{display:none}}
+
+
 
 .admin-console .status.bad{background:transparent;border:0;border-radius:0;padding:0}
 .admin-console .status.bad:before{background:#c83b38;flex-shrink:0}
 
-/* In the icon rail, the product mark is the only expand control. */
-.admin-console .brand-expand{display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;width:40px;height:40px;padding:8px;border:0;background:transparent;color:inherit;cursor:pointer}
-.admin-console .brand-expand svg{width:24px;height:24px;min-width:24px}
-.admin-console .brand-expand:hover{background:var(--soft)}
-
-/* Keep wide audit tables discoverable on narrow screens. */
-.admin-console .table-scroll-hint { display: none; }
+/* Tables become labeled cards on narrow screens. */
 @media (max-width: 760px) {
-  .admin-console .logs-table .table-scroll-hint {
-    display: block;
-    margin: 4px 0 8px;
-    font-size: 12px;
-    color: var(--muted);
-  }
-  .admin-console .logs-table .table-wrap {
-    overflow-x: auto;
-    overscroll-behavior-x: contain;
-    -webkit-overflow-scrolling: touch;
-  }
-  .admin-console .logs-table table { min-width: 720px; }
-  .admin-console .logs-table th:first-child,
-  .admin-console .logs-table td:first-child {
-    position: sticky;
-    left: 0;
-    z-index: 1;
+  .admin-console table,
+  .admin-console tbody,
+  .admin-console tr,
+  .admin-console td { display: block; width: 100%; }
+  .admin-console thead { display: none; }
+  .admin-console tbody { display: grid; gap: 12px; }
+  .admin-console tr {
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 12px 14px;
     background: #fff;
-    padding-left: 12px;
-    box-shadow: 1px 0 0 var(--line);
   }
-  .admin-console .logs-table tbody tr:hover td:first-child { background: #fbfcfb; }
+  .admin-console td {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    padding: 5px 0;
+    border: 0;
+    white-space: normal;
+    font-size: 13px;
+    text-align: left;
+  }
+  .admin-console td::before {
+    content: attr(data-label);
+    flex: 0 0 64px;
+    color: var(--muted);
+    font-size: 12px;
+  }
+  .admin-console td.mono,
+  .admin-console td.break { overflow-wrap: anywhere; }
+  .admin-console td.actions { justify-content: flex-start; }
+  .admin-console tbody tr:hover { background: #fff; }
 }
+
+
+@media (max-width: 760px) {
+  .admin-console h1 { font-size: 20px; }
+  .admin-console button:not(.link) { min-height: 44px; }
+  .admin-console input, .admin-console select { min-height: 44px; }
+}
+
+
+
+/* Admin content now lives inside the shared AppShell. */
+.admin-console{background:transparent;padding:0;min-width:0}.admin-console .crumb{padding:24px 0 0;margin-bottom:0}.admin-console .heading{margin-top:20px}
+@media (max-width:760px){.admin-console .crumb{padding-top:16px}.admin-console .heading{margin-top:16px}}
+
+
+
+

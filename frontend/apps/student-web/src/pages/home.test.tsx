@@ -81,6 +81,15 @@ it("旧格式任务仍可查看详情但不再进入工作台", async () => {
   expect(screen.getByText("任务详情页面")).toBeInTheDocument();
 });
 
+it("日历跳过已完成任务，优先定位到最近的未完成日期", async () => {
+  show([
+    ...tasks(1, "10").map((task) => ({ ...task, status: "COMPLETED" as const, progress: 100 })),
+    ...tasks(1, "11"),
+  ]);
+  expect(await screen.findByRole("button", { name: /11日任务1/ })).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: /10日任务1/ })).not.toBeInTheDocument();
+});
+
 it("切换日期及返回原日期均回到第一页，空日期显示空状态", async () => {
   show([...tasks(9), ...tasks(5, "11")]);
   fireEvent.click(await screen.findByRole("button", { name: "下一页" }));
