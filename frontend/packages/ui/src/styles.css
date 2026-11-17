@@ -1,4 +1,4 @@
-/* ═══ Design tokens ═══ */
+﻿/* ═══ Design tokens ═══ */
 :root {
   --ink: #252b2a;
   --muted: #69716e;
@@ -195,16 +195,30 @@ small { color: var(--muted); font-size: 12px; }
   min-height: 100vh;
   flex-direction: column;
   align-items: stretch;
-  gap: 22px;
-  padding: 24px 14px;
-  border-right: 1px solid var(--line);
+  gap: 24px;
+  padding: 28px 16px;
+  border-right: 0;
   border-bottom: 0;
 }
-.side-nav-shell .brand-lockup { padding: 0 8px; }
+.side-nav-shell .brand-lockup { padding: 0; }
 .side-nav-shell .brand-lockup .context-dot, .side-nav-shell .brand-lockup .context-label { display: none; }
 .side-nav-shell .primary-nav { flex-direction: column; align-items: stretch; gap: 4px; overflow: visible; }
-.side-nav-shell .nav-item { width: 100%; text-align: left; min-height: 42px; padding: 9px 12px; }
+.side-nav-shell .nav-item { width: 100%; text-align: left; min-height: 40px; padding: 8px 12px; }
+.side-nav-shell .nav-item.active { background: var(--teal-soft); color: var(--teal); }
+.side-nav-shell .sidebar-toggle {
+  position: absolute;
+  top: 28px;
+  right: 12px;
+  width: 28px;
+  height: 28px;
+  min-height: 28px;
+  padding: 4px;
+  border: 0;
+  background: transparent;
+  justify-content: center;
+}
 .side-nav-shell .nav-group-menu { position: static; margin: 2px 0 0 8px; box-shadow: none; }
+.side-nav-shell .brand-mark { width: 24px; height: 24px; }
 .side-nav-shell .topbar-actions { margin-top: auto; flex-direction: column; align-items: stretch; }
 .side-nav-shell .profile-trigger { width: 100%; }
 .side-nav-shell .profile-popover { top: auto; bottom: calc(100% + 6px); left: 0; right: auto; }
@@ -843,3 +857,6 @@ body.layout-resizing.resize-rows { cursor: row-resize; }
   border-radius: 2px;
   background: var(--teal);
 }
+
+.side-nav-shell .nav-item, .side-nav-shell .nav-item.active { border-bottom: 0; }
+

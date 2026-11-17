@@ -803,7 +803,8 @@
 
 
 /* Admin content now lives inside the shared AppShell. */
-.admin-console{background:transparent;padding:16px 0 0;min-width:0}
-@media (max-width:760px){.admin-console{padding-top:8px}}
+.admin-console{background:transparent;padding:0;min-width:0}.admin-console .crumb{padding:24px 0 0;margin-bottom:0}.admin-console .heading{margin-top:20px}
+@media (max-width:760px){.admin-console .crumb{padding-top:16px}.admin-console .heading{margin-top:16px}}
+
 
 

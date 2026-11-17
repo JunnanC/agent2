@@ -1092,6 +1092,10 @@ function PageContent({
   const updated = Math.max(...required.map((q) => q.dataUpdatedAt));
   return (
     <>
+      <nav className="crumb" aria-label="面包屑">
+        <span>管理控制台{"　/　"}</span>
+        <b>{names[current]}</b>
+      </nav>
       <div className="heading">
         <div>
           <h1>{names[current]}</h1>

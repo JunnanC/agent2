@@ -5,7 +5,7 @@ import { assessmentTeachingApi, teachingApi } from "@edu/api-client";
 import type { Publication } from "@edu/api-client";
 import { keys } from "@edu/query-keys";
 import {
-  LineChart, Metric, Panel, RequestStateView, StatusBadge,
+  Breadcrumbs, LineChart, Metric, Panel, RequestStateView, StatusBadge,
 } from "@edu/ui";
 import type { ChartSeries } from "@edu/ui";
 import { COURSE_STATUS_LABEL, PUBLICATION_STATUS_LABEL } from "@/lib/format";
@@ -147,6 +147,7 @@ export function Home() {
 
   return (
     <>
+      <Breadcrumbs items={[{ label: "教师门户" }]} current="教学概览" />
       <div className="overview-heading">
         <h1>教学概览</h1>
         <div className="page-actions align-end">
