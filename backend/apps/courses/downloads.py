@@ -8,10 +8,23 @@ from .models import Chapter, Enrollment, MaterialVersion
 
 
 def authorize_course_material_download(asset: ObjectAsset, actor: User, portal: str) -> str:
+    if portal == "TEACHING" and asset.owner_type == "COURSE_ATTACHMENT":
+        from apps.core.errors import ResourceNotFound
+
+        from .models import Course
+        from .selectors import require_course_capability
+
+        try:
+            course = Course.objects.get(public_id=asset.owner_ref)
+        except Course.DoesNotExist as exc:
+            raise ResourceNotFound() from exc
+        require_course_capability(course=course, actor=actor, capability="MANAGE_CONTENT")
+        return course.public_id
     if portal != "USER" or asset.purpose not in {"MANUAL", "REPORT_TEMPLATE"}:
         raise DownloadScopeDenied()
     version = (
-        MaterialVersion.objects.filter(
+        MaterialVersion.objects
+        .filter(
             object_asset=asset,
             status=MaterialVersion.Status.PUBLISHED,
             material__current_version_id=F("pk"),

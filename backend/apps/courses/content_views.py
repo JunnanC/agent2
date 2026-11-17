@@ -58,6 +58,7 @@ from .models import (
 from .selectors import active_enrollment, require_course_capability, visible_course
 from .services import ActorContext
 from .tasks import run_copy_job, run_enrollment_import, run_enrollment_import_precheck
+from .teaching_crypto import readable_invitation
 from .views import _body, _context, _idempotent_response, _response
 
 
@@ -68,6 +69,7 @@ def _data(item: Any) -> dict[str, object]:
             "course_id": item.course.public_id,
             "title": item.title,
             "summary": item.summary,
+            "content": item.content,
             "position": item.position,
             "status": item.status,
             "row_version": item.row_version,
@@ -430,6 +432,7 @@ class TeachingContentCollectionView(APIView):
                     actor=request.user,
                     title=data["title"],
                     summary=data.get("summary", ""),
+                    content=data.get("content", ""),
                     position=data["position"],
                     context=_ctx(request),
                 )
@@ -638,7 +641,8 @@ class TeachingInvitationView(APIView):
             [
                 {
                     "public_id": item.public_id,
-                    "code": item.code_masked,
+                    "code": readable_invitation(item),
+                    "recoverable": bool(item.code_encrypted),
                     "max_uses": item.max_uses,
                     "used_count": item.used_count,
                     "expires_at": item.expires_at,
@@ -671,7 +675,7 @@ class TeachingInvitationView(APIView):
                 "code": raw,
                 "expires_at": invitation.expires_at,
                 "max_uses": invitation.max_uses,
-                "warning": "明文邀请码仅显示一次",
+                "warning": "请仅向需要加入本课程的学生分享",
             }
             return StoredResponse(
                 201, _body(request, payload), {"ETag": etag_for_version(invitation.row_version)}

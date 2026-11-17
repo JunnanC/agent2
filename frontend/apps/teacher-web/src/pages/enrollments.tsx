@@ -8,6 +8,7 @@ import {
   AsyncJobProgress, Button, ConfirmDialog, DataTable, Metric, Modal, Panel,
   RequestStateView, StatusBadge, useToast,
 } from "@edu/ui";
+import { DirectInvite } from "@/components/direct-invite";
 import { copyText } from "@/lib/clipboard";
 import { ENROLLMENT_STATUS_LABEL, apiErrorMessage, formatDateTime } from "@/lib/format";
 
@@ -105,7 +106,7 @@ export function Enrollments() {
   });
 
   const copyInvitation = async () => {
-    const code = plainInvitation?.course_id === courseId ? plainInvitation.code : undefined;
+    const code = plainInvitation?.course_id === courseId ? plainInvitation.code : activeInvitation?.recoverable ? activeInvitation.code : undefined;
     if (!code) {
       createInvitation.mutate();
       return;
@@ -175,6 +176,7 @@ export function Enrollments() {
         </RequestStateView>
       </Panel>
 
+      <DirectInvite courseId={courseId} onAdded={() => { void enrollments.refetch(); void course.refetch(); }} />
       <Panel title={<><h2>申请列表</h2></>}
         actions={(
           <>
@@ -242,8 +244,8 @@ export function Enrollments() {
               <div style={{
                 fontSize: 26, fontWeight: 700, letterSpacing: "0.02em",
                 color: "var(--teal)", margin: "8px 0 6px", wordBreak: "break-all",
-              }}>{plainInvitation?.course_id === courseId ? plainInvitation.code : "邀请码已隐藏"}</div>
-              {!plainInvitation && <p className="subtle">明文仅生成时显示一次。点击“复制邀请码”将生成可分享的新码；已有邀请码保持原有效期。</p>}
+              }}>{plainInvitation?.course_id === courseId ? plainInvitation.code : activeInvitation.code}</div>
+              {!plainInvitation && <p className="subtle">新邀请码可随时查看和复制；历史脱敏码可重新生成后分享。</p>}
               <small>
                 仅可用于{course.data?.title ?? "本课程"}课程
                 {activeInvitation.expires_at ? `，${formatDateTime(activeInvitation.expires_at)}失效` : "，长期有效"}
@@ -256,7 +258,7 @@ export function Enrollments() {
           ) : (
             <div className="state-block">
               <strong>暂无启用中的邀请码</strong>
-              <p>生成邀请码后学生可在加入课程页直接填写加入。</p>
+              <p>学生使用邀请码提交申请后，需要教师审核。</p>
               <Button variant="primary" disabled={createInvitation.isPending} onClick={() => createInvitation.mutate()}>
                 {createInvitation.isPending ? "生成中…" : "生成邀请码"}
               </Button>

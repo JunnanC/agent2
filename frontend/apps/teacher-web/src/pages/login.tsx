@@ -1,10 +1,10 @@
+import { PlatformMark } from "@edu/ui";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { authFlow } from "@edu/auth-client";
 import { meApi } from "@edu/api-client";
 import { queryClient } from "@/app/providers";
 import { keys } from "@edu/query-keys";
-import { Icon } from "@edu/ui";
 
 export function Login() {
   const navigate = useNavigate();
@@ -46,7 +46,7 @@ export function Login() {
     <div style={{ minHeight: "100vh", display: "grid", placeItems: "center", padding: 20, background: "var(--paper)" }}>
       <form className="panel" style={{ width: "min(420px, 94vw)", display: "grid", gap: 10, padding: 24 }} onSubmit={submit} noValidate>
         <div className="brand-lockup" style={{ marginBottom: 4 }}>
-          <span className="brand-mark"><Icon name="layers" size={16} /></span>
+          <span className="brand-mark"><PlatformMark size={26} /></span>
           <span className="brand-name">Edu Agent Platform</span>
           <span className="context-dot" />
           <span className="context-label">teacher.localhost · 教师门户</span>

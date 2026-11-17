@@ -1,10 +1,10 @@
+import { ChapterResources } from "@/components/chapter-resources";
 import { useEffect, useRef, useState } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
-import { fileApi, studentApi, taskApi } from "@edu/api-client";
-import type { Material } from "@edu/api-client";
+import { studentApi, taskApi } from "@edu/api-client";
 import { keys } from "@edu/query-keys";
-import { Breadcrumbs, Button, EmptyState, Panel, RequestStateView, StatusBadge, useToast } from "@edu/ui";
+import { Breadcrumbs, EmptyState, Panel, RequestStateView, StatusBadge } from "@edu/ui";
 import { formatDate, formatDateTime, taskStatusLabel, taskStatusTone } from "@/lib/task-format";
 import { CourseDiscussion } from "@/components/course-discussion";
 import { CourseAgent } from "@/components/course-agent";
@@ -13,12 +13,10 @@ import { ApiError } from "@edu/auth-client";
 
 export function CourseDetail({ discussionPage = false }: { discussionPage?: boolean }) {
   const { courseId = "", chapterId } = useParams();
-  const toast = useToast();
   const navigate = useNavigate();
   const location = useLocation();
   const [activeChapterId, setActiveChapterId] = useState<string | null>(null);
   const chapterNavRef = useRef<HTMLElement>(null);
-  const [openTextMaterialId, setOpenTextMaterialId] = useState<string | null>(null);
   const detail = useQuery({ queryKey: keys.course(courseId), queryFn: () => studentApi.courseDetail(courseId),
     staleTime: 0, refetchOnMount: "always", retry: false });
   const canRead = detail.isSuccess && !detail.isFetching;
@@ -27,22 +25,9 @@ export function CourseDetail({ discussionPage = false }: { discussionPage?: bool
     queryFn: () => studentApi.myEnrollments({ page_size: 100, status: "ACTIVE" }), enabled: loadOverview });
   const enrollment = enrollments.data?.rows.find((row) => row.course_id === courseId && row.status === "ACTIVE");
   const chapters = useQuery({ queryKey: keys.courseResource(courseId, "chapters"), queryFn: () => studentApi.courseChapters(courseId), enabled: canRead });
-  const materials = useQuery({ queryKey: keys.courseResource(courseId, "materials"), queryFn: () => studentApi.courseMaterials(courseId), enabled: loadOverview });
   const announcements = useQuery({ queryKey: keys.courseResource(courseId, "announcements"), queryFn: () => studentApi.courseAnnouncements(courseId), enabled: loadOverview });
   const events = useQuery({ queryKey: keys.courseResource(courseId, "calendar-events"), queryFn: () => studentApi.courseCalendarEvents(courseId), enabled: loadOverview });
   const tasks = useQuery({ queryKey: keys.tasks({ course_id: courseId }), queryFn: () => taskApi.list({ course_id: courseId }), enabled: loadOverview });
-  const openFile = useMutation({
-    mutationFn: (material: Material) => {
-      if (!material.object_asset_id) throw new Error("该材料暂时没有可打开的文件");
-      return fileApi.createDownloadGrant(material.object_asset_id);
-    },
-    onSuccess: (grant) => {
-      if (grant.download_path.startsWith("/files/") && !grant.download_path.includes("\\")) {
-        window.location.assign(grant.download_path);
-      } else toast.notify("文件打开地址无效", "error");
-    },
-    onError: (error) => toast.notify(error.message, "error"),
-  });
   const chapterRows = chapters.data?.rows ?? [];
   const currentChapterId = chapterId ?? activeChapterId ?? chapterRows[0]?.public_id ?? null;
   useEffect(() => {
@@ -146,7 +131,7 @@ export function CourseDetail({ discussionPage = false }: { discussionPage?: bool
 
         <section className="course-learning-main">
           {chapterId || discussionPage ? <Link className="btn" to={`/courses/${courseId}`}>返回课程介绍</Link> : null}
-          {chapterId ? <><RequestStateView loading={chapters.isLoading} error={chapters.error} onRetry={() => void chapters.refetch()} empty={!chapterRows.some((chapter) => chapter.public_id === chapterId)} emptyState={<EmptyState title="章节不存在或尚未发布" />} >{chapterRows.filter((chapter) => chapter.public_id === chapterId).map((chapter) => <Panel key={chapter.public_id} title={<h2>{chapter.title}</h2>}><p className="course-chapter-description">{chapter.description || "本章节暂未提供说明。"}</p></Panel>)}</RequestStateView></> : discussionPage ? <CourseDiscussion key={courseId} courseId={courseId} /> : <>
+          {chapterId ? <><RequestStateView loading={chapters.isLoading} error={chapters.error} onRetry={() => void chapters.refetch()} empty={!chapterRows.some((chapter) => chapter.public_id === chapterId)} emptyState={<EmptyState title="章节不存在或尚未发布" />} >{chapterRows.filter((chapter) => chapter.public_id === chapterId).map((chapter) => <Panel key={chapter.public_id} title={<h2>{chapter.title}</h2>}><p className="course-chapter-description">{chapter.description || "本章节暂未提供说明。"}</p></Panel>)}</RequestStateView>{chapterRows.some(chapter => chapter.public_id === chapterId) && <ChapterResources key={chapterId} courseId={courseId} chapterId={chapterId} />}</> : discussionPage ? <CourseDiscussion key={courseId} courseId={courseId} /> : <>
           <Panel title={<><h2>课程信息</h2></>} actions={enrollment ? <EnrollmentExit enrollment={enrollment} onExited={() => navigate("/courses", { replace: true })} /> : undefined}>
             <div className="grid equal section" style={{ marginTop: 0 }}>
               <div>
@@ -174,6 +159,7 @@ export function CourseDetail({ discussionPage = false }: { discussionPage?: bool
               <p className="course-chapter-description">
                 {chapter.description || "本章节暂未提供说明。"}
               </p>
+              <Link className="btn" to={`/courses/${courseId}/chapters/${chapter.public_id}`}>进入章节 · 材料与实验</Link>
             </Panel>
           ))}
 
@@ -202,31 +188,6 @@ export function CourseDetail({ discussionPage = false }: { discussionPage?: bool
           </Panel>
 
           <div className="grid two">
-            <Panel title={<h2>课程材料</h2>}>
-              <RequestStateView loading={materials.isLoading} error={materials.error}
-                onRetry={() => void materials.refetch()}
-                empty={!materials.data?.rows.length}
-                emptyState={<EmptyState title="暂无课程材料" hint="教师上传材料后会显示在这里。" />}>
-                <div>
-                  {(materials.data?.rows ?? []).map((material) => (
-                    <div className="item" key={material.public_id}>
-                      <div>
-                        {material.kind === "LINK" && material.link_url ? (
-                          <a className="task-title" href={material.link_url} target="_blank" rel="noreferrer">{material.title}</a>
-                        ) : material.kind === "TEXT" ? (
-                          <Button size="sm" onClick={() => setOpenTextMaterialId((current) => current === material.public_id ? null : material.public_id)}>{material.title}</Button>
-                        ) : (
-                          <Button size="sm" disabled={openFile.isPending || !material.object_asset_id} onClick={() => openFile.mutate(material)}>{material.title}</Button>
-                        )}
-                        <small>{material.kind === "FILE" ? "讲义 / 实验指导书" : material.kind === "LINK" ? "外部链接" : "在线阅读"}</small>
-                        {material.kind === "TEXT" && openTextMaterialId === material.public_id ? <p className="course-chapter-description">{material.text_content || "暂无正文"}</p> : null}
-                      </div>
-                      <span className="status neutral">{material.version_status === "PUBLISHED" ? "已发布" : material.status ?? ""}</span>
-                    </div>
-                  ))}
-                </div>
-              </RequestStateView>
-            </Panel>
             <Panel title={<h2>课程公告</h2>}>
               <RequestStateView loading={announcements.isLoading} error={announcements.error}
                 onRetry={() => void announcements.refetch()}

@@ -7,6 +7,7 @@ import { teachingApi } from "@edu/api-client";
 import { Publishing } from "./publishing";
 
 vi.mock("@edu/api-client", () => ({ teachingApi: {
+  courseResource: vi.fn(async () => ({rows:[]})),
   publications: vi.fn(async () => ({ rows: [{ public_id: "p1", status: "DRAFT", title: "实验", template_version_id: "v1" }] })),
   templateVersion: vi.fn(async () => ({ public_id: "v1", status: "PUBLISHED", row_version: "9" })),
   precheckRuns: vi.fn(async () => ({ rows: [{ status: "PASSED", stage_results: [] }] })),

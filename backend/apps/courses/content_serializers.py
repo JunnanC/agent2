@@ -4,6 +4,7 @@ from rest_framework import serializers
 class ContentWriteSerializer(serializers.Serializer):
     title = serializers.CharField(max_length=180, required=False)
     summary = serializers.CharField(max_length=500, required=False, allow_blank=True)
+    content = serializers.CharField(required=False, allow_blank=True, max_length=100000)
     body = serializers.CharField(required=False, allow_blank=True)
     position = serializers.IntegerField(required=False, min_value=1)
     kind = serializers.ChoiceField(choices=("FILE", "LINK", "TEXT"), required=False)

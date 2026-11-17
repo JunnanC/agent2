@@ -200,6 +200,7 @@ export interface LearningRiskSignal {
 }
 
 export interface Chapter {
+  content?: string;
   public_id: string;
   course_id: string;
   title: string;
@@ -269,6 +270,7 @@ export interface Blocker {
 }
 
 export interface Task {
+  course_chapter_id?: string | null;
   assessment_available?: boolean;
   public_id: string;
   course_id: string;
@@ -376,6 +378,7 @@ export interface PrecheckRun {
 }
 
 export interface Publication {
+  course_chapter_id?: string | null;
   public_id: string;
   course_id: string;
   retake_of_publication_id?: string | null;
@@ -397,6 +400,7 @@ export interface Publication {
 }
 
 export interface Invitation {
+  recoverable?: boolean;
   public_id: string;
   course_id: string;
   code: string;

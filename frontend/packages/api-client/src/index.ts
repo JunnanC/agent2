@@ -148,9 +148,9 @@ export const studentApi = {
   courseDetail: (courseId: string) => request<Course>(`/courses/${courseId}`).then((r) => r.data),
 
   courseChapters: (courseId: string) =>
-    request<Array<Chapter & { summary?: string; position?: number }>>(`/courses/${courseId}/chapters`).then((r) => {
+    request<Array<Chapter & { content?: string; summary?: string; position?: number }>>(`/courses/${courseId}/chapters`).then((r) => {
       const list = toList(r);
-      return { ...list, rows: list.rows.map((chapter) => ({ ...chapter, description: chapter.summary ?? chapter.description, sort_order: chapter.position ?? chapter.sort_order })) };
+      return { ...list, rows: list.rows.map((chapter) => ({ ...chapter, description: chapter.content || chapter.summary || chapter.description, sort_order: chapter.position ?? chapter.sort_order })) };
     }),
 
   courseMaterials: (courseId: string) =>
@@ -175,7 +175,7 @@ export const studentApi = {
       })) };
     }),
 
-  /** 加入课程（需要幂等键；APPROVAL 课程提交申请，OPEN 课程直接加入） */
+  /** 邀请码提交入课申请，教师审核后生效。 */
   joinCourse: (courseId: string, payload: { invitation_code?: string; application_message?: string }, reuseKey?: string) =>
     request<Enrollment>(
       `/courses/${courseId}/enrollments`,

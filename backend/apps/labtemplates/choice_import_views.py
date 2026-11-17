@@ -28,9 +28,11 @@ class ChoiceImportResponseSerializer(serializers.Serializer):
 class ChoiceImportTemplateView(APIView):
     permission_classes = [IsTeachingPortal]
 
-    @extend_schema(responses={
-        (200, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"): bytes,
-    })
+    @extend_schema(
+        responses={
+            (200, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"): bytes,
+        }
+    )
     def get(self, request: HttpRequest) -> HttpResponse:
         response = HttpResponse(
             download_template(),
@@ -46,17 +48,23 @@ class ChoiceImportPreviewView(APIView):
     parser_classes = [MultiPartParser]
 
     @extend_schema(
-        request=ChoiceImportSerializer, responses=ChoiceImportResponseSerializer,
+        request=ChoiceImportSerializer,
+        responses=ChoiceImportResponseSerializer,
         parameters=[IDEMPOTENCY_KEY],
     )
     def post(self, request: HttpRequest, course_id: str, chapter_id: str) -> Response:
         serializer = ChoiceImportSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         uploaded = serializer.validated_data["file"]
-        if not uploaded.name.lower().endswith(".xlsx") or uploaded.size > 10 * 1024 * 1024:
-            invalid("file", "fixed_xlsx_template_required")
+        if (
+            not uploaded.name.lower().endswith((".xlsx", ".docx"))
+            or uploaded.size > 10 * 1024 * 1024
+        ):
+            invalid("file", "xlsx_or_docx_required")
         result = preview_choices(
-            actor=request.user, course_id=course_id, chapter_id=chapter_id,
+            actor=request.user,
+            course_id=course_id,
+            chapter_id=chapter_id,
             content=uploaded.read(10 * 1024 * 1024 + 1),
         )
         return _response(request, result)
@@ -67,7 +75,8 @@ class ChoiceImportConfirmView(APIView):
     parser_classes = [MultiPartParser]
 
     @extend_schema(
-        request=ChoiceImportSerializer, responses=ChoiceImportResponseSerializer,
+        request=ChoiceImportSerializer,
+        responses=ChoiceImportResponseSerializer,
         parameters=[IDEMPOTENCY_KEY],
     )
     def post(self, request: HttpRequest, course_id: str, chapter_id: str) -> Response:
@@ -81,12 +90,17 @@ class ChoiceImportConfirmView(APIView):
 
         def operation() -> StoredResponse:
             result = confirm_choices(
-                actor=request.user, course_id=course_id, chapter_id=chapter_id,
-                content=content, token=token, context=_ctx(request),
+                actor=request.user,
+                course_id=course_id,
+                chapter_id=chapter_id,
+                content=content,
+                token=token,
+                context=_ctx(request),
             )
             return StoredResponse(201, _body(request, result), {})
 
         return _idempotent(
-            request, payload={"digest": hashlib.sha256(content).hexdigest(), "token": token},
+            request,
+            payload={"digest": hashlib.sha256(content).hexdigest(), "token": token},
             operation=operation,
         )

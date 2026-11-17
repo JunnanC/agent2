@@ -28,8 +28,19 @@ def download_template() -> bytes:
     sheet = workbook.active
     sheet.title = "选择题"
     sheet.append(HEADERS)
-    sheet.append(["单选", "下列哪个是栈的特征？", "先进先出", "后进先出", "随机访问", "按值排序",
-                  "", "", "B", 5, "栈遵循后进先出"])
+    sheet.append([
+        "单选",
+        "下列哪个是栈的特征？",
+        "先进先出",
+        "后进先出",
+        "随机访问",
+        "按值排序",
+        "",
+        "",
+        "B",
+        5,
+        "栈遵循后进先出",
+    ])
     output = io.BytesIO()
     workbook.save(output)
     return output.getvalue()
@@ -41,17 +52,26 @@ def parse_choices(content: bytes) -> tuple[list[dict[str, Any]], list[dict[str, 
     try:
         with zipfile.ZipFile(io.BytesIO(content)) as archive:
             names = archive.namelist()
+            if "word/document.xml" in names:
+                from .word_choices import parse_word_choices
+
+                return parse_word_choices(content)
             if (
                 len(names) > 1000
                 or sum(info.file_size for info in archive.infolist()) > 50 * 1024 * 1024
-                or any("vbaproject" in name.lower() or "externallinks/" in name.lower()
-                       for name in names)
+                or any(
+                    "vbaproject" in name.lower() or "externallinks/" in name.lower()
+                    for name in names
+                )
             ):
                 invalid("file", "unsafe_workbook")
         workbook = load_workbook(
-            io.BytesIO(content), read_only=True, data_only=False, keep_links=False,
+            io.BytesIO(content),
+            read_only=True,
+            data_only=False,
+            keep_links=False,
         )
-    except (ValueError, OSError, zipfile.BadZipFile, KeyError):
+    except ValueError, OSError, zipfile.BadZipFile, KeyError:
         invalid("file", "invalid_xlsx")
     rows: list[dict[str, Any]] = []
     errors: list[dict[str, Any]] = []
@@ -83,13 +103,21 @@ def parse_choices(content: bytes) -> tuple[list[dict[str, Any]], list[dict[str, 
                 ]
                 answers = str(values[8] or "").replace("，", ",").upper().split(",")
                 public, private, score = normalize_question(
-                    task_type=kind, public={"options": options}, max_score=values[9],
-                    marking={"correct_option_ids": [answer.strip() for answer in answers],
-                             "explanation": str(values[10] or "")},
+                    task_type=kind,
+                    public={"options": options},
+                    max_score=values[9],
+                    marking={
+                        "correct_option_ids": [answer.strip() for answer in answers],
+                        "explanation": str(values[10] or ""),
+                    },
                 )
                 rows.append({
-                    "title": values[1][:160], "description": values[1], "task_type": kind,
-                    "question_spec": public, "marking_spec": private, "max_score": str(score),
+                    "title": values[1][:160],
+                    "description": values[1],
+                    "task_type": kind,
+                    "question_spec": public,
+                    "marking_spec": private,
+                    "max_score": str(score),
                 })
             except (ValueError, TypeError, ArithmeticError) as exc:
                 errors.append({"row": index, "error": type(exc).__name__})
@@ -103,25 +131,37 @@ def parse_choices(content: bytes) -> tuple[list[dict[str, Any]], list[dict[str, 
 
 
 def preview_choices(
-    *, actor: Any, course_id: str, chapter_id: str, content: bytes,
+    *,
+    actor: Any,
+    course_id: str,
+    chapter_id: str,
+    content: bytes,
 ) -> dict[str, Any]:
     from apps.courses.models import CourseStaffGrant
 
     course = _course(course_id, actor, CourseStaffGrant.Capability.MANAGE_TEMPLATE)
     try:
         chapter = TemplateChapter.objects.select_related("template_version").get(
-            public_id=chapter_id, template_version__template__course=course,
+            public_id=chapter_id,
+            template_version__template__course=course,
         )
     except TemplateChapter.DoesNotExist as exc:
         raise ResourceNotFound() from exc
     rows, errors = parse_choices(content)
     digest = hashlib.sha256(content).hexdigest()
-    token = signing.dumps({
-        "actor": actor.public_id, "chapter": chapter.public_id,
-        "version": chapter.template_version.row_version, "digest": digest,
-    }, salt=SALT)
+    token = signing.dumps(
+        {
+            "actor": actor.public_id,
+            "chapter": chapter.public_id,
+            "version": chapter.template_version.row_version,
+            "digest": digest,
+        },
+        salt=SALT,
+    )
     return {
-        "rows": rows, "errors": errors, "token": token if not errors else None,
+        "rows": rows,
+        "errors": errors,
+        "token": token if not errors else None,
         "count": len(rows),
         "total_score": str(sum((Decimal(row["max_score"]) for row in rows), Decimal(0))),
     }
@@ -129,7 +169,13 @@ def preview_choices(
 
 @transaction.atomic
 def confirm_choices(
-    *, actor: Any, course_id: str, chapter_id: str, content: bytes, token: str, context: Any,
+    *,
+    actor: Any,
+    course_id: str,
+    chapter_id: str,
+    content: bytes,
+    token: str,
+    context: Any,
 ) -> dict[str, Any]:
     from apps.courses.models import CourseStaffGrant
 
@@ -144,7 +190,8 @@ def confirm_choices(
     course = _course(course_id, actor, CourseStaffGrant.Capability.MANAGE_TEMPLATE)
     try:
         chapter = TemplateChapter.objects.select_related("template_version").get(
-            public_id=chapter_id, template_version__template__course=course,
+            public_id=chapter_id,
+            template_version__template__course=course,
         )
     except TemplateChapter.DoesNotExist as exc:
         raise ResourceNotFound() from exc
@@ -159,6 +206,9 @@ def confirm_choices(
         for index, row in enumerate(rows, 1)
     ])
     changed = compare_and_swap(
-        TemplateVersion, pk=version.pk, expected_version=version.row_version, changes={},
+        TemplateVersion,
+        pk=version.pk,
+        expected_version=version.row_version,
+        changes={},
     )
     return {"count": len(rows), "row_version": changed.row_version, "digest": request_digest(rows)}

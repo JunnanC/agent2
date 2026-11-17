@@ -227,24 +227,34 @@ def create_course(
                 status=AcademicTerm.Status.CURRENT,
                 is_current=True,
             )
-    try:
-        course = Course.objects.create(
-            code=code.strip().upper(),
-            title=title.strip(),
-            summary=summary.strip(),
-            description=description.strip(),
-            owner=actor,
-            term=term,
-            visibility=visibility,
-            enrollment_mode=enrollment_mode,
-            capacity=capacity,
-            enrollment_start=enrollment_start,
-            enrollment_end=enrollment_end,
-            teaching_start=teaching_start,
-            teaching_end=teaching_end,
-        )
-    except IntegrityError as exc:
-        raise CourseStateConflict(detail={"code": code.strip().upper()}) from exc
+    import secrets
+
+    generated = not code.strip()
+    for attempt in range(10):
+        if generated:
+            code = f"C{timezone.now():%Y%m%d%H%M%S%f}{secrets.token_hex(4).upper()}"
+        try:
+            # A savepoint lets a unique-key collision retry without breaking the outer transaction.
+            with transaction.atomic():
+                course = Course.objects.create(
+                    code=code.strip().upper(),
+                    title=title.strip(),
+                    summary=summary.strip(),
+                    description=description.strip(),
+                    owner=actor,
+                    term=term,
+                    visibility=visibility,
+                    enrollment_mode=Course.EnrollmentMode.APPROVAL,
+                    capacity=capacity,
+                    enrollment_start=enrollment_start,
+                    enrollment_end=enrollment_end,
+                    teaching_start=teaching_start,
+                    teaching_end=teaching_end,
+                )
+            break
+        except IntegrityError as exc:
+            if not generated or attempt == 9:
+                raise CourseStateConflict(detail={"code": code.strip().upper()}) from exc
     owner = CourseStaff.objects.create(
         course=course,
         user=actor,
@@ -476,7 +486,8 @@ def transfer_course_ownership(
         context=context,
     )
     target_staff = (
-        CourseStaff.objects.select_for_update()
+        CourseStaff.objects
+        .select_for_update()
         .filter(
             course=course,
             user=new_owner,
@@ -638,7 +649,8 @@ def grant_course_capability(
     if capability not in CourseStaffGrant.Capability.values:
         raise CourseStateConflict(detail={"capability": capability})
     grant = (
-        CourseStaffGrant.objects.select_for_update()
+        CourseStaffGrant.objects
+        .select_for_update()
         .filter(
             course_staff=staff,
             capability=capability,
@@ -705,7 +717,8 @@ def revoke_course_capability(
     try:
         course = Course.objects.select_for_update().get(public_id=course_id)
         grant = (
-            CourseStaffGrant.objects.select_for_update()
+            CourseStaffGrant.objects
+            .select_for_update()
             .select_related("course_staff__course")
             .get(
                 public_id=grant_id,
@@ -861,6 +874,7 @@ def apply_for_course(
     application_message: str,
     context: ActorContext,
     invitation_code: str = "",
+    invited_by: User | None = None,
 ) -> Enrollment:
     try:
         course = Course.objects.select_for_update().get(public_id=course_id)
@@ -874,6 +888,8 @@ def apply_for_course(
         from .errors import PrerequisiteNotSatisfied
 
         raise PrerequisiteNotSatisfied(detail={"blockers": blockers})
+    if invited_by is not None:
+        require_course_capability(course=course, actor=invited_by, capability="MANAGE_ENROLLMENT")
     invitation_code = invitation_code.strip()
     has_invitation = bool(invitation_code)
     if has_invitation:
@@ -881,7 +897,8 @@ def apply_for_course(
 
         consume_invitation(course=course, code=invitation_code)
     existing = (
-        Enrollment.objects.select_for_update()
+        Enrollment.objects
+        .select_for_update()
         .filter(
             course=course,
             student=student,
@@ -897,10 +914,8 @@ def apply_for_course(
         ]
         or 0
     ) + 1
-    # An invitation is the explicit teacher-approved path. Without one every
-    # student application must wait for the teacher, regardless of the course's
-    # public enrollment mode.
-    status = Enrollment.Status.ACTIVE if has_invitation else Enrollment.Status.PENDING
+    # Only an authenticated teacher action may directly activate a membership.
+    status = Enrollment.Status.ACTIVE if invited_by is not None else Enrollment.Status.PENDING
     if status == Enrollment.Status.ACTIVE:
         _ensure_capacity(course)
     now = timezone.now()
@@ -966,7 +981,8 @@ def withdraw_application(
 ) -> Enrollment:
     try:
         enrollment = (
-            Enrollment.objects.select_for_update()
+            Enrollment.objects
+            .select_for_update()
             .select_related("course")
             .get(
                 public_id=enrollment_id,
@@ -1009,7 +1025,8 @@ def review_enrollment(
     try:
         course = Course.objects.select_for_update().get(public_id=course_id)
         enrollment = (
-            Enrollment.objects.select_for_update()
+            Enrollment.objects
+            .select_for_update()
             .select_related("student")
             .get(
                 public_id=enrollment_id,
@@ -1104,7 +1121,8 @@ def enrollment_exit_check(
             )
         ]
     return [
-        blocker for blocker in enrollment_blockers(enrollment)
+        blocker
+        for blocker in enrollment_blockers(enrollment)
         if not (allow_unfinished_tasks and blocker.type == "UNFINISHED_TASK")
     ]
 
@@ -1150,7 +1168,8 @@ def drop_enrollment(
 ) -> Enrollment:
     try:
         enrollment = (
-            Enrollment.objects.select_for_update()
+            Enrollment.objects
+            .select_for_update()
             .select_related("course", "student")
             .get(public_id=enrollment_id, student=student)
         )
@@ -1181,10 +1200,12 @@ def drop_enrollment(
     teacher_ids = [
         staff.user.public_id
         for staff in CourseStaff.objects.select_related("user").filter(
-            course=enrollment.course, status=CourseStaff.Status.ACTIVE,
+            course=enrollment.course,
+            status=CourseStaff.Status.ACTIVE,
         )
         if has_course_capability(
-            course=enrollment.course, actor=staff.user,
+            course=enrollment.course,
+            actor=staff.user,
             capability=CourseStaffGrant.Capability.MANAGE_ENROLLMENT,
         )
     ]
@@ -1222,7 +1243,8 @@ def remove_enrollment(
     try:
         course = Course.objects.select_for_update().get(public_id=course_id)
         enrollment = (
-            Enrollment.objects.select_for_update()
+            Enrollment.objects
+            .select_for_update()
             .select_related("course", "student")
             .get(public_id=enrollment_id, course=course)
         )
