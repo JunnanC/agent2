@@ -1,9 +1,9 @@
+import { PlatformMark } from "@edu/ui";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { authFlow } from "@edu/auth-client";
 import { queryClient, meApiFn } from "@/app/api";
 import { keys } from "@edu/query-keys";
-import { Icon } from "@edu/ui";
 
 export function Login() {
   const navigate = useNavigate();
@@ -50,7 +50,7 @@ export function Login() {
         noValidate
       >
         <div className="brand-lockup" style={{ marginBottom: 4 }}>
-          <span className="brand-mark"><Icon name="layers" size={16} /></span>
+          <span className="brand-mark"><PlatformMark size={26} /></span>
           <span className="brand-name">Edu Agent Platform</span>
           <span className="context-dot" />
           <span className="context-label">student.localhost · 学生门户</span>

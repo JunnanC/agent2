@@ -67,6 +67,13 @@ class TaskPublication(VersionedModel):
 
     public_id = public_id_field()
     course = models.ForeignKey(Course, on_delete=models.PROTECT, related_name="task_publications")
+    course_chapter = models.ForeignKey(
+        "courses.Chapter",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="experiments",
+    )
     retake_of = models.ForeignKey(
         "self",
         on_delete=models.PROTECT,
@@ -117,8 +124,11 @@ class TaskPublication(VersionedModel):
     )
     resource_profile_snapshot = models.JSONField(default=dict, blank=True)
     rubric_version = models.ForeignKey(
-        RubricVersion, on_delete=models.PROTECT, related_name="task_publications",
-        null=True, blank=True,
+        RubricVersion,
+        on_delete=models.PROTECT,
+        related_name="task_publications",
+        null=True,
+        blank=True,
     )
     title = models.CharField(max_length=180)
     description = models.TextField(blank=True, default="")
@@ -492,9 +502,7 @@ class ExperimentRetakeLink(VersionedModel):
         related_name="source_retake_link",
     )
     created_by = models.ForeignKey(User, on_delete=models.PROTECT)
-    registered_score = models.DecimalField(
-        max_digits=7, decimal_places=2, null=True, blank=True
-    )
+    registered_score = models.DecimalField(max_digits=7, decimal_places=2, null=True, blank=True)
 
     class Meta:
         db_table = "experiments_experiment_retake_link"

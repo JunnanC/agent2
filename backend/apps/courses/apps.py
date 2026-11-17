@@ -11,3 +11,4 @@ class CoursesConfig(AppConfig):
         from .downloads import authorize_course_material_download
 
         register_download_authorizer("TEMPLATE_VERSION", authorize_course_material_download)
+        register_download_authorizer("COURSE_ATTACHMENT", authorize_course_material_download)

@@ -112,9 +112,9 @@ export function JoinCourses() {
             if (code && !resolveInvitation.isPending && !joinMutation.isPending) resolveInvitation.mutate(code);
           }}>
             <label className="form-label" htmlFor="direct-invitation-code" style={{ margin: 0 }}>邀请码直达</label>
-            <input id="direct-invitation-code" className="field" value={invitationSearch} onChange={(event) => setInvitationSearch(event.target.value)} placeholder="输入邀请码直接加入关联课程" />
+            <input id="direct-invitation-code" className="field" value={invitationSearch} onChange={(event) => setInvitationSearch(event.target.value)} placeholder="输入邀请码申请加入关联课程" />
             <Button type="submit" variant="primary" disabled={!invitationSearch.trim() || resolveInvitation.isPending || joinMutation.isPending}>
-              {resolveInvitation.isPending || joinMutation.isPending ? "提交中…" : "使用邀请码加入"}
+              {resolveInvitation.isPending || joinMutation.isPending ? "提交中…" : "提交邀请码申请"}
             </Button>
           </form>
         <RequestStateView
@@ -125,7 +125,7 @@ export function JoinCourses() {
           emptyState={(
             <EmptyState
               title={tab === "discover" ? "没有找到匹配的开放课程" : "暂无申请记录"}
-              hint={tab === "discover" ? "试试其他关键词或使用邀请码加入。" : "先去「发现课程」查看本学期可申请的课程。"}
+              hint={tab === "discover" ? "试试其他关键词或提交邀请码申请。" : "先去「发现课程」查看本学期可申请的课程。"}
             />
           )}
         >
@@ -153,7 +153,7 @@ export function JoinCourses() {
                       <span className="join-course-mode-note">
                         {status.label
                           ? status.label === "已加入" ? `${course.active_enrollment_count} 人课程进行中` : "申请已提交，等待教师审核"
-                          : "填写有效邀请码立即加入，否则提交后等待教师审核"}
+                          : "填写有效邀请码提交申请，教师审核后加入"}
                       </span>
                       <div className="join-course-card-actions">
                         {status.label
@@ -189,22 +189,22 @@ export function JoinCourses() {
         actions={(
           <>
             <Button onClick={() => { setApplyTarget(null); setInvitationCode(""); setApplicationMessage(""); }}>取消</Button>
-            <Button variant="primary" disabled={joinMutation.isPending}
+            <Button variant="primary" disabled={joinMutation.isPending || !invitationCode.trim()}
               onClick={() => { if (applyTarget) joinMutation.mutate({ courseId: applyTarget.courseId, payload: {
                 invitation_code: invitationCode.trim() || undefined,
                 application_message: applicationMessage.trim() || undefined,
               } }); }}>
-              {joinMutation.isPending ? "提交中…" : invitationCode.trim() ? "使用邀请码加入" : "提交加入申请"}
+              {joinMutation.isPending ? "提交中…" : invitationCode.trim() ? "提交邀请码申请" : "提交加入申请"}
             </Button>
           </>
         )}
       >
         <p className="subtle">
           {invitationCode.trim()
-            ? "邀请码校验成功后将直接加入课程。"
+            ? "邀请码校验成功后提交申请，等待教师审核。"
             : "未填写邀请码时需要教师审核，提交后可在「我的申请」中查看进度。"}
         </p>
-        <label className="form-label" htmlFor="invitation-code">课程邀请码 <span>选填</span></label>
+        <label className="form-label" htmlFor="invitation-code">课程邀请码 <span>必填</span></label>
         <input id="invitation-code" className="field" value={invitationCode} onChange={(event) => setInvitationCode(event.target.value)} />
         <label className="form-label" htmlFor="application-message">申请说明 <span>选填</span></label>
         <textarea id="application-message" className="field" rows={3} value={applicationMessage} onChange={(event) => setApplicationMessage(event.target.value)} />

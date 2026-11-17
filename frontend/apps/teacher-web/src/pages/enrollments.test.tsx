@@ -13,11 +13,11 @@ vi.mock("@edu/api-client", () => ({ teachingApi: {
   createInvitation: vi.fn(async () => ({ public_id: "new", code: "plain-code-123" })),
 } }));
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
-it("copies the one-time plaintext and keeps it after the masked list refreshes", async () => {
+it("generates a readable invitation from a legacy masked code and copies it", async () => {
   vi.stubGlobal("navigator", { clipboard: { writeText } });
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(<QueryClientProvider client={client}><ToastProvider><MemoryRouter initialEntries={["/courses/c/enrollments"]}><Routes><Route path="/courses/:courseId/enrollments" element={<Enrollments />} /></Routes></MemoryRouter></ToastProvider></QueryClientProvider>);
-  expect(await screen.findByText("邀请码已隐藏")).toBeInTheDocument();
+  expect(await screen.findByText("abc***")).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "复制邀请码" }));
   await waitFor(() => expect(writeText).toHaveBeenCalledWith("plain-code-123"));
   expect(await screen.findByText("plain-code-123")).toBeInTheDocument();

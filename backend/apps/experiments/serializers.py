@@ -33,6 +33,7 @@ class PrerequisiteWriteSerializer(serializers.Serializer):
 
 
 class PublicationWriteSerializer(serializers.Serializer):
+    course_chapter_id = serializers.CharField(max_length=26, required=False, allow_null=True)
     template_version_id = serializers.CharField(max_length=26)
     rubric_version_id = serializers.CharField(max_length=26, required=False, allow_null=True)
     score_release_at = serializers.DateTimeField(required=False, allow_null=True)
@@ -64,6 +65,7 @@ class PublicationWriteSerializer(serializers.Serializer):
 
 
 class PublicationPatchSerializer(serializers.Serializer):
+    course_chapter_id = serializers.CharField(max_length=26, required=False, allow_null=True)
     score_release_at = serializers.DateTimeField(required=False, allow_null=True)
     template_version_id = serializers.CharField(max_length=26, required=False)
     rubric_version_id = serializers.CharField(max_length=26, required=False)
@@ -141,6 +143,7 @@ class TaskExtensionDecisionSerializer(serializers.Serializer):
 
 
 class PublicationDataSerializer(serializers.Serializer):
+    course_chapter_id = serializers.CharField(allow_null=True, required=False)
     score_release_at = serializers.DateTimeField(allow_null=True)
     public_id = serializers.CharField()
     course_id = serializers.CharField()
@@ -177,6 +180,7 @@ class PublicationDataSerializer(serializers.Serializer):
 
 
 class TaskDataSerializer(serializers.Serializer):
+    course_chapter_id = serializers.CharField(allow_null=True, required=False)
     assessment_available = serializers.BooleanField()
     public_id = serializers.CharField()
     course_id = serializers.CharField()
@@ -284,9 +288,8 @@ def publication_data(item: TaskPublication) -> dict[str, Any]:
     return {
         "public_id": item.public_id,
         "course_id": item.course.public_id,
-        "retake_of_publication_id": (
-            item.retake_of.public_id if item.retake_of_id else None
-        ),
+        "course_chapter_id": item.course_chapter.public_id if item.course_chapter else None,
+        "retake_of_publication_id": (item.retake_of.public_id if item.retake_of_id else None),
         "template_version_id": item.template_version.public_id,
         "rubric_version_id": item.rubric_version.public_id if item.rubric_version else None,
         "template_spec_digest": template_spec_digest,
@@ -432,6 +435,9 @@ def task_data(
         ).exists(),
         "public_id": item.public_id,
         "course_id": item.course.public_id,
+        "course_chapter_id": item.publication.course_chapter.public_id
+        if item.publication.course_chapter
+        else None,
         "publication_id": item.publication.public_id,
         "enrollment_id": item.enrollment.public_id,
         "student_id": item.student.public_id,

@@ -20,6 +20,15 @@ from .content_views import (
     UserCourseContentView,
     UserQuestionCreateView,
 )
+from .teaching_views import (
+    TeachingChapterDetailView,
+    TeachingChapterGenerateView,
+    TeachingDirectInviteView,
+    TeachingExperimentChapterView,
+    TeachingInvitationSummaryView,
+    TeachingMaterialUploadView,
+    TeachingTemplateChapterImportView,
+)
 from .timetable_views import (
     AdministrativeClassCollectionView,
     AdministrativeClassMemberEndView,
@@ -70,6 +79,28 @@ from .views import (
 )
 
 urlpatterns = [
+    path(
+        "teaching/courses/<str:course_id>/experiments/<str:publication_id>/course-chapter",
+        TeachingExperimentChapterView.as_view(),
+    ),
+    path("teaching/course-invitations", TeachingInvitationSummaryView.as_view()),
+    path("teaching/courses/<str:course_id>/direct-invitations", TeachingDirectInviteView.as_view()),
+    path(
+        "teaching/courses/<str:course_id>/chapters/<str:chapter_id>",
+        TeachingChapterDetailView.as_view(),
+    ),
+    path(
+        "teaching/courses/<str:course_id>/chapters/<str:chapter_id>/materials/upload",
+        TeachingMaterialUploadView.as_view(),
+    ),
+    path(
+        "teaching/courses/<str:course_id>/chapter-drafts/generate",
+        TeachingChapterGenerateView.as_view(),
+    ),
+    path(
+        "teaching/courses/<str:course_id>/template-versions/<str:version_id>/import-course-chapter",
+        TeachingTemplateChapterImportView.as_view(),
+    ),
     path("context", ContextView.as_view(), name="context"),
     path("me/timetable", UserTimetableView.as_view(), name="my-timetable"),
     path(

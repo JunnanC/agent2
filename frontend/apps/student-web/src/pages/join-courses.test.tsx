@@ -38,36 +38,33 @@ beforeEach(() => {
 afterEach(() => { cleanup(); clients.splice(0).forEach((client) => client.clear()); });
 
 describe("课程加入策略", () => {
-  it("无邀请码提交申请并等待审核，不跳转课程", async () => {
-    vi.mocked(studentApi.joinCourse).mockResolvedValue(enrollment("PENDING"));
+  it("无邀请码不能提交申请", async () => {
     show();
-    fireEvent.click(await screen.findByRole("button", { name: "申请加入" }));
-    fireEvent.click(screen.getByRole("button", { name: "提交加入申请" }));
-    expect(await screen.findByText("申请已提交，等待教师审核")).toBeInTheDocument();
-    expect(studentApi.joinCourse).toHaveBeenCalledWith("course-1", { invitation_code: undefined, application_message: undefined });
-    expect(screen.queryByText("课程页面 course-1")).not.toBeInTheDocument();
+    fireEvent.click(await screen.findByRole("button", {name: "申请加入"}));
+    expect(screen.getByRole("button", {name: "提交加入申请"})).toBeDisabled();
+    expect(studentApi.joinCourse).not.toHaveBeenCalled();
   });
 
-  it("弹窗填写邀请码后直接进入对应课程并刷新选课缓存", async () => {
-    vi.mocked(studentApi.joinCourse).mockResolvedValue(enrollment("ACTIVE"));
+  it("弹窗填写邀请码后等待审核并刷新缓存", async () => {
+    vi.mocked(studentApi.joinCourse).mockResolvedValue(enrollment("PENDING"));
     const client = show();
     const invalidate = vi.spyOn(client, "invalidateQueries");
     fireEvent.click(await screen.findByRole("button", { name: "申请加入" }));
     fireEvent.change(screen.getByLabelText(/课程邀请码/), { target: { value: "  valid-code  " } });
-    fireEvent.click(screen.getAllByRole("button", { name: "使用邀请码加入" }).at(-1)!);
-    expect(await screen.findByText("课程页面 course-1")).toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole("button", { name: "提交邀请码申请" }).at(-1)!);
+    expect(await screen.findByText("申请已提交，等待教师审核")).toBeInTheDocument();
     expect(studentApi.joinCourse).toHaveBeenCalledWith("course-1", { invitation_code: "valid-code", application_message: undefined });
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ["student-enrollments"] });
   });
 
-  it("邀请码直达先解析关联课程，再加入并进入该课程", async () => {
+  it("邀请码直达先解析课程再提交待审核申请", async () => {
     vi.mocked(studentApi.courses).mockResolvedValue({ rows: [], total: 0, page: 1, pageSize: 100 });
     vi.mocked(studentApi.resolveInvitation).mockResolvedValue({ ...course, public_id: "invited-course" });
-    vi.mocked(studentApi.joinCourse).mockResolvedValue({ ...enrollment("ACTIVE"), course_id: "invited-course" });
+    vi.mocked(studentApi.joinCourse).mockResolvedValue({ ...enrollment("PENDING"), course_id: "invited-course" });
     show();
     fireEvent.change(await screen.findByLabelText("邀请码直达"), { target: { value: "invite-code" } });
-    fireEvent.click(screen.getByRole("button", { name: "使用邀请码加入" }));
-    expect(await screen.findByText("课程页面 invited-course")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "提交邀请码申请" }));
+    expect(await screen.findByText("申请已提交，等待教师审核")).toBeInTheDocument();
     expect(studentApi.resolveInvitation).toHaveBeenCalledWith("invite-code");
     expect(studentApi.joinCourse).toHaveBeenCalledWith("invited-course", { invitation_code: "invite-code" });
   });
@@ -76,7 +73,7 @@ describe("课程加入策略", () => {
     vi.mocked(studentApi.resolveInvitation).mockRejectedValue(new Error("invalid"));
     show();
     fireEvent.change(await screen.findByLabelText("邀请码直达"), { target: { value: "wrong-code" } });
-    fireEvent.click(screen.getByRole("button", { name: "使用邀请码加入" }));
+    fireEvent.click(screen.getByRole("button", { name: "提交邀请码申请" }));
     await waitFor(() => expect(screen.getByText("邀请码无效或已失效")).toBeInTheDocument());
     expect(studentApi.joinCourse).not.toHaveBeenCalled();
   });

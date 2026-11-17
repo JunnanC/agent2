@@ -1,73 +1,102 @@
 import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { request, newIdempotencyKey } from "@edu/auth-client";
 import { teachingApi } from "@edu/api-client";
-import { newIdempotencyKey, request } from "@edu/auth-client";
-import { Button, EmptyState, Panel, RequestStateView, isSafeUrl, useToast } from "@edu/ui";
+import type { Material } from "@edu/api-client";
 import { keys } from "@edu/query-keys";
+import { Button, EmptyState, Panel, RequestStateView, useToast } from "@edu/ui";
 
-type Chapter = { public_id: string; title: string; status: string; row_version: number };
-type Material = { public_id: string; title: string; current_version_id: string; version_status: string };
+type Chapter = { public_id: string; title: string; summary?: string; content?: string; status: string; position: number; row_version: number };
 
 export function CourseMaterials({ courseId }: { courseId: string }) {
-  const base = `/teaching/courses/${courseId}`;
   const toast = useToast();
-  const [title, setTitle] = useState("");
-  const [chapterId, setChapterId] = useState("");
+  const base = `/teaching/courses/${courseId}`;
+  const [selectedId, setSelectedId] = useState("");
+  const [editing, setEditing] = useState<Chapter | null>(null);
   const [chapterTitle, setChapterTitle] = useState("");
-  const [kind, setKind] = useState("TEXT");
   const [content, setContent] = useState("");
-  const [templateId, setTemplateId] = useState("");
+  const [aiDraft, setAiDraft] = useState<string | null>(null);
+  const [title, setTitle] = useState("");
+  const [file, setFile] = useState<File | null>(null);
+  const [fileKey, setFileKey] = useState(0);
   const chapters = useQuery({ queryKey: keys.courseResource(courseId, "chapters"), queryFn: () => teachingApi.courseResource<Chapter>(courseId, "chapters") });
   const materials = useQuery({ queryKey: keys.courseResource(courseId, "materials"), queryFn: () => teachingApi.courseResource<Material>(courseId, "materials") });
-  const templates = useQuery({ queryKey: keys.templates(courseId), queryFn: () => teachingApi.templates(courseId), enabled: kind === "FILE" });
-  const template = templates.data?.rows.find((row) => row.public_id === templateId);
-  const assets = useQuery({ queryKey: ["course-material-assets", courseId, templateId, template?.current_version_id], queryFn: () => teachingApi.templateAssets(courseId, templateId, template?.current_version_id ?? ""), enabled: kind === "FILE" && Boolean(template?.current_version_id) });
-  const addChapter = useMutation({
-    mutationFn: async () => {
-      const chapter = (await request<Chapter>(`${base}/chapters`, { method: "POST", body: { title: chapterTitle.trim(), position: Math.max(0, ...(chapters.data?.rows ?? []).map((row) => Number((row as Chapter & { position?: number }).position ?? 0))) + 1 }, idempotencyKey: newIdempotencyKey() })).data;
-      return request<Chapter>(`${base}/chapters/${chapter.public_id}/published`, { method: "POST", body: {}, ifMatch: chapter.row_version, idempotencyKey: newIdempotencyKey() });
+  const rows = chapters.data?.rows ?? [];
+  const selected = rows.find(row => row.public_id === selectedId);
+  const notifyError = (error: Error) => toast.notify(error.message, "error");
+  const refresh = () => { void chapters.refetch(); void materials.refetch(); };
+  const save = useMutation({
+    mutationFn: () => request<Chapter>(editing ? `${base}/chapters/${editing.public_id}` : `${base}/chapters`, {
+      method: editing ? "PATCH" : "POST", ifMatch: editing?.row_version, idempotencyKey: newIdempotencyKey(),
+      body: { title: chapterTitle.trim(), content, summary: content.slice(0, 500), ...(editing ? {} : { position: Math.max(0, ...rows.map(row => row.position)) + 1 }) },
+    }),
+    onSuccess: result => { setEditing(result.data); setSelectedId(result.data.public_id); refresh(); toast.notify("章节草稿已保存，评审后可单独发布"); }, onError: notifyError,
+  });
+  const generate = useMutation({
+    mutationFn: () => request<{ content: string }>(`${base}/chapter-drafts/generate`, { method: "POST", body: { title: chapterTitle.trim() }, idempotencyKey: newIdempotencyKey() }),
+    onSuccess: result => setAiDraft(result.data.content), onError: notifyError,
+  });
+  const status = useMutation({
+    mutationFn: ({ chapter, action }: { chapter: Chapter; action: string }) => request(`${base}/chapters/${chapter.public_id}/${action}`, { method: "POST", body: {}, ifMatch: chapter.row_version, idempotencyKey: newIdempotencyKey() }),
+    onSuccess: () => { setEditing(null); setChapterTitle(""); setContent(""); refresh(); toast.notify("章节状态已更新，材料需单独发布"); }, onError: notifyError,
+  });
+  const upload = useMutation({
+    mutationFn: () => {
+      const body = new FormData(); body.append("title", title.trim()); body.append("file", file!);
+      return request(`${base}/chapters/${selectedId}/materials/upload`, { method: "POST", body, idempotencyKey: newIdempotencyKey() });
     },
-    onSuccess: (result) => { setChapterId(result.data.public_id); setChapterTitle(""); void chapters.refetch(); toast.notify("章节已创建并发布"); },
-    onError: (error) => { void chapters.refetch(); toast.notify(error.message, "error"); },
+    onSuccess: () => { setTitle(""); setFile(null); setFileKey(key => key + 1); refresh(); toast.notify("附件扫描通过，材料草稿已保存"); }, onError: notifyError,
   });
   const publish = useMutation({
     mutationFn: async (material: Material) => {
-      const versions = (await request<Array<{ public_id: string; row_version: number }>>(`${base}/materials/${material.public_id}/versions`)).data;
-      const version = versions.find((row) => row.public_id === material.current_version_id);
-      if (!version) throw new Error("未找到材料版本，请刷新后重试");
-      await request(`${base}/material-versions/${version.public_id}/published`, { method: "POST", body: {}, ifMatch: version.row_version, idempotencyKey: newIdempotencyKey() });
-    },
-    onSuccess: () => { void materials.refetch(); toast.notify("材料已发布，学生可在课程介绍查看"); },
-    onError: (error) => toast.notify(error.message, "error"),
+      const versions = await request<Array<{ public_id: string; row_version: number }>>(`${base}/materials/${material.public_id}/versions`);
+      const version = versions.data.find(row => row.public_id === material.current_version_id) ?? versions.data[0];
+      if (!version) throw new Error("材料版本不存在，请刷新");
+      return request(`${base}/material-versions/${version.public_id}/published`, { method: "POST", body: {}, ifMatch: version.row_version, idempotencyKey: newIdempotencyKey() });
+    }, onSuccess: () => { refresh(); toast.notify("材料已发布，学生可在对应章节查看"); }, onError: notifyError,
   });
-  const create = useMutation({
-    mutationFn: () => request<Material>(`${base}/materials`, { method: "POST", idempotencyKey: newIdempotencyKey(), body: { title: title.trim(), chapter_id: chapterId, kind, ...(kind === "TEXT" ? { text_content: content } : kind === "LINK" ? { link_url: content } : { object_asset_id: content }) } }),
-    onSuccess: () => { setTitle(""); setContent(""); void materials.refetch(); toast.notify("材料草稿已保存，请在下方发布"); },
-    onError: (error) => toast.notify(error.message, "error"),
-  });
-  return <Panel className="section" title={<h2>课程材料</h2>}>
-    <p className="subtle">发布的材料供本课程学生查看。附件可选用实验设计中已上传且扫描通过的指导书、报告模板等文件。</p>
-    <RequestStateView loading={chapters.isLoading || materials.isLoading} error={chapters.error ?? materials.error} onRetry={() => { void chapters.refetch(); void materials.refetch(); }} empty={false}>
-      <label className="form-label">新章节名称<input className="field" value={chapterTitle} onChange={(event) => setChapterTitle(event.target.value)} /></label><Button disabled={!chapterTitle.trim() || addChapter.isPending} onClick={() => addChapter.mutate()}>创建并发布章节</Button>
-      <form className="section" onSubmit={(event) => {
-        event.preventDefault();
-        if (kind === "LINK" && !isSafeUrl(content)) {
-          toast.notify("链接地址须以 http:// 或 https:// 开头", "error");
-          return;
-        }
-        create.mutate();
-      }}>
-        <label className="form-label">所属章节<select className="field" value={chapterId} onChange={(event) => setChapterId(event.target.value)}><option value="">选择已发布章节</option>{chapters.data?.rows.filter((row) => row.status === "PUBLISHED").map((row) => <option key={row.public_id} value={row.public_id}>{row.title}</option>)}</select></label>
-        <label className="form-label">材料标题<input className="field" value={title} onChange={(event) => setTitle(event.target.value)} /></label>
-        <label className="form-label">材料类型<select className="field" value={kind} onChange={(event) => { setKind(event.target.value); setContent(""); }}><option value="TEXT">在线文本</option><option value="LINK">外部链接</option><option value="FILE">已上传附件</option></select></label>
-        {kind === "FILE" ? <RequestStateView loading={templates.isLoading || assets.isLoading} error={templates.error ?? assets.error} onRetry={() => { void templates.refetch(); void assets.refetch(); }} empty={false}>
-          <label className="form-label">附件所在实验<select className="field" value={templateId} onChange={(event) => { setTemplateId(event.target.value); setContent(""); }}><option value="">选择实验</option>{templates.data?.rows.map((row) => <option key={row.public_id} value={row.public_id}>{row.name}</option>)}</select></label>
-          <label className="form-label">扫描通过的附件<select className="field" value={content} onChange={(event) => setContent(event.target.value)}><option value="">选择附件</option>{(assets.data?.rows ?? []).filter((row) => row["scan_status"] === "CLEAN" && ["MANUAL", "REPORT_TEMPLATE"].includes(String(row["purpose"]))).map((row) => <option key={String(row["public_id"])} value={String(row["public_id"])}>{String(row["file_name"] ?? row["public_id"])}</option>)}</select></label>
-        </RequestStateView> : <label className="form-label">{kind === "LINK" ? "链接地址" : "材料正文"}<textarea className="field" value={content} onChange={(event) => setContent(event.target.value)} /></label>}
-        <Button type="submit" disabled={!chapterId || !title.trim() || !content.trim() || create.isPending}>保存材料草稿</Button>
-      </form>
-      {materials.data?.rows.map((row) => <div className="item" key={row.public_id}><strong>{row.title}</strong><span>{row.version_status === "PUBLISHED" ? "已发布" : <Button disabled={publish.isPending} onClick={() => publish.mutate(row)}>发布材料 {row.title}</Button>}</span></div>)}
-      {!materials.data?.rows.length && <EmptyState title="暂无课程材料" />}
+  const readOnly = editing?.status === "PUBLISHED";
+  return <Panel className="section" title={<h2>课程章节</h2>}>
+    <p className="subtle">先编写章节说明，再在章节中添加学习材料和实验。章节与材料分别发布。</p>
+    <RequestStateView loading={chapters.isLoading || materials.isLoading} error={chapters.error ?? materials.error} onRetry={refresh} empty={false}>
+      <div className="chapter-authoring">
+        <nav aria-label="管理课程章节" className="chapter-authoring-nav">
+          <Button onClick={() => { setEditing(null); setChapterTitle(""); setContent(""); setAiDraft(null); }}>新建章节</Button>
+          {rows.map(row => <div className="section" key={row.public_id}>
+            <Button variant={selectedId === row.public_id ? "primary" : "default"} onClick={() => { setSelectedId(row.public_id); setEditing(row); setChapterTitle(row.title); setContent(row.content || row.summary || ""); setAiDraft(null); }}>{row.title}</Button>
+            <p className="subtle">{row.status === "PUBLISHED" ? "已发布" : row.status === "WITHDRAWN" ? "已撤回" : "草稿"}</p>
+            <Button disabled={status.isPending} onClick={() => status.mutate({ chapter: row, action: row.status === "PUBLISHED" ? "withdrawn" : "published" })}>{row.status === "PUBLISHED" ? "撤回章节" : "发布章节"}</Button>
+          </div>)}
+          {!rows.length && <EmptyState title="暂无章节" hint="填写标题与说明，保存第一章。" />}
+        </nav>
+        <div>
+          <form onSubmit={event => { event.preventDefault(); save.mutate(); }}>
+            <label className="form-label">章节名称<input className="field" value={chapterTitle} disabled={readOnly || save.isPending} onChange={event => setChapterTitle(event.target.value)} placeholder="第一章 环境准备与平台导览" maxLength={180} /></label>
+            <label className="form-label">章节说明<textarea className="field" rows={10} value={content} disabled={readOnly || save.isPending} onChange={event => setContent(event.target.value)} placeholder="介绍本章目标、准备事项与学习步骤，也可用 AI 先生成草稿。" maxLength={100000} /></label>
+            {readOnly && <p className="subtle">已发布内容需先撤回章节，再编辑并重新发布。</p>}
+            <div className="page-actions">
+              <Button type="submit" disabled={readOnly || !chapterTitle.trim() || save.isPending}>{save.isPending ? "保存中…" : "保存章节草稿"}</Button>
+              <Button disabled={readOnly || !chapterTitle.trim() || generate.isPending} onClick={() => generate.mutate()}>{generate.isPending ? "AI 正在生成…" : "AI 生成章节内容"}</Button>
+            </div>
+          </form>
+          {aiDraft !== null && <Panel title={<h3>AI 草稿 · 等待教师评审</h3>}>
+            <textarea aria-label="AI 章节草稿" className="field" rows={12} value={aiDraft} onChange={event => setAiDraft(event.target.value)} />
+            <Button disabled={readOnly} onClick={() => { setContent(aiDraft); setAiDraft(null); }}>采纳草稿并替换章节说明</Button>
+            <Button onClick={() => setAiDraft(null)}>放弃草稿</Button>
+          </Panel>}
+        </div>
+      </div>
+      {selected ? <section className="section">
+        <h3>{selected.title} · 学习材料</h3>
+        <form onSubmit={event => { event.preventDefault(); upload.mutate(); }}>
+          <label className="form-label">材料名称<input className="field" value={title} maxLength={180} disabled={upload.isPending} onChange={event => setTitle(event.target.value)} /></label>
+          <label className="form-label">附件<input key={fileKey} className="field" type="file" accept=".pdf,.docx,.pptx,.xlsx,.txt,.md,.csv,.png,.jpg,.jpeg" disabled={upload.isPending} onChange={event => setFile(event.target.files?.[0] ?? null)} /></label>
+          <p className="subtle">最大 10 MB。上传并扫描通过后保存为草稿。</p>
+          <Button type="submit" disabled={!file || !title.trim() || upload.isPending}>{upload.isPending ? "正在上传并扫描…" : "保存材料草稿"}</Button>
+        </form>
+        {(materials.data?.rows ?? []).filter(row => row.chapter_id === selectedId).map(row => <div className="item" key={row.public_id}><strong>{row.title}</strong>{row.version_status === "PUBLISHED" ? <span>已发布</span> : <Button disabled={publish.isPending || selected.status !== "PUBLISHED"} onClick={() => publish.mutate(row)}>发布材料 {row.title}</Button>}</div>)}
+        {selected.status !== "PUBLISHED" && <p className="subtle">先发布章节，再单独发布其中的材料。</p>}
+      </section> : <p className="subtle">选择或保存章节后，可在该章节添加材料。</p>}
     </RequestStateView>
   </Panel>;
 }

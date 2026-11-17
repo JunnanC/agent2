@@ -70,14 +70,25 @@ def _require_student(course: Course, actor: User) -> Enrollment:
 
 @transaction.atomic
 def create_chapter(
-    *, course_id: str, actor: User, title: str, summary: str, position: int, context: ActorContext
+    *,
+    course_id: str,
+    actor: User,
+    title: str,
+    summary: str,
+    position: int,
+    context: ActorContext,
+    content: str = "",
 ) -> Chapter:
     course = _staff_course(course_id, actor, "MANAGE_CONTENT")
     if course.status == Course.Status.ARCHIVED or position < 1:
         raise ContentStateConflict(detail={"course_status": course.status})
     try:
         chapter = Chapter.objects.create(
-            course=course, title=title.strip(), summary=summary.strip(), position=position
+            course=course,
+            title=title.strip(),
+            summary=summary.strip(),
+            position=position,
+            content=content,
         )
     except IntegrityError as exc:
         raise ContentStateConflict(detail={"position": position}) from exc
@@ -108,10 +119,12 @@ def update_chapter(
     except Chapter.DoesNotExist as exc:
         raise ResourceNotFound() from exc
     _staff_course(chapter.course.public_id, actor, "MANAGE_CONTENT")
-    if chapter.status != Chapter.Status.DRAFT:
+    if chapter.status not in (Chapter.Status.DRAFT, Chapter.Status.WITHDRAWN):
         raise ContentStateConflict(detail={"status": chapter.status})
     allowed = {
-        key: value for key, value in changes.items() if key in {"title", "summary", "position"}
+        key: value
+        for key, value in changes.items()
+        if key in {"title", "summary", "position", "content"}
     }
     if "title" in allowed:
         allowed["title"] = str(allowed["title"]).strip()
@@ -136,10 +149,10 @@ def change_chapter_status(
         raise ResourceNotFound() from exc
     _staff_course(chapter.course.public_id, actor, "MANAGE_CONTENT")
     valid = {
-        Chapter.Status.PUBLISHED: Chapter.Status.DRAFT,
-        Chapter.Status.WITHDRAWN: Chapter.Status.PUBLISHED,
+        Chapter.Status.PUBLISHED: (Chapter.Status.DRAFT, Chapter.Status.WITHDRAWN),
+        Chapter.Status.WITHDRAWN: (Chapter.Status.PUBLISHED,),
     }
-    if status not in valid or chapter.status != valid[status]:
+    if status not in valid or chapter.status not in valid[status]:
         raise ContentStateConflict(detail={"from": chapter.status, "to": status})
     now = timezone.now()
     changes = {
@@ -190,6 +203,21 @@ def _validate_material_payload(
             )
         except ObjectAsset.DoesNotExist as exc:
             raise MaterialAssetNotClean(detail={"object_asset": asset_id}) from exc
+    if asset is not None:
+        from apps.labtemplates.models import TemplateVersion
+
+        owned_course = (
+            asset.owner_type == "COURSE_ATTACHMENT" and asset.owner_ref == material.course.public_id
+        )
+        owned_template = (
+            asset.owner_type == "TEMPLATE_VERSION"
+            and TemplateVersion.objects.filter(
+                public_id=asset.owner_ref,
+                template__course=material.course,
+            ).exists()
+        )
+        if not (owned_course or owned_template):
+            raise MaterialAssetNotClean(detail={"object_asset": "cross_course"})
     return asset
 
 
@@ -291,7 +319,8 @@ def change_material_version_status(
 ) -> MaterialVersion:
     try:
         version = (
-            MaterialVersion.objects.select_for_update()
+            MaterialVersion.objects
+            .select_for_update()
             .select_related("material__course", "material__chapter")
             .get(public_id=version_id)
         )
@@ -370,7 +399,8 @@ def publish_announcement(
 ) -> Announcement:
     try:
         item = (
-            Announcement.objects.select_for_update()
+            Announcement.objects
+            .select_for_update()
             .select_related("course")
             .get(public_id=announcement_id)
         )
@@ -620,6 +650,12 @@ def add_chapter_prerequisite(
         raise ContentStateConflict(detail={"prerequisite": prerequisite.public_id}) from exc
 
 
+def encrypt_invitation(code: str) -> str:
+    from .teaching_crypto import invitation_cipher
+
+    return invitation_cipher().encrypt(code.encode()).decode()
+
+
 def invitation_digest(code: str) -> str:
     return hmac.new(
         str(settings.COURSE_INVITATION_HMAC_KEY).encode(), code.encode(), hashlib.sha256
@@ -638,6 +674,7 @@ def create_invitation(
     invitation = Invitation.objects.create(
         course=course,
         code_digest=invitation_digest(raw),
+        code_encrypted=encrypt_invitation(raw),
         code_masked=f"{raw[:4]}...{raw[-4:]}",
         max_uses=max_uses,
         expires_at=expires_at,
@@ -729,7 +766,8 @@ def create_import_job(
 def precheck_import_job(*, job_id: str, actor: User, context: ActorContext) -> EnrollmentImportJob:
     try:
         job = (
-            EnrollmentImportJob.objects.select_for_update()
+            EnrollmentImportJob.objects
+            .select_for_update()
             .select_related("course")
             .get(public_id=job_id)
         )
@@ -775,7 +813,8 @@ def precheck_import_job(*, job_id: str, actor: User, context: ActorContext) -> E
 def execute_import(*, job_id: str, actor: User, context: ActorContext) -> EnrollmentImportJob:
     try:
         job = (
-            EnrollmentImportJob.objects.select_for_update()
+            EnrollmentImportJob.objects
+            .select_for_update()
             .select_related("course")
             .get(public_id=job_id)
         )
@@ -793,7 +832,8 @@ def execute_import(*, job_id: str, actor: User, context: ActorContext) -> Enroll
             status=EnrollmentImportJob.Status.RUNNING
         )
         item_ids = list(
-            locked_job.items.filter(status__in=("READY", "ERROR"))
+            locked_job.items
+            .filter(status__in=("READY", "ERROR"))
             .order_by("row_no")
             .values_list("pk", flat=True)
         )
@@ -818,6 +858,7 @@ def execute_import(*, job_id: str, actor: User, context: ActorContext) -> Enroll
                     course_id=job.course.public_id,
                     student=user,
                     application_message="CSV_IMPORT",
+                    invited_by=actor,
                     context=context,
                 )
             except Exception as exc:
@@ -857,7 +898,8 @@ def create_copy_job(
 def execute_copy_job(*, job_id: str, actor: User, context: ActorContext) -> CourseCopyJob:
     try:
         job = (
-            CourseCopyJob.objects.select_for_update()
+            CourseCopyJob.objects
+            .select_for_update()
             .select_related("source_course")
             .get(public_id=job_id)
         )
@@ -907,6 +949,7 @@ def execute_copy_job(*, job_id: str, actor: User, context: ActorContext) -> Cour
                 course=target,
                 title=chapter.title,
                 summary=chapter.summary,
+                content=chapter.content,
                 position=chapter.position,
                 status=Chapter.Status.DRAFT,
             )

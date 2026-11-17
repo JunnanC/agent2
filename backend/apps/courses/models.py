@@ -102,7 +102,7 @@ class Course(VersionedModel):
     enrollment_mode = models.CharField(
         max_length=16,
         choices=EnrollmentMode.choices,
-        default=EnrollmentMode.OPEN,
+        default=EnrollmentMode.APPROVAL,
     )
     capacity = models.PositiveIntegerField(null=True, blank=True)
     enrollment_start = models.DateTimeField(null=True, blank=True)
@@ -497,7 +497,7 @@ class AdministrativeClassMembership(VersionedModel):
         constraints = [
             models.UniqueConstraint(
                 fields=("student", "administrative_class", "active_slot"),
-                name="courses_admin_member_active_uniq"
+                name="courses_admin_member_active_uniq",
             ),
             models.CheckConstraint(
                 condition=models.Q(ends_on__isnull=True)
@@ -660,6 +660,7 @@ class Chapter(VersionedModel):
     course = models.ForeignKey(Course, on_delete=models.PROTECT, related_name="chapters")
     title = models.CharField(max_length=180)
     summary = models.CharField(max_length=500, blank=True, default="")
+    content = models.TextField(blank=True, default="")
     position = models.PositiveIntegerField()
     status = models.CharField(max_length=16, choices=Status.choices, default=Status.DRAFT)
     published_at = models.DateTimeField(null=True, blank=True)
@@ -900,6 +901,7 @@ class Invitation(VersionedModel):
     course = models.ForeignKey(Course, on_delete=models.PROTECT, related_name="invitations")
     code_digest = models.CharField(max_length=64, unique=True)
     code_masked = models.CharField(max_length=32)
+    code_encrypted = models.TextField(blank=True, default="")
     max_uses = models.PositiveIntegerField(default=1)
     used_count = models.PositiveIntegerField(default=0)
     expires_at = models.DateTimeField()
@@ -1014,3 +1016,14 @@ class CourseCopyItem(AppendOnlyModel):
                 name="courses_copy_item_status_ck",
             ),
         ]
+
+
+class ChapterDraft(VersionedModel):
+    public_id = public_id_field()
+    course = models.ForeignKey(Course, on_delete=models.PROTECT, related_name="chapter_drafts")
+    created_by = models.ForeignKey(User, on_delete=models.PROTECT)
+    title = models.CharField(max_length=180)
+    content = models.TextField()
+
+    class Meta:
+        db_table = "courses_chapter_draft"

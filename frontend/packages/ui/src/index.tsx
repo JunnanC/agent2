@@ -26,3 +26,5 @@ export type { LineChartProps, ChartSeries, BarChartProps } from "./chart";
 export { CodeEditor } from "./code-editor";
 export type { CodeEditorProps } from "./code-editor";
 export { isSafeUrl } from "./url-safety";
+
+export { PlatformMark } from "./platform-mark";

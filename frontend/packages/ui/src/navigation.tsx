@@ -1,3 +1,4 @@
+import { PlatformMark } from "./platform-mark";
 import { useEffect, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import { Icon, IconName } from "./icons";
@@ -64,8 +65,8 @@ export function AppShell({
           {canCollapse && collapsed ? <button type="button" className="brand-mark brand-expand"
             aria-label="展开导航" title="展开导航" aria-expanded={false}
             aria-controls="collapsible-primary-nav" onClick={toggleSidebar}>
-            <Icon name="layers" size={16} />
-          </button> : <span className="brand-mark" aria-hidden="true"><Icon name="layers" size={16} /></span>}
+            <PlatformMark size={26} />
+          </button> : <span className="brand-mark" aria-hidden="true"><PlatformMark size={26} /></span>}
           <span className="brand-name">{brand}</span>
           <span className="context-dot" aria-hidden="true" />
           <span className="context-label">{domainLabel}</span>

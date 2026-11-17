@@ -37,7 +37,7 @@ class CourseMaterialDownloadTests(TestCase):
         )
         asset = ObjectAsset.objects.create(
             bucket="test", object_key="template-assets/manual.pdf", digest_sha256="a" * 64,
-            size_bytes=10, owner_type="TEMPLATE_VERSION", owner_ref="template-version",
+            size_bytes=10, owner_type="COURSE_ATTACHMENT", owner_ref=course.public_id,
             purpose="MANUAL", scan_status="CLEAN",
         )
         material = create_material(

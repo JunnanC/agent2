@@ -417,3 +417,8 @@ CSRF_COOKIE_DOMAIN = None
 PASSWORD_HASHERS = [
     "django.contrib.auth.hashers.Argon2PasswordHasher",
 ]
+
+# Chapter drafting can use a dedicated provider or the existing assessment AI service.
+CHAPTER_AI_API_KEY = env("CHAPTER_AI_API_KEY", "") or RUBRIC_AI_API_KEY
+CHAPTER_AI_BASE_URL = env("CHAPTER_AI_BASE_URL", "") or RUBRIC_AI_BASE_URL
+CHAPTER_AI_MODEL_NAME = env("CHAPTER_AI_MODEL_NAME", "") or RUBRIC_AI_MODEL_NAME

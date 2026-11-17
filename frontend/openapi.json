@@ -7815,6 +7815,31 @@
                 }
             }
         },
+        "/api/v2/teaching/course-invitations": {
+            "get": {
+                "operationId": "api_v2_teaching_course_invitations_retrieve",
+                "tags": [
+                    "api"
+                ],
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CourseContentResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
         "/api/v2/teaching/courses": {
             "get": {
                 "operationId": "teaching_courses_list",
@@ -10137,6 +10162,123 @@
                 }
             }
         },
+        "/api/v2/teaching/courses/{course_id}/chapter-drafts/generate": {
+            "post": {
+                "operationId": "api_v2_teaching_courses_chapter_drafts_generate_create",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "course_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "api"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ChapterGenerate"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ChapterGenerate"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ChapterGenerate"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CourseContentResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/v2/teaching/courses/{course_id}/chapters/{chapter_id}": {
+            "patch": {
+                "operationId": "api_v2_teaching_courses_chapters_partial_update",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "chapter_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "course_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "api"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/PatchedContentWrite"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/PatchedContentWrite"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/PatchedContentWrite"
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CourseContentResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
         "/api/v2/teaching/courses/{course_id}/chapters/{chapter_id}/{status}": {
             "post": {
                 "operationId": "teaching_chapter_status",
@@ -10169,6 +10311,59 @@
                 "tags": [
                     "api"
                 ],
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CourseContentResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/v2/teaching/courses/{course_id}/chapters/{chapter_id}/materials/upload": {
+            "post": {
+                "operationId": "api_v2_teaching_courses_chapters_materials_upload_create",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "chapter_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "course_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "api"
+                ],
+                "requestBody": {
+                    "content": {
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/MaterialUpload"
+                            }
+                        }
+                    },
+                    "required": true
+                },
                 "security": [
                     {
                         "portalSession": []
@@ -10458,6 +10653,61 @@
                 ],
                 "responses": {
                     "202": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CourseContentResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/v2/teaching/courses/{course_id}/direct-invitations": {
+            "post": {
+                "operationId": "api_v2_teaching_courses_direct_invitations_create",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "course_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "api"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/DirectInvite"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/DirectInvite"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/DirectInvite"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
                         "content": {
                             "application/json": {
                                 "schema": {
@@ -11462,6 +11712,68 @@
                 "x-portals": [
                     "TEACHING"
                 ]
+            }
+        },
+        "/api/v2/teaching/courses/{course_id}/experiments/{publication_id}/course-chapter": {
+            "patch": {
+                "operationId": "api_v2_teaching_courses_experiments_course_chapter_partial_update",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "course_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "publication_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "api"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/PatchedTemplateChapterImport"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/PatchedTemplateChapterImport"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/PatchedTemplateChapterImport"
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CourseContentResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
             }
         },
         "/api/v2/teaching/courses/{course_id}/experiments/{publication_id}/publish": {
@@ -14519,6 +14831,69 @@
                 ]
             }
         },
+        "/api/v2/teaching/courses/{course_id}/template-versions/{version_id}/import-course-chapter": {
+            "post": {
+                "operationId": "api_v2_teaching_courses_template_versions_import_course_chapter_create",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "course_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "version_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "api"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/TemplateChapterImport"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/TemplateChapterImport"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/TemplateChapterImport"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CourseContentResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
         "/api/v2/teaching/courses/{course_id}/template-versions/{version_id}/precheck": {
             "post": {
                 "operationId": "teaching_template_precheck_create",
@@ -16485,6 +16860,18 @@
                 "type": "string",
                 "description": "* `MANAGE_ENROLLMENT` - Manage Enrollment\n* `MANAGE_CONTENT` - Manage Content\n* `MODERATE_QA` - Moderate Qa\n* `MANAGE_TEMPLATE` - Manage Template\n* `PUBLISH_EXPERIMENT` - Publish Experiment\n* `MANAGE_EXTENSION` - Manage Extension\n* `VIEW_PROGRESS` - View Progress\n* `REVIEW_SUBMISSION` - Review Submission\n* `EXPORT_RESULT` - Export Result\n* `MANAGE_AGENT` - Manage Agent"
             },
+            "ChapterGenerate": {
+                "type": "object",
+                "properties": {
+                    "title": {
+                        "type": "string",
+                        "maxLength": 180
+                    }
+                },
+                "required": [
+                    "title"
+                ]
+            },
             "CheckData": {
                 "type": "object",
                 "properties": {
@@ -16696,6 +17083,10 @@
                     "summary": {
                         "type": "string",
                         "maxLength": 500
+                    },
+                    "content": {
+                        "type": "string",
+                        "maxLength": 100000
                     },
                     "body": {
                         "type": "string"
@@ -16921,7 +17312,12 @@
                         "$ref": "#/components/schemas/VisibilityEnum"
                     },
                     "enrollment_mode": {
-                        "$ref": "#/components/schemas/EnrollmentModeEnum"
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/EnrollmentModeEnum"
+                            }
+                        ],
+                        "default": "APPROVAL"
                     },
                     "capacity": {
                         "type": "integer",
@@ -16950,8 +17346,6 @@
                     }
                 },
                 "required": [
-                    "code",
-                    "enrollment_mode",
                     "title",
                     "visibility"
                 ]
@@ -17162,6 +17556,18 @@
                     "counts",
                     "next_tasks",
                     "weekly_study"
+                ]
+            },
+            "DirectInvite": {
+                "type": "object",
+                "properties": {
+                    "identity": {
+                        "type": "string",
+                        "maxLength": 254
+                    }
+                },
+                "required": [
+                    "identity"
                 ]
             },
             "DownloadGrantData": {
@@ -18372,6 +18778,23 @@
                     "password"
                 ]
             },
+            "MaterialUpload": {
+                "type": "object",
+                "properties": {
+                    "title": {
+                        "type": "string",
+                        "maxLength": 180
+                    },
+                    "file": {
+                        "type": "string",
+                        "format": "uri"
+                    }
+                },
+                "required": [
+                    "file",
+                    "title"
+                ]
+            },
             "MeData": {
                 "type": "object",
                 "properties": {
@@ -18584,6 +19007,55 @@
                     }
                 }
             },
+            "PatchedContentWrite": {
+                "type": "object",
+                "properties": {
+                    "title": {
+                        "type": "string",
+                        "maxLength": 180
+                    },
+                    "summary": {
+                        "type": "string",
+                        "maxLength": 500
+                    },
+                    "content": {
+                        "type": "string",
+                        "maxLength": 100000
+                    },
+                    "body": {
+                        "type": "string"
+                    },
+                    "position": {
+                        "type": "integer",
+                        "minimum": 1
+                    },
+                    "kind": {
+                        "$ref": "#/components/schemas/ContentWriteKindEnum"
+                    },
+                    "text_content": {
+                        "type": "string"
+                    },
+                    "link_url": {
+                        "oneOf": [
+                            {
+                                "type": "string",
+                                "format": "uri"
+                            },
+                            {
+                                "type": "string",
+                                "maxLength": 0
+                            }
+                        ]
+                    },
+                    "object_asset_id": {
+                        "type": "string",
+                        "maxLength": 26
+                    },
+                    "pinned": {
+                        "type": "boolean"
+                    }
+                }
+            },
             "PatchedCourseUpdate": {
                 "type": "object",
                 "properties": {
@@ -18746,6 +19218,11 @@
             "PatchedPublicationPatch": {
                 "type": "object",
                 "properties": {
+                    "course_chapter_id": {
+                        "type": "string",
+                        "nullable": true,
+                        "maxLength": 26
+                    },
                     "score_release_at": {
                         "type": "string",
                         "format": "date-time",
@@ -18954,6 +19431,14 @@
                     "status": {
                         "$ref": "#/components/schemas/RuntimeAdapterUpdateStatusEnum"
                     },
+                    "budget_cpu_millicores": {
+                        "type": "integer",
+                        "minimum": 0
+                    },
+                    "budget_memory_mb": {
+                        "type": "integer",
+                        "minimum": 0
+                    },
                     "reason": {
                         "type": "string",
                         "maxLength": 500
@@ -18969,6 +19454,15 @@
                     "reason": {
                         "type": "string",
                         "maxLength": 255
+                    }
+                }
+            },
+            "PatchedTemplateChapterImport": {
+                "type": "object",
+                "properties": {
+                    "chapter_id": {
+                        "type": "string",
+                        "maxLength": 26
                     }
                 }
             },
@@ -19566,6 +20060,10 @@
             "PublicationData": {
                 "type": "object",
                 "properties": {
+                    "course_chapter_id": {
+                        "type": "string",
+                        "nullable": true
+                    },
                     "score_release_at": {
                         "type": "string",
                         "format": "date-time",
@@ -19803,6 +20301,11 @@
             "PublicationWrite": {
                 "type": "object",
                 "properties": {
+                    "course_chapter_id": {
+                        "type": "string",
+                        "nullable": true,
+                        "maxLength": 26
+                    },
                     "template_version_id": {
                         "type": "string",
                         "maxLength": 26
@@ -21058,6 +21561,12 @@
                     "available_memory_mb": {
                         "type": "integer"
                     },
+                    "budget_cpu_millicores": {
+                        "type": "integer"
+                    },
+                    "budget_memory_mb": {
+                        "type": "integer"
+                    },
                     "last_health_at": {
                         "type": "string",
                         "format": "date-time",
@@ -21070,6 +21579,8 @@
                 "required": [
                     "available_cpu_millicores",
                     "available_memory_mb",
+                    "budget_cpu_millicores",
+                    "budget_memory_mb",
                     "capacity_cpu_millicores",
                     "capacity_memory_mb",
                     "code",
@@ -21376,6 +21887,10 @@
             "TaskData": {
                 "type": "object",
                 "properties": {
+                    "course_chapter_id": {
+                        "type": "string",
+                        "nullable": true
+                    },
                     "assessment_available": {
                         "type": "boolean"
                     },
@@ -21803,6 +22318,18 @@
                     "status",
                     "tasks",
                     "title"
+                ]
+            },
+            "TemplateChapterImport": {
+                "type": "object",
+                "properties": {
+                    "chapter_id": {
+                        "type": "string",
+                        "maxLength": 26
+                    }
+                },
+                "required": [
+                    "chapter_id"
                 ]
             },
             "TemplateChapterListResponse": {

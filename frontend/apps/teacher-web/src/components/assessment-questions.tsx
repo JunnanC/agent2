@@ -1,7 +1,9 @@
+import { useQuery } from "@tanstack/react-query";
+import { keys } from "@edu/query-keys";
 import { useState } from "react";
 import { assessmentTeachingApi, teachingApi } from "@edu/api-client";
 import type { AssessmentLanguage, HiddenGroup, TeacherQuestion, TemplateVersion } from "@edu/api-client";
-import { newIdempotencyKey } from "@edu/auth-client";
+import { request, newIdempotencyKey } from "@edu/auth-client";
 import { useToast } from "@edu/ui";
 import { importErrorText } from "@/lib/import-errors";
 
@@ -14,6 +16,8 @@ export function AssessmentQuestions({ courseId, templateId, version, refresh }: 
 }) {
   const toast = useToast();
   const [chapterId, setChapterId] = useState("");
+  const [sourceChapter, setSourceChapter] = useState("");
+  const sourceChapters = useQuery({ queryKey: keys.courseResource(courseId, "chapters"), queryFn: () => teachingApi.courseResource<{public_id: string; title: string}>(courseId, "chapters") });
   const [chapterTitle, setChapterTitle] = useState("");
   const [kind, setKind] = useState<TeacherQuestion["task_type"]>("SINGLE_CHOICE");
   const [editing, setEditing] = useState<string | null>(null);
@@ -37,7 +41,7 @@ export function AssessmentQuestions({ courseId, templateId, version, refresh }: 
   const [importPreview, setImportPreview] = useState<Awaited<ReturnType<typeof assessmentTeachingApi.previewImport>> | null>(null);
   const [importKey, setImportKey] = useState("");
   const chapters = version?.chapters ?? [];
-  const selectedChapter = chapterId || chapters[0]?.public_id || "";
+  const selectedChapter = chapters.some(chapter => chapter.public_id === chapterId) ? chapterId : chapters[0]?.public_id || "";
   const locked = version?.status === "PUBLISHED" || version?.status === "PRECHECKING" || busy;
 
   async function act(operation: () => Promise<unknown>) {
@@ -127,16 +131,23 @@ export function AssessmentQuestions({ courseId, templateId, version, refresh }: 
         </div>;
       })}
     </div>)}
+    {locked && <p className="subtle">{busy ? "正在处理，请稍候。" : "当前版本已发布或正在预检，章节和题目暂不可编辑。请创建草稿版本后修改。"}</p>}
     <fieldset disabled={locked}>
-      <legend>章节与批量导入</legend>
+      <legend>模板内部章节与批量导入</legend>
+      <p className="subtle">模板内部章节用于组织题目；实验所属课程章节在发布时选择。</p>
+      <label>导入课程章节<select className="field" value={sourceChapter} onChange={event => setSourceChapter(event.target.value)}><option value="">选择要复制内容的课程章节</option>{sourceChapters.data?.rows.map(chapter => <option key={chapter.public_id} value={chapter.public_id}>{chapter.title}</option>)}</select></label>
+      <button className="btn" disabled={!sourceChapter} onClick={() => void act(async () => { await request(`/teaching/courses/${courseId}/template-versions/${version.public_id}/import-course-chapter`, {method: "POST", body: {chapter_id: sourceChapter}, ifMatch: version.row_version, idempotencyKey: newIdempotencyKey()}); setSourceChapter(""); })}>导入为模板章节</button>
+      {sourceChapters.error ? <p role="alert">课程章节加载失败。</p> : null}
+      {!chapters.length && <p>暂无模板章节，请新增或导入章节后再添加题目。</p>}
       <label>章节名称<input className="field" value={chapterTitle} onChange={(e) => setChapterTitle(e.target.value)} /></label>
       <button className="btn" disabled={!chapterTitle.trim()} onClick={() => void act(() => teachingApi.createTemplateChapter(courseId, version.public_id, { title: chapterTitle }, version.row_version))}>新增章节</button>
       <label>当前章节<select className="field" value={selectedChapter} onChange={(e) => { setChapterId(e.target.value); setImportPreview(null); }}>
         {chapters.map((c) => <option key={c.public_id} value={c.public_id}>{c.title}</option>)}
       </select></label>
       <a className="btn" href="/api/v2/teaching/choice-import-template" download>下载 Excel 模板</a>
+      <p className="subtle">Word 支持 .docx：每题以“1. 题干”开始，选项各占一段（A.、B.），随后填写“答案：B”“分值：5”“解析：说明”。</p>
       <p className="subtle">多选题的正确答案用英文逗号分隔，例如 A,C；答案必须是该题已填写的选项。</p>
-      <input aria-label="导入选择题 Excel" type="file" accept=".xlsx" onChange={(e) => { setImportFile(e.target.files?.[0] ?? null); setImportPreview(null); }} />
+      <input aria-label="导入选择题 Excel 或 Word" type="file" accept=".xlsx,.docx" onChange={(e) => { setImportFile(e.target.files?.[0] ?? null); setImportPreview(null); }} />
       <button className="btn" disabled={!importFile || !selectedChapter} onClick={() => void act(async () => {
         const result = await assessmentTeachingApi.previewImport(courseId, selectedChapter, importFile!);
         setImportPreview(result); setImportKey(newIdempotencyKey());
