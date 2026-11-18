@@ -40,6 +40,17 @@ it("按发布筛选交卷，AI 建议需教师确认保存", async () => {
     submission_version: 2, scores: { criterion: "9" }, feedback: "",
   }, 7));
 });
+
+it("从任务链接打开时自动载入指定学生的评审", async () => {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(<QueryClientProvider client={client}><ToastProvider><MemoryRouter initialEntries={["/courses/course/reviews?task=task"]}><Routes>
+    <Route path="/courses/:courseId/reviews" element={<Reviews />} />
+  </Routes></MemoryRouter></ToastProvider></QueryClientProvider>);
+
+  await waitFor(() => expect(assessmentTeachingApi.review).toHaveBeenCalledWith("course", "task"));
+  expect(await screen.findByText("固定报告")).toBeInTheDocument();
+  client.clear();
+});
 it("AI 失败仍可人工填写报告分", async () => {
   vi.mocked(assessmentTeachingApi.reportSuggestion).mockRejectedValue(new Error("offline"));
   await show();
