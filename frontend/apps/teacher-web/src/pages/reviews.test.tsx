@@ -16,24 +16,21 @@ beforeEach(() => {
   vi.mocked(assessmentTeachingApi.review).mockResolvedValue({ student_name: "学生", sections: [{ kind: "PROGRAMMING", status: "SUBMITTED", submission_version: 2, row_version: 7, questions: [], grading_status: "COMPLETED" }], sources: [], report: { body_markdown: "固定报告" }, report_criteria: [{ id: "criterion", title: "分析", max_score: "10" }] } as never);
   vi.mocked(assessmentTeachingApi.reportSuggestion).mockResolvedValue({ submission_version: 2, criteria: [{ criterion_id: "criterion", score: "9", rationale: "依据", evidence: "报告" }] });
 });
-async function show() {
+async function show(expectedText = "固定报告", rowName = /打开答卷：学生 · 实验/, taskId = "task") {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(<QueryClientProvider client={client}><ToastProvider><MemoryRouter initialEntries={["/courses/course/publishing/pub/reviews"]}><Routes>
     <Route path="/courses/:courseId/publishing/:publicationId/reviews" element={<Reviews />} />
   </Routes></MemoryRouter></ToastProvider></QueryClientProvider>);
-  await screen.findByRole("option", { name: /学生 · 实验/ });
-  const select = screen.getByRole("combobox") as HTMLSelectElement;
-  select.value = "task";
-  fireEvent.change(select);
-  expect(select.value).toBe("task");
-  await waitFor(() => expect(assessmentTeachingApi.review).toHaveBeenCalledWith("course", "task"));
-  await screen.findByText("固定报告");
+  fireEvent.click(await screen.findByRole("button", { name: rowName }));
+  await waitFor(() => expect(assessmentTeachingApi.review).toHaveBeenCalledWith("course", taskId));
+  await screen.findByText("学生试卷");
+  if (expectedText) await screen.findByText(expectedText);
 }
 it("按发布筛选交卷，AI 建议需教师确认保存", async () => {
   await show();
   expect(assessmentTeachingApi.reviews).toHaveBeenCalledWith("course", "pub");
   fireEvent.click(screen.getByRole("button", { name: "获取报告 AI 建议" }));
-  fireEvent.click(await screen.findByRole("button", { name: "填入建议，人工核对后保存" }));
+  fireEvent.click(await screen.findByRole("button", { name: "填入建议分" }));
   expect(assessmentTeachingApi.saveReview).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole("button", { name: "保存报告评分" }));
   await waitFor(() => expect(assessmentTeachingApi.saveReview).toHaveBeenCalledWith("course", "task", {
@@ -72,7 +69,7 @@ it("shows a read-only answer sheet for choice submissions", async () => {
     }],
     sources: [], report: null, report_criteria: [],
     choice_answers: [{
-      question_id: "q1", title: "栈", task_type: "SINGLE_CHOICE",
+      question_id: "q1", title: "栈", description: "栈顶元素最先出栈。", task_type: "SINGLE_CHOICE",
       options: [{ id: "a", text: "先进先出" }, { id: "b", text: "后进先出" }],
       selected_option_ids: ["b"], correct_option_ids: ["b"], score: "5", max_score: "5",
     }],
@@ -83,13 +80,37 @@ it("shows a read-only answer sheet for choice submissions", async () => {
     <Route path="/courses/:courseId/publishing/:publicationId/reviews" element={<Reviews />} />
   </Routes></MemoryRouter></ToastProvider></QueryClientProvider>);
 
-  const select = await screen.findByRole("combobox") as HTMLSelectElement;
-  await screen.findByRole("option", { name: /李四 · 选择题 · 选择题/ });
-  select.value = "choice-task";
-  fireEvent.change(select);
-  expect(await screen.findByText("李四 · 选择题答卷")).toBeInTheDocument();
-  expect(screen.getByText("5 / 5")).toBeInTheDocument();
+  fireEvent.click(await screen.findByRole("button", { name: /打开答卷：李四 · 选择题/ }));
+  expect(await screen.findByRole("heading", { name: "选择题答卷" })).toBeInTheDocument();
+  expect(screen.getAllByText(/5 \/ 5/).length).toBeGreaterThan(0);
+  expect(screen.getAllByText("后进先出").length).toBeGreaterThan(0);
+  expect(screen.getByText("栈顶元素最先出栈。")).toBeInTheDocument();
   client.clear();
+});
+
+it("shows programming prompts, public samples, and submitted source in the paper", async () => {
+  vi.mocked(assessmentTeachingApi.reviews).mockResolvedValue([{
+    task_id: "code-task", student_name: "王同学", title: "数组求和", kind: "PROGRAMMING",
+    version_no: 1, status: "SUBMITTED", review_status: "PENDING",
+  }]);
+  vi.mocked(assessmentTeachingApi.review).mockResolvedValue({
+    student_name: "王同学",
+    sections: [{ kind: "PROGRAMMING", status: "SUBMITTED", submission_version: 1,
+      row_version: 3, grading_status: "COMPLETED", score: "8", max_score: "10",
+      questions: [{ id: "q1", title: "数组求和", description: "输入整数数组并输出元素之和。",
+        instructions: "使用标准输入输出。", task_type: "PROGRAMMING", language: "python",
+        samples: [{ input: "1 2 3", output: "6" }], score: "8", max_score: "10" }] }],
+    sources: [{ question_id: "q1", language: "python", files: { "main.py": "print(sum(map(int, input().split())))" } }],
+    report: null, report_criteria: [], choice_answers: [],
+  } as never);
+
+  await show("", /打开答卷：王同学 · 数组求和/, "code-task");
+  expect(screen.getByText("输入整数数组并输出元素之和。")).toBeInTheDocument();
+  expect(screen.getByText("使用标准输入输出。")).toBeInTheDocument();
+  fireEvent.click(screen.getByText("公开示例"));
+  expect(screen.getByText("1 2 3")).toBeInTheDocument();
+  fireEvent.click(screen.getByText("查看学生代码（python）"));
+  expect(screen.getByText("print(sum(map(int, input().split())))")).toBeInTheDocument();
 });
 
 it("shows returned reports in the submission list and detail", async () => {
@@ -100,10 +121,10 @@ it("shows returned reports in the submission list and detail", async () => {
   vi.mocked(assessmentTeachingApi.review).mockResolvedValue({
     student_name: "学生", sections: [{ kind: "PROGRAMMING", status: "RETURNED",
       review_status: "RETURNED", submission_version: 2, row_version: 7, questions: [], grading_status: "RETURNED" }],
-    sources: [], report: { body_markdown: "固定报告" }, report_criteria: [],
+    sources: [], report: { body_markdown: "固定报告", version_no: 2 },
+    report_criteria: [{ id: "criterion", title: "分析", max_score: "10" }],
   } as never);
   await show();
-  expect(screen.getByRole("option", { name: /已退回/ })).toBeInTheDocument();
-  expect(screen.getByText("报告评审：已退回")).toBeInTheDocument();
+  expect(screen.getAllByText("已退回").length).toBeGreaterThan(0);
   expect(screen.getByRole("button", { name: "保存报告评分" })).toBeDisabled();
 });

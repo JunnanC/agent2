@@ -7,7 +7,7 @@ export function Reviews() {
   const [searchParams] = useSearchParams();
   const taskId = searchParams.get("task") ?? "";
   return <>
-    <Breadcrumbs items={[{ label: "教师门户" }, { label: "课程" }]} current="编程与报告评审" />
+    <Breadcrumbs items={[{ label: "教师门户" }, { label: "课程" }]} current="学生试卷与评审" />
     <AssessmentReviews key={`${courseId}:${publicationId}:${taskId}`} courseId={courseId} publicationId={publicationId} initialTaskId={taskId} />
   </>;
 }
