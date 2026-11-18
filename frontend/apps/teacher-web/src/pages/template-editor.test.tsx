@@ -41,3 +41,18 @@ it("编程环境只保存治理资源，不生成旧运行 JSON", async () => {
     runtime_type: "CONTAINER", runtime_adapter_id: "docker", image_id: "image", resource_profile_id: "profile",
   }, "5"));
 });
+
+it("执行预检失败后显示公开示例的校验原因", async () => {
+  const run = { public_id: "failed-run", template_version_id: "v1" };
+  vi.mocked(teachingApi.precheckRuns)
+    .mockResolvedValueOnce({ rows: [], total: 0, page: 1, pageSize: 0 })
+    .mockResolvedValueOnce({ rows: [{ ...run, status: "QUEUED" }], total: 1, page: 1, pageSize: 1 })
+    .mockResolvedValue({ rows: [{
+      ...run, status: "FAILED", error_code: "TEMPLATE_VALIDATION_ERROR",
+      error_detail: { reference_solutions: "reference_does_not_pass_samples" },
+    }], total: 1, page: 1, pageSize: 1 });
+  show();
+  await waitFor(() => expect(teachingApi.precheckRuns).toHaveBeenCalledWith("course", "v1"));
+  fireEvent.click(screen.getByRole("button", { name: "执行预检" }));
+  expect(await screen.findByText(/参考解未通过公开示例/, {}, { timeout: 4000 })).toBeInTheDocument();
+});

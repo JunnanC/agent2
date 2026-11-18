@@ -375,6 +375,8 @@ export interface PrecheckRun {
   template_version_id: string;
   status: "QUEUED" | "RUNNING" | "RETRY" | "PASSED" | "FAILED";
   stage_results?: Array<{ stage: string; result: string; at?: Iso8601 }>;
+  error_code?: string;
+  error_detail?: Record<string, unknown>;
   created_at?: Iso8601;
   finished_at?: Iso8601 | null;
   trace_id?: string;

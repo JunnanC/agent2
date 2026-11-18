@@ -17,6 +17,22 @@ vi.mock("@edu/api-client", () => ({ teachingApi: {
   precheck: vi.fn(),
 } }));
 afterEach(cleanup);
+it("预检没有阶段记录时仍显示失败状态和原因", async () => {
+  vi.mocked(teachingApi.precheckRuns).mockResolvedValueOnce({ rows: [{
+    public_id: "failed-run", template_version_id: "v1",
+    status: "FAILED", stage_results: [], error_code: "PRECHECK_WORKER_FAILED", error_detail: {},
+  }], total: 1, page: 1, pageSize: 1 });
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(<QueryClientProvider client={client}><ToastProvider><MemoryRouter initialEntries={["/courses/c1/publishing"]}><Routes>
+    <Route path="/courses/:courseId/publishing" element={<Publishing />} />
+  </Routes></MemoryRouter></ToastProvider></QueryClientProvider>);
+
+  expect(await screen.findByText("预检服务执行失败，请重新预检。")).toBeInTheDocument();
+  expect(screen.getByText("未通过")).toBeInTheDocument();
+  expect(screen.queryByText("预检进行中")).not.toBeInTheDocument();
+  client.clear();
+});
+
 it("reuses an already published template's precheck without sending a conflicting command", async () => {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(<QueryClientProvider client={client}><ToastProvider><MemoryRouter initialEntries={["/courses/c1/publishing"]}><Routes><Route path="/courses/:courseId/publishing" element={<Publishing />} /></Routes></MemoryRouter></ToastProvider></QueryClientProvider>);
