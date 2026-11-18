@@ -60,7 +60,7 @@ export function Login() {
           使用学生账号登录，或先完成邮箱验证注册。
         </p>
 
-        <label className="form-label" htmlFor="login-identifier">账号 / 邮箱</label>
+        <label className="form-label" htmlFor="login-identifier">学号 / 账号 / 邮箱</label>
         <input id="login-identifier" className="field" autoComplete="username"
           value={identifier} onChange={(event) => setIdentifier(event.target.value)} />
 

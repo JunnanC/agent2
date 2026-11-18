@@ -114,6 +114,7 @@ class IdentityReviewSerializer(serializers.Serializer):
 
 
 class UserDataSerializer(serializers.Serializer):
+    student_number = serializers.CharField(allow_null=True)
     public_id = serializers.CharField()
     email = serializers.EmailField()
     username = serializers.CharField()
@@ -219,6 +220,7 @@ def user_data(user: User) -> dict[str, object]:
         "public_id": user.public_id,
         "email": user.email,
         "username": user.username,
+        "student_number": user.student_number,
         "display_name": user.display_name,
         "account_status": user.account_status,
         "row_version": user.row_version,

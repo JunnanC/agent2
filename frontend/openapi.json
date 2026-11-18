@@ -6087,6 +6087,54 @@
                 ]
             }
         },
+        "/api/v2/platform/student-imports": {
+            "post": {
+                "operationId": "platform_student_import",
+                "tags": [
+                    "platform-accounts"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/StudentImportInput"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/StudentImportInput"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/StudentImportInput"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/StudentImportResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                },
+                "x-portals": [
+                    "PLATFORM"
+                ]
+            }
+        },
         "/api/v2/platform/tasks/anomalies": {
             "get": {
                 "operationId": "platform_experiment_task_anomalies",
@@ -16083,6 +16131,14 @@
                 "operationId": "files_download",
                 "parameters": [
                     {
+                        "in": "query",
+                        "name": "preview",
+                        "schema": {
+                            "type": "boolean"
+                        },
+                        "description": "Safe file preview; unsupported formats return 415."
+                    },
+                    {
                         "in": "path",
                         "name": "token",
                         "schema": {
@@ -16102,6 +16158,9 @@
                 "responses": {
                     "200": {
                         "description": "authorized file content"
+                    },
+                    "415": {
+                        "description": "format does not support safe preview"
                     }
                 },
                 "x-portals": [
@@ -18802,6 +18861,10 @@
             "MeData": {
                 "type": "object",
                 "properties": {
+                    "student_number": {
+                        "type": "string",
+                        "nullable": true
+                    },
                     "public_id": {
                         "type": "string"
                     },
@@ -18863,6 +18926,7 @@
                     "portal",
                     "public_id",
                     "row_version",
+                    "student_number",
                     "teacher_qualification",
                     "username"
                 ]
@@ -21880,6 +21944,82 @@
                     "status"
                 ]
             },
+            "StudentImportData": {
+                "type": "object",
+                "properties": {
+                    "rows": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/StudentImportRow"
+                        }
+                    }
+                },
+                "required": [
+                    "rows"
+                ]
+            },
+            "StudentImportInput": {
+                "type": "object",
+                "properties": {
+                    "csv": {
+                        "type": "string",
+                        "writeOnly": true,
+                        "maxLength": 1048576
+                    }
+                },
+                "required": [
+                    "csv"
+                ]
+            },
+            "StudentImportResponse": {
+                "type": "object",
+                "properties": {
+                    "data": {
+                        "$ref": "#/components/schemas/StudentImportData"
+                    },
+                    "meta": {
+                        "type": "object",
+                        "additionalProperties": {}
+                    }
+                },
+                "required": [
+                    "data",
+                    "meta"
+                ]
+            },
+            "StudentImportRow": {
+                "type": "object",
+                "properties": {
+                    "row_number": {
+                        "type": "integer"
+                    },
+                    "student_number": {
+                        "type": "string"
+                    },
+                    "status": {
+                        "$ref": "#/components/schemas/StudentImportRowStatusEnum"
+                    },
+                    "user_id": {
+                        "type": "string"
+                    },
+                    "error": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "row_number",
+                    "status",
+                    "student_number"
+                ]
+            },
+            "StudentImportRowStatusEnum": {
+                "enum": [
+                    "CREATED",
+                    "FAILED"
+                ],
+                "type": "string",
+                "description": "* `CREATED` - CREATED\n* `FAILED` - FAILED"
+            },
             "TargetTypeEnum": {
                 "enum": [
                     "HOST",
@@ -23239,6 +23379,10 @@
             "UserData": {
                 "type": "object",
                 "properties": {
+                    "student_number": {
+                        "type": "string",
+                        "nullable": true
+                    },
                     "public_id": {
                         "type": "string"
                     },
@@ -23265,6 +23409,7 @@
                     "email",
                     "public_id",
                     "row_version",
+                    "student_number",
                     "username"
                 ]
             },

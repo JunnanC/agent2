@@ -341,8 +341,28 @@ class AssessmentTests(TestCase):
             )
         report = report_draft(
             actor=self.student, task_id=self.task.public_id,
-            expected_version=report["row_version"], body_markdown="My report\n",
+            expected_version=report["row_version"], body_markdown="",
         )
+        from apps.core.models import ObjectAsset
+        from apps.reports.models import ReportAttachment, ReportDraft
+
+        asset = ObjectAsset.objects.create(
+            bucket="test", object_key="report.pdf", original_name="report.pdf",
+            owner_type="REPORT_ATTACHMENT", owner_ref=self.task.public_id,
+            purpose="REPORT_ATTACHMENT", media_type="application/pdf", size_bytes=10,
+            digest_sha256="a" * 64, scan_status="PENDING",
+        )
+        ReportAttachment.objects.create(
+            draft=ReportDraft.objects.get(task=self.task), asset=asset,
+            uploaded_by=self.student, trace_id="c" * 32,
+        )
+        with self.assertRaises(StateConflict):
+            submit_programming(
+                actor=self.student, task_id=self.task.public_id,
+                versions={question.public_id: {"language": "python", "row_version": 2}},
+                report_version=report["row_version"], trace_id="c" * 32,
+            )
+        ObjectAsset.objects.filter(pk=asset.pk).update(scan_status="CLEAN")
         with (
             patch(
                 "apps.workspaces.code_snapshots.object_storage",
@@ -357,19 +377,20 @@ class AssessmentTests(TestCase):
                     "language": "python", "row_version": saved["row_version"],
                 }}, report_version=report["row_version"], trace_id="c" * 32,
             )
+        assert submission.report_version.attachments.count() == 1
         answer = submission.answers.get()
         assert answer.code_snapshot.question_id == question.pk
         assert not hasattr(answer.code_snapshot, "session_id")
         assert answer.grade.status == "PENDING"
         assert answer.grade.score is None
-        assert submission.report_version.body_markdown == "My report\n"
+        assert submission.report_version.body_markdown == ""
         assert not hasattr(submission.report_version, "workspace_snapshot_id")
         report_draft(
             actor=self.student, task_id=self.task.public_id,
             expected_version=report["row_version"], body_markdown="New draft",
         )
         fixed = ReportVersion.objects.get(pk=submission.report_version_id)
-        assert fixed.body_markdown == "My report\n"
+        assert fixed.body_markdown == ""
         from ..assessment import review_programming, section_result
         from ..models import AssessmentSection, QuestionGrade
 
@@ -461,3 +482,29 @@ class AssessmentTests(TestCase):
         AssessmentSection.objects.filter(pk=section.pk).update(status="RETURNED")
         response = AssessmentReviewListView().get(request, self.course.public_id)
         assert response.data["data"]["rows"][0]["review_status"] == "RETURNED"
+
+    def test_teacher_report_template_download_requires_assigned_active_student(self):
+        from apps.accounts.tests.helpers import create_user
+        from apps.core.errors import DownloadScopeDenied
+        from apps.core.models import ObjectAsset
+        from apps.courses.downloads import authorize_course_material_download
+        from apps.labtemplates.models import TemplateVersion
+
+        version = self.publication.template_version
+        asset = ObjectAsset.objects.create(
+            bucket="test", object_key="template.pdf", original_name="template.pdf",
+            owner_type="TEMPLATE_VERSION", owner_ref=version.public_id,
+            purpose="REPORT_TEMPLATE", media_type="application/pdf", size_bytes=10,
+            digest_sha256="a" * 64, scan_status="CLEAN",
+        )
+        TemplateVersion.objects.filter(pk=version.pk).update(report_template_asset=asset)
+        data = assessment_data(actor=self.student, task_id=self.task.public_id)
+        assert data["report_template"]["asset_id"] == asset.public_id
+        scope = authorize_course_material_download(asset, self.student, "USER")
+        assert scope == self.course.public_id
+        outsider = create_user(username="outsider", email="outsider@example.edu")
+        with self.assertRaises(DownloadScopeDenied):
+            authorize_course_material_download(asset, outsider, "USER")
+        type(self.enrollment).objects.filter(pk=self.enrollment.pk).update(status="DROPPED")
+        with self.assertRaises(DownloadScopeDenied):
+            authorize_course_material_download(asset, self.student, "USER")

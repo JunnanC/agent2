@@ -434,6 +434,7 @@ export interface Rubric {
 /** 平台端契约对象 */
 
 export interface PlatformUser {
+  student_number?: string | null;
   public_id: string;
   username: string;
   display_name: string;

@@ -551,7 +551,16 @@ export const teachingApi = {
 
 /* ══════════ 平台端 ══════════ */
 
+export interface StudentImportRow {
+  row_number: number; student_number: string; status: "CREATED" | "FAILED";
+  user_id?: string; error?: string;
+}
+
 export const platformApi = {
+  importStudents: (csv: string, idempotencyKey: string) =>
+    request<{ rows: StudentImportRow[] }>("/platform/student-imports", {
+      method: "POST", body: { csv }, idempotencyKey,
+    }).then((r) => r.data),
   users: (query?: { page?: number; page_size?: number; search?: string }) =>
     request<PlatformUser[]>("/platform/users", { query }).then(toList),
 

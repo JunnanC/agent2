@@ -1,5 +1,6 @@
 from django.urls import path
 
+from .student_import_views import PlatformStudentImportView
 from .views import (
     AdminAssignmentDetailView,
     AdminAssignmentsView,
@@ -24,6 +25,7 @@ from .views import (
 )
 
 urlpatterns = [
+    path("platform/student-imports", PlatformStudentImportView.as_view()),
     path("auth/csrf", CsrfView.as_view(), name="auth-csrf"),
     path("auth/login", LoginView.as_view(), name="auth-login"),
     path("auth/register", RegisterView.as_view(), name="auth-register"),

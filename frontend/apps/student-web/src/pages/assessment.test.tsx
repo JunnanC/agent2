@@ -58,12 +58,12 @@ it("saves the current code before switching questions and restores each question
   const editor = await screen.findByRole("textbox", { name: "代码 main.py" });
   expect(editor).toHaveValue("depth draft");
   fireEvent.change(editor, { target: { value: "depth edited" } });
-  fireEvent.change(screen.getByRole("combobox", { name: "编程题" }), { target: { value: "insert" } });
-  await waitFor(() => expect(screen.getByRole("combobox", { name: "编程题" })).toHaveValue("insert"));
+  fireEvent.click(screen.getByRole("button", { name: "2. 二分查找插入点" }));
+  await waitFor(() => expect(screen.getByRole("button", { name: "2. 二分查找插入点" })).toHaveAttribute("aria-pressed", "true"));
   expect(assessmentApi.saveCode).toHaveBeenCalledWith("task", "depth", "python", { "main.py": "depth edited" }, expect.any(Number));
   await waitFor(() => expect(screen.getByRole("textbox", { name: "代码 main.py" })).toHaveValue("insert draft"));
 
-  fireEvent.change(screen.getByRole("combobox", { name: "编程题" }), { target: { value: "depth" } });
+  fireEvent.click(screen.getByRole("button", { name: "1. 二叉树的最大深度" }));
   await waitFor(() => expect(screen.getByRole("textbox", { name: "代码 main.py" })).toHaveValue("depth edited"));
   fireEvent.change(screen.getByRole("combobox", { name: "语言" }), { target: { value: "c" } });
   await waitFor(() => expect(screen.getByRole("textbox", { name: "代码 main.c" })).toHaveValue("C draft"));
@@ -71,9 +71,9 @@ it("saves the current code before switching questions and restores each question
   await waitFor(() => expect(assessmentApi.saveCode).toHaveBeenCalledWith("task", "depth", "c", { "main.c": "C draft" }, 1));
   vi.mocked(assessmentApi.saveCode).mockRejectedValueOnce(new Error("offline"));
   fireEvent.change(screen.getByRole("textbox", { name: "代码 main.c" }), { target: { value: "C unsaved" } });
-  fireEvent.change(screen.getByRole("combobox", { name: "编程题" }), { target: { value: "insert" } });
+  fireEvent.click(screen.getByRole("button", { name: "2. 二分查找插入点" }));
   expect(await screen.findByText("请先处理未保存内容或版本冲突")).toBeInTheDocument();
-  expect(screen.getByRole("combobox", { name: "编程题" })).toHaveValue("depth");
+  expect(screen.getByRole("button", { name: "1. 二叉树的最大深度" })).toHaveAttribute("aria-pressed", "true");
   expect(screen.getByRole("textbox", { name: "代码 main.c" })).toHaveValue("C unsaved");
   client.clear();
 });
@@ -171,5 +171,29 @@ it("downloads the current submitted report version, not the editable draft", asy
   expect(text).toContain("# 已提交报告");
   expect(click).toHaveBeenCalled();
   click.mockRestore();
+  client.clear();
+});
+
+it("switches programming questions through the list and shows attachment-only reports and samples", async () => {
+  const question = { id: "p1", title: "求和", description: "", instructions: "", task_type: "PROGRAMMING",
+    max_score: "10", allowed_languages: ["python"], selected_language: "python",
+    samples: [{ input: "1 2", output: "3" }, { input: "3 4", output: "7" }], starter_files: {}, limits: {} };
+  vi.mocked(assessmentApi.get).mockResolvedValueOnce({ task_id: "task", report_required: true,
+    questions: [question, { ...question, id: "p2", title: "排序" }],
+    sections: [{ kind: "PROGRAMMING", status: "NOT_SUBMITTED", deadline: "2099-01-01T00:00:00Z" }],
+    server_time: new Date().toISOString(), all_submitted: false } as never);
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(<QueryClientProvider client={client}><ToastProvider><MemoryRouter initialEntries={["/experiments/task/assessment"]}>
+    <Routes><Route path="/experiments/:taskId/assessment" element={<AssessmentWorkbench />} /></Routes>
+  </MemoryRouter></ToastProvider></QueryClientProvider>);
+  expect(await screen.findByRole("navigation", { name: "编程题列表" })).toBeInTheDocument();
+  expect(screen.queryByLabelText("报告正文")).not.toBeInTheDocument();
+  expect(screen.getByLabelText("报告附件")).toBeInTheDocument();
+  expect(screen.getByText("示例 1").parentElement).toHaveAttribute("open");
+  expect(screen.getByText("示例 2").parentElement).toHaveAttribute("open");
+  await waitFor(() => expect(assessmentApi.saveCode).toHaveBeenCalled());
+  fireEvent.click(screen.getByRole("button", { name: "2. 排序" }));
+  await waitFor(() => expect(screen.getByRole("button", { name: "2. 排序" })).toHaveAttribute("aria-pressed", "true"));
+  expect(assessmentApi.codeDraft).toHaveBeenCalledWith("task", "p2", "python");
   client.clear();
 });
