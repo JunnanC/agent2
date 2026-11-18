@@ -16,6 +16,7 @@ export function CourseDetail({ discussionPage = false }: { discussionPage?: bool
   const navigate = useNavigate();
   const location = useLocation();
   const [activeChapterId, setActiveChapterId] = useState<string | null>(null);
+  const contentRef = useRef<HTMLElement>(null);
   const chapterNavRef = useRef<HTMLElement>(null);
   const detail = useQuery({ queryKey: keys.course(courseId), queryFn: () => studentApi.courseDetail(courseId),
     staleTime: 0, refetchOnMount: "always", retry: false });
@@ -39,10 +40,13 @@ export function CourseDetail({ discussionPage = false }: { discussionPage?: bool
     const updateChapter = () => {
       frame = 0;
       let current = firstChapterId;
+      const container = contentRef.current;
+      const rootTop = container && ["auto", "scroll"].includes(window.getComputedStyle(container).overflowY)
+        ? container.getBoundingClientRect().top : 0;
       for (const chapter of rows) {
         const panel = document.getElementById(`course-chapter-${chapter.public_id}`);
         if (!panel) continue;
-        const offset = parseFloat(window.getComputedStyle(panel).scrollMarginTop) || 0;
+        const offset = rootTop + (parseFloat(window.getComputedStyle(panel).scrollMarginTop) || 0);
         if (panel.getBoundingClientRect().top <= offset + 1) current = chapter.public_id;
         else break;
       }
@@ -52,10 +56,13 @@ export function CourseDetail({ discussionPage = false }: { discussionPage?: bool
       if (!frame) frame = window.requestAnimationFrame(updateChapter);
     };
     updateChapter();
+    const content = contentRef.current;
+    content?.addEventListener("scroll", scheduleUpdate, { passive: true });
     window.addEventListener("scroll", scheduleUpdate, { passive: true });
     window.addEventListener("resize", scheduleUpdate);
     return () => {
       window.cancelAnimationFrame(frame);
+      content?.removeEventListener("scroll", scheduleUpdate);
       window.removeEventListener("scroll", scheduleUpdate);
       window.removeEventListener("resize", scheduleUpdate);
     };
@@ -129,7 +136,7 @@ export function CourseDetail({ discussionPage = false }: { discussionPage?: bool
           </Link> : null}
         </aside>
 
-        <section className="course-learning-main">
+        <section ref={contentRef} className="course-learning-main" aria-label="课程内容">
           {chapterId || discussionPage ? <Link className="btn" to={`/courses/${courseId}`}>返回课程介绍</Link> : null}
           {chapterId ? <><RequestStateView loading={chapters.isLoading} error={chapters.error} onRetry={() => void chapters.refetch()} empty={!chapterRows.some((chapter) => chapter.public_id === chapterId)} emptyState={<EmptyState title="章节不存在或尚未发布" />} >{chapterRows.filter((chapter) => chapter.public_id === chapterId).map((chapter) => <Panel key={chapter.public_id} title={<h2>{chapter.title}</h2>}><p className="course-chapter-description">{chapter.description || "本章节暂未提供说明。"}</p>{chapter.content ? <Markdown source={chapter.content} /> : null}</Panel>)}</RequestStateView>{chapterRows.some(chapter => chapter.public_id === chapterId) && <ChapterResources key={chapterId} courseId={courseId} chapterId={chapterId} />}</> : discussionPage ? <CourseDiscussion key={courseId} courseId={courseId} /> : <>
           <Panel title={<><h2>课程信息</h2></>} actions={enrollment ? <EnrollmentExit enrollment={enrollment} onExited={() => navigate("/courses", { replace: true })} /> : undefined}>

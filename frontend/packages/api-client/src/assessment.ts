@@ -28,6 +28,8 @@ export interface ProgrammingQuestion extends QuestionBase {
 }
 
 export interface Assessment {
+  report_required?: boolean;
+  report_template?: { asset_id: string; file_name: string } | null;
   task_id: string;
   title?: string;
   course_title?: string;

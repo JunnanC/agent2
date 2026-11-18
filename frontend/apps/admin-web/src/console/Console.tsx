@@ -1,3 +1,4 @@
+import { StudentImport } from "./StudentImport";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
@@ -349,6 +350,7 @@ function PageContent({
     );
   else if (current === "students") {
     content = <>
+      <StudentImport onComplete={() => { void refresh(); }} />
       {classId ? <><button className="link" onClick={() => setParams({})}>返回班级列表</button><h2>{members.data?.class.name ?? "班级学生名单"}</h2>
         {members.isPending ? <p role="status">正在加载名单</p> : members.error ? <ErrorState error={members.error} retry={() => void members.refetch()} /> : <Table headings={["学生", "账号状态", "操作"]} empty={!members.data?.members.length}>
           {(members.data?.members ?? []).map((member) => { const user = users.data?.find((item) => item.public_id === member.student_id); return <tr key={member.public_id}><td data-label="成员">{member.student_name}<span className="mono muted">{member.student_id}</span></td><td data-label="账号状态"><Status value={user?.account_status} /></td><td data-label="操作">{user && action("详情", () => open({ kind: "person", account: user, teacher: false }))}</td></tr>; })}

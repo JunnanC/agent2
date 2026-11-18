@@ -33,3 +33,10 @@
 运行相关测试、lint、迁移检查、构建、浏览器场景，更新 checklist 证据并提交。验证：记录命令实际结果，未执行项不标通过。
 
 执行顺序：T1 → T2 → T3 → T4 → T5 → T6 → T7 → T8 → T9 → T10。每组相关任务验证后本地提交，不自动推送。
+
+## 执行记录
+
+- T1–T9 已实现并完成对应自动化验证。
+- T10 自动化与本地浏览器验收已完成；真实存储/扫描/容器的部署环境端到端验收待联调，见 checklist.md。
+- 实际新增文件：accounts/student_imports.py、student_import_views.py、0003_user_student_number.py；core/tests/test_file_preview.py；courses/tests/test_student_number_import.py；学生 asset-actions.tsx 及测试；管理端 console/StudentImport.tsx 及测试。
+- 现有前端设计沿用原门户字体、颜色与组件，仅调整材料动作、样例、输出、代码区与滚动容器；未另建视觉主题。

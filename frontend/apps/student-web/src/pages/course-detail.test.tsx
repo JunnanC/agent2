@@ -133,3 +133,19 @@ it("课程详情中确认退出后返回课程列表", async () => {
   expect(await screen.findByText("我的课程列表")).toBeInTheDocument();
   expect(studentApi.dropEnrollment).toHaveBeenCalledWith("en-1", { reason: "选课调整" }, "4");
 });
+
+it("在自然页面滚动时使用视口追踪活动章节", async () => {
+  vi.mocked(studentApi.courseDetail).mockResolvedValue(course);
+  vi.mocked(studentApi.courseChapters).mockResolvedValue({ ...empty, total: 3, rows:
+    [1, 2, 3].map((index) => ({ public_id: `chapter-${index}`, course_id: "course-1", title: `第${index}章`, description: null, sort_order: index, status: "PUBLISHED", row_version: "1" })) });
+  show();
+  await screen.findByRole("heading", { name: "第2章" });
+  const content = screen.getByRole("region", { name: "课程内容" });
+  content.style.overflowY = "visible";
+  vi.spyOn(content, "getBoundingClientRect").mockReturnValue({ top: -1500 } as DOMRect);
+  for (const [index, top] of [[1, -1200], [2, -20], [3, 700]]) {
+    vi.spyOn(document.getElementById(`course-chapter-chapter-${index}`)!, "getBoundingClientRect").mockReturnValue({ top } as DOMRect);
+  }
+  fireEvent.scroll(window);
+  await waitFor(() => expect(screen.getByRole("button", { name: /第2章/ })).toHaveAttribute("aria-current", "location"));
+});
