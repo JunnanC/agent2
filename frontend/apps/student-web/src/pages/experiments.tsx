@@ -82,7 +82,13 @@ export function Experiments() {
                   key: "actions", header: "", align: "right", width: 150, render: (task) => (
                     <div className="table-actions">
                       {task.assessment_available
-                        ? <Link className="btn sm primary" to={`/experiments/${task.public_id}/assessment`}>进入实验答题</Link>
+                        ? <Link className="btn sm primary" to={`/experiments/${task.public_id}/assessment`}>{
+                          ["COMPLETED", "APPROVED"].includes(task.status)
+                            ? "查看答卷"
+                            : ["IN_PROGRESS", "REPORT_DRAFT", "READY"].includes(task.status)
+                              ? "继续答题"
+                              : "进入实验答题"
+                        }</Link>
                         : <Link className="btn sm" to={`/experiments/${task.public_id}`}>查看详情</Link>}
                     </div>
                   ),

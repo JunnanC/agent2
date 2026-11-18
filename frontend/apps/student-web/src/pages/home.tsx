@@ -24,6 +24,7 @@ export function Home() {
     enrollment.course_id,
     enrollment.course_title || enrollment.course_code || enrollment.course_id,
   ])), [enrollmentsQuery.data]);
+  const courseNamesLoaded = enrollmentsQuery.isSuccess;
   const activeTasks = useMemo(() => tasks.filter((task) => !TERMINAL_STATUSES.has(task.status)), [tasks]);
   const draftCount = tasks.filter((task) => task.status === "REPORT_DRAFT").length;
   const inProgressCount = tasks.filter((task) => ["IN_PROGRESS", "REPORT_DRAFT"].includes(task.status)).length;
@@ -112,8 +113,8 @@ export function Home() {
   }, []);
 
   const focusDate = useMemo(() => {
-    const dates = calendarItems.filter((item) => !item.done).map((item) => item.date).sort();
-    return dates.find((date) => date <= todayKey) ?? dates[0] ?? null;
+    const dates = [...new Set(calendarItems.filter((item) => !item.done).map((item) => item.date))].sort();
+    return dates.find((date) => date >= todayKey) ?? dates[0] ?? null;
   }, [calendarItems, todayKey]);
 
   useEffect(() => {
@@ -171,7 +172,7 @@ export function Home() {
                 <div className="eyebrow">{formatDate(selectedDate)} · {focusedItems.length} 项待办</div>
                 {visibleItems.map((item, index) => (
                   <button key={`${item.title}-${index}`} type="button" className="calendar-focus-task" onClick={item.onClick}>
-                    <span><small className="calendar-focus-course">{item.context || "未归属课程"}</small><strong>{item.title}</strong><small>{item.subtitle}</small></span>
+                    <span><small className="calendar-focus-course">{item.context ?? (courseNamesLoaded ? "未归属课程" : "")}</small><strong>{item.title}</strong><small>{item.subtitle}</small></span>
                     <StatusBadge tone={item.statusTone ?? "neutral"}>{item.statusLabel}</StatusBadge>
                   </button>
                 ))}
