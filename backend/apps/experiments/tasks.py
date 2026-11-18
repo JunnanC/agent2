@@ -7,6 +7,7 @@ from django.db import transaction
 from apps.core.audit import append_failure
 from apps.core.compensation import create_compensation
 from apps.core.concurrency import compare_and_swap
+from apps.core.outbox import append_outbox_event, enqueue_relay_after_commit
 from apps.core.tasks import run_compensations
 
 from .assessment_workers import (  # noqa: F401
@@ -16,6 +17,7 @@ from .assessment_workers import (  # noqa: F401
     dispatch_assessments,
     run_assessment_job,
 )
+from .events import PUBLICATION_FAILED
 from .models import TaskPublication
 from .services import assign_late_enrollment_task as assign_late_enrollment_service
 from .services import (
@@ -52,6 +54,14 @@ def _record_publication_failure(publication_id: str, trace_id: str, exc: Excepti
                 },
             },
         )
+        append_outbox_event(
+            event_type=PUBLICATION_FAILED,
+            aggregate_type="task_publication",
+            aggregate_ref=publication_id,
+            payload={"publication_id": publication_id, "course_id": publication.course.public_id},
+            trace_id=trace_id,
+        )
+        enqueue_relay_after_commit(trace_id=trace_id)
         failure = append_failure(
             failure_type="EXPERIMENT_PUBLICATION_ASSIGNMENT",
             subject_type="TASK_PUBLICATION",

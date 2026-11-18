@@ -6,6 +6,12 @@ import { assessmentApi } from "@edu/api-client";
 import { ToastProvider } from "@edu/ui";
 import { AssessmentWorkbench } from "./assessment";
 
+vi.mock("@edu/ui", async original => ({
+  ...await original<typeof import("@edu/ui")>(),
+  CodeEditor: ({ value, onChange, ariaLabel }: { value: string; onChange: (value: string) => void; ariaLabel: string }) =>
+    <textarea aria-label={ariaLabel} value={value} onChange={event => onChange(event.target.value)} />,
+}));
+
 vi.mock("@edu/api-client", () => ({ assessmentApi: {
   get: vi.fn(async () => ({
     task_id: "task", questions: [{ id: "q", title: "栈", description: "访问顺序", instructions: "", task_type: "SINGLE_CHOICE", max_score: "5", options: [{ id: "a", text: "先进先出" }, { id: "b", text: "后进先出" }] }],
@@ -26,6 +32,51 @@ vi.mock("@edu/api-client", () => ({ assessmentApi: {
 } }));
 
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
+
+it("saves the current code before switching questions and restores each question's draft", async () => {
+  vi.mocked(assessmentApi.get).mockResolvedValueOnce({
+    task_id: "task", server_time: new Date().toISOString(),
+    questions: ["depth", "insert"].map(id => ({
+      id, title: id === "depth" ? "二叉树的最大深度" : "二分查找插入点",
+      description: id, instructions: "", task_type: "PROGRAMMING", max_score: "10",
+      allowed_languages: ["python", "c"], selected_language: "python", samples: [],
+      starter_files: {}, limits: {},
+    })),
+    sections: [{ kind: "PROGRAMMING", status: "NOT_SUBMITTED", grading_status: "NOT_SUBMITTED",
+      score: null, deadline: "2099-01-01T00:00:00Z", editable: true }],
+  } as never);
+  vi.mocked(assessmentApi.codeDraft)
+    .mockResolvedValueOnce({ files: { "main.py": "depth draft" }, row_version: 1, language: "python" })
+    .mockResolvedValueOnce({ files: { "main.py": "insert draft" }, row_version: 1, language: "python" })
+    .mockResolvedValueOnce({ files: { "main.py": "depth edited" }, row_version: 2, language: "python" })
+    .mockResolvedValueOnce({ files: { "main.c": "C draft" }, row_version: 1, language: "c" });
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(<QueryClientProvider client={client}><ToastProvider><MemoryRouter initialEntries={["/experiments/task/assessment"]}>
+    <Routes><Route path="/experiments/:taskId/assessment" element={<AssessmentWorkbench />} /></Routes>
+  </MemoryRouter></ToastProvider></QueryClientProvider>);
+
+  const editor = await screen.findByRole("textbox", { name: "代码 main.py" });
+  expect(editor).toHaveValue("depth draft");
+  fireEvent.change(editor, { target: { value: "depth edited" } });
+  fireEvent.click(screen.getByRole("button", { name: "2. 二分查找插入点" }));
+  await waitFor(() => expect(screen.getByRole("button", { name: "2. 二分查找插入点" })).toHaveAttribute("aria-pressed", "true"));
+  expect(assessmentApi.saveCode).toHaveBeenCalledWith("task", "depth", "python", { "main.py": "depth edited" }, expect.any(Number));
+  await waitFor(() => expect(screen.getByRole("textbox", { name: "代码 main.py" })).toHaveValue("insert draft"));
+
+  fireEvent.click(screen.getByRole("button", { name: "1. 二叉树的最大深度" }));
+  await waitFor(() => expect(screen.getByRole("textbox", { name: "代码 main.py" })).toHaveValue("depth edited"));
+  fireEvent.change(screen.getByRole("combobox", { name: "语言" }), { target: { value: "c" } });
+  await waitFor(() => expect(screen.getByRole("textbox", { name: "代码 main.c" })).toHaveValue("C draft"));
+  expect(screen.getByRole("combobox", { name: "语言" })).toHaveValue("c");
+  await waitFor(() => expect(assessmentApi.saveCode).toHaveBeenCalledWith("task", "depth", "c", { "main.c": "C draft" }, 1));
+  vi.mocked(assessmentApi.saveCode).mockRejectedValueOnce(new Error("offline"));
+  fireEvent.change(screen.getByRole("textbox", { name: "代码 main.c" }), { target: { value: "C unsaved" } });
+  fireEvent.click(screen.getByRole("button", { name: "2. 二分查找插入点" }));
+  expect(await screen.findByText("请先处理未保存内容或版本冲突")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "1. 二叉树的最大深度" })).toHaveAttribute("aria-pressed", "true");
+  expect(screen.getByRole("textbox", { name: "代码 main.c" })).toHaveValue("C unsaved");
+  client.clear();
+});
 
 it("shows the submitted answer sheet and per-question score after the deadline", async () => {
   vi.mocked(assessmentApi.get).mockResolvedValueOnce({

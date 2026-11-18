@@ -552,6 +552,12 @@ def section_result(section: AssessmentSection, *, student: bool) -> dict[str, An
         return result
     result["questions"] = [{
         "id": answer.question.public_id, "title": answer.question.title,
+        **({
+            "description": answer.question.description,
+            "instructions": answer.question.instructions,
+            "task_type": answer.question.task_type,
+            "samples": (answer.question.question_spec or {}).get("samples", []),
+        } if not student else {}),
         "score": str(answer.grade.score)
         if answer.grade.status == "COMPLETED" else None,
         "max_score": str(answer.question.max_score), "language": answer.language,
@@ -586,6 +592,8 @@ def choice_review_data(section: AssessmentSection) -> list[dict[str, Any]]:
             {
                 "question_id": question.public_id,
                 "title": question.title,
+                "description": question.description,
+                "instructions": question.instructions,
                 "task_type": question.task_type,
                 "options": [
                     {"id": option.get("id", ""), "text": option.get("text", "")}

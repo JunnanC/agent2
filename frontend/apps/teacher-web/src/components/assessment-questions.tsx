@@ -1,14 +1,18 @@
-import { useQuery } from "@tanstack/react-query";
-import { keys } from "@edu/query-keys";
 import { useState } from "react";
 import { assessmentTeachingApi, teachingApi } from "@edu/api-client";
-import type { AssessmentLanguage, HiddenGroup, TeacherQuestion, TemplateVersion } from "@edu/api-client";
-import { request, newIdempotencyKey } from "@edu/auth-client";
+import type { AssessmentLanguage, HiddenGroup, TeacherQuestion, TemplateChapter, TemplateVersion } from "@edu/api-client";
+import { newIdempotencyKey } from "@edu/auth-client";
 import { useToast } from "@edu/ui";
 import { importErrorText } from "@/lib/import-errors";
+import "./assessment-questions.css";
 
 const languages: AssessmentLanguage[] = ["python", "c", "cpp", "java", "go"];
 const entrypoints = { python: "main.py", c: "main.c", cpp: "main.cpp", java: "Main.java", go: "main.go" };
+const questionTypeLabels: Record<TeacherQuestion["task_type"], string> = {
+  SINGLE_CHOICE: "单选题",
+  MULTIPLE_CHOICE: "多选题",
+  PROGRAMMING: "编程题",
+};
 type Option = { id: string; text: string };
 
 export function AssessmentQuestions({ courseId, templateId, version, refresh }: {
@@ -16,9 +20,10 @@ export function AssessmentQuestions({ courseId, templateId, version, refresh }: 
 }) {
   const toast = useToast();
   const [chapterId, setChapterId] = useState("");
-  const [sourceChapter, setSourceChapter] = useState("");
-  const sourceChapters = useQuery({ queryKey: keys.courseResource(courseId, "chapters"), queryFn: () => teachingApi.courseResource<{public_id: string; title: string}>(courseId, "chapters") });
   const [chapterTitle, setChapterTitle] = useState("");
+  const [createdChapters, setCreatedChapters] = useState<TemplateChapter[]>([]);
+  const [groupFormOpen, setGroupFormOpen] = useState(false);
+  const [questionFormOpen, setQuestionFormOpen] = useState(false);
   const [kind, setKind] = useState<TeacherQuestion["task_type"]>("SINGLE_CHOICE");
   const [editing, setEditing] = useState<string | null>(null);
   const [title, setTitle] = useState("");
@@ -40,19 +45,70 @@ export function AssessmentQuestions({ courseId, templateId, version, refresh }: 
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importPreview, setImportPreview] = useState<Awaited<ReturnType<typeof assessmentTeachingApi.previewImport>> | null>(null);
   const [importKey, setImportKey] = useState("");
-  const chapters = version?.chapters ?? [];
+  const serverChapters = version?.chapters ?? [];
+  const chapters = [...serverChapters, ...createdChapters.filter(
+    created => !serverChapters.some(chapter => chapter.public_id === created.public_id),
+  )];
   const selectedChapter = chapters.some(chapter => chapter.public_id === chapterId) ? chapterId : chapters[0]?.public_id || "";
   const locked = version?.status === "PUBLISHED" || version?.status === "PRECHECKING" || busy;
 
-  async function act(operation: () => Promise<unknown>) {
+  async function act(operation: () => Promise<unknown>): Promise<unknown | null> {
     setBusy(true);
-    try { await operation(); await refresh(); }
-    catch (error) { toast.notify(error instanceof Error ? error.message : "操作失败", "error"); }
+    try {
+      const result = await operation();
+      await refresh();
+      return result;
+    }
+    catch (error) { toast.notify(error instanceof Error ? error.message : "操作失败", "error"); return null; }
     finally { setBusy(false); }
   }
 
-  async function save() {
+  async function addGroup(title: string) {
+    if (!version || !title.trim()) return;
+    const result = await act(() => teachingApi.createTemplateChapter(
+      courseId, version.public_id, { title: title.trim() }, version.row_version,
+    ));
+    if (!result) return;
+    const created = result as TemplateChapter;
+    setCreatedChapters(current => [...current, created]);
+    setChapterId(created.public_id);
+    setChapterTitle("");
+    setGroupFormOpen(false);
+  }
+
+  async function startQuestion(nextKind: TeacherQuestion["task_type"]) {
     if (!version) return;
+    if (!selectedChapter) {
+      const result = await act(() => teachingApi.createTemplateChapter(
+        courseId, version.public_id, { title: "题目" }, version.row_version,
+      ));
+      if (!result) return;
+      const created = result as TemplateChapter;
+      setCreatedChapters(current => [...current, created]);
+      setChapterId(created.public_id);
+    }
+    setEditing(null);
+    setTitle("");
+    setStem("");
+    setPoints("5");
+    setOptions([{ id: crypto.randomUUID(), text: "" }, { id: crypto.randomUUID(), text: "" }]);
+    setCorrect([]);
+    setExplanation("");
+    setAllowed(["python"]);
+    setSamples([{ input: "", output: "" }]);
+    setGroups([{ id: "group1", score: "5", cases: [{ input: "", output: "" }] }]);
+    setReferenceLanguage("python");
+    setReference("");
+    setStarters({});
+    setLimits({});
+    setReferenceFiles({});
+    setPreview(false);
+    setKind(nextKind);
+    setQuestionFormOpen(true);
+  }
+
+  async function save() {
+    if (!version || !selectedChapter) return;
     let rowVersion: string | number = version.row_version;
     let questionSpec: Record<string, unknown> = { options };
     let markingSpec: Record<string, unknown> = { correct_option_ids: correct, explanation };
@@ -78,12 +134,13 @@ export function AssessmentQuestions({ courseId, templateId, version, refresh }: 
       title, description: stem, instructions: "", task_type: kind,
       max_score: points, question_spec: questionSpec, marking_spec: markingSpec,
     }, rowVersion);
-    setEditing(null); setTitle(""); setStem(""); setCorrect([]);
+    setEditing(null); setQuestionFormOpen(false); setTitle(""); setStem(""); setCorrect([]);
     toast.notify("题目已保存，请在发布前重新预检");
   }
 
   async function edit(question: TeacherQuestion, parent: string, copy = false) {
     setEditing(copy ? null : question.public_id); setChapterId(parent); setKind(question.task_type);
+    setQuestionFormOpen(true); setPreview(false);
     setTitle(question.title + (copy ? "（副本）" : "")); setStem(question.description || ""); setPoints(question.max_score);
     if (question.task_type !== "PROGRAMMING") {
       setOptions(question.question_spec.options as Option[]);
@@ -105,70 +162,78 @@ export function AssessmentQuestions({ courseId, templateId, version, refresh }: 
   }
 
   if (!version) return <div className="state-block">
-    <p>先创建空白草稿版本，再添加章节和题目。纯选择题无需配置运行环境。</p>
+    <p>创建草稿版本后即可添加选择题或编程题。</p>
     <button className="btn primary" disabled={busy} onClick={() => void act(() => teachingApi.createTemplateVersion(courseId, templateId, {}))}>创建空白版本</button>
   </div>;
 
-  return <section aria-label="实验题目编辑">
-    <h2>选择题与编程题</h2>
-    <p className="subtle">题目及答案在发布时冻结；标准答案、隐藏用例和参考解仅教师可见。</p>
-    {chapters.map((chapter) => <div className="section" key={chapter.public_id}>
+  return <section className="assessment-editor" aria-label="实验题目编辑">
+    <header className="assessment-editor-heading">
+      <div>
+        <h2>题目</h2>
+        <p className="subtle">选择题和编程题分别编辑；题目及答案在发布时固定。</p>
+      </div>
+      <div className="actions">
+        <button type="button" className="btn" disabled={locked} onClick={() => void startQuestion("SINGLE_CHOICE")}>新增选择题</button>
+        <button type="button" className="btn primary" disabled={locked} onClick={() => void startQuestion("PROGRAMMING")}>新增编程题</button>
+      </div>
+    </header>
+
+    {!chapters.length && <div className="state-block">
+      <strong>还没有题目</strong>
+      <p>第一次添加题目时会自动创建默认分组。</p>
+    </div>}
+    {chapters.length > 1 && <label className="form-label">新题目所属分组
+      <select className="field" value={selectedChapter} onChange={(event) => { setChapterId(event.target.value); setImportPreview(null); }}>
+        {chapters.map(chapter => <option key={chapter.public_id} value={chapter.public_id}>{chapter.title}</option>)}
+      </select>
+    </label>}
+    {chapters.map((chapter) => <section className="assessment-question-group" key={chapter.public_id}>
       <h3>{chapter.title}</h3>
       {chapter.tasks.map((raw, position) => {
         const question = raw as unknown as TeacherQuestion;
-        return <div className="item" key={question.public_id}>
-          <strong>{question.title}</strong>　{question.task_type}　{question.max_score ?? "0"} 分
-          <button className="btn" disabled={locked} onClick={() => void act(() => edit(question, chapter.public_id))}>编辑</button>
-          <button className="btn" disabled={locked} onClick={() => void act(() => edit(question, chapter.public_id, true))}>复制</button>
-          <button className="btn" disabled={locked || position === 0} onClick={() => void act(() => {
-            const ids = chapter.tasks.map((q) => q.public_id);
-            [ids[position - 1], ids[position]] = [ids[position]!, ids[position - 1]!];
-            return assessmentTeachingApi.reorderQuestions(courseId, chapter.public_id, ids, version.row_version);
-          })}>上移</button>
-          <button className="btn" disabled={locked} onClick={() => {
-            if (window.confirm(`删除题目“${question.title}”？`)) void act(() => assessmentTeachingApi.deleteQuestion(courseId, question.public_id, version.row_version));
-          }}>删除</button>
+        return <div className="assessment-question-row" key={question.public_id}>
+          <div className="assessment-question-summary">
+            <strong>{question.title}</strong>
+            <span>{questionTypeLabels[question.task_type]} · {question.max_score ?? "0"} 分</span>
+          </div>
+          <div className="assessment-question-actions">
+            <button type="button" className="btn sm" disabled={locked} onClick={() => void act(() => edit(question, chapter.public_id))}>编辑</button>
+            <button type="button" className="btn sm" disabled={locked} onClick={() => void act(() => edit(question, chapter.public_id, true))}>复制</button>
+            <button type="button" className="btn sm" disabled={locked || position === 0} onClick={() => void act(() => {
+              const ids = chapter.tasks.map((task) => task.public_id);
+              [ids[position - 1], ids[position]] = [ids[position]!, ids[position - 1]!];
+              return assessmentTeachingApi.reorderQuestions(courseId, chapter.public_id, ids, version.row_version);
+            })}>上移</button>
+            <button type="button" className="btn sm" disabled={locked} onClick={() => {
+              if (window.confirm(`删除题目“${question.title}”？`)) void act(() => assessmentTeachingApi.deleteQuestion(courseId, question.public_id, version.row_version));
+            }}>删除</button>
+          </div>
         </div>;
       })}
-    </div>)}
-    {locked && <p className="subtle">{busy ? "正在处理，请稍候。" : "当前版本已发布或正在预检，章节和题目暂不可编辑。请创建草稿版本后修改。"}</p>}
-    <fieldset disabled={locked}>
-      <legend>模板内部章节与批量导入</legend>
-      <p className="subtle">模板内部章节用于组织题目；实验所属课程章节在发布时选择。</p>
-      <label>导入课程章节<select className="field" value={sourceChapter} onChange={event => setSourceChapter(event.target.value)}><option value="">选择要复制内容的课程章节</option>{sourceChapters.data?.rows.map(chapter => <option key={chapter.public_id} value={chapter.public_id}>{chapter.title}</option>)}</select></label>
-      <button className="btn" disabled={!sourceChapter} onClick={() => void act(async () => { await request(`/teaching/courses/${courseId}/template-versions/${version.public_id}/import-course-chapter`, {method: "POST", body: {chapter_id: sourceChapter}, ifMatch: version.row_version, idempotencyKey: newIdempotencyKey()}); setSourceChapter(""); })}>导入为模板章节</button>
-      {sourceChapters.error ? <p role="alert">课程章节加载失败。</p> : null}
-      {!chapters.length && <p>暂无模板章节，请新增或导入章节后再添加题目。</p>}
-      <label>章节名称<input className="field" value={chapterTitle} onChange={(e) => setChapterTitle(e.target.value)} /></label>
-      <button className="btn" disabled={!chapterTitle.trim()} onClick={() => void act(() => teachingApi.createTemplateChapter(courseId, version.public_id, { title: chapterTitle }, version.row_version))}>新增章节</button>
-      <label>当前章节<select className="field" value={selectedChapter} onChange={(e) => { setChapterId(e.target.value); setImportPreview(null); }}>
-        {chapters.map((c) => <option key={c.public_id} value={c.public_id}>{c.title}</option>)}
-      </select></label>
-      <a className="btn" href="/api/v2/teaching/choice-import-template" download>下载 Excel 模板</a>
-      <p className="subtle">Word 支持 .docx：每题以“1. 题干”开始，选项各占一段（A.、B.），随后填写“答案：B”“分值：5”“解析：说明”。</p>
-      <p className="subtle">多选题的正确答案用英文逗号分隔，例如 A,C；答案必须是该题已填写的选项。</p>
-      <input aria-label="导入选择题 Excel 或 Word" type="file" accept=".xlsx,.docx" onChange={(e) => { setImportFile(e.target.files?.[0] ?? null); setImportPreview(null); }} />
-      <button className="btn" disabled={!importFile || !selectedChapter} onClick={() => void act(async () => {
-        const result = await assessmentTeachingApi.previewImport(courseId, selectedChapter, importFile!);
-        setImportPreview(result); setImportKey(newIdempotencyKey());
-      })}>预检导入</button>
-      {importPreview && <div className="section">
-        {importPreview.errors.length > 0
-          ? <p>预检通过 {importPreview.rows.length} 道题，共 {importPreview.total_score} 分；有 {importPreview.errors.length} 行错误，修正全部错误后才能追加。</p>
-          : <p>将追加 {importPreview.count} 道题，共 {importPreview.total_score} 分。</p>}
-        {importPreview.rows.map((q, i) => <p key={i}>{i + 1}. {q.description}（{q.max_score} 分）</p>)}
-        {importPreview.errors.map((error) => <p role="alert" key={error.row}>第 {error.row} 行：{importErrorText(error.error)}</p>)}
-        <button className="btn primary" disabled={!importPreview.token} onClick={() => void act(async () => {
-          await assessmentTeachingApi.confirmImport(courseId, selectedChapter, importFile!, importPreview.token!, importKey);
-          setImportPreview(null);
-        })}>确认追加</button>
-      </div>}
-    </fieldset>
-    <fieldset disabled={locked || !selectedChapter}>
+      {!chapter.tasks.length && <p className="subtle">该分组还没有题目。</p>}
+    </section>)}
+
+    {chapters.length > 0 && <details className="assessment-editor-optional section">
+      <summary>题目分组管理（可选）</summary>
+      <p className="subtle">分组只用于整理题目，不影响实验归属。</p>
+      {!groupFormOpen
+        ? <button type="button" className="btn sm" disabled={locked} onClick={() => setGroupFormOpen(true)}>新增分组</button>
+        : <div className="assessment-group-form">
+          <label>分组名称<input className="field" value={chapterTitle} onChange={(event) => setChapterTitle(event.target.value)} placeholder="例如：基础练习" /></label>
+          <div className="actions">
+            <button type="button" className="btn sm" onClick={() => { setGroupFormOpen(false); setChapterTitle(""); }}>取消</button>
+            <button type="button" className="btn sm primary" disabled={locked || !chapterTitle.trim()} onClick={() => void addGroup(chapterTitle)}>创建分组</button>
+          </div>
+        </div>}
+    </details>}
+
+    {locked && <p className="subtle">{busy ? "正在处理，请稍候。" : "当前版本已发布或正在预检，不能编辑。请先创建草稿版本。"}</p>}
+    {questionFormOpen && selectedChapter && <fieldset className="assessment-question-form" disabled={locked}>
       <legend>{editing ? "编辑题目" : "新增题目"}</legend>
-      <label>题型<select className="field" value={kind} onChange={(e) => { setKind(e.target.value as typeof kind); setCorrect([]); }}>
-        <option value="SINGLE_CHOICE">单选题</option><option value="MULTIPLE_CHOICE">多选题</option><option value="PROGRAMMING">编程题</option>
-      </select></label>
+      <p className="assessment-selected-type">题型：{questionTypeLabels[kind]}</p>
+      {kind !== "PROGRAMMING" && <label>选择题类型<select className="field" value={kind} onChange={(event) => { setKind(event.target.value as typeof kind); setCorrect([]); }}>
+        <option value="SINGLE_CHOICE">单选题</option><option value="MULTIPLE_CHOICE">多选题</option>
+      </select></label>}
       <label>标题<input className="field" value={title} onChange={(e) => setTitle(e.target.value)} /></label>
       <label>题干<textarea className="field" rows={5} value={stem} onChange={(e) => setStem(e.target.value)} /></label>
       <label>分值<input className="field" type="number" min="0.01" step="0.01" value={points} onChange={(e) => setPoints(e.target.value)} /></label>
@@ -238,10 +303,36 @@ export function AssessmentQuestions({ courseId, templateId, version, refresh }: 
         }} /></label>
       </>}
       <button className="btn" onClick={() => setPreview(!preview)}>预览题面</button>
+      <button type="button" className="btn" onClick={() => { setQuestionFormOpen(false); setEditing(null); setPreview(false); }}>取消</button>
       <button className="btn primary" disabled={!title.trim()} onClick={() => void act(save)}>保存题目</button>
-    </fieldset>
+    </fieldset>}
     {preview && <article className="panel"><h3>{title}</h3><pre style={{ whiteSpace: "pre-wrap" }}>{stem}</pre>
       {kind === "PROGRAMMING" ? samples.map((s, i) => <div key={i}><pre>{s.input}</pre><pre>{s.output}</pre></div>) : options.map((o) => <p key={o.id}>○ {o.text}</p>)}
     </article>}
+    <details className="assessment-editor-optional">
+      <summary>批量导入选择题（Excel / Word）</summary>
+      <p className="subtle">此处只导入选择题；编程题请使用上方“新增编程题”。导入前会先预检格式和分值。</p>
+      {!selectedChapter && <button type="button" className="btn sm" disabled={locked} onClick={() => void startQuestion("SINGLE_CHOICE")}>创建题目分组</button>}
+      {selectedChapter && <>
+        <a className="btn sm" href="/api/v2/teaching/choice-import-template" download>下载选择题导入模板</a>
+        <p className="subtle">Word 格式：题干以“1. ”开头，选项单独成段，答案、分值和解析各占一行。</p>
+        <input aria-label="导入选择题 Excel 或 Word" type="file" accept=".xlsx,.docx" onChange={(event) => { setImportFile(event.target.files?.[0] ?? null); setImportPreview(null); }} />
+        <button type="button" className="btn sm" disabled={!importFile || busy} onClick={() => void act(async () => {
+          const result = await assessmentTeachingApi.previewImport(courseId, selectedChapter, importFile!);
+          setImportPreview(result); setImportKey(newIdempotencyKey());
+        })}>预检导入</button>
+        {importPreview && <div className="assessment-import-preview">
+          {importPreview.errors.length > 0
+            ? <p>预检通过 {importPreview.rows.length} 道题，共 {importPreview.total_score} 分；有 {importPreview.errors.length} 行错误，请修正后重试。</p>
+            : <p>将追加 {importPreview.count} 道题，共 {importPreview.total_score} 分。</p>}
+          {importPreview.rows.map((question, index) => <p key={index}>{index + 1}. {question.description}（{question.max_score} 分）</p>)}
+          {importPreview.errors.map((error) => <p role="alert" key={error.row}>第 {error.row} 行：{importErrorText(error.error)}</p>)}
+          <button type="button" className="btn sm primary" disabled={!importPreview.token || busy} onClick={() => void act(async () => {
+            await assessmentTeachingApi.confirmImport(courseId, selectedChapter, importFile!, importPreview.token!, importKey);
+            setImportPreview(null);
+          })}>确认导入</button>
+        </div>}
+      </>}
+    </details>
   </section>;
 }

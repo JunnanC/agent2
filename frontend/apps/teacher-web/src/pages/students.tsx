@@ -5,10 +5,11 @@ import { assessmentTeachingApi, teachingApi } from "@edu/api-client";
 import type { TeacherAssessmentReview } from "@edu/api-client";
 import { keys } from "@edu/query-keys";
 import {
-  DataTable, Metric, Drawer, Modal, Panel, RequestStateView, StatusBadge, useToast, EmptyState,
+  DataTable, Metric, Modal, Panel, RequestStateView, StatusBadge, useToast, EmptyState,
 } from "@edu/ui";
 import { ASSESSMENT_STATUS_LABEL, GRADING_STATUS_LABEL, REPORT_REVIEW_STATUS_LABEL, apiErrorMessage } from "@/lib/format";
 import { formatDateTime } from "@/lib/task-format";
+import { allPages } from "@/lib/all-pages";
 
 interface ProgressRow {
   public_id: string;
@@ -16,6 +17,7 @@ interface ProgressRow {
   title: string;
   status: string;
   progress: number;
+  score?: string | number | null;
   effective_deadline?: string | null;
   report_required?: boolean;
 }
@@ -58,11 +60,10 @@ export function Students() {
   const navigate = useNavigate();
   const toast = useToast();
   const [search, setSearch] = useState("");
-  const [detail, setDetail] = useState<ProgressRow | null>(null);
 
   const progress = useQuery({
     queryKey: keys.teachingProgress(courseId, {}),
-    queryFn: () => teachingApi.progress(courseId, { page_size: 100 }),
+    queryFn: () => allPages(page => teachingApi.progress(courseId, { page, page_size: 100 })),
   });
   const pendingReviews = useQuery({
     queryKey: keys.reviews(courseId, { status: "PENDING" }),
@@ -75,17 +76,18 @@ export function Students() {
 
   const rows = useMemo(() => {
     const query = search.trim().toLowerCase();
-    return (progress.data?.rows ?? []).filter((row: ProgressRow) =>
-      !query || row.student_name?.toLowerCase().includes(query) || row.title.toLowerCase().includes(query));
+    return (progress.data ?? []).filter((row: ProgressRow) =>
+      !query || row.student_name?.toLowerCase().includes(query) || row.title.toLowerCase().includes(query)
+        || String(row.score ?? "").toLowerCase().includes(query));
   }, [progress.data, search]);
 
-  const inProgressCount = (progress.data?.rows ?? []).filter((row) => ["IN_PROGRESS", "REPORT_DRAFT", "READY"].includes(row.status)).length;
-  const staleCount = (progress.data?.rows ?? []).filter((row) => {
+  const inProgressCount = (progress.data ?? []).filter((row) => ["IN_PROGRESS", "REPORT_DRAFT", "READY"].includes(row.status)).length;
+  const staleCount = (progress.data ?? []).filter((row) => {
     if (["COMPLETED", "SUBMITTED", "UNDER_REVIEW", "APPROVED"].includes(row.status)) return false;
     const deadline = row.effective_deadline ? new Date(row.effective_deadline).getTime() : 0;
     return deadline > 0 && deadline < Date.now() - 7 * 86_400_000;
   }).length;
-  const failedCount = (progress.data?.rows ?? []).filter((row) => row.status === "FAILED").length;
+  const failedCount = (progress.data ?? []).filter((row) => row.status === "FAILED").length;
   const pendingReviewTotal = typeof pendingReviews.data?.total === "number"
     ? pendingReviews.data?.total
     : (pendingReviews.data?.rows.length ?? 0);
@@ -94,7 +96,7 @@ export function Students() {
 
   const byExperiment = useMemo(() => {
     const grouped = new Map<string, Map<string, string>>();
-    (progress.data?.rows ?? []).forEach((row: ProgressRow) => {
+    (progress.data ?? []).forEach((row: ProgressRow) => {
       const name = row.student_name ?? "—";
       const inner = grouped.get(row.title) ?? new Map<string, string>();
       const previous = inner.get(name);
@@ -160,8 +162,8 @@ export function Students() {
 
       <Panel title={<><h2>学生进度与风险</h2></>}
         actions={(
-          <input className="field" style={{ width: 210 }} type="search" placeholder="搜索学生"
-            aria-label="搜索学生" value={search} onChange={(event) => setSearch(event.target.value)} />
+            <input className="field" style={{ width: 230 }} type="search" placeholder="搜索学生、实验或成绩"
+            aria-label="搜索学生、实验或成绩" value={search} onChange={(event) => setSearch(event.target.value)} />
         )}>
         <RequestStateView
           loading={progress.isLoading}
@@ -176,6 +178,7 @@ export function Students() {
             columns={[
               { key: "student", header: "学生", render: (row: ProgressRow) => <strong>{row.student_name ?? "—"}</strong> },
               { key: "task", header: "当前任务", render: (row: ProgressRow) => row.title },
+              { key: "score", header: "成绩", render: (row: ProgressRow) => row.score ?? "待评分" },
               {
                 key: "progress", header: "进度", width: 170, render: (row: ProgressRow) => (
                   <div style={{ minWidth: 130 }}>
@@ -216,31 +219,15 @@ export function Students() {
                 },
               },
               {
-                key: "actions", header: "", align: "right", render: (row: ProgressRow) => (
-                  <button type="button" className="btn sm" onClick={() => setDetail(row)}>查看</button>
+                  key: "actions", header: "", align: "right", render: (row: ProgressRow) => (
+                  <button type="button" className="btn sm" disabled={previewMutation.isPending}
+                    onClick={() => previewMutation.mutate(row)}>查看答卷</button>
                 ),
               },
             ]}
           />
         </RequestStateView>
       </Panel>
-
-      <Drawer open={detail != null} onClose={() => setDetail(null)} title={detail ? `${detail.student_name} · ${detail.title}` : "任务详情"}>
-        {detail ? (
-          <>
-            <div className="status-line is-ok" style={{ marginBottom: 10 }}>
-              ✓ 查看学生已交卷的固定代码和报告，不读取后续草稿。
-            </div>
-            <div style={{ display: "grid", gap: 8 }}>
-              <button type="button" className="btn" disabled={previewMutation.isPending}
-                onClick={() => previewMutation.mutate(detail)}>
-                {previewMutation.isPending ? "载入中…" : "提交预览"}
-              </button>
-
-            </div>
-          </>
-        ) : null}
-      </Drawer>
 
       <Modal open={evidence != null} onClose={() => setEvidence(null)}
         eyebrow="学生过程" title={evidence?.title ?? ""} wide

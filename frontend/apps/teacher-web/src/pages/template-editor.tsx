@@ -50,8 +50,8 @@ export function TemplateEditor() {
     </Panel>
     {version && <>
       <AssessmentQuestions key={version.public_id} courseId={courseId} templateId={templateId} version={version} refresh={versions.refetch} />
-      <Panel className="section"><h2>编程执行资源</h2>
-        <p>纯选择题无需配置。编程题使用 Docker Local 的临时执行容器，各题语言和限制在题目中设置。</p>
+      <Panel className="section"><h2>编程题运行环境</h2>
+        <p>在上方编辑编程题内容；这里设置这些题目共用的运行环境和资源。纯选择题不需要配置。</p>
         {options.error && <p role="alert">运行资源载入失败</p>}
         <fieldset disabled={locked}><legend>运行环境</legend>
           <label>运行适配器<select className="field" value={adapter || version.runtime_adapter_id || ""} onChange={e => setAdapter(e.target.value)}>

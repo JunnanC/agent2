@@ -1,0 +1,411 @@
+.assessment-review-workspace {
+  display: grid;
+  grid-template-columns: minmax(250px, 310px) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.assessment-review-queue,
+.assessment-review-detail {
+  min-width: 0;
+}
+
+.assessment-review-queue-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.assessment-review-queue-heading h2 {
+  margin: 0;
+}
+
+.assessment-review-queue-list {
+  display: grid;
+  gap: 6px;
+  margin-top: 12px;
+  max-height: 68vh;
+  overflow-y: auto;
+}
+
+.assessment-review-queue-row {
+  display: grid;
+  gap: 5px;
+  width: 100%;
+  min-width: 0;
+  padding: 10px;
+  color: var(--ink);
+  text-align: left;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.assessment-review-queue-row:hover,
+.assessment-review-queue-row.active {
+  border-color: var(--teal);
+  background: var(--teal-soft);
+}
+
+.assessment-review-queue-row strong,
+.assessment-review-queue-student {
+  overflow-wrap: anywhere;
+}
+
+.assessment-review-queue-student {
+  font-weight: 600;
+}
+
+.assessment-review-queue-row .status {
+  justify-self: start;
+}
+
+.assessment-exam-paper {
+  display: grid;
+  gap: 18px;
+  min-width: 0;
+}
+
+.assessment-exam-heading,
+.assessment-exam-section-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.assessment-exam-heading {
+  justify-content: flex-start;
+  align-items: center;
+  gap: 24px;
+  padding: 4px 0 8px;
+}
+
+.assessment-exam-identity {
+  flex: 1 1 180px;
+}
+
+.assessment-exam-heading h2,
+.assessment-exam-section-heading h3 {
+  margin: 0;
+}
+
+.assessment-exam-heading p,
+.assessment-exam-section-heading p {
+  margin: 4px 0 0;
+}
+
+.assessment-exam-summary {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.assessment-exam-score {
+  min-width: 160px;
+  padding: 12px 20px;
+  border-left: 1px solid var(--line);
+}
+
+.assessment-exam-score > span,
+.assessment-exam-score div > span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.assessment-exam-score strong {
+  font-size: 32px;
+  font-weight: 500;
+  line-height: 1.3;
+  font-variant-numeric: tabular-nums;
+}
+
+.assessment-exam-statuses {
+  display: grid;
+  gap: 6px;
+}
+
+.assessment-exam-section {
+  display: grid;
+  gap: 12px;
+  border-top: 1px solid var(--line);
+  padding-top: 16px;
+}
+
+.assessment-choice-list,
+.assessment-programming-list {
+  display: grid;
+  gap: 10px;
+}
+
+.assessment-choice-question,
+.assessment-programming-question {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.assessment-choice-question > header,
+.assessment-programming-question > header,
+.assessment-choice-result {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.assessment-choice-question h4,
+.assessment-programming-question h4 {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.assessment-choice-question p,
+.assessment-programming-question p {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.assessment-choice-options {
+  display: grid;
+  gap: 6px;
+}
+
+.assessment-choice-option {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  border-bottom: 1px solid var(--line);
+}
+
+.assessment-choice-option.correct {
+  color: var(--green);
+}
+
+.assessment-choice-option.selected:not(.correct) {
+  color: var(--amber);
+}
+
+.assessment-choice-letter {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.assessment-choice-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.assessment-choice-result {
+  justify-content: flex-start;
+}
+
+.assessment-choice-result strong {
+  color: var(--ink);
+}
+
+.assessment-sample,
+.assessment-source-file {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.assessment-sample {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.assessment-sample > div {
+  min-width: 0;
+}
+
+.assessment-sample span,
+.assessment-source-file strong {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.assessment-sample pre,
+.assessment-source-file pre,
+.assessment-report-body {
+  max-width: 100%;
+  overflow: auto;
+  margin: 0;
+  padding: 10px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  background: var(--surface-soft);
+  border-radius: var(--radius);
+  font-family: inherit;
+}
+
+.assessment-report-review {
+  margin-top: 16px;
+}
+
+.assessment-report-review h2 {
+  margin: 0;
+}
+
+.assessment-report-actions,
+.assessment-review-actions {
+  display: flex;
+  align-items: end;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.assessment-review-actions label {
+  min-width: 220px;
+  flex: 1;
+}
+
+.assessment-rubric-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.assessment-suggestion {
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+.assessment-suggestion p {
+  overflow-wrap: anywhere;
+}
+
+.assessment-submission-history {
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+
+.assessment-submission-history summary,
+.assessment-exam-section details summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+/* Keep the course header visible; each review column owns its scroll area. */
+@media (min-width: 901px) {
+  .teacher-portal .app-shell:has(.assessment-review-workspace) {
+    height: 100dvh;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .teacher-portal .shell-layout:has(.assessment-review-workspace) {
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .teacher-portal .main-content:has(.assessment-review-workspace) {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+    padding-bottom: 16px;
+  }
+
+  .teacher-portal .main-content:has(.assessment-review-workspace) > .course-context {
+    flex: none;
+    padding: 12px 0;
+  }
+
+  .teacher-portal .main-content:has(.assessment-review-workspace) .course-context h1 {
+    margin: 8px 0 4px;
+  }
+
+  .teacher-portal .main-content:has(.assessment-review-workspace) .course-tabs {
+    margin-top: 10px;
+  }
+
+  .assessment-review-workspace {
+    flex: 1;
+    min-height: 0;
+    align-items: stretch;
+    overflow: hidden;
+  }
+
+  .assessment-review-queue {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  .assessment-review-queue-panel {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+  }
+
+  .assessment-review-queue-heading,
+  .assessment-review-queue-panel > input {
+    flex: none;
+  }
+
+  .assessment-review-queue-list {
+    flex: 1;
+    min-height: 0;
+    max-height: none;
+    align-content: start;
+    overscroll-behavior-y: contain;
+    scrollbar-gutter: stable;
+  }
+
+  .assessment-review-detail {
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+    scrollbar-gutter: stable;
+    padding-right: 8px;
+  }
+}
+
+@media (max-width: 900px) {
+  .assessment-review-workspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .assessment-review-queue-list {
+    max-height: 40vh;
+  }
+}
+
+@media (max-width: 560px) {
+  .assessment-choice-option {
+    grid-template-columns: 24px minmax(0, 1fr);
+  }
+
+  .assessment-choice-tags {
+    grid-column: 2;
+  }
+
+  .assessment-sample,
+  .assessment-rubric-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

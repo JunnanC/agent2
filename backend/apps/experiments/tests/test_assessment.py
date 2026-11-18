@@ -440,6 +440,7 @@ class AssessmentTests(TestCase):
         section = AssessmentSection.objects.get(task=self.task, kind="CHOICE")
         rows = choice_review_data(section)
         assert len(rows) == 1
+        assert rows[0]["description"] == self.question.description
         assert rows[0]["selected_option_ids"] == ["b"]
         assert rows[0]["correct_option_ids"] == ["b"]
         assert rows[0]["options"] == self.public["options"]
@@ -464,6 +465,11 @@ class AssessmentTests(TestCase):
         ReportGrade.objects.filter(pk=grade.pk).update(score=Decimal("0"))
         section.refresh_from_db()
         result = section_result(section, student=False)
+        assert result["questions"][0]["description"] == self.question.description
+        assert all(
+            "description" not in question
+            for question in section_result(section, student=True)["questions"]
+        )
         assert result["review_status"] == "COMPLETED"
         assert result["grading_status"] == "PENDING"
         assert "review_status" not in section_result(section, student=True)

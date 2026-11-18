@@ -5,9 +5,15 @@ from django.utils import timezone
 
 from apps.core.models import OutboxEvent
 from apps.courses.models import Course, Enrollment
-from apps.experiments.events import TASK_ASSIGNED
+from apps.experiments.events import (
+    PUBLICATION_CLOSED,
+    PUBLICATION_FAILED,
+    PUBLICATION_PUBLISHED,
+    TASK_ASSIGNED,
+)
 from apps.experiments.models import ExperimentTask, TaskPublication
 from apps.experiments.services import publish_publication
+from apps.experiments.tasks import _record_publication_failure
 from apps.experiments.tests.helpers import (
     context,
     create_domain,
@@ -20,6 +26,7 @@ from apps.notifications.services import (
     backfill_notification_content,
     consume_notification_event,
     create_notifications_for_event,
+    notify_ended_publications,
     remind_unfinished_experiments,
 )
 
@@ -61,6 +68,54 @@ class ExperimentNotificationTests(TestCase):
         self.assertIn("截止时间：", notice.body_masked)
         self.assertEqual(notice.task_ref, self.task.public_id)
         self.assertEqual(notice.link_url, f"/experiments/{self.task.public_id}")
+
+    def test_publication_success_and_failure_notify_course_teachers(self) -> None:
+        published = OutboxEvent.objects.get(
+            event_type=PUBLICATION_PUBLISHED, aggregate_ref=self.publication.public_id
+        )
+        self.assertEqual(create_notifications_for_event(published), 1)
+        success = Notification.objects.get(account=self.owner, kind=PUBLICATION_PUBLISHED)
+        self.assertIn("已发布", success.body_masked)
+        self.assertEqual(success.portal, "TEACHING")
+
+        TaskPublication.objects.filter(pk=self.publication.pk).update(
+            status=TaskPublication.Status.PUBLISHING
+        )
+        _record_publication_failure(
+            self.publication.public_id, "publication-failure", RuntimeError()
+        )
+        failed = OutboxEvent.objects.get(
+            event_type=PUBLICATION_FAILED, aggregate_ref=self.publication.public_id
+        )
+        self.assertEqual(create_notifications_for_event(failed), 1)
+        failure = Notification.objects.get(account=self.owner, kind=PUBLICATION_FAILED)
+        self.assertIn("发布失败", failure.title)
+        self.assertEqual(failure.link_url, f"/courses/{self.course.public_id}/publishing")
+
+    def test_ended_publication_notice_reports_completed_count_once(self) -> None:
+        ExperimentTask.objects.filter(pk=self.task.pk).update(
+            status=ExperimentTask.Status.COMPLETED,
+            completed_at=self.now,
+        )
+        TaskPublication.objects.filter(pk=self.publication.pk).update(
+            window_start=self.now - timedelta(minutes=1),
+            window_end=self.now,
+            assignment_deadline=None,
+        )
+
+        self.assertEqual(notify_ended_publications(now=self.now), 1)
+        self.assertEqual(notify_ended_publications(now=self.now), 0)
+        notice = Notification.objects.get(account=self.owner, kind=PUBLICATION_CLOSED)
+        self.assertIn("已完成 1 / 1 人", notice.body_masked)
+        self.assertEqual(notice.portal, "TEACHING")
+        close_event = OutboxEvent.objects.create(
+            event_type=PUBLICATION_CLOSED,
+            aggregate_type="task_publication",
+            aggregate_ref=self.publication.public_id,
+            trace_id="publication-ended-event",
+            payload={"publication_id": self.publication.public_id},
+        )
+        self.assertEqual(create_notifications_for_event(close_event), 0)
 
     def test_legacy_event_resolves_names_from_task(self) -> None:
         event = OutboxEvent.objects.create(

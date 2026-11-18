@@ -36,6 +36,12 @@ it("展示学生退课正文、无需审批及选课管理入口", async () => {
   expect(screen.queryByRole("button", { name: /同意|拒绝/ })).not.toBeInTheDocument();
 });
 
+it("实验通知使用发布页面入口", async () => {
+  show([{ ...notice, id: "experiment-1", public_id: "experiment-1", title: "实验已结束",
+    links: [{ url: "/courses/course-1/publishing", course_id: "course-1" }] }]);
+  expect(await screen.findByRole("link", { name: "查看实验发布" })).toHaveAttribute("href", "/courses/course-1/publishing");
+});
+
 it("读取通知仅标记已读并刷新计数", async () => {
   show([notice]);
   vi.mocked(meApi.markNotificationRead).mockResolvedValue({});

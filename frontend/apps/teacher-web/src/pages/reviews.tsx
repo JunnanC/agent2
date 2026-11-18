@@ -1,11 +1,9 @@
-import { useParams } from "react-router-dom";
-import { Breadcrumbs } from "@edu/ui";
+import { useSearchParams, useParams } from "react-router-dom";
 import { AssessmentReviews } from "@/components/assessment-reviews";
 
 export function Reviews() {
   const { courseId = "", publicationId = "" } = useParams();
-  return <>
-    <Breadcrumbs items={[{ label: "教师门户" }, { label: "课程" }]} current="编程与报告评审" />
-    <AssessmentReviews key={`${courseId}:${publicationId}`} courseId={courseId} publicationId={publicationId} />
-  </>;
+  const [searchParams] = useSearchParams();
+  const taskId = searchParams.get("task") ?? "";
+  return <AssessmentReviews key={`${courseId}:${publicationId}:${taskId}`} courseId={courseId} publicationId={publicationId} initialTaskId={taskId} />;
 }

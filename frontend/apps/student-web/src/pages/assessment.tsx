@@ -503,7 +503,10 @@ function AssessmentPage({ taskId }: { taskId: string }) {
       result={disabled ? sectionState?.questions?.find((item) => item.id === question.id) : undefined} />) : <>
       <nav className="assessment-question-list" aria-label="编程题列表">{programs.map((q, index) => <button type="button" className="btn" key={q.id} aria-pressed={q.id === selectedQuestion?.id} onClick={() => void switchView(() => setActive(q.id))}>{index + 1}. {q.title}</button>)}</nav>
       {selectedQuestion && <>
-        <label>语言<select className="field" value={language} disabled={disabled} onChange={(e) => void switchView(() => setSelectedLanguages((current) => ({ ...current, [selectedQuestion.id]: e.target.value as AssessmentLanguage })))}>{selectedQuestion.allowed_languages.map((v) => <option key={v}>{v}</option>)}</select></label>
+        <label>语言<select className="field" value={language} disabled={disabled} onChange={(event) => {
+          const nextLanguage = event.currentTarget.value as AssessmentLanguage;
+          void switchView(() => setSelectedLanguages((current) => ({ ...current, [selectedQuestion.id]: nextLanguage })));
+        }}>{selectedQuestion.allowed_languages.map((v) => <option key={v}>{v}</option>)}</select></label>
         <CodeAnswer key={`${selectedQuestion.id}:${language}`} taskId={taskId} question={selectedQuestion} language={language} register={register} disabled={disabled} />
       </>}
       {data.report_required !== false && <>
