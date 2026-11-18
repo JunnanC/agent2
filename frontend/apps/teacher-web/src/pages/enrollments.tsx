@@ -2,23 +2,18 @@ import { useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useParams } from "react-router-dom";
 import { teachingApi } from "@edu/api-client";
-import type { Enrollment, Invitation } from "@edu/api-client";
+import type { Enrollment } from "@edu/api-client";
 import { keys } from "@edu/query-keys";
 import {
   AsyncJobProgress, Button, ConfirmDialog, DataTable, Metric, Modal, Panel,
   RequestStateView, StatusBadge, useToast,
 } from "@edu/ui";
 import { DirectInvite } from "@/components/direct-invite";
-import { copyText } from "@/lib/clipboard";
 import { ENROLLMENT_STATUS_LABEL, apiErrorMessage, formatDateTime } from "@/lib/format";
-
-const isActiveInvitation = (invitation: Invitation) =>
-  ["ACTIVE", "ENABLED"].includes(invitation.status);
 
 export function Enrollments() {
   const { courseId = "" } = useParams();
   const toast = useToast();
-  const [plainInvitation, setPlainInvitation] = useState<Invitation | null>(null);
   const [status, setStatus] = useState("PENDING");
   const [search, setSearch] = useState("");
   const [reviewTarget, setReviewTarget] = useState<Enrollment | null>(null);
@@ -32,10 +27,6 @@ export function Enrollments() {
     queryFn: () => teachingApi.enrollments(courseId, { status: status === "ALL" ? undefined : status, page: 1 }),
   });
   const course = useQuery({ queryKey: keys.teachingCourse(courseId), queryFn: () => teachingApi.course(courseId) });
-  const invitations = useQuery({
-    queryKey: [...keys.invitations(courseId)],
-    queryFn: () => teachingApi.invitations(courseId),
-  });
   const importJob = useQuery({
     queryKey: [keys.importJob(courseId, importJobId ?? ""), "poll"],
     queryFn: () => teachingApi.imports.get(courseId, importJobId ?? ""),
@@ -65,8 +56,6 @@ export function Enrollments() {
   const capacity = course.data?.capacity ?? null;
   const used = course.data?.active_enrollment_count ?? approvedCount;
 
-  const activeInvitation = (plainInvitation?.course_id === courseId ? plainInvitation : null) ?? (invitations.data?.rows ?? []).find(isActiveInvitation);
-
   const review = useMutation({
     mutationFn: (input: { target: Enrollment; decision: "approve" | "reject" }) =>
       teachingApi.reviewEnrollment(courseId, input.target.public_id,
@@ -93,27 +82,6 @@ export function Enrollments() {
     },
     onError: (error) => toast.notify(apiErrorMessage(error), "error"),
   });
-
-  const createInvitation = useMutation({
-    mutationFn: () => teachingApi.createInvitation(courseId, { valid_days: 30 }),
-    onSuccess: async (invitation) => {
-      setPlainInvitation({ ...invitation, course_id: courseId, status: "ACTIVE" });
-      const copied = await copyText(invitation.code);
-      toast.notify(copied ? "新邀请码已生成并复制" : "新邀请码已生成，请在下方手动复制", copied ? "default" : "error");
-      void invitations.refetch();
-    },
-    onError: (error) => toast.notify(apiErrorMessage(error), "error"),
-  });
-
-  const copyInvitation = async () => {
-    const code = plainInvitation?.course_id === courseId ? plainInvitation.code : activeInvitation?.recoverable ? activeInvitation.code : undefined;
-    if (!code) {
-      createInvitation.mutate();
-      return;
-    }
-    const copied = await copyText(code);
-    toast.notify(copied ? "邀请码已复制" : "浏览器未允许复制，请选中下方邀请码手动复制", copied ? "default" : "error");
-  };
 
   const runImportPrecheck = useMutation({
     mutationFn: (file: File) => new Promise<string>((resolve, reject) => {
@@ -150,9 +118,6 @@ export function Enrollments() {
     <>
       <div className="page-actions align-end">
         <Button onClick={() => fileInputRef.current?.click()}>批量导入</Button>
-        <Button variant="primary" disabled={createInvitation.isPending} onClick={() => { void copyInvitation(); }}>
-          {createInvitation.isPending ? "生成中…" : "复制邀请码"}
-        </Button>
         <input ref={fileInputRef} type="file" accept=".csv,text/csv" hidden
           onChange={(event) => {
             const file = event.target.files?.[0];
@@ -234,58 +199,26 @@ export function Enrollments() {
         </RequestStateView>
       </Panel>
 
-      <div className="grid two section"
-        style={{ gridTemplateColumns: "minmax(0, 1.1fr) minmax(0, 1fr)" }}>
-        <Panel title={<><h2>邀请码</h2>
-          {activeInvitation ? <StatusBadge tone="good">已启用</StatusBadge> : <span className="status neutral">暂无启用中</span>}
-        </>}>
-          {activeInvitation ? (
-            <>
-              <div style={{
-                fontSize: 26, fontWeight: 700, letterSpacing: "0.02em",
-                color: "var(--teal)", margin: "8px 0 6px", wordBreak: "break-all",
-              }}>{plainInvitation?.course_id === courseId ? plainInvitation.code : activeInvitation.code}</div>
-              {!plainInvitation && <p className="subtle">新邀请码可随时查看和复制；历史脱敏码可重新生成后分享。</p>}
-              <small>
-                仅可用于{course.data?.title ?? "本课程"}课程
-                {activeInvitation.expires_at ? `，${formatDateTime(activeInvitation.expires_at)}失效` : "，长期有效"}
-              </small>
-              <div className="section" style={{ display: "flex", gap: 8, marginTop: 12 }}>
-                <Button size="sm" onClick={() => { void copyInvitation(); }}>复制</Button>
-                <Button size="sm" disabled={createInvitation.isPending} onClick={() => createInvitation.mutate()}>重新生成</Button>
-              </div>
-            </>
-          ) : (
-            <div className="state-block">
-              <strong>暂无启用中的邀请码</strong>
-              <p>学生使用邀请码提交申请后，需要教师审核。</p>
-              <Button variant="primary" disabled={createInvitation.isPending} onClick={() => createInvitation.mutate()}>
-                {createInvitation.isPending ? "生成中…" : "生成邀请码"}
-              </Button>
-            </div>
-          )}
-        </Panel>
-        <Panel title={<><h2>学生导入任务</h2><span className="subtle">导入 CSV 学生名单的处理进度，不是实验作业</span>
-          <span className={`status ${jobRunning ? "blue" : "neutral"}`}>{jobRunning ? "进行中" : "无进行中作业"}</span>
-        </>}>
-          {!importJobId || !importJob.data ? (
-            <>
-              <p className="subtle" style={{ margin: "4px 0 10px" }}>先预检 CSV 中的学号、邮箱和课程分组，再执行导入。</p>
-              <Button size="sm" onClick={() => fileInputRef.current?.click()}>选择文件</Button>
-              {runImportPrecheck.isPending ? <small style={{ display: "block", marginTop: 8 }}>正在提交预检…</small> : null}
-            </>
-          ) : (
-            <AsyncJobProgress
-              status={jobStatus === "COMPLETED" ? "succeeded"
-                : jobStatus === "FAILED" || jobStatus === "PRECHECK_FAILED" ? "failed"
-                  : "processing"}
-              stages={jobStages}
-              failureReason="预检失败时请修正 CSV 后重新选择文件提交。"
-              onRetry={() => void importJob.refetch()}
-            />
-          )}
-        </Panel>
-      </div>
+      <Panel className="section" title={<><h2>学生导入任务</h2><span className="subtle">导入 CSV 学生名单的处理进度，不是实验作业</span>
+        <span className={`status ${jobRunning ? "blue" : "neutral"}`}>{jobRunning ? "进行中" : "无进行中作业"}</span>
+      </>}>
+        {!importJobId || !importJob.data ? (
+          <>
+            <p className="subtle" style={{ margin: "4px 0 10px" }}>先预检 CSV 中的学号、邮箱和课程分组，再执行导入。</p>
+            <Button size="sm" onClick={() => fileInputRef.current?.click()}>选择文件</Button>
+            {runImportPrecheck.isPending ? <small style={{ display: "block", marginTop: 8 }}>正在提交预检…</small> : null}
+          </>
+        ) : (
+          <AsyncJobProgress
+            status={jobStatus === "COMPLETED" ? "succeeded"
+              : jobStatus === "FAILED" || jobStatus === "PRECHECK_FAILED" ? "failed"
+                : "processing"}
+            stages={jobStages}
+            failureReason="预检失败时请修正 CSV 后重新选择文件提交。"
+            onRetry={() => void importJob.refetch()}
+          />
+        )}
+      </Panel>
 
       <Modal open={reviewTarget != null} onClose={() => setReviewTarget(null)} eyebrow="选课审核"
         title={reviewTarget ? `审核 ${reviewTarget.student_name} 的申请` : "审核"}

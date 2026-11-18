@@ -49,9 +49,12 @@ def compile_plan(language: str, files: Mapping[str, str]) -> tuple[list[str], li
         ], ["/build/program"]
     if language == "java":
         return [
-            "javac", "-J-Xmx512m", "-d", "/build", "--source-path", "/source",
+            "javac", "-encoding", "UTF-8", "-J-Xmx512m", "-d", "/build", "--source-path", "/source",
             *["/source/" + path for path in paths if path.endswith(".java")],
-        ], ["java", "-Xmx256m", "-XX:ActiveProcessorCount=1", "-cp", "/build", "Main"]
+        ], [
+            "java", "-Dfile.encoding=UTF-8", "-Xmx256m", "-XX:ActiveProcessorCount=1",
+            "-cp", "/build", "Main",
+        ]
     if language == "go":
         return ["/usr/local/go/bin/go", "build", "-o", "/build/program", "."], ["/build/program"]
     raise ValueError("Unsupported assessment language")

@@ -103,6 +103,15 @@
 .teacher-portal .overview-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin:16px 0 24px}
 .teacher-portal .overview-heading h1{margin:0}
 .teacher-portal .overview-heading .page-actions{margin:0}
+.teacher-portal .overview-todos-empty{align-content:center}
+
+.teacher-portal .course-context-heading{display:flex;justify-content:space-between;align-items:flex-start;gap:16px 24px;flex-wrap:wrap;margin-top:24px}
+.teacher-portal .course-context-heading h1{margin:0 0 8px;overflow-wrap:anywhere}
+.teacher-portal .course-context-heading > div:first-child{flex:1 1 280px;min-width:0}
+.teacher-portal .course-context-invitation{margin-inline-start:auto;max-width:100%;text-align:end}
+.teacher-portal .course-context-invitation .page-actions{justify-content:flex-end}
+.teacher-portal .course-context-invitation-details{display:flex;align-items:baseline;justify-content:flex-end;gap:4px 8px;flex-wrap:wrap;margin-top:8px}
+.teacher-portal .course-context-invitation-details code{color:var(--teal);overflow-wrap:anywhere;user-select:all}
 
 @media(max-width:760px){.teacher-portal .btn:not(.sm){min-height:44px}.teacher-portal .course-context h1{font-size:20px}}
 

@@ -1,13 +1,12 @@
 import { useMemo, useState } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { useNavigate, useParams } from "react-router-dom";
 import { assessmentTeachingApi, teachingApi } from "@edu/api-client";
-import type { TeacherAssessmentReview } from "@edu/api-client";
 import { keys } from "@edu/query-keys";
 import {
-  DataTable, Metric, Modal, Panel, RequestStateView, StatusBadge, useToast, EmptyState,
+  DataTable, Metric, Panel, RequestStateView, StatusBadge, EmptyState,
 } from "@edu/ui";
-import { ASSESSMENT_STATUS_LABEL, GRADING_STATUS_LABEL, REPORT_REVIEW_STATUS_LABEL, apiErrorMessage } from "@/lib/format";
+import { REPORT_REVIEW_STATUS_LABEL } from "@/lib/format";
 import { formatDateTime } from "@/lib/task-format";
 import { allPages } from "@/lib/all-pages";
 
@@ -58,7 +57,6 @@ function riskChip(row: ProgressRow): { label: string; tone: "good" | "warn" } {
 export function Students() {
   const { courseId = "" } = useParams();
   const navigate = useNavigate();
-  const toast = useToast();
   const [search, setSearch] = useState("");
 
   const progress = useQuery({
@@ -92,8 +90,6 @@ export function Students() {
     ? pendingReviews.data?.total
     : (pendingReviews.data?.rows.length ?? 0);
 
-  const [evidence, setEvidence] = useState<{ title: string; data: unknown } | null>(null);
-
   const byExperiment = useMemo(() => {
     const grouped = new Map<string, Map<string, string>>();
     (progress.data ?? []).forEach((row: ProgressRow) => {
@@ -115,12 +111,6 @@ export function Students() {
       return { title, total: inner.size, submitted, inProgress, notStarted };
     }).sort((left, right) => left.title.localeCompare(right.title, "zh-CN"));
   }, [progress.data]);
-
-  const previewMutation = useMutation({
-    mutationFn: (task: ProgressRow) => assessmentTeachingApi.review(courseId, task.public_id),
-    onSuccess: (data, task) => setEvidence({ title: `提交预览 · ${task.title}`, data }),
-    onError: (error) => toast.notify(apiErrorMessage(error), "error"),
-  });
 
   return (
     <>
@@ -218,74 +208,10 @@ export function Students() {
                   return <StatusBadge tone={chip.tone}>{chip.label}</StatusBadge>;
                 },
               },
-              {
-                  key: "actions", header: "", align: "right", render: (row: ProgressRow) => (
-                  <button type="button" className="btn sm" disabled={previewMutation.isPending}
-                    onClick={() => previewMutation.mutate(row)}>查看答卷</button>
-                ),
-              },
             ]}
           />
         </RequestStateView>
       </Panel>
-
-      <Modal open={evidence != null} onClose={() => setEvidence(null)}
-        eyebrow="学生过程" title={evidence?.title ?? ""} wide
-        actions={<button type="button" className="btn" onClick={() => setEvidence(null)}>关闭</button>}>
-        {evidence ? <SubmissionEvidence review={evidence.data as TeacherAssessmentReview} /> : null}
-      </Modal>
     </>
-  );
-}
-
-export function SubmissionEvidence({ review }: { review: TeacherAssessmentReview }) {
-  const sections = review.sections ?? [];
-  return (
-    <div style={{ display: "grid", gap: 16 }}>
-      <div className="status-line is-ok">✓ 以下为已交卷的固定版本，不读取后续草稿。</div>
-      <div className="metric-strip">
-        {sections.map((section) => (
-          <Metric key={section.kind}
-            label={section.kind === "CHOICE" ? "选择题" : "编程与报告"}
-            value={section.score ?? "—"}
-            sub={`满分 ${section.max_score} · ${GRADING_STATUS_LABEL[section.grading_status] ?? "状态未知"}`} />
-        ))}
-      </div>
-      {sections.map((section) => (
-        <Panel key={section.kind} title={section.kind === "CHOICE" ? "选择题答卷" : "编程与报告答卷"}>
-          <p className="subtle">答题状态：{ASSESSMENT_STATUS_LABEL[section.status] ?? "状态未知"} · 评分状态：{GRADING_STATUS_LABEL[section.grading_status] ?? "状态未知"}</p>
-          {section.kind === "PROGRAMMING" && section.review_status && <p>报告评审：{REPORT_REVIEW_STATUS_LABEL[section.review_status] ?? "状态未知"}</p>}
-          {section.questions.length > 0 ? (
-            <DataTable
-              rows={section.questions}
-              rowKey={(question) => question.id}
-              columns={[
-                { key: "question", header: "题目", render: (question) => question.title || "未命名题目" },
-                { key: "language", header: "语言", render: (question) => question.language || "—" },
-                { key: "score", header: "得分", render: (question) => (
-                  question.score == null ? "待评分" : `${question.score} / ${question.max_score}`
-                ) },
-              ]}
-            />
-          ) : <p className="subtle">暂无题目记录。</p>}
-        </Panel>
-      ))}
-      {review.report && (
-        <Panel title={`实验总报告 · 第 ${review.report.version_no} 次提交`}>
-          <pre style={{ whiteSpace: "pre-wrap", fontFamily: "inherit" }}>{review.report.body_markdown}</pre>
-        </Panel>
-      )}
-      {review.report_criteria.length > 0 && (
-        <Panel title="报告评分项">
-          <ul>{review.report_criteria.map((criterion) => (
-            <li key={criterion.id}>{criterion.title}（满分 {criterion.max_score}）</li>
-          ))}</ul>
-        </Panel>
-      )}
-      <details>
-        <summary>技术详情</summary>
-        <pre style={{ whiteSpace: "pre-wrap" }}>{JSON.stringify(review, null, 2)}</pre>
-      </details>
-    </div>
   );
 }

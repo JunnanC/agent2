@@ -35,6 +35,15 @@ def test_multifile_commands_are_fixed_argv_not_shell() -> None:
         compile_plan("shell", {})
 
 
+def test_java_uses_utf8_for_source_and_standard_io() -> None:
+    compile_argv, run_argv = compile_plan("java", {"Main.java": "// 中文注释"})
+    assert compile_argv[0] == "javac"
+    encoding_index = compile_argv.index("-encoding")
+    assert compile_argv[encoding_index + 1] == "UTF-8"
+    assert run_argv[0] == "java"
+    assert "-Dfile.encoding=UTF-8" in run_argv[:-1]
+
+
 def test_staged_files_have_no_write_permissions_and_no_embedded_test_runner() -> None:
     content = source_archive({"main.py": b"print(input())", "lib/helper.py": b""})
     with tarfile.open(fileobj=io.BytesIO(content)) as archive:

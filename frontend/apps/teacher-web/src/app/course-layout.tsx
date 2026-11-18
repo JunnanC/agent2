@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { Link, NavLink, useParams } from "react-router-dom";
+import { Link, NavLink, useMatch, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { teachingApi } from "@edu/api-client";
 import type { Announcement } from "@edu/api-client";
@@ -7,12 +7,30 @@ import { keys } from "@edu/query-keys";
 import { Button, Panel, RequestStateView, EmptyState, useToast } from "@edu/ui";
 
 import { CourseMaterials } from "@/components/course-materials";
+import { CourseInvitationActions } from "@/components/course-invitation";
 import { COURSE_STATUS_LABEL, PUBLICATION_STATUS_LABEL } from "@/lib/format";
 
 export function CourseLayout({ children }: { children: ReactNode }) {
   const { courseId } = useParams();
+  const enrollmentsPage = useMatch("/courses/:courseId/enrollments");
   const course = useQuery({ queryKey: keys.teachingCourse(courseId ?? ""), queryFn: () => teachingApi.course(courseId!), enabled: Boolean(courseId) });
-  return <>{courseId && <section className="course-context"><div><Link to="/courses">我的课程</Link><span> / {course.data?.title ?? "课程"}</span></div><h1>{course.data?.title ?? "课程教学空间"}</h1><p className="subtle">{course.data?.code} · 学生、实验与教学数据</p><nav aria-label="课程功能" className="course-tabs">{[["", "课程概况"], ["/enrollments", "成员与申请"], ["/students", "实验进度"], ["/templates", "实验设计"], ["/publishing", "实验发布"], ["/analytics", "教学分析"]].map(([path, label]) => <NavLink key={path} end={path === ""} to={`/courses/${courseId}${path}`}>{label}</NavLink>)}</nav></section>}{children}</>;
+  return <>
+    {courseId && <section className="course-context">
+      <div><Link to="/courses">我的课程</Link><span> / {course.data?.title ?? "课程"}</span></div>
+      <div className={enrollmentsPage ? "course-context-heading" : undefined}>
+        <div>
+          <h1>{course.data?.title ?? "课程教学空间"}</h1>
+          <p className="subtle">{course.data?.code} · 学生、实验与教学数据</p>
+        </div>
+        {enrollmentsPage && <CourseInvitationActions key={courseId} courseId={courseId} />}
+      </div>
+      <nav aria-label="课程功能" className="course-tabs">
+        {[["", "课程概况"], ["/enrollments", "成员与申请"], ["/students", "实验进度"], ["/templates", "实验设计"], ["/publishing", "实验发布"], ["/analytics", "教学分析"]].map(([path, label]) =>
+          <NavLink key={path} end={path === ""} to={`/courses/${courseId}${path}`}>{label}</NavLink>)}
+      </nav>
+    </section>}
+    {children}
+  </>;
 }
 
 export function CourseOverview() {
