@@ -53,7 +53,7 @@ export function Enrollments() {
   }, [enrollments.data, search]);
 
   const pendingCount = (enrollments.data?.rows ?? []).filter((row) => row.status === "PENDING").length;
-  const approvedCount = (enrollments.data?.rows ?? []).filter((row) => ["ACTIVE", "APPROVED"].includes(row.status)).length;
+  const approvedCount = course.data?.active_enrollment_count ?? 0;
   const monthApplications = useMemo(() => {
     const now = new Date();
     const prefix = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
@@ -168,7 +168,7 @@ export function Enrollments() {
           empty={false} emptyState={null}>
           <div className="metric-strip">
             <Metric label="待审核" value={String(pendingCount)} icon="user" sub="需要你处理" />
-            <Metric label="已通过" value={String(approvedCount)} icon="users" sub="当前学期" />
+            <Metric label="已通过" value={String(approvedCount)} icon="users" sub="已加入课程" />
             <Metric label="本月申请" value={String(monthApplications)} icon="trending-up" sub="按申请时间统计" />
             <Metric label="课程容量" value={capacity ? `${Math.min(used, capacity)} / ${capacity}` : `${used} 人已加入`}
               icon="gauge" sub={capacity ? `剩余 ${Math.max(0, capacity - used)} 个名额` : "未设置容量上限"} />

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { assessmentApi, reportApi } from "@edu/api-client";
-import type { AssessmentLanguage, ChoiceQuestion, ProgrammingQuestion } from "@edu/api-client";
+import type { Assessment, AssessmentLanguage, ChoiceQuestion, ProgrammingQuestion } from "@edu/api-client";
 import { newIdempotencyKey } from "@edu/auth-client";
 import { keys } from "@edu/query-keys";
 import { CodeEditor, LoadingState, Modal, useToast } from "@edu/ui";
@@ -21,6 +21,28 @@ const STATUS_LABEL: Record<string, string> = {
   TIMEOUT: "运行超时", MEMORY_LIMIT: "内存超限", OUTPUT_LIMIT: "输出超限",
 };
 
+type Section = Assessment["sections"][number];
+
+function sectionShort(section?: Section): string {
+  if (!section || section.status === "NOT_SUBMITTED") return "未提交";
+  if (section.status === "RETURNED") return "待修改重交";
+  return section.grading_status === "COMPLETED" ? "已批改" : "已交卷";
+}
+
+function sectionLabel(kind: "CHOICE" | "PROGRAMMING", section?: Section): string {
+  const name = kind === "CHOICE" ? "选择题" : "编程与报告";
+  if (!section || section.status === "NOT_SUBMITTED") return `${name}：未提交`;
+  if (section.status === "RETURNED") return `${name}：已退回，需要重交`;
+  if (section.status !== "SUBMITTED") return `${name}：${STATUS_LABEL[section.status] ?? section.status}`;
+  if (section.grading_status === "COMPLETED") {
+    return section.score != null
+      ? `${name}：已交卷 · 已批改 · ${section.score} / ${section.max_score ?? "—"} 分`
+      : `${name}：已交卷 · 已批改（成绩由老师公布）`;
+  }
+  if (section.grading_status === "RETURNED") return `${name}：已交卷 · 已退回，需要重交`;
+  return `${name}：已交卷 · 待批改`;
+}
+
 function useAutosave<T>({ load, save, register, draftKey, immediate = false, saveOnLoad = false }: {
   load: () => Promise<{ value: T; version: number }>;
   save: (value: T, version: number) => Promise<{ value: T; version: number }>;
@@ -28,6 +50,7 @@ function useAutosave<T>({ load, save, register, draftKey, immediate = false, sav
 }) {
   const [value, setValue] = useState<T | null>(null);
   const [status, setStatus] = useState("载入中");
+  const [touched, setTouched] = useState(false);
   const current = useRef<{ value: T; version: number; generation: number; saved: number } | null>(null);
   const queue = useRef<Promise<boolean>>(Promise.resolve(true));
   const conflict = useRef(false);
@@ -83,6 +106,7 @@ function useAutosave<T>({ load, save, register, draftKey, immediate = false, sav
 
   const change = (next: T) => {
     if (!current.current) return;
+    setTouched(true);
     current.current.value = next; current.current.generation += 1;
     setValue(next); setStatus("有未保存修改");
     clearTimeout(timer.current);
@@ -93,7 +117,7 @@ function useAutosave<T>({ load, save, register, draftKey, immediate = false, sav
     };
     timer.current = setTimeout(() => { void saveWithRetry(); }, immediate ? 0 : 2000);
   };
-  return { value, change, status, flush };
+  return { value, change, status, touched, failed: /保存失败|版本冲突/.test(status), flush };
 }
 
 function ChoiceAnswer({ taskId, question, register, disabled, submittedSelected, result }: {
@@ -126,7 +150,9 @@ function ChoiceAnswer({ taskId, question, register, disabled, submittedSelected,
       </label>)}
     </fieldset>
     {result && <p>本题得分：{result.score ?? "0"} / {result.max_score}{verdict ? ` · ${verdict}` : ""}</p>}
-    {!disabled && <p role="status">{draft.status} <button className="btn" onClick={() => void draft.flush()}>重试保存</button></p>}
+    {!disabled && draft.touched && <p role="status" className="subtle">自动保存：{draft.status}
+      {draft.failed && <button className="btn sm" onClick={() => void draft.flush()}>重试保存</button>}
+    </p>}
     {question.correct_option_ids && <div className="section">
       <p>正确选项：{question.options.filter((o) => question.correct_option_ids!.includes(o.id)).map((o) => o.text).join("；")}</p>
       <p>{question.explanation}</p>
@@ -234,7 +260,9 @@ function CodeAnswer({ taskId, question, language, register, disabled }: {
         ariaLabel={`代码 ${selectedPath}`} onChange={(content) => draft.change({ ...draft.value!, [selectedPath]: content })} />
         : <p>{draft.value ? "请新增代码文件" : "载入代码中…"}</p>}
     </div>
-    <p role="status">{draft.status} <button className="btn" onClick={() => void draft.flush()}>立即保存</button></p>
+    {draft.touched && <p role="status" className="subtle">自动保存：{draft.status}
+      {draft.failed && <button className="btn sm" onClick={() => void draft.flush()}>重试保存</button>}
+    </p>}
     <label>自定义输入<textarea className="field" rows={4} value={stdin} onChange={(e) => { setStdin(e.target.value); command.current = null; }} /></label>
     <button className="btn primary" disabled={disabled || running || draft.value === null || run.data?.status === "RUNNING" || run.data?.status === "PENDING"} onClick={() => void runCode()}>运行代码</button>
     <p className="subtle">运行仅使用本页输入。隐藏测试只在正式交卷后执行。</p>
@@ -259,7 +287,9 @@ function ReportAnswer({ taskId, register, disabled }: { taskId: string; register
   });
   return <section className="panel"><h2>实验总报告</h2>
     <label>报告正文<textarea className="field" rows={14} disabled={disabled || draft.value === null} value={draft.value ?? ""} onChange={(e) => draft.change(e.target.value)} /></label>
-    <p role="status">{draft.status}</p>
+    {draft.touched && <p role="status" className="subtle">自动保存：{draft.status}
+      {draft.failed && <button className="btn sm" onClick={() => void draft.flush()}>重试保存</button>}
+    </p>}
     <label>报告附件<input type="file" accept=".pdf,.docx,.txt,.md,.png,.jpg,.jpeg" disabled={disabled || uploading} onChange={(event) => {
       const file = event.target.files?.[0]; if (!file) return;
       void (async () => {
@@ -328,6 +358,8 @@ function AssessmentPage({ taskId }: { taskId: string }) {
   const [busy, setBusy] = useState(false);
   const [confirmation, setConfirmation] = useState<{ message: string; execute: () => Promise<unknown> } | null>(null);
   const [viewing, setViewing] = useState<HistoryRow | null>(null);
+  const [receipt, setReceipt] = useState<{ kind: "CHOICE" | "PROGRAMMING"; version: number; at: string } | null>(null);
+  const historyRef = useRef<HTMLDetailsElement>(null);
   const flushes = useRef(new Map<string, Flush>());
   const submitKey = useRef<string | null>(null);
   const submitPayload = useRef("");
@@ -348,6 +380,15 @@ function AssessmentPage({ taskId }: { taskId: string }) {
     (row) => row.kind === "PROGRAMMING" && row.is_current && row.report,
   ) ?? null;
   const programmingState = data?.sections.find((s) => s.kind === "PROGRAMMING");
+  const choiceState = data?.sections.find((s) => s.kind === "CHOICE");
+  const partLabels = [
+    choices.length > 0 ? sectionLabel("CHOICE", choiceState) : null,
+    programs.length > 0 ? sectionLabel("PROGRAMMING", programmingState) : null,
+  ].filter((label): label is string => Boolean(label));
+  const missingParts = [
+    choices.length > 0 && choiceState?.status !== "SUBMITTED" ? "选择题" : null,
+    programs.length > 0 && programmingState?.status !== "SUBMITTED" ? "编程与报告" : null,
+  ].filter((label): label is string => Boolean(label));
   const serverNow = data ? new Date(data.server_time).getTime() + Date.now() - assessment.dataUpdatedAt : Date.now();
   const disabled = !!sectionState && (
     sectionState.editable === false || serverNow >= new Date(sectionState.deadline).getTime()
@@ -401,7 +442,14 @@ function AssessmentPage({ taskId }: { taskId: string }) {
     setBusy(true);
     try {
       await confirmation.execute(); submitKey.current = null; setConfirmation(null);
-      toast.notify("交卷成功，已固定本次提交版本"); await assessment.refetch(); await history.refetch();
+      const kind = selectedSection === "CHOICE" ? "CHOICE" : "PROGRAMMING";
+      const result = await history.refetch();
+      const rows = (result.data ?? []) as HistoryRow[];
+      const latest = rows.find((row) => row.kind === kind && row.is_current) ?? rows.find((row) => row.kind === kind);
+      setReceipt({ kind, version: latest?.version_no ?? 1, at: latest?.submitted_at ?? new Date().toISOString() });
+      historyRef.current?.setAttribute("open", "");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      toast.notify("交卷成功，已固定本次提交版本"); await assessment.refetch();
     } catch (error) { toast.notify(error instanceof Error ? error.message : "交卷失败，请重试", "error"); }
     finally { setBusy(false); }
   }
@@ -419,19 +467,35 @@ function AssessmentPage({ taskId }: { taskId: string }) {
   }
   return <main className="app-shell" style={{ padding: 24, maxWidth: 1500, margin: "auto" }}>
     <Modal open={confirmation !== null} onClose={() => { if (!busy) setConfirmation(null); }} title="确认交卷"
-      actions={<><button className="btn" disabled={busy} onClick={() => setConfirmation(null)}>继续检查</button><button className="btn primary" disabled={busy} onClick={() => void confirmSubmit()}>{busy ? "提交中…" : "确认交卷"}</button></>}>
-      <p>{confirmation?.message}</p><p>将固定已保存的答案和代码版本；草稿后续修改不会改变本次提交。</p>
+      actions={<><button className="btn" disabled={busy} onClick={() => setConfirmation(null)}>返回检查</button><button className="btn primary" disabled={busy} onClick={() => void confirmSubmit()}>{busy ? "提交中…" : "确认交卷"}</button></>}>
+      <p>{confirmation?.message}</p><p>提交后本次内容不能再修改，已提交的版本会保留在交卷历史里。</p>
     </Modal>
-    <header className="page-actions"><h1>实验答题</h1><Link to="/experiments" onClick={(e) => { e.preventDefault(); void switchView(() => { window.location.assign("/experiments"); }); }}>返回实验列表</Link></header>
+    <header className="page-actions" style={{ alignItems: "flex-start" }}>
+      <div>
+        <p className="subtle" style={{ margin: 0 }}>
+          {[data.course_title, data.chapter_title].filter(Boolean).join(" · ") || "实验答题"}
+        </p>
+        <h1 style={{ margin: "2px 0 0" }}>{data.title || "实验答题"}</h1>
+        {sectionState?.deadline && <p className="subtle" style={{ margin: "4px 0 0" }}>本部分截止 {formatDateTime(sectionState.deadline)}</p>}
+      </div>
+      <Link to="/experiments" onClick={(e) => { e.preventDefault(); void switchView(() => { window.location.assign("/experiments"); }); }}>返回实验列表</Link>
+    </header>
+    {receipt && <p role="status" style={{
+      display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center", margin: "12px 0 0",
+      padding: "10px 14px", borderRadius: 10, border: "1px solid #b7ddc6", background: "#f2fbf5", color: "#1d5c3a",
+    }}>
+      <strong>{receipt.kind === "CHOICE" ? "选择题卷" : "编程与报告"}已提交</strong>
+      <span>{formatDateTime(receipt.at)} · 第 {receipt.version} 次</span>
+      <button className="btn sm" onClick={() => { historyRef.current?.setAttribute("open", ""); historyRef.current?.scrollIntoView({ block: "center" }); }}>查看交卷历史</button>
+    </p>}
     <nav className="page-actions" aria-label="试卷部分">
-      {choices.length > 0 && <button className="btn" onClick={() => void switchView(() => setSection("CHOICE"))}>选择题</button>}
-      {programs.length > 0 && <button className="btn" onClick={() => void switchView(() => setSection("PROGRAMMING"))}>编程与报告</button>}
+      {choices.length > 0 && <button className="btn" aria-pressed={selectedSection === "CHOICE"} onClick={() => void switchView(() => setSection("CHOICE"))}>选择题 · {sectionShort(choiceState)}</button>}
+      {programs.length > 0 && <button className="btn" aria-pressed={selectedSection === "PROGRAMMING"} onClick={() => void switchView(() => setSection("PROGRAMMING"))}>编程与报告 · {sectionShort(programmingState)}</button>}
     </nav>
     <p role="status" className="assessment-meta">
-      <span>{STATUS_LABEL[sectionState?.status ?? ""] ?? sectionState?.status ?? "—"}</span>
-      <span aria-hidden="true">·</span>
-      <span>{STATUS_LABEL[sectionState?.grading_status ?? ""] ?? sectionState?.grading_status ?? "—"}</span>
-      {sectionState?.deadline ? <><span aria-hidden="true">·</span><span>截止 {formatDateTime(sectionState.deadline)}</span></> : null}
+      {partLabels.map((label, index) => <span key={label}>
+        {index > 0 && <span aria-hidden="true"> · </span>}{label}
+      </span>)}
     </p>
     {sectionState?.feedback && <p role="note">教师评语：{sectionState.feedback}</p>}
     {selectedSection === "CHOICE" ? choices.map((question) => <ChoiceAnswer key={question.id} taskId={taskId} question={question} register={register} disabled={disabled}
@@ -444,14 +508,21 @@ function AssessmentPage({ taskId }: { taskId: string }) {
       </>}
       <ReportAnswer taskId={taskId} register={register} disabled={disabled} />
     </>}
-    <button className="btn primary" disabled={busy || disabled} onClick={() => void submit()}>{busy ? "提交中…" : selectedSection === "CHOICE" ? "提交选择题卷" : "提交编程与报告卷"}</button>
-    <p>{data.all_submitted ? "两部分已交齐（或当前实验全部部分已提交）" : "尚未交齐全部部分"}</p>
+    <button className="btn primary" disabled={busy || disabled} onClick={() => void submit()}>{busy ? "提交中…" : selectedSection === "CHOICE"
+      ? (sectionState?.status === "SUBMITTED" ? `再次提交选择题卷（将记为第 ${(sectionState.submission_version ?? 0) + 1} 次）` : "提交选择题卷")
+      : (programmingState?.status === "SUBMITTED" ? `再次提交编程与报告卷（将记为第 ${(programmingState.submission_version ?? 0) + 1} 次）` : "提交编程与报告卷")}</button>
+    {receipt && <p className="subtle"><strong>{receipt.kind === "CHOICE" ? "选择题卷" : "编程与报告"}已提交</strong> · 第 {receipt.version} 次 · {formatDateTime(receipt.at)}。再次提交会记为第 {receipt.version + 1} 次，以最后一次为准。</p>}
+    <p className="subtle">{missingParts.length
+      ? `本实验还有未交部分：${missingParts.join("、")}。`
+      : "本实验各部分已交齐。"}</p>
     {sectionState?.score !== null && <p>本部分得分：{sectionState?.score} / {sectionState?.max_score ?? "—"}</p>}
     {currentReport && <p><button className="btn" onClick={() => downloadSubmittedReport(currentReport, taskId, programmingState?.score ?? null, programmingState?.max_score ?? null)}>下载已提交报告</button> <span className="subtle">第 {currentReport.version_no} 次提交，不含后续草稿</span></p>}
-    <details><summary>交卷历史</summary>{history.data?.map((submission) => <p key={`${submission.kind}:${submission.version_no}`}>
-      {submission.kind === "CHOICE" ? "选择题" : "编程与报告"} · 第 {submission.version_no} 次 · {formatDateTime(submission.submitted_at)}{submission.is_current ? "（当前有效）" : ""}
-      {submission.kind === "CHOICE" && <button className="btn sm" onClick={() => setViewing(submission)}>查看答卷</button>}
-    </p>)}</details>
+    <details ref={historyRef}><summary>交卷历史</summary>
+      {history.data?.length ? history.data.map((submission) => <p key={`${submission.kind}:${submission.version_no}`}>
+        {submission.kind === "CHOICE" ? "选择题" : "编程与报告"} · 第 {submission.version_no} 次 · {formatDateTime(submission.submitted_at)}{submission.is_current ? "（当前有效）" : ""}
+        {submission.kind === "CHOICE" && <button className="btn sm" onClick={() => setViewing(submission)}>查看答卷</button>}
+      </p>) : <p className="subtle">还没有提交记录。提交后这里会显示每次交卷的时间与版本。</p>}
+    </details>
     <Modal open={viewing !== null} onClose={() => setViewing(null)} wide
       title={viewing ? `第 ${viewing.version_no} 次提交答卷` : ""}
       actions={<button className="btn" onClick={() => setViewing(null)}>关闭</button>}>

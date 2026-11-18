@@ -1,4 +1,4 @@
-import { request, newIdempotencyKey } from "@edu/auth-client";
+﻿import { request, newIdempotencyKey } from "@edu/auth-client";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link, useParams, useSearchParams } from "react-router-dom";
@@ -384,7 +384,7 @@ export function Publishing() {
               onChange={(event) => setCreateForm((prev) => ({ ...prev, report_required: event.target.checked }))} />
             需要提交实验报告(评审后完成)
           </label>
-          <p className="subtle" style={{ margin: 0 }}>受众暂为全体选课学生;按学生分组的发布在企业评审(评分表)发布后可再调整。创建后运行预检,通过即可点「发布」。</p>
+          <p className="subtle" style={{ margin: 0 }}>受众暂为全体选课学生;按学生分组的发布在教师评审(评分表)发布后可再调整。创建后运行预检,通过即可点「发布」。</p>
         </div>
       </Modal>
 
@@ -403,3 +403,4 @@ export function Publishing() {
     </>
   );
 }
+

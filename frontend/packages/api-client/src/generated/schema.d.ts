@@ -4714,6 +4714,7 @@ export interface components {
             enrollment_mode: string;
             capacity: number | null;
             active_enrollment_count: number;
+            pending_enrollments: number;
             /** Format: date-time */
             enrollment_start: string | null;
             /** Format: date-time */

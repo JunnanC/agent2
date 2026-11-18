@@ -20,6 +20,15 @@ interface ProgressRow {
   report_required?: boolean;
 }
 
+const SUBMITTED_STATUSES = ["SUBMITTED", "UNDER_REVIEW", "COMPLETED", "APPROVED"];
+
+function submissionChip(status: string): { label: string; tone: "good" | "warn" | "neutral" } {
+  if (["COMPLETED", "APPROVED"].includes(status)) return { label: "已交 · 已评阅", tone: "good" };
+  if (["SUBMITTED", "UNDER_REVIEW"].includes(status)) return { label: "已交卷", tone: "good" };
+  if (["IN_PROGRESS", "REPORT_DRAFT", "READY"].includes(status)) return { label: "进行中", tone: "warn" };
+  return { label: "未交", tone: "neutral" };
+}
+
 function workspaceChip(status: string): { label: string; tone: "good" | "warn" | "blue" | "neutral" } {
   if (["IN_PROGRESS", "REPORT_DRAFT"].includes(status)) return { label: "在线", tone: "good" };
   if (status === "READY") return { label: "准备就绪", tone: "blue" };
@@ -83,6 +92,28 @@ export function Students() {
 
   const [evidence, setEvidence] = useState<{ title: string; data: unknown } | null>(null);
 
+  const byExperiment = useMemo(() => {
+    const grouped = new Map<string, Map<string, string>>();
+    (progress.data?.rows ?? []).forEach((row: ProgressRow) => {
+      const name = row.student_name ?? "—";
+      const inner = grouped.get(row.title) ?? new Map<string, string>();
+      const previous = inner.get(name);
+      const advance = !previous
+        || (!SUBMITTED_STATUSES.includes(previous) && SUBMITTED_STATUSES.includes(row.status));
+      inner.set(name, advance ? row.status : previous ?? row.status);
+      grouped.set(row.title, inner);
+    });
+    return [...grouped.entries()].map(([title, inner]) => {
+      const names = (statuses: string[]) => [...inner.entries()]
+        .filter(([, status]) => statuses.includes(status))
+        .map(([name]) => name);
+      const inProgress = names(["IN_PROGRESS", "REPORT_DRAFT", "READY"]);
+      const notStarted = names(["ASSIGNED", "NOT_STARTED"]);
+      const submitted = inner.size - inProgress.length - notStarted.length;
+      return { title, total: inner.size, submitted, inProgress, notStarted };
+    }).sort((left, right) => left.title.localeCompare(right.title, "zh-CN"));
+  }, [progress.data]);
+
   const previewMutation = useMutation({
     mutationFn: (task: ProgressRow) => assessmentTeachingApi.review(courseId, task.public_id),
     onSuccess: (data, task) => setEvidence({ title: `提交预览 · ${task.title}`, data }),
@@ -111,6 +142,22 @@ export function Students() {
         </RequestStateView>
       </Panel>
 
+      <Panel className="section" title={<><h2>按实验看谁没交</h2><span className="subtle">同一名学生的多条记录只算一次</span></>}>
+        {byExperiment.length ? <div style={{ display: "grid", gap: 10 }}>
+          {byExperiment.map((group) => <div key={group.title} className="item" style={{ display: "block" }}>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center" }}>
+              <strong>{group.title}</strong>
+              <span className="subtle">已交齐 {group.submitted} / {group.total} 人</span>
+              <StatusBadge tone={group.inProgress.length + group.notStarted.length ? "warn" : "good"}>
+                {group.inProgress.length + group.notStarted.length ? `未交齐 ${group.inProgress.length + group.notStarted.length} 人` : "全部已交齐"}
+              </StatusBadge>
+            </div>
+            {group.inProgress.length > 0 && <p className="subtle" style={{ margin: "6px 0 0" }}>进行中（已进入、未交齐）：{group.inProgress.join("、")}</p>}
+            {group.notStarted.length > 0 && <p className="subtle" style={{ margin: "2px 0 0" }}>未开始：{group.notStarted.join("、")}</p>}
+          </div>)}
+        </div> : <EmptyState title="还没有学生记录" hint="实验发布并分配后才出现学生过程记录。" />}
+      </Panel>
+
       <Panel title={<><h2>学生进度与风险</h2></>}
         actions={(
           <input className="field" style={{ width: 210 }} type="search" placeholder="搜索学生"
@@ -137,7 +184,7 @@ export function Students() {
                   </div>
                 ),
               },
-              { key: "deadline", header: "最近活动", render: (row: ProgressRow) => (
+              { key: "deadline", header: "截止", render: (row: ProgressRow) => (
                 row.effective_deadline
                   ? (new Date(row.effective_deadline).getTime() < Date.now()
                     ? `已过截止 ${formatDateTime(row.effective_deadline)}`
@@ -145,9 +192,12 @@ export function Students() {
                   : "无截止时间"
               ) },
               {
-                key: "assessment", header: "答题", render: (row: ProgressRow) => {
-                  const chip = workspaceChip(row.status);
-                  return <StatusBadge tone={chip.tone}>{chip.label}</StatusBadge>;
+                key: "submission", header: "提交状态", render: (row: ProgressRow) => {
+                  const chip = submissionChip(row.status);
+                  return <div>
+                    <StatusBadge tone={chip.tone}>{chip.label}</StatusBadge>
+                    <small style={{ display: "block", marginTop: 3 }}>{workspaceChip(row.status).label}</small>
+                  </div>;
                 },
               },
               {

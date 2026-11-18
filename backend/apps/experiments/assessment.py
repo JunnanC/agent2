@@ -228,6 +228,12 @@ def assessment_data(*, actor: User, task_id: str) -> dict[str, Any]:
         })
     return {
         "task_id": task.public_id, "questions": values, "sections": sections,
+        "title": task.publication.title,
+        "course_title": task.publication.course.title,
+        "chapter_title": (
+            task.publication.course_chapter.title
+            if task.publication.course_chapter_id else ""
+        ),
         "all_submitted": all(s["status"] == "SUBMITTED" for s in sections),
         "server_time": now, "choice_answers_visible": answer_visible,
         "report_required": task.publication.report_required,

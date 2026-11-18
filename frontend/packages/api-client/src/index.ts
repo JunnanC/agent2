@@ -299,6 +299,16 @@ export const teachingApi = {
   courseResource: <T>(courseId: string, resource: "chapters" | "materials" | "announcements" | "calendar-events" | "questions", query?: { page?: number }) =>
     request<T[]>(`/teaching/courses/${courseId}/${resource}`, { query }).then(toList),
 
+  createAnnouncement: (courseId: string, payload: { title: string; body?: string; pinned?: boolean }, reuseKey?: string) =>
+    request<Announcement>(`/teaching/courses/${courseId}/announcements`, {
+      method: "POST", body: payload, idempotencyKey: reuseKey ?? newIdempotencyKey(),
+    }).then((r) => r.data),
+
+  publishAnnouncement: (courseId: string, announcementId: string, ifMatch: string, reuseKey?: string) =>
+    request<Announcement>(`/teaching/courses/${courseId}/announcements/${announcementId}/publish`, {
+      method: "POST", body: {}, idempotencyKey: reuseKey ?? newIdempotencyKey(), ifMatch,
+    }).then((r) => r.data),
+
   enrollments: (courseId: string, query?: { status?: string; page?: number }) =>
     request<Enrollment[]>(`/teaching/courses/${courseId}/enrollments`, { query }).then(toList),
 

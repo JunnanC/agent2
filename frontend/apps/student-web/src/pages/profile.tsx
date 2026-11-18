@@ -1,4 +1,4 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { meApi } from "@edu/api-client";
 import { Button, Panel,  useToast } from "@edu/ui";
@@ -36,7 +36,7 @@ export function Profile() {
             <span className="avatar large">{(me?.display_name ?? me?.username ?? "").slice(0, 1)}</span>
             <div>
               <strong>{me?.username}</strong>
-              <small style={{ display: "block" }}>学生 · {me?.portal}</small>
+              <small style={{ display: "block" }}>学生</small>
             </div>
           </div>
           <label className="form-label" htmlFor="display-name">显示名称</label>
@@ -55,3 +55,4 @@ export function Profile() {
     </>
   );
 }
+

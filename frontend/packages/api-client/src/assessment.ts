@@ -29,6 +29,9 @@ export interface ProgrammingQuestion extends QuestionBase {
 
 export interface Assessment {
   task_id: string;
+  title?: string;
+  course_title?: string;
+  chapter_title?: string;
   questions: Array<ChoiceQuestion | ProgrammingQuestion>;
   sections: Array<{
     kind: "CHOICE" | "PROGRAMMING";
