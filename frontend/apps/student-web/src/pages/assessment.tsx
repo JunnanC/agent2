@@ -501,9 +501,15 @@ function AssessmentPage({ taskId }: { taskId: string }) {
     {selectedSection === "CHOICE" ? choices.map((question) => <ChoiceAnswer key={question.id} taskId={taskId} question={question} register={register} disabled={disabled}
       submittedSelected={disabled ? choiceSubmission?.answers.find((answer) => answer.question_id === question.id)?.selected_option_ids ?? [] : undefined}
       result={disabled ? sectionState?.questions?.find((item) => item.id === question.id) : undefined} />) : <>
-      <label>编程题<select className="field" value={selectedQuestion?.id ?? ""} onChange={(e) => void switchView(() => setActive(e.target.value))}>{programs.map((q) => <option key={q.id} value={q.id}>{q.title}</option>)}</select></label>
+      <label>编程题<select className="field" value={selectedQuestion?.id ?? ""} onChange={(event) => {
+        const questionId = event.currentTarget.value;
+        void switchView(() => setActive(questionId));
+      }}>{programs.map((q) => <option key={q.id} value={q.id}>{q.title}</option>)}</select></label>
       {selectedQuestion && <>
-        <label>语言<select className="field" value={language} disabled={disabled} onChange={(e) => void switchView(() => setSelectedLanguages((current) => ({ ...current, [selectedQuestion.id]: e.target.value as AssessmentLanguage })))}>{selectedQuestion.allowed_languages.map((v) => <option key={v}>{v}</option>)}</select></label>
+        <label>语言<select className="field" value={language} disabled={disabled} onChange={(event) => {
+          const nextLanguage = event.currentTarget.value as AssessmentLanguage;
+          void switchView(() => setSelectedLanguages((current) => ({ ...current, [selectedQuestion.id]: nextLanguage })));
+        }}>{selectedQuestion.allowed_languages.map((v) => <option key={v}>{v}</option>)}</select></label>
         <CodeAnswer key={`${selectedQuestion.id}:${language}`} taskId={taskId} question={selectedQuestion} language={language} register={register} disabled={disabled} />
       </>}
       <ReportAnswer taskId={taskId} register={register} disabled={disabled} />
