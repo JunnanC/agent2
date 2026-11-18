@@ -129,6 +129,7 @@ class CourseDataSerializer(serializers.Serializer):
     enrollment_mode = serializers.CharField()
     capacity = serializers.IntegerField(allow_null=True)
     active_enrollment_count = serializers.IntegerField()
+    pending_enrollments = serializers.IntegerField()
     enrollment_start = serializers.DateTimeField(allow_null=True)
     enrollment_end = serializers.DateTimeField(allow_null=True)
     teaching_start = serializers.DateTimeField(allow_null=True)
@@ -246,6 +247,7 @@ class CheckResponseSerializer(serializers.Serializer):
 
 def course_data(course: Course) -> dict[str, object]:
     active_count = course.enrollments.filter(status=Enrollment.Status.ACTIVE).count()
+    pending_count = course.enrollments.filter(status=Enrollment.Status.PENDING).count()
     return {
         "public_id": course.public_id,
         "code": course.code,
@@ -259,6 +261,7 @@ def course_data(course: Course) -> dict[str, object]:
         "enrollment_mode": course.enrollment_mode,
         "capacity": course.capacity,
         "active_enrollment_count": active_count,
+        "pending_enrollments": pending_count,
         "enrollment_start": course.enrollment_start,
         "enrollment_end": course.enrollment_end,
         "teaching_start": course.teaching_start,

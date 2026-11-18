@@ -17390,6 +17390,9 @@
                     "active_enrollment_count": {
                         "type": "integer"
                     },
+                    "pending_enrollments": {
+                        "type": "integer"
+                    },
                     "enrollment_start": {
                         "type": "string",
                         "format": "date-time",
@@ -17424,6 +17427,7 @@
                     "enrollment_start",
                     "owner_id",
                     "owner_name",
+                    "pending_enrollments",
                     "public_id",
                     "row_version",
                     "status",

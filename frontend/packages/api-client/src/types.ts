@@ -233,6 +233,8 @@ export interface Announcement {
   body?: string;
   published_at?: Iso8601 | null;
   status?: string;
+  pinned?: boolean;
+  row_version?: string;
 }
 
 export interface CalendarEvent {
