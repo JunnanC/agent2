@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { request, ApiError } from "@edu/auth-client";
@@ -99,8 +99,14 @@ export default function Console() {
   useEffect(() => {
     document.title = names[current] + " · 教学实验平台管理";
   }, [current]);
-  function go(page: Page, tab?: string) {
-    navigate(page === "overview" ? "/" : `/${page}${tab ? `?tab=${tab}` : ""}`);
+  function go(page: Page, tab?: string, query?: Record<string, string>) {
+    const params = new URLSearchParams();
+    if (tab) params.set("tab", tab);
+    for (const [key, value] of Object.entries(query ?? {})) {
+      if (value) params.set(key, value);
+    }
+    const search = params.toString();
+    navigate(page === "overview" ? "/" : `/${page}${search ? `?${search}` : ""}`);
   }
   const adminNav = (Object.keys(names) as Page[]).map((page) => ({
     label: names[page],
@@ -143,12 +149,56 @@ export default function Console() {
   );
 }
 
+const AUDIT_ACTION_LABEL: Record<string, string> = {
+  "auth.login": "登录",
+  "auth.logout": "退出登录",
+  "auth.session.denied": "会话过期",
+  "assessment.choice.submit": "选择题交卷",
+  "assessment.programming.submit": "编程与报告交卷",
+  "assessment.report.grade": "报告评分",
+  "enrollment.review": "选课审核",
+  "enrollment.apply": "选课申请",
+  "enrollment.withdraw": "撤回选课申请",
+  "course.create": "创建课程",
+  "course.published": "发布课程",
+  "course.publish": "发布课程",
+  "course.chapter.create": "创建章节",
+  "course.chapter.status": "调整章节状态",
+  "course.material_version.status": "调整材料状态",
+  "labtemplate.create": "创建实验模板",
+  "labtemplate.version.create": "创建模板版本",
+  "labtemplate.version.publish": "发布模板版本",
+  "labtemplate.precheck.request": "提交模板预检",
+  "experiment.publication.create": "创建实验发布",
+  "experiment.publication.publish": "发布实验",
+  "governance.image.create": "登记镜像",
+  "governance.quota.reserve": "预留配额",
+  "governance.quota.release": "释放配额",
+};
+
+const AUDIT_SUCCEEDED = "SUCCEEDED";
+
+function isFailedAudit(entry: Audit): boolean {
+  return Boolean(entry.result) && entry.result !== AUDIT_SUCCEEDED;
+}
+
+function describeAudit(entry: Audit): string {
+  return AUDIT_ACTION_LABEL[entry.action] ?? entry.action;
+}
+
+function describeTarget(target: string | undefined): string {
+  if (!target) return "";
+  const [kind, id] = target.split(":");
+  if (!id) return target;
+  return `${kind} ${id.slice(0, 8)}…`;
+}
+
 function PageContent({
   current,
   go,
 }: {
   current: Page;
-  go: (page: Page, tab?: string) => void;
+  go: (page: Page, tab?: string, query?: Record<string, string>) => void;
 }) {
   const client = useQueryClient(),
     recentAuth = useRecentAuthGuard();
@@ -189,6 +239,48 @@ function PageContent({
     allImages = images.data ?? [],
     allRuntimes = runtimes.data ?? [],
     allAudits = audits.data ?? [];
+  const issues = useMemo(() => {
+    const items: Array<{
+      key: string;
+      kind: string;
+      label: string;
+      detail?: string;
+      action: () => void;
+    }> = [];
+    for (const alert of overview.data?.alerts ?? []) {
+      items.push({
+        key: `alert-${alert.code}`,
+        kind: "告警",
+        label: alert.message,
+        detail: alert.severity,
+        action: () => go("resources"),
+      });
+    }
+    for (const runtime of allRuntimes.filter(
+      (item) => item.health_status && !["HEALTHY", "OK"].includes(item.health_status),
+    )) {
+      items.push({
+        key: `runtime-${runtime.public_id}`,
+        kind: "健康",
+        label: `${runtime.name} 健康异常`,
+        detail: runtime.health_status,
+        action: () => go("resources", "health"),
+      });
+    }
+    for (const entry of allAudits
+      .filter((item) => isFailedAudit(item) && !item.action.startsWith("auth.session."))
+      .slice(0, 3)) {
+      const actorName = users.data?.find((u) => u.public_id === entry.actor)?.display_name ?? entry.actor;
+      items.push({
+        key: `audit-${entry.id}`,
+        kind: "失败操作",
+        label: `${describeAudit(entry)}失败 · ${actorName}`,
+        detail: `${describeTarget(entry.target)} · ${new Date(entry.occurred_at).toLocaleString("zh-CN")}`,
+        action: () => go("logs", undefined, { result: "FAILED", action: entry.action }),
+      });
+    }
+    return items;
+  }, [overview.data, allRuntimes, allAudits, users.data, go]);
   const userName = (id: string) =>
     users.data?.find((u) => u.public_id === id)?.display_name ?? id;
   const open = (value: Dialog) => {
@@ -321,9 +413,9 @@ function PageContent({
               [
                 s,
                 {
-                  PUBLISHED: "进行中",
+                  PUBLISHED: "已发布",
                   DRAFT: "草稿",
-                  CLOSED: "已结束",
+                  CLOSED: "已关闭",
                   ARCHIVED: "已归档",
                 }[s]!,
               ] as [string, string],
@@ -384,10 +476,10 @@ function PageContent({
               [
                 s,
                 {
-                  APPROVED: "启用",
-                  RETIRED: "停用",
-                  PENDING: "待就绪",
-                  REJECTED: "未启用",
+                  APPROVED: "已批准",
+                  RETIRED: "已停用",
+                  PENDING: "待处理",
+                  REJECTED: "已拒绝",
                 }[s]!,
               ] as [string, string],
           )}
@@ -439,8 +531,10 @@ function PageContent({
     );
   } else if (current === "logs") {
     const isIsoDate = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value);
+    const failedOnly = params.get("result") === "FAILED";
     const data = allAudits.filter(
       (l) =>
+        (!failedOnly || isFailedAudit(l)) &&
         (!isIsoDate(from) ||
           new Date(l.occurred_at).toLocaleDateString("sv-SE", {
             timeZone: "Asia/Shanghai",
@@ -455,31 +549,43 @@ function PageContent({
         <div className="logs-table">
           <List
           rows={data}
-          text={(l) => `${l.action} ${l.target} ${l.actor} ${l.trace_id}`}
-          states={[...new Set(allAudits.map((l) => l.action))].map((s) => [s, s])}
+          text={(l) => `${l.action} ${describeAudit(l)} ${l.target} ${l.actor} ${userName(l.actor)} ${l.trace_id}`}
+          states={[...new Set(allAudits.map((l) => l.action))].map((s) => [s, AUDIT_ACTION_LABEL[s] ?? s])}
           state={(l) => l.action}
-          placeholder="搜索操作、对象或操作者"
+          initialState={params.get("action") ?? ""}
+          placeholder="搜索操作、对象、操作者或 Trace ID"
           extra={
             <>
-              <input
-                type="text"
-                inputMode="numeric"
-                maxLength={10}
-                placeholder="YYYY-MM-DD"
-                aria-label="开始日期（YYYY-MM-DD）"
-                value={from}
-                onChange={(e) => setFrom(e.target.value)}
-              />
-              <span className="muted">至</span>
-              <input
-                type="text"
-                inputMode="numeric"
-                maxLength={10}
-                placeholder="YYYY-MM-DD"
-                aria-label="结束日期（YYYY-MM-DD）"
-                value={to}
-                onChange={(e) => setTo(e.target.value)}
-              />
+              <label className="muted" style={{ display: "inline-flex", gap: 6, alignItems: "center", whiteSpace: "nowrap" }}>
+                <input
+                  type="checkbox"
+                  style={{ width: 16, height: 16, minWidth: 16, margin: 0 }}
+                  checked={failedOnly}
+                  onChange={(e) => go("logs", undefined, e.target.checked ? { result: "FAILED" } : {})}
+                />
+                只看失败
+              </label>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={10}
+                  placeholder="YYYY-MM-DD"
+                  aria-label="开始日期（YYYY-MM-DD）"
+                  value={from}
+                  onChange={(e) => setFrom(e.target.value)}
+                />
+                <span className="muted">至</span>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={10}
+                  placeholder="YYYY-MM-DD"
+                  aria-label="结束日期（YYYY-MM-DD）"
+                  value={to}
+                  onChange={(e) => setTo(e.target.value)}
+                />
+              </span>
             </>
           }
           headings={[
@@ -494,7 +600,10 @@ function PageContent({
             <tr key={l.id}>
               <td className="mono muted" data-label="操作时间">{date(l.occurred_at)}</td>
               <td data-label="操作者">{userName(l.actor)}</td>
-              <td className="break" data-label="操作类型">{l.action}</td>
+              <td className="break" data-label="操作类型">
+                {AUDIT_ACTION_LABEL[l.action] ?? l.action}
+                <span className="mono muted" style={{ display: "block" }}>{l.action}</span>
+              </td>
               <td className="break mono" data-label="操作对象">{l.target}</td>
               <td data-label="结果">
                 <Status value={l.result} />
@@ -612,14 +721,30 @@ function PageContent({
             </div>
           ))}
         </section>
-        {overview.data?.alerts?.length ? (
-          <div className="notice">
-            <span>{overview.data.alerts[0]?.message}</span>
-            <button className="link" onClick={() => go("resources")}>
-              查看详情
+        <section className="panel">
+          <div className="panel-head">
+            <h2>需要处理</h2>
+            <button className="link" onClick={() => go("logs")}>
+              全部日志 →
             </button>
           </div>
-        ) : null}
+          {issues.length ? (
+            issues.map((issue) => (
+              <div className="activity" key={issue.key}>
+                <span className="muted">{issue.kind}</span>
+                <span>
+                  {issue.label}
+                  {issue.detail ? <div className="muted break">{issue.detail}</div> : null}
+                </span>
+                <button className="link" onClick={issue.action}>
+                  查看
+                </button>
+              </div>
+            ))
+          ) : (
+            <p className="muted">当前没有需要处理的事项。</p>
+          )}
+        </section>
         <div className="grid">
           <section className="panel">
             <div className="panel-head">
@@ -676,7 +801,7 @@ function PageContent({
             {!allRuntimes.length && <p className="muted">暂无健康数据</p>}
             <div className="service-item">
               <div>运行时引擎</div>
-              <Status value={overview.data?.runtime?.status} />
+              <Status value={overview.data?.runtime?.status ?? "未接入监测"} />
             </div>
           </section>
         </div>
@@ -759,7 +884,7 @@ function PageContent({
               )}
             </>
           ) : (
-            <p className="muted">管理端尚未提供该学生的课程成员关系查询</p>
+            <p className="muted">学生所在班级由任课教师维护；如需核对名单，请在「学生管理」里按班级查看</p>
           )}
         </>
       );
@@ -855,7 +980,7 @@ function PageContent({
           ) : (
             <div className="empty">
               {courseTab === "members" ? "课程学生名单" : "课程实验安排"}
-              由教师管理，管理端查询接口尚未开放
+              由任课教师维护；如需修改名单，请联系课程教师
             </div>
           )}
         </>
@@ -1012,7 +1137,7 @@ function PageContent({
               ],
             ]}
           />
-          <p className="muted">独立显示名称、用途说明及课程引用关系尚未提供</p>
+          <p className="muted">名称、用途与课程引用关系由教师端维护，管理端暂不展示</p>
           <p className="form-error">{error}</p>
           {!i.digest && (
             <button
@@ -1078,7 +1203,7 @@ function PageContent({
             ]}
           />
           <p className="muted">
-            完整原因及变更前后数据尚未通过审计查询接口提供
+            审计记录只保留结果与 Trace ID；排查时请把上面的 Trace ID 提供给平台开发
           </p>
         </>
       );
@@ -1142,3 +1267,5 @@ function PageContent({
     </>
   );
 }
+
+

@@ -106,6 +106,7 @@ export function List<T>({
   headings,
   render,
   extra,
+  initialState = "",
 }: {
   rows: T[];
   text: (row: T) => string;
@@ -115,9 +116,10 @@ export function List<T>({
   headings: string[];
   render: (row: T) => ReactNode;
   extra?: ReactNode;
+  initialState?: string;
 }) {
   const [search, setSearch] = useState(""),
-    [filter, setFilter] = useState(""),
+    [filter, setFilter] = useState(initialState),
     [page, setPage] = useState(1);
   const filtered = rows.filter(
     (row) =>
