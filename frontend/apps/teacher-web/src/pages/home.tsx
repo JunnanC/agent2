@@ -173,7 +173,7 @@ export function Home() {
         </RequestStateView>
       </Panel>
 
-      <div className="grid two section">
+      <div className="grid equal section">
         <Panel title={<><h2>班级实验进度</h2><span className="subtle">近 7 天</span></>}>
           <RequestStateView loading={overview.isLoading && !perCourse.length}
             error={overview.error}
@@ -197,7 +197,7 @@ export function Home() {
             error={overview.error}
             onRetry={() => void overview.refetch()}
             empty={!todoItems.length}
-            emptyState={<div className="state-block"><strong>暂无需要处理的事务</strong><p>选课审核与发布待办会集中显示在这里。</p></div>}>
+            emptyState={<div className="state-block overview-todos-empty"><strong>暂无需要处理的事务</strong><p>选课审核与发布待办会集中显示在这里。</p></div>}>
             <div>
               {todoItems.map((item) => (
                 <div className="item" key={item.key}>

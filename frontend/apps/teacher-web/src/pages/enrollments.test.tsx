@@ -1,9 +1,11 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, expect, it, vi } from "vitest";
 import { ToastProvider } from "@edu/ui";
 import { teachingApi } from "@edu/api-client";
+import type { Invitation } from "@edu/api-client";
+import { CourseLayout } from "@/app/course-layout";
 import { Enrollments } from "./enrollments";
 
 const writeText = vi.fn(async () => {});
@@ -12,18 +14,43 @@ vi.mock("@edu/api-client", () => ({ teachingApi: {
   invitations: vi.fn(async () => ({ rows: [{ public_id: "old", code: "abc***", status: "ACTIVE" }] })),
   createInvitation: vi.fn(async () => ({ public_id: "new", code: "plain-code-123" })),
 } }));
-afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
-it("generates a readable invitation from a legacy masked code and copies it", async () => {
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.clearAllMocks(); });
+
+function renderEnrollments() {
   vi.stubGlobal("navigator", { clipboard: { writeText } });
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  render(<QueryClientProvider client={client}><ToastProvider><MemoryRouter initialEntries={["/courses/c/enrollments"]}><Routes><Route path="/courses/:courseId/enrollments" element={<Enrollments />} /></Routes></MemoryRouter></ToastProvider></QueryClientProvider>);
-  expect(await screen.findByText("abc***")).toBeInTheDocument();
-  fireEvent.click(screen.getByRole("button", { name: "复制邀请码" }));
+  render(<QueryClientProvider client={client}><ToastProvider><MemoryRouter initialEntries={["/courses/c/enrollments"]}>
+    <Routes><Route path="/courses/:courseId/enrollments" element={<CourseLayout><Enrollments /></CourseLayout>} /></Routes>
+  </MemoryRouter></ToastProvider></QueryClientProvider>);
+  return client;
+}
+
+it("generates and copies a new invitation from the course heading when the old code is masked", async () => {
+  const client = renderEnrollments();
+  const actions = screen.getByRole("group", { name: "课程邀请码" });
+  expect(actions.closest(".course-context")).toContainElement(await screen.findByRole("heading", { name: "课程" }));
+  const invitation = within(actions);
+  await invitation.findByText("旧邀请码已脱敏，可生成新码");
+  expect(invitation.getByRole("button", { name: "复制邀请码" })).toBeDisabled();
+  fireEvent.click(invitation.getByRole("button", { name: "生成邀请码" }));
   await waitFor(() => expect(writeText).toHaveBeenCalledWith("plain-code-123"));
-  expect(await screen.findByText("plain-code-123")).toBeInTheDocument();
-  fireEvent.click(screen.getByRole("button", { name: "复制" }));
+  expect(await invitation.findByText("plain-code-123")).toBeInTheDocument();
+  fireEvent.click(invitation.getByRole("button", { name: "复制邀请码" }));
   await waitFor(() => expect(writeText).toHaveBeenCalledTimes(2));
   expect(writeText).not.toHaveBeenCalledWith("abc***");
-  expect(teachingApi.createInvitation).toHaveBeenCalledTimes(1);
+  expect(teachingApi.createInvitation).toHaveBeenCalledExactlyOnceWith("c", { valid_days: 30 });
+  client.clear();
+});
+
+it("copies the existing readable invitation without generating a new one", async () => {
+  const active: Invitation = { public_id: "active", course_id: "c", status: "ACTIVE", code: "existing-code", recoverable: true };
+  vi.mocked(teachingApi.invitations).mockResolvedValueOnce({ rows: [active], total: 1, page: 1, pageSize: 20 });
+  const client = renderEnrollments();
+  const invitation = within(screen.getByRole("group", { name: "课程邀请码" }));
+  expect(await invitation.findByText("existing-code")).toBeInTheDocument();
+  expect(invitation.getByRole("button", { name: "重新生成邀请码" })).toBeEnabled();
+  fireEvent.click(invitation.getByRole("button", { name: "复制邀请码" }));
+  await waitFor(() => expect(writeText).toHaveBeenCalledExactlyOnceWith("existing-code"));
+  expect(teachingApi.createInvitation).not.toHaveBeenCalled();
   client.clear();
 });
