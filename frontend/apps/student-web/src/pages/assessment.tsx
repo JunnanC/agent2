@@ -1,3 +1,4 @@
+import { AssetActions } from "@/components/asset-actions";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
@@ -233,11 +234,11 @@ function CodeAnswer({ taskId, question, language, register, disabled }: {
     <h2>{question.title} <small>{question.max_score} 分</small></h2>
     <pre style={{ whiteSpace: "pre-wrap", fontFamily: "inherit" }}>{question.description}</pre>
     <p>{question.instructions}</p>
-    {question.samples.map((sample, index) => <details key={index}><summary>示例 {index + 1}</summary>
+    <div className="assessment-samples">{question.samples.slice(0, 2).map((sample, index) => <details open key={index}><summary>示例 {index + 1}</summary>
       <p>输入</p><pre>{sample.input}</pre><p>输出</p><pre>{sample.output}</pre>
       <button className="btn" onClick={() => setStdin(sample.input)}>填入运行输入</button>
-    </details>)}
-    <div style={{ display: "grid", gridTemplateColumns: "180px minmax(0,1fr)", border: "1px solid var(--line, #ddd)", minHeight: 400 }}>
+    </details>)}</div>
+    <div className="assessment-code-layout" style={{ display: "grid", border: "1px solid var(--line, #ddd)", minHeight: 400 }}>
       <aside style={{ padding: 12 }}>
         {Object.keys(draft.value ?? {}).map((file) => <button key={file} className="btn" style={{ display: "block", width: "100%", marginBottom: 5 }} onClick={() => setPath(file)}>{file}</button>)}
         <button className="btn" disabled={disabled || !draft.value} onClick={() => {
@@ -266,13 +267,17 @@ function CodeAnswer({ taskId, question, language, register, disabled }: {
     <label>自定义输入<textarea className="field" rows={4} value={stdin} onChange={(e) => { setStdin(e.target.value); command.current = null; }} /></label>
     <button className="btn primary" disabled={disabled || running || draft.value === null || run.data?.status === "RUNNING" || run.data?.status === "PENDING"} onClick={() => void runCode()}>运行代码</button>
     <p className="subtle">运行仅使用本页输入。隐藏测试只在正式交卷后执行。</p>
-    {run.data && <section aria-label="运行结果"><h3>{STATUS_LABEL[run.data.result_status || run.data.status] ?? run.data.status}</h3><pre>{run.data.stdout}</pre><pre>{run.data.stderr}</pre></section>}
+    {run.data && <section className="assessment-run-result" aria-label="运行结果"><h3>{STATUS_LABEL[run.data.result_status || run.data.status] ?? run.data.status}</h3><h4>标准输出</h4><pre>{run.data.stdout || "（无输出）"}</pre><h4>错误输出</h4><pre>{run.data.stderr || "（无错误输出）"}</pre></section>}
   </article>;
 }
 
 function ReportAnswer({ taskId, register, disabled }: { taskId: string; register: Register; disabled: boolean }) {
   const toast = useToast();
   const [uploading, setUploading] = useState(false);
+  useEffect(() => {
+    register("report-upload", () => Promise.resolve(!uploading));
+    return () => register("report-upload", null);
+  }, [register, uploading]);
   const attachments = useQuery({
     queryKey: ["assessment-attachments", taskId], queryFn: () => assessmentApi.reportDraft(taskId),
     refetchInterval: (query) => {
@@ -280,22 +285,17 @@ function ReportAnswer({ taskId, register, disabled }: { taskId: string; register
       return (data?.attachments ?? []).some((a) => a.scan_status === "PENDING") ? 3000 : false;
     },
   });
-  const draft = useAutosave<string>({
-    draftKey: "report", register,
-    load: async () => { const data = await assessmentApi.reportDraft(taskId); return { value: data.body_markdown, version: data.row_version }; },
-    save: async (value, version) => { const data = await assessmentApi.saveReport(taskId, value, version); return { value: data.body_markdown, version: data.row_version }; },
-  });
   return <section className="panel"><h2>实验总报告</h2>
-    <label>报告正文<textarea className="field" rows={14} disabled={disabled || draft.value === null} value={draft.value ?? ""} onChange={(e) => draft.change(e.target.value)} /></label>
-    {draft.touched && <p role="status" className="subtle">自动保存：{draft.status}
-      {draft.failed && <button className="btn sm" onClick={() => void draft.flush()}>重试保存</button>}
-    </p>}
+    <p>请上传报告附件。安全扫描完成后可交卷。</p>
     <label>报告附件<input type="file" accept=".pdf,.docx,.txt,.md,.png,.jpg,.jpeg" disabled={disabled || uploading} onChange={(event) => {
       const file = event.target.files?.[0]; if (!file) return;
       void (async () => {
         setUploading(true);
         try {
-          const mediaType = file.type || (file.name.endsWith(".md") ? "text/markdown" : "text/plain");
+          const extension = file.name.split(".").pop()?.toLowerCase() ?? "";
+          const mediaTypes: Record<string, string> = { pdf: "application/pdf", docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", txt: "text/plain", md: "text/markdown", png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg" };
+          if (!mediaTypes[extension]) throw new Error("请选择 PDF、DOCX、文本或图片报告");
+          const mediaType = mediaTypes[extension];
           const digest = await crypto.subtle.digest("SHA-256", await file.arrayBuffer());
           const digestHex = Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, "0")).join("");
           const created = await reportApi.uploadAttachment(taskId, {
@@ -313,7 +313,7 @@ function ReportAnswer({ taskId, register, disabled }: { taskId: string; register
         finally { setUploading(false); }
       })();
     }} /></label>
-    {attachments.data?.attachments?.map((attachment) => <p key={attachment.asset_id}>{attachment.file_name} · {attachment.scan_status}</p>)}
+    {attachments.data?.attachments?.map((attachment) => <p key={attachment.asset_id}>{attachment.file_name} · {attachment.scan_status}{attachment.scan_status === "CLEAN" && <AssetActions assetId={attachment.asset_id} title={attachment.file_name} />}</p>)}
   </section>;
 }
 
@@ -465,7 +465,7 @@ function AssessmentPage({ taskId }: { taskId: string }) {
         : error?.payload?.message ?? "实验暂时无法打开";
     return <div className="state-block"><p role="alert">{message}</p><button className="btn" onClick={() => void assessment.refetch()}>重试</button><Link to="/experiments">返回实验列表</Link></div>;
   }
-  return <main className="app-shell" style={{ padding: 24, maxWidth: 1500, margin: "auto" }}>
+  return <main className="app-shell assessment-workbench" style={{ padding: 24, maxWidth: 1500, margin: "auto", width: "100%", boxSizing: "border-box" }}>
     <Modal open={confirmation !== null} onClose={() => { if (!busy) setConfirmation(null); }} title="确认交卷"
       actions={<><button className="btn" disabled={busy} onClick={() => setConfirmation(null)}>返回检查</button><button className="btn primary" disabled={busy} onClick={() => void confirmSubmit()}>{busy ? "提交中…" : "确认交卷"}</button></>}>
       <p>{confirmation?.message}</p><p>提交后本次内容不能再修改，已提交的版本会保留在交卷历史里。</p>
@@ -501,12 +501,15 @@ function AssessmentPage({ taskId }: { taskId: string }) {
     {selectedSection === "CHOICE" ? choices.map((question) => <ChoiceAnswer key={question.id} taskId={taskId} question={question} register={register} disabled={disabled}
       submittedSelected={disabled ? choiceSubmission?.answers.find((answer) => answer.question_id === question.id)?.selected_option_ids ?? [] : undefined}
       result={disabled ? sectionState?.questions?.find((item) => item.id === question.id) : undefined} />) : <>
-      <label>编程题<select className="field" value={selectedQuestion?.id ?? ""} onChange={(e) => void switchView(() => setActive(e.target.value))}>{programs.map((q) => <option key={q.id} value={q.id}>{q.title}</option>)}</select></label>
+      <nav className="assessment-question-list" aria-label="编程题列表">{programs.map((q, index) => <button type="button" className="btn" key={q.id} aria-pressed={q.id === selectedQuestion?.id} onClick={() => void switchView(() => setActive(q.id))}>{index + 1}. {q.title}</button>)}</nav>
       {selectedQuestion && <>
         <label>语言<select className="field" value={language} disabled={disabled} onChange={(e) => void switchView(() => setSelectedLanguages((current) => ({ ...current, [selectedQuestion.id]: e.target.value as AssessmentLanguage })))}>{selectedQuestion.allowed_languages.map((v) => <option key={v}>{v}</option>)}</select></label>
         <CodeAnswer key={`${selectedQuestion.id}:${language}`} taskId={taskId} question={selectedQuestion} language={language} register={register} disabled={disabled} />
       </>}
-      <ReportAnswer taskId={taskId} register={register} disabled={disabled} />
+      {data.report_required !== false && <>
+        {data.report_template && <p>教师报告附件：{data.report_template.file_name}<AssetActions assetId={data.report_template.asset_id} title={data.report_template.file_name} /></p>}
+        <ReportAnswer taskId={taskId} register={register} disabled={disabled} />
+      </>}
     </>}
     <button className="btn primary" disabled={busy || disabled} onClick={() => void submit()}>{busy ? "提交中…" : selectedSection === "CHOICE"
       ? (sectionState?.status === "SUBMITTED" ? `再次提交选择题卷（将记为第 ${(sectionState.submission_version ?? 0) + 1} 次）` : "提交选择题卷")

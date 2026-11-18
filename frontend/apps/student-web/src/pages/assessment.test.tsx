@@ -122,3 +122,27 @@ it("downloads the current submitted report version, not the editable draft", asy
   click.mockRestore();
   client.clear();
 });
+
+it("switches programming questions through the list and shows attachment-only reports and samples", async () => {
+  const question = { id: "p1", title: "求和", description: "", instructions: "", task_type: "PROGRAMMING",
+    max_score: "10", allowed_languages: ["python"], selected_language: "python",
+    samples: [{ input: "1 2", output: "3" }, { input: "3 4", output: "7" }], starter_files: {}, limits: {} };
+  vi.mocked(assessmentApi.get).mockResolvedValueOnce({ task_id: "task", report_required: true,
+    questions: [question, { ...question, id: "p2", title: "排序" }],
+    sections: [{ kind: "PROGRAMMING", status: "NOT_SUBMITTED", deadline: "2099-01-01T00:00:00Z" }],
+    server_time: new Date().toISOString(), all_submitted: false } as never);
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(<QueryClientProvider client={client}><ToastProvider><MemoryRouter initialEntries={["/experiments/task/assessment"]}>
+    <Routes><Route path="/experiments/:taskId/assessment" element={<AssessmentWorkbench />} /></Routes>
+  </MemoryRouter></ToastProvider></QueryClientProvider>);
+  expect(await screen.findByRole("navigation", { name: "编程题列表" })).toBeInTheDocument();
+  expect(screen.queryByLabelText("报告正文")).not.toBeInTheDocument();
+  expect(screen.getByLabelText("报告附件")).toBeInTheDocument();
+  expect(screen.getByText("示例 1").parentElement).toHaveAttribute("open");
+  expect(screen.getByText("示例 2").parentElement).toHaveAttribute("open");
+  await waitFor(() => expect(assessmentApi.saveCode).toHaveBeenCalled());
+  fireEvent.click(screen.getByRole("button", { name: "2. 排序" }));
+  await waitFor(() => expect(screen.getByRole("button", { name: "2. 排序" })).toHaveAttribute("aria-pressed", "true"));
+  expect(assessmentApi.codeDraft).toHaveBeenCalledWith("task", "p2", "python");
+  client.clear();
+});

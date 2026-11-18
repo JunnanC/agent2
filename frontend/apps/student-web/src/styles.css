@@ -175,3 +175,30 @@
 .student-portal .side-nav-shell .sidebar-toggle{grid-area:auto;grid-column:auto;grid-row:auto}
 .student-portal .student-overview-heading{padding:20px 0}
 }
+
+.asset-actions, .assessment-question-list { display: flex; flex-wrap: wrap; gap: 8px; }
+.asset-actions { display: inline-flex; margin-inline-start: 12px; }
+.assessment-question-list { margin-block: 16px; }
+.assessment-question-list [aria-pressed="true"] { border-color: currentColor; font-weight: 600; }
+@media (min-width: 901px) {
+  .course-learning-shell { height: calc(100dvh - 140px); min-height: 360px; align-items: stretch; }
+  .course-learning-shell .course-chapter-nav { position: static; max-height: 100%; overflow-y: auto; overscroll-behavior: contain; }
+  .course-learning-main { min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding-inline-end: 8px; }
+}
+@media (max-width: 900px) {
+  .course-learning-shell { height: auto; }
+  .course-learning-shell .course-chapter-nav { position: static; max-height: none; overflow: visible; }
+  .course-learning-main { overflow: visible; min-width: 0; }
+}
+
+.assessment-code-layout { grid-template-columns: 180px minmax(0, 1fr); }
+@media (max-width: 600px) {
+  .assessment-code-layout { grid-template-columns: minmax(0, 1fr); }
+  .assessment-code-layout aside { display: flex; flex-wrap: wrap; gap: 6px; }
+  .assessment-code-layout aside .btn { width: auto !important; margin-bottom: 0 !important; }
+}
+
+.assessment-samples { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-block: 16px; }
+.assessment-samples details { padding: 12px; border: 1px solid var(--line); border-radius: 8px; }
+.assessment-samples pre, .assessment-run-result pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+@media (max-width: 600px) { .assessment-samples { grid-template-columns: minmax(0, 1fr); } }

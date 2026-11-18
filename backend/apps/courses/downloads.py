@@ -36,5 +36,15 @@ def authorize_course_material_download(asset: ObjectAsset, actor: User, portal: 
         .first()
     )
     if version is None:
+        if asset.purpose == "REPORT_TEMPLATE":
+            from apps.experiments.models import ExperimentTask
+
+            task = ExperimentTask.objects.filter(
+                student=actor, enrollment__status="ACTIVE",
+                template_version__report_template_asset=asset,
+                publication__status="PUBLISHED",
+            ).select_related("course").first()
+            if task is not None:
+                return task.course.public_id
         raise DownloadScopeDenied()
     return version.material.course.public_id

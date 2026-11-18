@@ -20,6 +20,7 @@ class User(VersionedModel):
         editable=False,
         db_collation="ascii_bin",
     )
+    student_number = models.CharField(max_length=32, unique=True, null=True, blank=True)
     email = models.EmailField(max_length=254, unique=True)
     username = models.CharField(max_length=32, unique=True)
     display_name = models.CharField(max_length=64)

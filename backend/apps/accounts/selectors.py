@@ -11,7 +11,11 @@ def user_by_public_id(public_id: str) -> User:
 
 def user_by_login(identifier: str) -> User | None:
     normalized = identifier.strip().casefold()
-    return User.objects.filter(Q(email=normalized) | Q(username=normalized)).first()
+    matches = list(User.objects.filter(
+        Q(email=normalized) | Q(username=normalized) | Q(student_number=normalized)
+    )[:2])
+    # Fail closed if legacy identifiers have become ambiguous.
+    return matches[0] if len(matches) == 1 else None
 
 
 def eligible_portals(user: User) -> list[str]:
@@ -44,6 +48,7 @@ def paged_users(*, spec: PageSpec, query: str = "") -> tuple[QuerySet[User], int
             Q(email__icontains=query)
             | Q(username__icontains=query)
             | Q(display_name__icontains=query)
+            | Q(student_number__icontains=query)
         )
     return users[spec.offset : spec.offset + spec.page_size], users.count()
 

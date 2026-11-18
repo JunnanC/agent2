@@ -701,6 +701,25 @@ def _normalize_identity(value: str) -> str:
     return value.strip().casefold()
 
 
+def _import_identity(row: dict) -> tuple[str, str]:
+    number = _normalize_identity(str(row.get("student_number") or ""))
+    email = _normalize_identity(str(row.get("email") or ""))
+    username = _normalize_identity(str(row.get("username") or ""))
+    identity = number or email or username
+    if not identity:
+        return "", "IDENTITY_REQUIRED"
+    from apps.accounts.selectors import user_by_login
+
+    user = User.objects.filter(student_number=number).first() if number else user_by_login(identity)
+    if not user:
+        return identity, "USER_NOT_FOUND"
+    if any(value and user_by_login(value) != user for value in (email, username)):
+        return identity, "IDENTITY_MISMATCH"
+    if user.registration_role != User.RegistrationRole.STUDENT or not user.is_active:
+        return identity, "STUDENT_UNAVAILABLE"
+    return identity, ""
+
+
 @transaction.atomic
 def precheck_import(
     *, course_id: str, actor: User, rows: Iterable[str], filename: str, context: ActorContext
@@ -712,16 +731,7 @@ def precheck_import(
     reader = csv.DictReader(rows)
     total = valid = 0
     for row_no, row in enumerate(reader, start=2):
-        raw = str(row.get("email") or row.get("username") or "")
-        identity = _normalize_identity(raw)
-        error = ""
-        if not identity:
-            error = "IDENTITY_REQUIRED"
-        elif (
-            not User.objects.filter(email__iexact=identity).exists()
-            and not User.objects.filter(username__iexact=identity).exists()
-        ):
-            error = "USER_NOT_FOUND"
+        identity, error = _import_identity(row)
         total += 1
         valid += not bool(error)
         EnrollmentImportItem.objects.create(
@@ -779,16 +789,7 @@ def precheck_import_job(*, job_id: str, actor: User, context: ActorContext) -> E
     reader = csv.DictReader(job.source_csv.splitlines())
     total = valid = 0
     for row_no, row in enumerate(reader, start=2):
-        raw = str(row.get("email") or row.get("username") or "")
-        identity = _normalize_identity(raw)
-        error = ""
-        if not identity:
-            error = "IDENTITY_REQUIRED"
-        elif (
-            not User.objects.filter(email__iexact=identity).exists()
-            and not User.objects.filter(username__iexact=identity).exists()
-        ):
-            error = "USER_NOT_FOUND"
+        identity, error = _import_identity(row)
         total += 1
         valid += not bool(error)
         EnrollmentImportItem.objects.create(
@@ -842,13 +843,14 @@ def execute_import(*, job_id: str, actor: User, context: ActorContext) -> Enroll
     for item_id in item_ids:
         with transaction.atomic():
             item = EnrollmentImportItem.objects.select_for_update().get(pk=item_id)
-            if item.status == "SUCCEEDED":
+            if item.status == "SUCCEEDED" or item.error_code in {
+                "IDENTITY_REQUIRED", "IDENTITY_MISMATCH",
+            }:
                 continue
-            user = (
-                User.objects.filter(email__iexact=item.normalized_identity).first()
-                or User.objects.filter(username__iexact=item.normalized_identity).first()
-            )
-            if user is None:
+            from apps.accounts.selectors import user_by_login
+
+            user = user_by_login(item.normalized_identity)
+            if user is None or not user.is_active or user.registration_role != "STUDENT":
                 EnrollmentImportItem.objects.filter(pk=item.pk).update(
                     status="ERROR", error_code="USER_NOT_FOUND"
                 )
