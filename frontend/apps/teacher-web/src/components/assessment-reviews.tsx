@@ -7,8 +7,8 @@ import { newIdempotencyKey } from "@edu/auth-client";
 
 import { GRADING_STATUS_LABEL, REPORT_REVIEW_STATUS_LABEL } from "@/lib/format";
 
-export function AssessmentReviews({ courseId, publicationId = "" }: { courseId: string; publicationId?: string }) {
-  const [taskId, setTaskId] = useState("");
+export function AssessmentReviews({ courseId, publicationId = "", initialTaskId = "" }: { courseId: string; publicationId?: string; initialTaskId?: string }) {
+  const [taskId, setTaskId] = useState(initialTaskId);
   const [scores, setScores] = useState<Record<string, string>>({});
   const [feedback, setFeedback] = useState("");
   const [returnUntil, setReturnUntil] = useState("");

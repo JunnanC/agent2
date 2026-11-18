@@ -130,19 +130,21 @@ export function Templates() {
                         </StatusBadge>
                       </td>
                       <td>{row.category ?? "—"}</td>
-                      <td className="table-actions">
-                        <Link className={`btn sm${row.status === "PUBLISHED" ? " primary" : ""}`}
+                      <td>
+                        <div className="table-actions">
+                          <Link className={`btn sm${row.status === "PUBLISHED" ? " primary" : ""}`}
                           to={`/courses/${courseId}/templates/${row.public_id}/edit`}>
                           {actionLabel}
-                        </Link>
-                        <Link className="btn sm" to={`/courses/${courseId}/publishing?template=${row.public_id}`}>配置发布</Link>
-                        {isDraft ? (
-                          <Button size="sm" variant="danger"
+                          </Link>
+                          <Link className="btn sm" to={`/courses/${courseId}/publishing?template=${row.public_id}`}>配置发布</Link>
+                          {isDraft ? (
+                            <Button size="sm" variant="danger"
                             disabled={remove.isPending}
                             onClick={() => setDeleteTarget(row)}>
                             删除
-                          </Button>
-                        ) : null}
+                            </Button>
+                          ) : null}
+                        </div>
                       </td>
                     </tr>
                   );
