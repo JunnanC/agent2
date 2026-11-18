@@ -6,8 +6,9 @@ import { assessmentApi, reportApi } from "@edu/api-client";
 import type { Assessment, AssessmentLanguage, ChoiceQuestion, ProgrammingQuestion } from "@edu/api-client";
 import { newIdempotencyKey } from "@edu/auth-client";
 import { keys } from "@edu/query-keys";
-import { CodeEditor, LoadingState, Modal, useToast } from "@edu/ui";
+import { CodeEditor, Icon, LoadingState, Modal, useToast } from "@edu/ui";
 import { formatDateTime } from "@/lib/task-format";
+import "./assessment.css";
 
 type Flush = () => Promise<boolean>;
 type Register = (key: string, flush: Flush | null) => void;
@@ -23,12 +24,6 @@ const STATUS_LABEL: Record<string, string> = {
 };
 
 type Section = Assessment["sections"][number];
-
-function sectionShort(section?: Section): string {
-  if (!section || section.status === "NOT_SUBMITTED") return "未提交";
-  if (section.status === "RETURNED") return "待修改重交";
-  return section.grading_status === "COMPLETED" ? "已批改" : "已交卷";
-}
 
 function sectionLabel(kind: "CHOICE" | "PROGRAMMING", section?: Section): string {
   const name = kind === "CHOICE" ? "选择题" : "编程与报告";
@@ -137,9 +132,9 @@ function ChoiceAnswer({ taskId, question, register, disabled, submittedSelected,
       ? "漏答"
       : sameOptions(submittedSelected, question.correct_option_ids) ? "正确" : "错误";
   }
-  return <article className="panel" style={{ marginBottom: 16 }}>
-    <h2>{question.title} <small>{question.max_score} 分</small></h2>
-    <pre style={{ whiteSpace: "pre-wrap", fontFamily: "inherit" }}>{question.description}</pre>
+  return <article className="panel assessment-choice">
+    <h2 className="assessment-question-title">{question.title} <small>{question.max_score} 分</small></h2>
+    <p className="assessment-question-text">{question.description}</p>
     <fieldset disabled={disabled || draft.value === null}>
       <legend>{question.task_type === "SINGLE_CHOICE" ? "单选题" : "多选题（完全正确才得分）"}</legend>
       {question.options.map((option) => <label className="item choice-option" key={option.id}>
@@ -194,8 +189,9 @@ function AnswerSheet({ submission, questions, result }: {
   </div>;
 }
 
-function CodeAnswer({ taskId, question, language, register, disabled }: {
+function CodeAnswer({ taskId, question, language, onLanguageChange, register, disabled }: {
   taskId: string; question: ProgrammingQuestion; language: AssessmentLanguage;
+  onLanguageChange: (language: AssessmentLanguage) => void;
   register: Register; disabled: boolean;
 }) {
   const [path, setPath] = useState("");
@@ -230,44 +226,84 @@ function CodeAnswer({ taskId, question, language, register, disabled }: {
     } catch (error) { toast.notify(error instanceof Error ? error.message : "运行请求失败", "error"); }
     finally { setRunning(false); }
   };
-  return <article>
-    <h2>{question.title} <small>{question.max_score} 分</small></h2>
-    <pre style={{ whiteSpace: "pre-wrap", fontFamily: "inherit" }}>{question.description}</pre>
-    <p>{question.instructions}</p>
-    <div className="assessment-samples">{question.samples.slice(0, 2).map((sample, index) => <details open key={index}><summary>示例 {index + 1}</summary>
-      <p>输入</p><pre>{sample.input}</pre><p>输出</p><pre>{sample.output}</pre>
-      <button className="btn" onClick={() => setStdin(sample.input)}>填入运行输入</button>
-    </details>)}</div>
-    <div className="assessment-code-layout" style={{ display: "grid", border: "1px solid var(--line, #ddd)", minHeight: 400 }}>
-      <aside style={{ padding: 12 }}>
-        {Object.keys(draft.value ?? {}).map((file) => <button key={file} className="btn" style={{ display: "block", width: "100%", marginBottom: 5 }} onClick={() => setPath(file)}>{file}</button>)}
-        <button className="btn" disabled={disabled || !draft.value} onClick={() => {
-          const name = window.prompt("相对文件路径，例如 helper.py");
-          if (name && draft.value && !(name in draft.value)) { draft.change({ ...draft.value, [name]: "" }); setPath(name); }
-        }}>新增文件</button>
-        <button className="btn" disabled={disabled || !selectedPath} onClick={() => {
-          const name = window.prompt("新文件路径", selectedPath);
-          if (name && draft.value && !(name in draft.value)) {
-            const files = { ...draft.value, [name]: draft.value[selectedPath] ?? "" }; delete files[selectedPath];
-            draft.change(files); setPath(name);
-          }
-        }}>重命名</button>
-        <button className="btn" disabled={disabled || !selectedPath} onClick={() => {
-          if (draft.value && window.confirm(`删除 ${selectedPath}？`)) { const files = { ...draft.value }; delete files[selectedPath]; draft.change(files); }
-        }}>删除文件</button>
-      </aside>
-      {draft.value && selectedPath ? <CodeEditor key={`${question.id}:${language}:${selectedPath}`}
-        value={draft.value[selectedPath] ?? ""} language={language} readOnly={disabled}
-        ariaLabel={`代码 ${selectedPath}`} onChange={(content) => draft.change({ ...draft.value!, [selectedPath]: content })} />
-        : <p>{draft.value ? "请新增代码文件" : "载入代码中…"}</p>}
-    </div>
-    {draft.touched && <p role="status" className="subtle">自动保存：{draft.status}
-      {draft.failed && <button className="btn sm" onClick={() => void draft.flush()}>重试保存</button>}
-    </p>}
-    <label>自定义输入<textarea className="field" rows={4} value={stdin} onChange={(e) => { setStdin(e.target.value); command.current = null; }} /></label>
-    <button className="btn primary" disabled={disabled || running || draft.value === null || run.data?.status === "RUNNING" || run.data?.status === "PENDING"} onClick={() => void runCode()}>运行代码</button>
-    <p className="subtle">运行仅使用本页输入。隐藏测试只在正式交卷后执行。</p>
-    {run.data && <section className="assessment-run-result" aria-label="运行结果"><h3>{STATUS_LABEL[run.data.result_status || run.data.status] ?? run.data.status}</h3><h4>标准输出</h4><pre>{run.data.stdout || "（无输出）"}</pre><h4>错误输出</h4><pre>{run.data.stderr || "（无错误输出）"}</pre></section>}
+  return <article className="assessment-programming">
+    <section className="assessment-statement" aria-labelledby="assessment-question-title">
+      <h2 className="assessment-question-title" id="assessment-question-title">{question.title} <small>{question.max_score} 分</small></h2>
+      {question.description && <p className="assessment-question-text">{question.description}</p>}
+      {question.instructions && <p className="assessment-question-text">{question.instructions}</p>}
+      {question.samples.length > 0 && <div className="assessment-samples">
+        {question.samples.slice(0, 2).map((sample, index) => <details open key={index}>
+          <summary>示例 {index + 1}</summary>
+          <div className="assessment-sample-content">
+            <div><p>输入</p><pre>{sample.input}</pre></div>
+            <div><p>输出</p><pre>{sample.output}</pre></div>
+          </div>
+          <button type="button" className="btn sm" onClick={() => setStdin(sample.input)}>填入运行输入</button>
+        </details>)}
+      </div>}
+    </section>
+
+    <section className="assessment-code-workspace" aria-label="代码与调试">
+      <header className="assessment-editor-toolbar">
+        <h2>代码编辑器</h2>
+        <label className="assessment-language">语言
+          <select className="field" value={language} disabled={disabled} onChange={(event) => onLanguageChange(event.currentTarget.value as AssessmentLanguage)}>
+            {question.allowed_languages.map((value) => <option key={value}>{value}</option>)}
+          </select>
+        </label>
+      </header>
+      <div className="assessment-code-layout">
+        <aside className="assessment-file-pane" aria-label="代码文件">
+          <h3>文件</h3>
+          <div className="assessment-file-list">
+            {Object.keys(draft.value ?? {}).map((file) => <button type="button" key={file} className="btn assessment-file"
+              aria-pressed={selectedPath === file} onClick={() => setPath(file)}>
+              <Icon name="file-text" size={16} /><span>{file}</span>
+            </button>)}
+          </div>
+          <div className="assessment-file-actions">
+            <button type="button" className="btn sm" disabled={disabled || !draft.value} onClick={() => {
+              const name = window.prompt("相对文件路径，例如 helper.py");
+              if (name && draft.value && !(name in draft.value)) { draft.change({ ...draft.value, [name]: "" }); setPath(name); }
+            }}>新增文件</button>
+            <button type="button" className="btn sm" disabled={disabled || !selectedPath} onClick={() => {
+              const name = window.prompt("新文件路径", selectedPath);
+              if (name && draft.value && !(name in draft.value)) {
+                const files = { ...draft.value, [name]: draft.value[selectedPath] ?? "" }; delete files[selectedPath];
+                draft.change(files); setPath(name);
+              }
+            }}>重命名</button>
+            <button type="button" className="btn sm" disabled={disabled || !selectedPath} onClick={() => {
+              if (draft.value && window.confirm(`删除 ${selectedPath}？`)) { const files = { ...draft.value }; delete files[selectedPath]; draft.change(files); }
+            }}>删除文件</button>
+          </div>
+        </aside>
+        <div className="assessment-editor-canvas">
+          {draft.value && selectedPath ? <CodeEditor key={`${question.id}:${language}:${selectedPath}`}
+            value={draft.value[selectedPath] ?? ""} language={language} readOnly={disabled}
+            ariaLabel={`代码 ${selectedPath}`} onChange={(content) => draft.change({ ...draft.value!, [selectedPath]: content })} />
+            : <p>{draft.value ? "请新增代码文件" : "载入代码中…"}</p>}
+        </div>
+      </div>
+      {draft.touched && <p role="status" className="assessment-save-status">自动保存：{draft.status}
+        {draft.failed && <button type="button" className="btn sm" onClick={() => void draft.flush()}>重试保存</button>}
+      </p>}
+      <section className="assessment-run-panel" aria-labelledby="assessment-run-title">
+        <header>
+          <h3 id="assessment-run-title">运行调试</h3>
+          <button type="button" className="btn primary" disabled={disabled || running || draft.value === null || run.data?.status === "RUNNING" || run.data?.status === "PENDING"} onClick={() => void runCode()}>
+            <Icon name="play" size={16} /> 运行代码
+          </button>
+        </header>
+        <label>自定义输入<textarea className="field" rows={3} value={stdin} onChange={(e) => { setStdin(e.target.value); command.current = null; }} /></label>
+        <p className="subtle">运行仅使用本页输入。隐藏测试只在正式交卷后执行。</p>
+        {run.data && <section className="assessment-run-result" aria-label="运行结果">
+          <h3>{STATUS_LABEL[run.data.result_status || run.data.status] ?? run.data.status}</h3>
+          <h4>标准输出</h4><pre>{run.data.stdout || "（无输出）"}</pre>
+          <h4>错误输出</h4><pre>{run.data.stderr || "（无错误输出）"}</pre>
+        </section>}
+      </section>
+    </section>
   </article>;
 }
 
@@ -465,70 +501,78 @@ function AssessmentPage({ taskId }: { taskId: string }) {
         : error?.payload?.message ?? "实验暂时无法打开";
     return <div className="state-block"><p role="alert">{message}</p><button className="btn" onClick={() => void assessment.refetch()}>重试</button><Link to="/experiments">返回实验列表</Link></div>;
   }
-  return <main className="app-shell assessment-workbench" style={{ padding: 24, maxWidth: 1500, margin: "auto", width: "100%", boxSizing: "border-box" }}>
+  return <main className="assessment-workbench">
     <Modal open={confirmation !== null} onClose={() => { if (!busy) setConfirmation(null); }} title="确认交卷"
       actions={<><button className="btn" disabled={busy} onClick={() => setConfirmation(null)}>返回检查</button><button className="btn primary" disabled={busy} onClick={() => void confirmSubmit()}>{busy ? "提交中…" : "确认交卷"}</button></>}>
       <p>{confirmation?.message}</p><p>提交后本次内容不能再修改，已提交的版本会保留在交卷历史里。</p>
     </Modal>
-    <header className="page-actions" style={{ alignItems: "flex-start" }}>
+    <header className="assessment-header">
       <div>
-        <p className="subtle" style={{ margin: 0 }}>
-          {[data.course_title, data.chapter_title].filter(Boolean).join(" · ") || "实验答题"}
-        </p>
-        <h1 style={{ margin: "2px 0 0" }}>{data.title || "实验答题"}</h1>
-        {sectionState?.deadline && <p className="subtle" style={{ margin: "4px 0 0" }}>本部分截止 {formatDateTime(sectionState.deadline)}</p>}
+        {(data.course_title || data.chapter_title) && <p className="assessment-course">
+          {[data.course_title, data.chapter_title].filter(Boolean).join(" / ")}
+        </p>}
+        <h1>{data.title || "实验答题"}</h1>
+        {sectionState?.deadline && <p className="assessment-deadline"><Icon name="clock" size={15} /> 本部分截止 {formatDateTime(sectionState.deadline)}</p>}
       </div>
-      <Link to="/experiments" onClick={(e) => { e.preventDefault(); void switchView(() => { window.location.assign("/experiments"); }); }}>返回实验列表</Link>
+      <Link className="btn assessment-back" to="/experiments" onClick={(e) => { e.preventDefault(); void switchView(() => { window.location.assign("/experiments"); }); }}>
+        <Icon name="arrow-left" size={16} /> 返回实验列表
+      </Link>
     </header>
-    {receipt && <p role="status" style={{
-      display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center", margin: "12px 0 0",
-      padding: "10px 14px", borderRadius: 10, border: "1px solid #b7ddc6", background: "#f2fbf5", color: "#1d5c3a",
-    }}>
+    {receipt && <p role="status" className="assessment-receipt">
       <strong>{receipt.kind === "CHOICE" ? "选择题卷" : "编程与报告"}已提交</strong>
       <span>{formatDateTime(receipt.at)} · 第 {receipt.version} 次</span>
       <button className="btn sm" onClick={() => { historyRef.current?.setAttribute("open", ""); historyRef.current?.scrollIntoView({ block: "center" }); }}>查看交卷历史</button>
     </p>}
-    <nav className="page-actions" aria-label="试卷部分">
-      {choices.length > 0 && <button className="btn" aria-pressed={selectedSection === "CHOICE"} onClick={() => void switchView(() => setSection("CHOICE"))}>选择题 · {sectionShort(choiceState)}</button>}
-      {programs.length > 0 && <button className="btn" aria-pressed={selectedSection === "PROGRAMMING"} onClick={() => void switchView(() => setSection("PROGRAMMING"))}>编程与报告 · {sectionShort(programmingState)}</button>}
-    </nav>
-    <p role="status" className="assessment-meta">
-      {partLabels.map((label, index) => <span key={label}>
-        {index > 0 && <span aria-hidden="true"> · </span>}{label}
-      </span>)}
-    </p>
-    {sectionState?.feedback && <p role="note">教师评语：{sectionState.feedback}</p>}
+    <div className="assessment-section-bar">
+      <nav className="assessment-sections" aria-label="试卷部分">
+        {choices.length > 0 && <button className="btn" aria-pressed={selectedSection === "CHOICE"} onClick={() => void switchView(() => setSection("CHOICE"))}>选择题</button>}
+        {programs.length > 0 && <button className="btn" aria-pressed={selectedSection === "PROGRAMMING"} onClick={() => void switchView(() => setSection("PROGRAMMING"))}>编程与报告</button>}
+      </nav>
+      <p role="status" className="assessment-meta">
+        {partLabels.map((label, index) => <span key={label}>
+          {index > 0 && <span aria-hidden="true"> · </span>}{label}
+        </span>)}
+      </p>
+    </div>
+    {sectionState?.feedback && <p className="assessment-feedback" role="note">教师评语：{sectionState.feedback}</p>}
     {selectedSection === "CHOICE" ? choices.map((question) => <ChoiceAnswer key={question.id} taskId={taskId} question={question} register={register} disabled={disabled}
       submittedSelected={disabled ? choiceSubmission?.answers.find((answer) => answer.question_id === question.id)?.selected_option_ids ?? [] : undefined}
       result={disabled ? sectionState?.questions?.find((item) => item.id === question.id) : undefined} />) : <>
-      <nav className="assessment-question-list" aria-label="编程题列表">{programs.map((q, index) => <button type="button" className="btn" key={q.id} aria-pressed={q.id === selectedQuestion?.id} onClick={() => void switchView(() => setActive(q.id))}>{index + 1}. {q.title}</button>)}</nav>
-      {selectedQuestion && <>
-        <label>语言<select className="field" value={language} disabled={disabled} onChange={(event) => {
-          const nextLanguage = event.currentTarget.value as AssessmentLanguage;
+      <nav className="assessment-question-list" aria-label="编程题列表">
+        {programs.map((question, index) => <button type="button" className="btn" key={question.id}
+          aria-pressed={question.id === selectedQuestion?.id} onClick={() => void switchView(() => setActive(question.id))}>
+          {index + 1}. {question.title}
+        </button>)}
+      </nav>
+      {selectedQuestion && <CodeAnswer key={`${selectedQuestion.id}:${language}`} taskId={taskId} question={selectedQuestion}
+        language={language} register={register} disabled={disabled} onLanguageChange={(nextLanguage) => {
           void switchView(() => setSelectedLanguages((current) => ({ ...current, [selectedQuestion.id]: nextLanguage })));
-        }}>{selectedQuestion.allowed_languages.map((v) => <option key={v}>{v}</option>)}</select></label>
-        <CodeAnswer key={`${selectedQuestion.id}:${language}`} taskId={taskId} question={selectedQuestion} language={language} register={register} disabled={disabled} />
-      </>}
+        }} />}
       {data.report_required !== false && <>
-        {data.report_template && <p>教师报告附件：{data.report_template.file_name}<AssetActions assetId={data.report_template.asset_id} title={data.report_template.file_name} /></p>}
+        {data.report_template && <p className="assessment-report-template">教师报告附件：{data.report_template.file_name}<AssetActions assetId={data.report_template.asset_id} title={data.report_template.file_name} /></p>}
         <ReportAnswer taskId={taskId} register={register} disabled={disabled} />
       </>}
     </>}
-    <button className="btn primary" disabled={busy || disabled} onClick={() => void submit()}>{busy ? "提交中…" : selectedSection === "CHOICE"
-      ? (sectionState?.status === "SUBMITTED" ? `再次提交选择题卷（将记为第 ${(sectionState.submission_version ?? 0) + 1} 次）` : "提交选择题卷")
-      : (programmingState?.status === "SUBMITTED" ? `再次提交编程与报告卷（将记为第 ${(programmingState.submission_version ?? 0) + 1} 次）` : "提交编程与报告卷")}</button>
-    {receipt && <p className="subtle"><strong>{receipt.kind === "CHOICE" ? "选择题卷" : "编程与报告"}已提交</strong> · 第 {receipt.version} 次 · {formatDateTime(receipt.at)}。再次提交会记为第 {receipt.version + 1} 次，以最后一次为准。</p>}
-    <p className="subtle">{missingParts.length
-      ? `本实验还有未交部分：${missingParts.join("、")}。`
-      : "本实验各部分已交齐。"}</p>
-    {sectionState?.score !== null && <p>本部分得分：{sectionState?.score} / {sectionState?.max_score ?? "—"}</p>}
-    {currentReport && <p><button className="btn" onClick={() => downloadSubmittedReport(currentReport, taskId, programmingState?.score ?? null, programmingState?.max_score ?? null)}>下载已提交报告</button> <span className="subtle">第 {currentReport.version_no} 次提交，不含后续草稿</span></p>}
-    <details ref={historyRef}><summary>交卷历史</summary>
-      {history.data?.length ? history.data.map((submission) => <p key={`${submission.kind}:${submission.version_no}`}>
-        {submission.kind === "CHOICE" ? "选择题" : "编程与报告"} · 第 {submission.version_no} 次 · {formatDateTime(submission.submitted_at)}{submission.is_current ? "（当前有效）" : ""}
-        {submission.kind === "CHOICE" && <button className="btn sm" onClick={() => setViewing(submission)}>查看答卷</button>}
-      </p>) : <p className="subtle">还没有提交记录。提交后这里会显示每次交卷的时间与版本。</p>}
-    </details>
+    <footer className="panel assessment-submission">
+      <div className="assessment-submit-row">
+        <div>
+          <p>{missingParts.length ? `本实验还有未交部分：${missingParts.join("、")}。` : "本实验各部分已交齐。"}</p>
+          {sectionState?.score != null && <p>本部分得分：{sectionState.score} / {sectionState.max_score ?? "—"}</p>}
+        </div>
+        <button className="btn primary" disabled={busy || disabled} onClick={() => void submit()}>{busy ? "提交中…" : selectedSection === "CHOICE"
+          ? (sectionState?.status === "SUBMITTED" ? `再次提交选择题卷（将记为第 ${(sectionState.submission_version ?? 0) + 1} 次）` : "提交选择题卷")
+          : (programmingState?.status === "SUBMITTED" ? `再次提交编程与报告卷（将记为第 ${(programmingState.submission_version ?? 0) + 1} 次）` : "提交编程与报告卷")}</button>
+      </div>
+      {receipt && <p className="subtle"><strong>{receipt.kind === "CHOICE" ? "选择题卷" : "编程与报告"}已提交</strong> · 第 {receipt.version} 次 · {formatDateTime(receipt.at)}。再次提交会记为第 {receipt.version + 1} 次，以最后一次为准。</p>}
+      {currentReport && <p><button className="btn" onClick={() => downloadSubmittedReport(currentReport, taskId, programmingState?.score ?? null, programmingState?.max_score ?? null)}>下载已提交报告</button> <span className="subtle">第 {currentReport.version_no} 次提交，不含后续草稿</span></p>}
+      <details className="assessment-history" ref={historyRef}>
+        <summary>交卷历史</summary>
+        {history.data?.length ? history.data.map((submission) => <p key={`${submission.kind}:${submission.version_no}`}>
+          {submission.kind === "CHOICE" ? "选择题" : "编程与报告"} · 第 {submission.version_no} 次 · {formatDateTime(submission.submitted_at)}{submission.is_current ? "（当前有效）" : ""}
+          {submission.kind === "CHOICE" && <button className="btn sm" onClick={() => setViewing(submission)}>查看答卷</button>}
+        </p>) : <p className="subtle">还没有提交记录。提交后这里会显示每次交卷的时间与版本。</p>}
+      </details>
+    </footer>
     <Modal open={viewing !== null} onClose={() => setViewing(null)} wide
       title={viewing ? `第 ${viewing.version_no} 次提交答卷` : ""}
       actions={<button className="btn" onClick={() => setViewing(null)}>关闭</button>}>
