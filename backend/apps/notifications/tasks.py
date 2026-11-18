@@ -4,6 +4,7 @@ from apps.core.models import OutboxEvent
 from apps.core.tasks import TraceTask
 
 from .services import consume_notification_event
+from .services import notify_ended_publications as send_publication_end_notices
 from .services import remind_unfinished_experiments as send_deadline_reminders
 
 
@@ -27,3 +28,13 @@ def consume_outbox(_task: TraceTask, *, trace_id: str = "") -> int:
 )
 def remind_unfinished_experiments(_task: TraceTask, *, trace_id: str = "") -> int:
     return send_deadline_reminders()
+
+
+@shared_task(
+    base=TraceTask,
+    bind=True,
+    acks_late=True,
+    name="apps.notifications.notify_ended_publications",
+)
+def notify_ended_publications(_task: TraceTask, *, trace_id: str = "") -> int:
+    return send_publication_end_notices()

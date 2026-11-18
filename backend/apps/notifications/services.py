@@ -14,9 +14,11 @@ from apps.accounts.models import User
 from apps.core.concurrency import compare_and_swap
 from apps.core.models import OutboxEvent
 from apps.core.outbox import consume_once
-from apps.courses.events import ENROLLMENT_STUDENT_DROPPED
-from apps.courses.models import Course, Enrollment
+from apps.courses.events import ENROLLMENT_APPLIED, ENROLLMENT_STUDENT_DROPPED
+from apps.courses.models import Course, CourseStaff, CourseStaffGrant, Enrollment
+from apps.courses.selectors import has_course_capability
 from apps.courses.services import ActorContext
+from apps.experiments.events import PUBLICATION_CLOSED, PUBLICATION_FAILED, PUBLICATION_PUBLISHED
 from apps.experiments.models import ExperimentTask, TaskPublication
 
 from .metrics import NOTIFICATIONS_TOTAL
@@ -27,13 +29,16 @@ logger = logging.getLogger(__name__)
 ASSIGNMENT_KINDS = {"experiment.task_assigned", "tasks.task.assigned", "demo-task-assigned"}
 DEADLINE_REMINDER_KIND = "experiment.deadline_reminder"
 GENERIC_BODIES = {"", "有新的平台动态", "请进入任务列表完成演示实验。"}
+TEACHER_EXPERIMENT_EVENTS = {PUBLICATION_PUBLISHED, PUBLICATION_FAILED, PUBLICATION_CLOSED}
 
 
 def _deadline_text(deadline: datetime) -> str:
     return timezone.localtime(deadline).strftime("%Y-%m-%d %H:%M")
 
 
-def _notification_content(kind: str, payload: dict[str, Any]) -> dict[str, str]:
+def _notification_content(
+    kind: str, payload: dict[str, Any], portal: str = "USER"
+) -> dict[str, str]:
     """Use event snapshots; resolve older events that predate descriptive payloads."""
     if kind == ENROLLMENT_STUDENT_DROPPED:
         ended_at = parse_datetime(payload["ended_at"])
@@ -48,6 +53,52 @@ def _notification_content(kind: str, payload: dict[str, Any]) -> dict[str, str]:
             ),
             "link_url": f"/courses/{payload['course_id']}/enrollments",
         }
+    if kind == ENROLLMENT_APPLIED and portal == "TEACHING":
+        enrollment = Enrollment.objects.select_related("course", "student").filter(
+            public_id=payload.get("enrollment_id"), course__public_id=payload.get("course_id")
+        ).first()
+        if enrollment:
+            return {
+                "title": "收到课程申请",
+                "body_masked": (
+                    f"{enrollment.student.display_name}申请加入课程《{enrollment.course.title}》。"
+                ),
+                "course_ref": enrollment.course.public_id,
+                "link_url": f"/courses/{enrollment.course.public_id}/enrollments",
+            }
+    if kind in TEACHER_EXPERIMENT_EVENTS:
+        publication = TaskPublication.objects.select_related("course").filter(
+            public_id=payload.get("publication_id") or payload.get("aggregate_ref")
+        ).first()
+        if publication:
+            total = publication.tasks.count()
+            completed = publication.tasks.filter(
+                status__in=(ExperimentTask.Status.COMPLETED, ExperimentTask.Status.APPROVED)
+            ).count()
+            content = {
+                "course_ref": publication.course.public_id,
+                "task_ref": "",
+                "link_url": f"/courses/{publication.course.public_id}/publishing",
+            }
+            if kind == PUBLICATION_PUBLISHED:
+                return {
+                    **content,
+                    "title": "实验发布成功",
+                    "body_masked": f"实验《{publication.title}》已发布，已分配 {total} 名学生。",
+                }
+            if kind == PUBLICATION_FAILED:
+                return {
+                    **content,
+                    "title": "实验发布失败",
+                    "body_masked": f"实验《{publication.title}》发布失败。请检查发布记录后重试。",
+                }
+            return {
+                **content,
+                "title": "实验已结束",
+                "body_masked": (
+                    f"实验《{publication.title}》已结束，已完成 {completed} / {total} 人。"
+                ),
+            }
     system_messages = {
         "account.created": (
             "账号创建成功",
@@ -118,6 +169,19 @@ def _accepts_notification(account: User, portal: str, kind: str) -> bool:
     )
 
 
+def _course_staff_targets(course: Course, capability: str) -> list[tuple[User, str]]:
+    staff_rows = CourseStaff.objects.select_related("user").filter(
+        course=course,
+        status=CourseStaff.Status.ACTIVE,
+        user__account_status=User.AccountStatus.ACTIVE,
+    )
+    return [
+        (staff.user, "TEACHING")
+        for staff in staff_rows
+        if has_course_capability(course=course, actor=staff.user, capability=capability)
+    ]
+
+
 def _targets(event: OutboxEvent) -> list[tuple[User, str]]:
     payload = event.payload or {}
     if event.event_type == ENROLLMENT_STUDENT_DROPPED:
@@ -125,6 +189,27 @@ def _targets(event: OutboxEvent) -> list[tuple[User, str]]:
             (user, "TEACHING")
             for user in User.objects.filter(public_id__in=payload.get("teacher_ids", []))
         ]
+    if event.event_type == ENROLLMENT_APPLIED:
+        course = Course.objects.filter(public_id=payload.get("course_id")).first()
+        teachers = (
+            _course_staff_targets(course, CourseStaffGrant.Capability.MANAGE_ENROLLMENT)
+            if course else []
+        )
+        student_ids = dict.fromkeys(
+            str(item) for item in (payload.get("student_id"), payload.get("user_id")) if item
+        )
+        students = [
+            (user, str(payload.get("portal", "USER")))
+            for user in User.objects.filter(public_id__in=student_ids)
+        ]
+        return teachers + students
+    if event.event_type in TEACHER_EXPERIMENT_EVENTS:
+        publication = TaskPublication.objects.select_related("course").filter(
+            public_id=payload.get("publication_id") or event.aggregate_ref
+        ).first()
+        return _course_staff_targets(
+            publication.course, CourseStaffGrant.Capability.PUBLISH_EXPERIMENT
+        ) if publication else []
     portal = str(payload.get("portal", "USER"))
     values = [payload.get("user_id"), payload.get("student_id"), payload.get("actor_id")]
     result: list[tuple[User, str]] = []
@@ -139,15 +224,19 @@ def _targets(event: OutboxEvent) -> list[tuple[User, str]]:
 def create_notifications_for_event(event: OutboxEvent) -> int:
     payload = event.payload or {}
     kind = event.event_type
-    content = _notification_content(kind, payload)
+    source_event_id = str(event.id)
+    if kind == PUBLICATION_CLOSED:
+        publication_id = payload.get("publication_id") or event.aggregate_ref
+        source_event_id = f"publication-ended:{publication_id}"
     created = 0
     for account, portal in _targets(event):
         if not _accepts_notification(account, portal, kind):
             continue
+        content = _notification_content(kind, payload, portal)
         _, made = Notification.objects.get_or_create(
             account=account,
             portal=portal,
-            source_event_id=str(event.id),
+            source_event_id=source_event_id,
             kind=kind,
             defaults={
                 "title": str(payload.get("title", "平台通知")),
@@ -255,6 +344,41 @@ def remind_unfinished_experiments(*, now: datetime | None = None) -> int:
                 count += 1
                 NOTIFICATIONS_TOTAL.labels(kind=DEADLINE_REMINDER_KIND, result="CREATED").inc()
     return count
+
+
+def notify_ended_publications(*, now: datetime | None = None) -> int:
+    now = now or timezone.now()
+    publications = TaskPublication.objects.select_related("course").filter(
+        status=TaskPublication.Status.PUBLISHED,
+        window_end__lte=now,
+    )
+    created = 0
+    for publication in publications.iterator():
+        kind = PUBLICATION_CLOSED
+        content = _notification_content(kind, {"publication_id": publication.public_id}, "TEACHING")
+        source_event_id = f"publication-ended:{publication.public_id}"
+        for account, portal in _course_staff_targets(
+            publication.course, CourseStaffGrant.Capability.PUBLISH_EXPERIMENT
+        ):
+            if not _accepts_notification(account, portal, kind):
+                continue
+            _, made = Notification.objects.get_or_create(
+                account=account,
+                portal=portal,
+                source_event_id=source_event_id,
+                kind=kind,
+                defaults={
+                    "title": content["title"],
+                    "body_masked": content["body_masked"],
+                    "course_ref": publication.course.public_id,
+                    "link_url": content["link_url"],
+                    "scope": {"actor_ref": account.public_id, "portal": portal},
+                },
+            )
+            if made:
+                created += 1
+                NOTIFICATIONS_TOTAL.labels(kind=kind, result="CREATED").inc()
+    return created
 
 
 def consume_notification_event(*, event_id: object) -> bool:

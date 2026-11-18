@@ -38,7 +38,9 @@ export function Notifications() {
               <p style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{item.body}</p>
               <div className="notification-actions">
                 {(item.links ?? []).filter((link) => link.url?.startsWith("/courses/")).map((link) =>
-                  <Link key={link.url} className="btn sm" to={link.url!}>查看选课管理</Link>)}
+                  <Link key={link.url} className="btn sm" to={link.url!}>
+                    {link.url?.includes("/publishing") ? "查看实验发布" : "查看选课管理"}
+                  </Link>)}
                 {!item.read && <Button size="sm" disabled={markRead.isPending} onClick={() => markRead.mutate(item)}>
                   {markRead.isPending && markRead.variables?.id === item.id ? "标记中…" : "标记已读"}
                 </Button>}

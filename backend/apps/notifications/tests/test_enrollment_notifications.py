@@ -6,7 +6,7 @@ from django.utils import timezone
 
 from apps.core.errors import RowVersionConflict
 from apps.core.models import OutboxEvent
-from apps.courses.events import ENROLLMENT_ENDED, ENROLLMENT_STUDENT_DROPPED
+from apps.courses.events import ENROLLMENT_APPLIED, ENROLLMENT_ENDED, ENROLLMENT_STUDENT_DROPPED
 from apps.courses.models import CourseStaff, CourseStaffGrant, Enrollment
 from apps.courses.services import (
     ActorContext,
@@ -28,6 +28,29 @@ class EnrollmentNotificationTests(TestCase):
         self.enrollment = create_enrollment(self.course, suffix="drop-notice-student")
         self.student = self.enrollment.student
         self.context = ActorContext(self.student.public_id, "USER", "d" * 32)
+
+    def test_course_application_notifies_student_and_enrollment_managers(self) -> None:
+        Enrollment.objects.filter(pk=self.enrollment.pk).update(status=Enrollment.Status.PENDING)
+        event = OutboxEvent.objects.create(
+            event_type=ENROLLMENT_APPLIED,
+            aggregate_type="enrollment",
+            aggregate_ref=self.enrollment.public_id,
+            trace_id="course-application-notice",
+            payload={
+                "enrollment_id": self.enrollment.public_id,
+                "course_id": self.course.public_id,
+                "student_id": self.student.public_id,
+                "status": Enrollment.Status.PENDING,
+            },
+        )
+
+        self.assertEqual(create_notifications_for_event(event), 2)
+        teacher_notice = Notification.objects.get(account=self.owner, portal="TEACHING")
+        student_notice = Notification.objects.get(account=self.student, portal="USER")
+        self.assertEqual(teacher_notice.title, "收到课程申请")
+        self.assertIn(self.student.display_name, teacher_notice.body_masked)
+        self.assertEqual(teacher_notice.link_url, f"/courses/{self.course.public_id}/enrollments")
+        self.assertEqual(student_notice.title, "课程申请已提交")
 
     def _drop(self) -> Enrollment:
         return drop_enrollment(

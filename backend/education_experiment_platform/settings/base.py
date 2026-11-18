@@ -273,6 +273,10 @@ CELERY_BEAT_SCHEDULE = {
         "task": "apps.notifications.remind_unfinished_experiments",
         "schedule": 60.0,
     },
+    "notify-ended-publications": {
+        "task": "apps.notifications.notify_ended_publications",
+        "schedule": 60.0,
+    },
     "reconcile-archives-and-runtime": {
         "task": "apps.archives.reconcile",
         "schedule": 60.0,
