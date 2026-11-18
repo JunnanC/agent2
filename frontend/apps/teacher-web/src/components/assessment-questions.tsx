@@ -230,12 +230,7 @@ export function AssessmentQuestions({ courseId, templateId, version, refresh }: 
     {locked && <p className="subtle">{busy ? "正在处理，请稍候。" : "当前版本已发布或正在预检，不能编辑。请先创建草稿版本。"}</p>}
     {questionFormOpen && selectedChapter && <fieldset className="assessment-question-form" disabled={locked}>
       <legend>{editing ? "编辑题目" : "新增题目"}</legend>
-      <div className="assessment-type-switch" role="group" aria-label="题目类型">
-        <button type="button" className={`btn sm${kind !== "PROGRAMMING" ? " primary" : ""}`} aria-pressed={kind !== "PROGRAMMING"}
-          disabled={locked || Boolean(editing)} onClick={() => { setKind(kind === "MULTIPLE_CHOICE" ? kind : "SINGLE_CHOICE"); setCorrect([]); }}>选择题</button>
-        <button type="button" className={`btn sm${kind === "PROGRAMMING" ? " primary" : ""}`} aria-pressed={kind === "PROGRAMMING"}
-          disabled={locked || Boolean(editing)} onClick={() => { setKind("PROGRAMMING"); setCorrect([]); }}>编程题</button>
-      </div>
+      <p className="assessment-selected-type">题型：{questionTypeLabels[kind]}</p>
       {kind !== "PROGRAMMING" && <label>选择题类型<select className="field" value={kind} onChange={(event) => { setKind(event.target.value as typeof kind); setCorrect([]); }}>
         <option value="SINGLE_CHOICE">单选题</option><option value="MULTIPLE_CHOICE">多选题</option>
       </select></label>}

@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { ToastProvider } from "@edu/ui";
 import { assessmentTeachingApi, teachingApi } from "@edu/api-client";
@@ -33,10 +33,8 @@ it("starts a programming question from an empty version and creates its default 
   expect(screen.getByLabelText("参考解代码")).toBeInTheDocument();
   expect(screen.queryByLabelText("正确选项 1")).toBeNull();
   expect(teachingApi.createTemplateChapter).toHaveBeenCalledWith("course", "version", { title: "题目" }, 5);
-  const typeSwitch = within(screen.getByRole("group", { name: "题目类型" }));
-  fireEvent.click(typeSwitch.getByRole("button", { name: "选择题" }));
-  expect(screen.getByLabelText("正确选项 1")).toBeInTheDocument();
-  fireEvent.click(typeSwitch.getByRole("button", { name: "编程题" }));
+  expect(screen.getByText("题型：编程题")).toBeInTheDocument();
+  expect(screen.getAllByRole("button", { name: "新增编程题" })).toHaveLength(1);
 
   fireEvent.change(screen.getByLabelText("标题"), { target: { value: "求和" } });
   fireEvent.click(screen.getByRole("button", { name: "保存题目" }));

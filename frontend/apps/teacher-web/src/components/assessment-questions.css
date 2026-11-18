@@ -51,12 +51,17 @@
   font-size: 12px;
 }
 
-.assessment-question-actions,
-.assessment-type-switch {
+.assessment-question-actions {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 6px;
+}
+
+.assessment-selected-type {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
 }
 
 .assessment-question-form {
