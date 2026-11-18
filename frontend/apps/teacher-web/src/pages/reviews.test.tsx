@@ -24,6 +24,8 @@ async function show(expectedText = "固定报告", rowName = /打开答卷：学
   fireEvent.click(await screen.findByRole("button", { name: rowName }));
   await waitFor(() => expect(assessmentTeachingApi.review).toHaveBeenCalledWith("course", taskId));
   await screen.findByText("学生试卷");
+  expect(screen.queryByRole("navigation", { name: "面包屑" })).not.toBeInTheDocument();
+  expect(screen.getByLabelText("当前成绩")).toBeInTheDocument();
   if (expectedText) await screen.findByText(expectedText);
 }
 it("按发布筛选交卷，AI 建议需教师确认保存", async () => {

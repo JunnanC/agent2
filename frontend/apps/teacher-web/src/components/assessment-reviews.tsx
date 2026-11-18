@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { assessmentTeachingApi } from "@edu/api-client";
 import type { TeacherAssessmentReview } from "@edu/api-client";
-import { EmptyState, Metric, Panel, StatusBadge, useToast } from "@edu/ui";
+import { EmptyState, Panel, StatusBadge, useToast } from "@edu/ui";
 import { newIdempotencyKey } from "@edu/auth-client";
 
 import { GRADING_STATUS_LABEL, REPORT_REVIEW_STATUS_LABEL } from "@/lib/format";
@@ -149,7 +149,7 @@ export function AssessmentReviews({ courseId, publicationId = "", initialTaskId 
       </section>
     </aside>
 
-    <main className="assessment-review-detail" aria-label="试卷与评审">
+    <section className="assessment-review-detail" aria-label="试卷与评审">
       {!taskId && <div className="state-block">
         <strong>选择一份学生答卷</strong>
         <p>选中左侧交卷后，可以查看题目、作答、判分和报告。</p>
@@ -198,7 +198,7 @@ export function AssessmentReviews({ courseId, publicationId = "", initialTaskId 
           </div>
         </Panel>}
       </>}
-    </main>
+    </section>
   </div>;
 }
 
@@ -210,18 +210,20 @@ function ExamPaper({ review, title, taskId }: { review: ExamReview; title: strin
   const programming = sections.find(item => item.kind === "PROGRAMMING");
   return <article className="assessment-exam-paper">
     <header className="assessment-exam-heading">
-      <div>
+      <div className="assessment-exam-identity">
         <p className="eyebrow">学生试卷</p>
         <h2>{review.student_name}</h2>
         <p>{title} · 固定提交记录</p>
       </div>
       <div className="assessment-exam-summary">
-        <Metric label="当前成绩" value={scorePending ? (score ? `${score} · 部分` : "待评分") : score}
-          sub={`满分 ${maximum}`} icon="file-check" />
-        {sections.map(section => <StatusBadge key={section.kind}
+        <div className="assessment-exam-score" aria-label="当前成绩">
+          <span>当前成绩</span>
+          <div><strong>{scorePending ? (score ? `${score} · 部分` : "待评分") : score}</strong><span> / {maximum}</span></div>
+        </div>
+        <div className="assessment-exam-statuses">{sections.map(section => <StatusBadge key={section.kind}
           tone={section.grading_status === "COMPLETED" ? "good" : section.grading_status === "RETURNED" ? "warn" : "neutral"}>
           {section.kind === "CHOICE" ? "选择题" : "编程与报告"} · {GRADING_STATUS_LABEL[section.grading_status] ?? "状态未知"}
-        </StatusBadge>)}
+        </StatusBadge>)}</div>
       </div>
     </header>
     {review.choice_answers?.length > 0 && <ChoiceReview data={review} />}

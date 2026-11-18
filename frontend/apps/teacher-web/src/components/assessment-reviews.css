@@ -79,6 +79,17 @@
   gap: 12px;
 }
 
+.assessment-exam-heading {
+  justify-content: flex-start;
+  align-items: center;
+  gap: 24px;
+  padding: 4px 0 8px;
+}
+
+.assessment-exam-identity {
+  flex: 1 1 180px;
+}
+
 .assessment-exam-heading h2,
 .assessment-exam-section-heading h3 {
   margin: 0;
@@ -93,7 +104,31 @@
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 16px;
+}
+
+.assessment-exam-score {
+  min-width: 160px;
+  padding: 12px 20px;
+  border-left: 1px solid var(--line);
+}
+
+.assessment-exam-score > span,
+.assessment-exam-score div > span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.assessment-exam-score strong {
+  font-size: 32px;
+  font-weight: 500;
+  line-height: 1.3;
+  font-variant-numeric: tabular-nums;
+}
+
+.assessment-exam-statuses {
+  display: grid;
+  gap: 6px;
 }
 
 .assessment-exam-section {
@@ -269,6 +304,85 @@
 .assessment-exam-section details summary {
   cursor: pointer;
   font-weight: 600;
+}
+
+/* Keep the course header visible; each review column owns its scroll area. */
+@media (min-width: 901px) {
+  .teacher-portal .app-shell:has(.assessment-review-workspace) {
+    height: 100dvh;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .teacher-portal .shell-layout:has(.assessment-review-workspace) {
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .teacher-portal .main-content:has(.assessment-review-workspace) {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+    padding-bottom: 16px;
+  }
+
+  .teacher-portal .main-content:has(.assessment-review-workspace) > .course-context {
+    flex: none;
+    padding: 12px 0;
+  }
+
+  .teacher-portal .main-content:has(.assessment-review-workspace) .course-context h1 {
+    margin: 8px 0 4px;
+  }
+
+  .teacher-portal .main-content:has(.assessment-review-workspace) .course-tabs {
+    margin-top: 10px;
+  }
+
+  .assessment-review-workspace {
+    flex: 1;
+    min-height: 0;
+    align-items: stretch;
+    overflow: hidden;
+  }
+
+  .assessment-review-queue {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  .assessment-review-queue-panel {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+  }
+
+  .assessment-review-queue-heading,
+  .assessment-review-queue-panel > input {
+    flex: none;
+  }
+
+  .assessment-review-queue-list {
+    flex: 1;
+    min-height: 0;
+    max-height: none;
+    align-content: start;
+    overscroll-behavior-y: contain;
+    scrollbar-gutter: stable;
+  }
+
+  .assessment-review-detail {
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+    scrollbar-gutter: stable;
+    padding-right: 8px;
+  }
 }
 
 @media (max-width: 900px) {

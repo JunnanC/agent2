@@ -111,4 +111,9 @@
 .teacher-portal .grid.two{align-items:start}
 .teacher-portal .state-block{min-height:120px;padding:16px}
 
+.teacher-portal .course-tabs a:hover,
+.teacher-portal .course-context > div > a:hover {
+  text-decoration: none;
+}
+
 
