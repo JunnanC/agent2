@@ -10,6 +10,7 @@ import {
   TEMPLATE_VERSION_STATUS_LABEL,
   apiErrorMessage,
 } from "@/lib/format";
+import { precheckFailureMessage } from "@/lib/precheck-errors";
 
 export function TemplateEditor() {
   const { courseId = "", templateId = "" } = useParams();
@@ -26,7 +27,11 @@ export function TemplateEditor() {
   const options = useQuery({ queryKey: keys.templateOptions(courseId), queryFn: () => teachingApi.templateOptions(courseId) });
   const checks = useQuery({ queryKey: keys.precheckRuns(version?.public_id ?? ""),
     queryFn: () => teachingApi.precheckRuns(courseId, version!.public_id), enabled: !!version,
-    refetchInterval: version?.status === "PRECHECKING" ? 2000 : false });
+    refetchInterval: query => {
+      const status = query.state.data?.rows[0]?.status;
+      const running = status === "QUEUED" || status === "RUNNING" || status === "RETRY";
+      return running || version?.status === "PRECHECKING" ? 2000 : false;
+    } });
   async function act(operation: () => Promise<unknown>) {
     setBusy(true);
     try { await operation(); await versions.refetch(); await checks.refetch(); }
@@ -75,7 +80,11 @@ export function TemplateEditor() {
       <Panel className="section"><h2>预检与发布</h2>
         <button className="btn" disabled={locked} onClick={() => void act(() => teachingApi.precheck(courseId, version.public_id, version.row_version))}>执行预检</button>
         <button className="btn primary" disabled={busy || version.status !== "PRECHECK_PASSED"} onClick={() => void act(() => teachingApi.publishTemplateVersion(courseId, version.public_id, version.row_version))}>发布模板版本</button>
-        {checks.data?.rows.map(check => <p key={check.public_id}>{PRECHECK_STATUS_LABEL[check.status] ?? check.status}</p>)}
+        {checks.data?.rows.map(check => <p key={check.public_id}>
+          {check.status === "FAILED"
+            ? `未通过。${precheckFailureMessage(check)}`
+            : (PRECHECK_STATUS_LABEL[check.status] ?? check.status)}
+        </p>)}
         <Link className="btn" to={`/courses/${courseId}/publishing`}>配置实验发布、报告与截止时间</Link>
       </Panel>
     </>}

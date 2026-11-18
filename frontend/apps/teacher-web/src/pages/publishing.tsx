@@ -9,7 +9,8 @@ import {
   ConfirmDialog, EmptyState, Modal, Panel, RequestStateView, StatusBadge, useToast,
 } from "@edu/ui";
 import { RubricCreate } from "@/components/rubric-create";
-import { PUBLICATION_STATUS_LABEL, apiErrorMessage, formatDateTime } from "@/lib/format";
+import { PRECHECK_STATUS_LABEL, PUBLICATION_STATUS_LABEL, apiErrorMessage, formatDateTime } from "@/lib/format";
+import { precheckFailureMessage } from "@/lib/precheck-errors";
 
 interface PrecheckStage {
   status: string;
@@ -269,11 +270,14 @@ export function Publishing() {
           {latestPrecheck ? (
             <StatusBadge tone={latestPrecheck.status === "PASSED" ? "good"
               : latestPrecheck.status === "FAILED" ? "bad" : "blue"}>
-              {precheckTotal > 0 ? `${precheckPassed} / ${precheckTotal} 通过` : "预检进行中"}
+              {latestPrecheck.status === "FAILED" || precheckTotal === 0
+                ? PRECHECK_STATUS_LABEL[latestPrecheck.status]
+                : `${precheckPassed} / ${precheckTotal} 通过`}
             </StatusBadge>
           ) : pendingPublication ? <span className="status warn">尚未预检</span> : <span className="status neutral">无待发布</span>}
         </>}>
-          {latestPrecheck && precheckStages.length ? (
+          {latestPrecheck?.status === "FAILED" && <p>{precheckFailureMessage(latestPrecheck)}</p>}
+          {precheckStages.length > 0 ? (
             precheckStages.map((stage, index) => {
               const ok = stage.status === "SUCCEEDED";
               const failed = stage.status === "FAILED";
@@ -287,12 +291,12 @@ export function Publishing() {
                 </div>
               );
             })
-          ) : (
+          ) : !latestPrecheck ? (
             <div className="state-block">
               <strong>{pendingPublication ? "尚未运行预检" : "暂无待预检发布"}</strong>
               <p>预检运行后这里将展示镜像治理、运行时健康与章节任务校验结果。</p>
             </div>
-          )}
+          ) : null}
         </Panel>
         <Panel title={<><h2>任务对账</h2>{taskTotal > 0 ? <span className="status blue">{`${taskTotal} 个任务`}</span> : null}</>}>
           <div className="section">

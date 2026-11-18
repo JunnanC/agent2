@@ -10,7 +10,10 @@ vi.mock("@edu/api-client", () => ({
   assessmentTeachingApi: { storeTests: vi.fn(), saveQuestion: vi.fn() },
 }));
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.clearAllMocks();
+});
 
 it("starts a programming question from an empty version and creates its default group", async () => {
   vi.mocked(teachingApi.createTemplateChapter).mockResolvedValue({
@@ -44,4 +47,49 @@ it("starts a programming question from an empty version and creates its default 
     6,
   ));
   client.clear();
+});
+
+it.each([true, false])("saves a Java-only question (Java selected first: %s)", async (javaFirst) => {
+  vi.mocked(assessmentTeachingApi.storeTests).mockResolvedValue({ asset_id: "tests-1", row_version: 6 });
+  render(<ToastProvider><AssessmentQuestions
+    courseId="course" templateId="template"
+    version={{
+      public_id: "version", status: "DRAFT", row_version: 5,
+      chapters: [{ public_id: "chapter-1", title: "题目", tasks: [] }],
+    } as never}
+    refresh={async () => undefined}
+  /></ToastProvider>);
+
+  fireEvent.click(screen.getByRole("button", { name: "新增编程题" }));
+  fireEvent.change(screen.getByLabelText("标题"), { target: { value: "Java 求和" } });
+  const python = screen.getByRole("checkbox", { name: "python" });
+  const java = screen.getByRole("checkbox", { name: "java" });
+  if (javaFirst) {
+    fireEvent.click(java);
+    fireEvent.click(python);
+  } else {
+    fireEvent.click(python);
+    fireEvent.click(screen.getByRole("button", { name: "保存题目" }));
+    expect(await screen.findByText("请至少选择一种允许语言")).toBeInTheDocument();
+    expect(assessmentTeachingApi.storeTests).not.toHaveBeenCalled();
+    fireEvent.click(java);
+  }
+
+  const language = screen.getByLabelText("参考解语言");
+  expect(language).toHaveValue("java");
+  fireEvent.click(python);
+  expect(language).toHaveValue("java");
+  fireEvent.click(python);
+
+  const reference = "public class Main {}";
+  fireEvent.change(screen.getByLabelText("参考解代码"), { target: { value: reference } });
+  fireEvent.click(screen.getByRole("button", { name: "保存题目" }));
+  await waitFor(() => expect(assessmentTeachingApi.saveQuestion).toHaveBeenCalledWith(
+    "course", "chapter-1", null,
+    expect.objectContaining({
+      question_spec: expect.objectContaining({ allowed_languages: ["java"] }),
+      marking_spec: expect.objectContaining({ reference_solutions: { java: { "Main.java": reference } } }),
+    }),
+    6,
+  ));
 });

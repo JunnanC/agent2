@@ -35,7 +35,7 @@ export function AssessmentQuestions({ courseId, templateId, version, refresh }: 
   const [allowed, setAllowed] = useState<AssessmentLanguage[]>(["python"]);
   const [samples, setSamples] = useState([{ input: "", output: "" }]);
   const [groups, setGroups] = useState<HiddenGroup[]>([{ id: "group1", score: "5", cases: [{ input: "", output: "" }] }]);
-  const [referenceLanguage, setReferenceLanguage] = useState<AssessmentLanguage>("python");
+  const [referenceLanguage, setReferenceLanguage] = useState<AssessmentLanguage | "">("python");
   const [reference, setReference] = useState("");
   const [starters, setStarters] = useState<Partial<Record<AssessmentLanguage, Record<string, string>>>>({});
   const [limits, setLimits] = useState<Partial<Record<AssessmentLanguage, { timeout_seconds: number; memory_mb: number }>>>({});
@@ -113,7 +113,8 @@ export function AssessmentQuestions({ courseId, templateId, version, refresh }: 
     let questionSpec: Record<string, unknown> = { options };
     let markingSpec: Record<string, unknown> = { correct_option_ids: correct, explanation };
     if (kind === "PROGRAMMING") {
-      if (!allowed.includes(referenceLanguage)) throw new Error("参考解语言必须属于允许语言");
+      if (!allowed.length) throw new Error("请至少选择一种允许语言");
+      if (!referenceLanguage || !allowed.includes(referenceLanguage)) throw new Error("参考解语言必须属于允许语言");
       const stored = await assessmentTeachingApi.storeTests(courseId, version.public_id, groups, rowVersion);
       rowVersion = stored.row_version;
       questionSpec = {
@@ -250,7 +251,13 @@ export function AssessmentQuestions({ courseId, templateId, version, refresh }: 
         <label>解析<textarea className="field" value={explanation} onChange={(e) => setExplanation(e.target.value)} /></label>
       </> : <>
         <p>允许语言</p>{languages.map((language) => <label key={language} style={{ marginRight: 16 }}>
-          <input type="checkbox" checked={allowed.includes(language)} onChange={(e) => setAllowed(e.target.checked ? [...allowed, language] : allowed.filter((v) => v !== language))} />{language}
+          <input type="checkbox" checked={allowed.includes(language)} onChange={(e) => {
+            const nextAllowed = e.target.checked ? [...allowed, language] : allowed.filter((value) => value !== language);
+            setAllowed(nextAllowed);
+            if (!referenceLanguage || !nextAllowed.includes(referenceLanguage)) {
+              setReferenceLanguage(nextAllowed[0] ?? "");
+            }
+          }} />{language}
         </label>)}
         {allowed.map((language) => <details key={language}><summary>{language} 初始文件与运行限制</summary>
           <label>单用例超时（秒）<input className="field" type="number" min="1" value={limits[language]?.timeout_seconds ?? (["c", "cpp"].includes(language) ? 2 : 3)} onChange={(e) => setLimits({ ...limits, [language]: { memory_mb: limits[language]?.memory_mb ?? (language === "java" ? 512 : 256), timeout_seconds: Number(e.target.value) } })} /></label>
@@ -295,7 +302,9 @@ export function AssessmentQuestions({ courseId, templateId, version, refresh }: 
           <button className="btn" disabled={groups.length <= 1} onClick={() => setGroups(groups.filter((_, i) => i !== index))}>删除测试组</button>
         </div>)}
         <button className="btn" onClick={() => setGroups([...groups, { id: crypto.randomUUID(), score: "1", cases: [{ input: "", output: "" }] }])}>新增测试组</button>
-        <label>参考解语言<select className="field" value={referenceLanguage} onChange={(e) => setReferenceLanguage(e.target.value as AssessmentLanguage)}>{allowed.map((language) => <option key={language}>{language}</option>)}</select></label>
+        <label>参考解语言<select className="field" value={referenceLanguage} disabled={!allowed.length} onChange={(e) => setReferenceLanguage(e.target.value as AssessmentLanguage)}>
+          {allowed.map((language) => <option key={language}>{language}</option>)}
+        </select></label>
         <label>参考解代码<textarea className="field" rows={10} value={reference} onChange={(e) => setReference(e.target.value)} /></label>
         <label>参考解的其他源文件<input type="file" multiple onChange={(e) => {
           const files = Array.from(e.target.files ?? []);
