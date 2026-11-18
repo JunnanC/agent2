@@ -6,7 +6,7 @@ from typing import Any
 from urllib.parse import quote
 
 from django.conf import settings
-from django.http import HttpRequest, StreamingHttpResponse
+from django.http import HttpRequest, HttpResponse, StreamingHttpResponse
 from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, extend_schema
 from rest_framework.permissions import BasePermission
 from rest_framework.response import Response
@@ -167,15 +167,43 @@ class FileDownloadView(APIView):
 
     @extend_schema(
         operation_id="files_download",
-        responses={200: OpenApiResponse(description="authorized file content")},
-        parameters=[],
+        responses={
+            200: OpenApiResponse(description="authorized file content"),
+            415: OpenApiResponse(description="format does not support safe preview"),
+        },
+        parameters=[
+            OpenApiParameter(
+                "preview",
+                bool,
+                OpenApiParameter.QUERY,
+                description="Safe file preview; unsupported formats return 415.",
+            )
+        ],
         tags=["reports"],
         extensions={"x-portals": ["USER", "TEACHING"]},
     )
-    def get(self, request: HttpRequest, token: str) -> StreamingHttpResponse:
+    def get(self, request: HttpRequest, token: str) -> HttpResponse | StreamingHttpResponse:
         grant, asset = get_download_target(
             token=token, actor=request.user, portal=str(request.portal)
         )
+        preview_requested = request.query_params.get("preview") == "1"
+        preview = preview_requested and asset.media_type in {
+            "application/pdf",
+            "image/png",
+            "image/jpeg",
+            "image/gif",
+            "image/webp",
+            "text/plain",
+        }
+        if preview_requested and not preview:
+            response = HttpResponse(
+                "此格式暂不支持在线预览，请返回课程页面使用下载按钮。",
+                content_type="text/plain; charset=utf-8",
+                status=415,
+            )
+            response["Cache-Control"] = "private, no-store"
+            response["X-Content-Type-Options"] = "nosniff"
+            return response
         consume_download_grant(
             grant_id=grant.pk,
             actor=request.user,
@@ -200,8 +228,12 @@ class FileDownloadView(APIView):
             stream(), content_type=asset.media_type or "application/octet-stream"
         )
         response["Content-Length"] = str(stored.content_length)
+        disposition = "inline" if preview else "attachment"
+        response["Content-Security-Policy"] = (
+            "sandbox; default-src 'none'; style-src 'unsafe-inline'"
+        )
         response["Content-Disposition"] = (
-            f"attachment; filename*=UTF-8''{quote(asset.original_name or 'download')}"
+            f"{disposition}; filename*=UTF-8''{quote(asset.original_name or 'download')}"
         )
         response["Cache-Control"] = "private, no-store"
         response["X-Content-Type-Options"] = "nosniff"

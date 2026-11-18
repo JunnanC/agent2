@@ -1881,6 +1881,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v2/platform/student-imports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["platform_student_import"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v2/platform/tasks/anomalies": {
         parameters: {
             query?: never;
@@ -5174,6 +5190,7 @@ export interface components {
             file: string;
         };
         MeData: {
+            student_number: string | null;
             public_id: string;
             /** Format: email */
             email: string;
@@ -6127,6 +6144,31 @@ export interface components {
             status: string;
             reason?: string;
         };
+        StudentImportData: {
+            rows: components["schemas"]["StudentImportRow"][];
+        };
+        StudentImportInput: {
+            csv: string;
+        };
+        StudentImportResponse: {
+            data: components["schemas"]["StudentImportData"];
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        StudentImportRow: {
+            row_number: number;
+            student_number: string;
+            status: components["schemas"]["StudentImportRowStatusEnum"];
+            user_id?: string;
+            error?: string;
+        };
+        /**
+         * @description * `CREATED` - CREATED
+         *     * `FAILED` - FAILED
+         * @enum {string}
+         */
+        StudentImportRowStatusEnum: "CREATED" | "FAILED";
         /**
          * @description * `HOST` - Host
          *     * `CIDR` - Cidr
@@ -6585,6 +6627,7 @@ export interface components {
             password: string;
         };
         UserData: {
+            student_number: string | null;
             public_id: string;
             /** Format: email */
             email: string;
@@ -10125,6 +10168,31 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PolicyResponse"];
+                };
+            };
+        };
+    };
+    platform_student_import: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StudentImportInput"];
+                "application/x-www-form-urlencoded": components["schemas"]["StudentImportInput"];
+                "multipart/form-data": components["schemas"]["StudentImportInput"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudentImportResponse"];
                 };
             };
         };
@@ -14887,7 +14955,10 @@ export interface operations {
     };
     files_download: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Safe file preview; unsupported formats return 415. */
+                preview?: boolean;
+            };
             header?: never;
             path: {
                 token: string;
@@ -14898,6 +14969,13 @@ export interface operations {
         responses: {
             /** @description authorized file content */
             200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description format does not support safe preview */
+            415: {
                 headers: {
                     [name: string]: unknown;
                 };

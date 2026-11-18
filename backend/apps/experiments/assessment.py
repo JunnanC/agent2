@@ -237,6 +237,10 @@ def assessment_data(*, actor: User, task_id: str) -> dict[str, Any]:
         "all_submitted": all(s["status"] == "SUBMITTED" for s in sections),
         "server_time": now, "choice_answers_visible": answer_visible,
         "report_required": task.publication.report_required,
+        "report_template": ({
+            "asset_id": task.publication.template_version.report_template_asset.public_id,
+            "file_name": task.publication.template_version.report_template_asset.original_name,
+        } if task.publication.template_version.report_template_asset_id else None),
     }
 
 
@@ -316,7 +320,7 @@ def submit_programming(
     if not questions or set(versions) != {question.public_id for question in questions}:
         raise StateConflict(detail={"versions": "complete_question_set_required"})
     report = ReportDraft.objects.select_for_update().filter(task=task, student=actor).first()
-    if task.publication.report_required and (report is None or not report.body_markdown.strip()):
+    if task.publication.report_required and (report is None or not report.attachments.exists()):
         raise StateConflict(detail={"report": "required"})
     if report is not None and report.row_version != report_version:
         from apps.core.errors import RowVersionConflict
