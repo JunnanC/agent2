@@ -8,6 +8,7 @@ import { cpp } from "@codemirror/lang-cpp";
 import { java } from "@codemirror/lang-java";
 import { go } from "@codemirror/legacy-modes/mode/go";
 import { basicSetup } from "codemirror";
+import { completionDataFor } from "./completions";
 
 export interface CodeEditorProps {
   value: string;
@@ -35,6 +36,7 @@ export default function CodeEditor({ value, language, onChange, readOnly = false
       state: EditorState.create({
         doc: initialValue.current,
         extensions: [basicSetup, syntax, keymap.of([indentWithTab]),
+          EditorState.languageData.of(() => completionDataFor(language)),
           EditorState.readOnly.of(readOnly), EditorView.editable.of(!readOnly),
           EditorView.contentAttributes.of({ "aria-label": ariaLabel }),
           EditorView.theme({
