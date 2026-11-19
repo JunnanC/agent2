@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { timetableApi } from "@edu/api-client";
 import type { TimetableImport, TimetableSchedule } from "@edu/api-client";
@@ -20,7 +19,7 @@ const rowErrorNames: Record<string, string> = {
   invalid_period: "节次范围无效", invalid_week_range: "周次范围无效", duplicate: "课表记录重复", course_code_conflict: "课程代码已被使用",
 };
 
-export function StudentTimetable({ uploadContainer }: { uploadContainer?: HTMLDivElement | null }) {
+export function StudentTimetable() {
   const toast = useToast();
   const client = useQueryClient();
   const importResults = useRef<HTMLDivElement>(null);
@@ -70,7 +69,7 @@ export function StudentTimetable({ uploadContainer }: { uploadContainer?: HTMLDi
     mutationFn: (selected: File) => timetableApi.upload(selected, timetable.data?.term.public_id),
     onSuccess: (data) => {
       storeJob(data);
-      if (uploadContainer) importResults.current?.focus();
+      importResults.current?.focus();
     },
     onError: (error) => toast.notify(error.message, "error"),
   });
@@ -107,7 +106,7 @@ export function StudentTimetable({ uploadContainer }: { uploadContainer?: HTMLDi
 
   return <Panel className="section student-timetable" title={<><h2>我的课表</h2><span className="subtle">{displayTermName(timetable.data?.term.name)}</span></>}>
     <RequestStateView loading={timetable.isLoading} error={timetable.error} onRetry={() => void timetable.refetch()}
-      empty={!timetable.data?.schedules.length} emptyState={<EmptyState title="暂无已排课时间" hint="可在页面上方导入个人课表。" />}>
+      empty={!timetable.data?.schedules.length} emptyState={<EmptyState title="暂无已排课时间" hint="可在下方导入个人课表。" />}>
       {groupedSchedules.map((group) => <div className="item timetable-course-row" key={`${group.title}-${group.slots[0]?.weekday}-${group.slots[0]?.start_period}`}>
         <div><strong>{group.title}</strong><small>{group.classroom || "教室待定"} · {group.instructor || "教师待定"}</small></div>
         <div className="timetable-slots">
@@ -117,7 +116,7 @@ export function StudentTimetable({ uploadContainer }: { uploadContainer?: HTMLDi
         </div>
       </div>)}
     </RequestStateView>
-    {uploadContainer ? createPortal(uploadForm, uploadContainer) : uploadContainer === undefined && uploadForm}
+    {uploadForm}
     <div ref={importResults} role="region" aria-label="课表导入结果" tabIndex={-1}>
       <RequestStateView loading={imports.isLoading} error={imports.error} onRetry={() => void imports.refetch()} empty={!imports.data?.rows.length} emptyState={<></>}>
         {(imports.data?.rows.length ?? 0) > 0 && <label className="form-label">最近的导入

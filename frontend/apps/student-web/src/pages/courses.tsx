@@ -1,5 +1,4 @@
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
 import { Link } from "react-router-dom";
 import { studentApi } from "@edu/api-client";
 import { keys } from "@edu/query-keys";
@@ -19,17 +18,15 @@ function enrollmentStatus(status: string): { label: string; tone: "good" | "warn
 }
 
 export function Courses() {
-  const [timetableUploadContainer, setTimetableUploadContainer] = useState<HTMLDivElement | null>(null);
   const enrollments = useQuery({ queryKey: keys.enrollments({ status: "ACTIVE" }), queryFn: () => studentApi.myEnrollments({ page_size: 100, status: "ACTIVE" }) });
   const applications = useQuery({ queryKey: keys.enrollments({ status: "PENDING" }), queryFn: () => studentApi.myEnrollments({ page_size: 100, status: "PENDING" }) });
 
   return (
     <>
       <Breadcrumbs items={[{ label: "学生门户" }]} current="我的课程" />
-      <header className="student-overview-heading student-courses-heading">
+      <header className="student-overview-heading">
         <div><h1>我的课程</h1></div>
         <Link className="btn primary" to="/courses/join">加入课程</Link>
-        <div className="student-timetable-upload-slot" ref={setTimetableUploadContainer} />
       </header>
       <div className="courses-browser">
         <RequestStateView
@@ -41,7 +38,6 @@ export function Courses() {
             <EmptyState
               title="暂无进行中的课程"
               hint="已结课课程会保留在下方「学习历史」中。"
-              action={<Link className="btn primary" to="/courses/join">加入课程</Link>}
             />
           )}
         >
@@ -84,7 +80,7 @@ export function Courses() {
           ))}
         </RequestStateView>
       </Panel>
-      <StudentTimetable uploadContainer={timetableUploadContainer} />
+      <StudentTimetable />
       <LearningHistory />
     </>
   );
