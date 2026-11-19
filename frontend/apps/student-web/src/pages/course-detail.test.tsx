@@ -83,6 +83,31 @@ it("三个章节后追加第四项问答入口，问答独立展示并能进入�
   expect(screen.getByRole("link", { name: "返回课程介绍" })).toHaveAttribute("href", "/courses/course-1");
 });
 
+it.each(["auto", "visible"])("切换章节时回到新章节的开头（overflow-y: %s）", async (overflowY) => {
+  vi.mocked(studentApi.courseDetail).mockResolvedValue(course);
+  vi.mocked(studentApi.courseChapters).mockResolvedValue({ ...empty, total: 2, rows:
+    [1, 2].map((index) => ({ public_id: `chapter-${index}`, course_id: "course-1", title: `第${index}章`, description: null, sort_order: index, status: "PUBLISHED", row_version: "1" })) });
+  const scrollIntoView = vi.fn();
+  Object.defineProperty(HTMLElement.prototype, "scrollIntoView", { configurable: true, value: scrollIntoView });
+
+  show("/courses/course-1/chapters/chapter-1");
+  await screen.findByRole("heading", { name: "第1章" });
+  const content = screen.getByRole("region", { name: "课程内容" });
+  content.style.overflowY = overflowY;
+  content.scrollTop = 750;
+  scrollIntoView.mockClear();
+
+  fireEvent.click(screen.getByRole("button", { name: /第2章/ }));
+  expect(await screen.findByRole("heading", { name: "第2章" })).toBeInTheDocument();
+  if (overflowY === "auto") {
+    expect(content.scrollTop).toBe(0);
+    expect(scrollIntoView).not.toHaveBeenCalled();
+  } else {
+    expect(scrollIntoView).toHaveBeenCalledExactlyOnceWith({ behavior: "instant", block: "start" });
+    expect(scrollIntoView.mock.contexts[0]).toBe(content);
+  }
+});
+
 it("零章节时问答可直接返回课程介绍，进入问答不加载日历", async () => {
   vi.mocked(studentApi.courseDetail).mockResolvedValue(course);
   show("/courses/course-1/questions");

@@ -1,5 +1,5 @@
 import { ChapterResources } from "@/components/chapter-resources";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { studentApi, taskApi } from "@edu/api-client";
@@ -11,6 +11,10 @@ import { CourseAgent } from "@/components/course-agent";
 import { EnrollmentExit } from "@/components/enrollment-exit";
 import { ApiError } from "@edu/auth-client";
 
+function hasIndependentScroll(content: HTMLElement) {
+  return ["auto", "scroll"].includes(window.getComputedStyle(content).overflowY);
+}
+
 export function CourseDetail({ discussionPage = false }: { discussionPage?: boolean }) {
   const { courseId = "", chapterId } = useParams();
   const navigate = useNavigate();
@@ -18,6 +22,7 @@ export function CourseDetail({ discussionPage = false }: { discussionPage?: bool
   const [activeChapterId, setActiveChapterId] = useState<string | null>(null);
   const contentRef = useRef<HTMLElement>(null);
   const chapterNavRef = useRef<HTMLElement>(null);
+  const lastOpenedChapter = useRef<string | null>(null);
   const detail = useQuery({ queryKey: keys.course(courseId), queryFn: () => studentApi.courseDetail(courseId),
     staleTime: 0, refetchOnMount: "always", retry: false });
   const canRead = detail.isSuccess && !detail.isFetching;
@@ -31,6 +36,24 @@ export function CourseDetail({ discussionPage = false }: { discussionPage?: bool
   const tasks = useQuery({ queryKey: keys.tasks({ course_id: courseId }), queryFn: () => taskApi.list({ course_id: courseId }), enabled: loadOverview });
   const chapterRows = chapters.data?.rows ?? [];
   const currentChapterId = chapterId ?? activeChapterId ?? chapterRows[0]?.public_id ?? null;
+
+  useLayoutEffect(() => {
+    if (!chapterId || discussionPage) {
+      lastOpenedChapter.current = null;
+      return;
+    }
+    const content = contentRef.current;
+    if (!canRead || !chapters.isSuccess || !content || lastOpenedChapter.current === location.pathname) return;
+    lastOpenedChapter.current = location.pathname;
+    if (location.hash) return;
+
+    if (hasIndependentScroll(content)) {
+      content.scrollTop = 0;
+    } else {
+      content.scrollIntoView({ behavior: "instant", block: "start" });
+    }
+  }, [canRead, chapterId, chapters.isSuccess, discussionPage, location.hash, location.pathname]);
+
   useEffect(() => {
     if (!canRead || discussionPage || !chapters.data?.rows.length) return;
     const rows = chapters.data.rows;
@@ -41,7 +64,7 @@ export function CourseDetail({ discussionPage = false }: { discussionPage?: bool
       frame = 0;
       let current = firstChapterId;
       const container = contentRef.current;
-      const rootTop = container && ["auto", "scroll"].includes(window.getComputedStyle(container).overflowY)
+      const rootTop = container && hasIndependentScroll(container)
         ? container.getBoundingClientRect().top : 0;
       for (const chapter of rows) {
         const panel = document.getElementById(`course-chapter-${chapter.public_id}`);
@@ -194,22 +217,20 @@ export function CourseDetail({ discussionPage = false }: { discussionPage?: bool
             </RequestStateView>
           </Panel>
 
-          <div className="grid two">
-            <Panel title={<h2>课程公告</h2>}>
-              <RequestStateView loading={announcements.isLoading} error={announcements.error}
-                onRetry={() => void announcements.refetch()}
-                empty={!announcements.data?.rows.length}
-                emptyState={<EmptyState title="暂无公告" />}>
-                <div>
-                  {(announcements.data?.rows ?? []).slice(0, 5).map((announcement) => (
-                    <div className="item" key={announcement.public_id}>
-                      <div><strong>{announcement.title}</strong><small>{formatDateTime(announcement.published_at)}</small></div>
-                    </div>
-                  ))}
-                </div>
-              </RequestStateView>
-            </Panel>
-          </div>
+          <Panel title={<h2>课程公告</h2>}>
+            <RequestStateView loading={announcements.isLoading} error={announcements.error}
+              onRetry={() => void announcements.refetch()}
+              empty={!announcements.data?.rows.length}
+              emptyState={<EmptyState title="暂无公告" />}>
+              <div>
+                {(announcements.data?.rows ?? []).slice(0, 5).map((announcement) => (
+                  <div className="item" key={announcement.public_id}>
+                    <div><strong>{announcement.title}</strong><small>{formatDateTime(announcement.published_at)}</small></div>
+                  </div>
+                ))}
+              </div>
+            </RequestStateView>
+          </Panel>
 
             <Panel title={<><h2>课程日历</h2><span className="subtle">截止与关键时间</span></>}>
               <RequestStateView loading={events.isLoading} error={events.error}
