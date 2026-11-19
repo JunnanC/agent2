@@ -63,9 +63,11 @@ export function Modal({ open, onClose, title, eyebrow, children, actions, wide }
   return (
     <div role="presentation" className="modal-backdrop open" onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
       <div className={wide ? "modal wide" : "modal"} role="dialog" aria-modal="true" aria-labelledby={titleId} ref={containerRef}>
-        {eyebrow ? <div className="modal-eyebrow">{eyebrow}</div> : null}
-        <h2 id={titleId}>{title}</h2>
-        {children}
+        <div className="modal-head">
+          {eyebrow ? <div className="modal-eyebrow">{eyebrow}</div> : null}
+          <h2 id={titleId}>{title}</h2>
+        </div>
+        <div className="modal-body">{children}</div>
         {actions ? <div className="modal-actions">{actions}</div> : null}
       </div>
     </div>

@@ -32,6 +32,7 @@ export interface Image {
   public_id: string;
   registry: string;
   repository: string;
+  display_name?: string;
   display_tag: string;
   digest: string;
   scan_status: string;
@@ -50,6 +51,18 @@ export interface Runtime {
   capacity_memory_mb: number;
   available_memory_mb: number;
   last_health_at?: string;
+}
+export interface ResourceProfile {
+  public_id: string;
+  code: string;
+  name: string;
+  runtime_type: string;
+  status: string;
+  cpu_millicores: number;
+  memory_mb: number;
+  disk_gb: number;
+  network_mode: string;
+  row_version: number;
 }
 export interface Audit {
   id: string;

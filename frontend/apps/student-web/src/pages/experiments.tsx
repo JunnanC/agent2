@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { taskApi } from "@edu/api-client";
 import { keys } from "@edu/query-keys";
-import { Breadcrumbs, DataTable, FilterBar,  Panel, RequestStateView, StatusBadge } from "@edu/ui";
+import { Breadcrumbs, DataTable, FilterBar,  PageHeader, Panel, RequestStateView, StatusBadge } from "@edu/ui";
 import { formatDateTime, taskStatusLabel, taskStatusTone } from "@/lib/task-format";
 
 const STATUS_FILTERS = [
@@ -35,7 +35,7 @@ export function Experiments() {
   return (
     <>
       <Breadcrumbs items={[{ label: "学生门户" }]} current="我的实验" />
-      
+      <PageHeader title="我的实验" />
       <Panel>
         <RequestStateView
           loading={tasks.isLoading}
@@ -45,7 +45,7 @@ export function Experiments() {
           emptyState={(
             <div className="state-block">
               <strong>暂无实验任务</strong>
-              <p>实验发布后，任务会按照课程分配到这里。</p>
+              <p>实验发布后会出现在这里。</p>
               <Link className="btn" to="/courses">查看我的课程</Link>
             </div>
           )}

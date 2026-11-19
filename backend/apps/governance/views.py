@@ -51,6 +51,7 @@ from .serializers import (
     ImageReResolveSerializer,
     ImageResolveSerializer,
     ImageResponseSerializer,
+    ImageRenameSerializer,
     ImageScanSerializer,
     PolicyListResponseSerializer,
     PolicyPutSerializer,
@@ -85,6 +86,7 @@ from .services import (
     create_runtime_adapter,
     decide_image,
     put_policy,
+    rename_image,
     revoke_allowlist_entry,
     transition_resource_profile,
     update_image_scan,
@@ -375,6 +377,42 @@ class ImageDetailView(APIView):
             **{key: value for key, value in data.items() if key != "scan_report_ref"},
         )
         return _response(request, image_data(item), etag=etag_for_version(item.row_version))
+
+
+class ImageRenameView(APIView):
+    permission_classes = [IsPlatformPortal]
+
+    @extend_schema(
+        operation_id="platform_images_rename",
+        request=ImageRenameSerializer,
+        responses={200: ImageResponseSerializer},
+        parameters=[IDEMPOTENCY_KEY, IF_MATCH],
+        tags=["platform-governance"],
+        extensions={"x-portals": ["PLATFORM"]},
+    )
+    def post(self, request: HttpRequest, image_id: str) -> Response:
+        _require_recent_auth(request)
+        serializer = ImageRenameSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        expected = parse_if_match(request.headers.get("If-Match"))
+
+        def operation() -> StoredResponse:
+            item = rename_image(
+                image_id=image_id,
+                actor=request.user,
+                expected_version=expected,
+                display_name=data["display_name"],
+                reason=data.get("reason", ""),
+                context=_context(request),
+            )
+            return StoredResponse(
+                200,
+                _body(request, image_data(item)),
+                {"ETag": etag_for_version(item.row_version)},
+            )
+
+        return _idempotent_response(request, payload=data, operation=operation)
 
 
 class ImageDecisionView(APIView):

@@ -42,23 +42,14 @@ export function Login() {
   };
 
   return (
-    <div style={{ minHeight: "100vh", display: "grid", placeItems: "center", padding: 20, background: "var(--paper)" }}>
-      <form
-        className="panel"
-        style={{ width: "min(420px, 94vw)", display: "grid", gap: 10, padding: 24 }}
-        onSubmit={submit}
-        noValidate
-      >
-        <div className="brand-lockup" style={{ marginBottom: 4 }}>
+    <div className="auth-shell">
+      <form className="auth-card" onSubmit={submit} noValidate>
+        <div className="auth-brand">
           <span className="brand-mark"><PlatformMark size={26} /></span>
-          <span className="brand-name">Edu Agent Platform</span>
-          <span className="context-dot" />
-          <span className="context-label">student.localhost · 学生门户</span>
+          <span className="brand-name">实验教学平台</span>
+          <span className="auth-portal">学生门户</span>
         </div>
-        <h1 style={{ fontSize: 22, margin: "4px 0 2px" }}>登录学生门户</h1>
-        <p className="subtle" style={{ margin: 0 }}>
-          使用学生账号登录，或先完成邮箱验证注册。
-        </p>
+        <h1>登录学生门户</h1>
 
         <label className="form-label" htmlFor="login-identifier">学号 / 账号 / 邮箱</label>
         <input id="login-identifier" className="field" autoComplete="username"
@@ -70,10 +61,10 @@ export function Login() {
 
         {error ? <div className="field-error" role="alert">{error}</div> : null}
 
-        <button type="submit" className="btn primary" style={{ marginTop: 10, justifyContent: "center" }} disabled={submitting}>
-          {submitting ? "登录中…" : "登录学生门户"}
+        <button type="submit" className="btn primary" style={{ marginTop: 6, justifyContent: "center" }} disabled={submitting}>
+          {submitting ? "登录中…" : "登录"}
         </button>
-        <Link to="/register">注册学生账号</Link>
+        <div className="auth-footer"><Link to="/register">注册学生账号</Link></div>
       </form>
     </div>
   );

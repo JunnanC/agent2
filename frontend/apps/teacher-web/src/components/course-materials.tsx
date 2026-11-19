@@ -135,7 +135,7 @@ export function CourseMaterials({ courseId }: { courseId: string }) {
   const submitChapter = (event: FormEvent) => { event.preventDefault(); save.mutate(); };
 
   return <div className="course-content-modules">
-    <Panel id="course-chapters-panel" className="course-content-module" title={<><div className="content-module-title"><h2>课程章节</h2><span>{rows.length} 个章节</span></div><p className="content-module-description">编写章节说明，评审后发布给学生。</p></>}
+    <Panel id="course-chapters-panel" className="course-content-module" title={<div className="content-module-title"><h2>课程章节</h2><span>{rows.length} 个章节</span></div>}
       actions={<Button disabled={busy || chapters.isPending || chapters.isError} onClick={() => { setEditing(null); setName(""); setContent(""); setAiDraft(null); requestAnimationFrame(() => nameInput.current?.focus()); }}><Icon name="plus" size={16} />新建章节</Button>}>
       <RequestStateView loading={chapters.isLoading} error={chapters.error} onRetry={refreshChapters} empty={false}>
         <div className="chapter-workspace">
@@ -165,7 +165,7 @@ export function CourseMaterials({ courseId }: { courseId: string }) {
       </RequestStateView>
     </Panel>
 
-    <Panel id="course-materials-panel" className="course-content-module" title={<><div className="content-module-title"><h2>学习材料</h2><span>{materialRows.length} 份材料</span></div><p className="content-module-description">为章节添加讲义、指导书等附件，材料单独发布。</p></>}
+    <Panel id="course-materials-panel" className="course-content-module" title={<div className="content-module-title"><h2>学习材料</h2><span>{materialRows.length} 份材料</span></div>}
       actions={<div className="material-chapter-scope"><label htmlFor="material-chapter">当前章节</label><select id="material-chapter" className="field" aria-label="学习材料所在章节" value={materialChapter?.public_id ?? ""} disabled={!rows.length || upload.isPending} onChange={event => { setMaterialChapterId(event.target.value); resetUpload(); }}>
         {!rows.length && <option value="">请先创建课程章节</option>}{rows.map(row => <option key={row.public_id} value={row.public_id}>{chapterTitle(row.position, row.title)}</option>)}
       </select></div>}>

@@ -222,9 +222,11 @@ def assessment_snapshot(
             "marking_spec": private, "max_score": str(points),
         })
     if programming:
+        from apps.provisioning.adapters import ASSESSMENT_RUNTIME_DRIVERS
+
         if not all((version.runtime_adapter_id, version.image_id, version.resource_profile_id)):
             invalid("runtime", "programming_runtime_required")
-        if version.runtime_adapter.driver != "DOCKER_LOCAL":
+        if version.runtime_adapter.driver not in ASSESSMENT_RUNTIME_DRIVERS:
             invalid("runtime", "stdio_requires_docker_local")
         if not version.image.is_ready or version.runtime_adapter.status != "ENABLED":
             invalid("runtime", "approved_image_and_enabled_runtime_required")

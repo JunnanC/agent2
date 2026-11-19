@@ -1,14 +1,14 @@
 import type { PrecheckRun } from "@edu/api-client";
 
 const detailMessages: Record<string, string> = {
-  programming_runtime_required: "请在「编程题运行环境」选择运行适配器、执行镜像和资源规格，然后保存。",
-  stdio_requires_docker_local: "编程题需要使用 Docker Local 运行适配器。",
-  approved_image_and_enabled_runtime_required: "请选择已审批的执行镜像和已启用的运行适配器。",
+  programming_runtime_required: "该版本缺少判题环境配置，请新建草稿版本后重试；仍失败请联系管理员。",
+  stdio_requires_docker_local: "判题环境不是平台支持的运行方式，请联系管理员。",
+  approved_image_and_enabled_runtime_required: "判题环境不可用（镜像未就绪或运行方式已停用），请联系管理员。",
   real_reference_execution_required: "当前环境未启用实际判题，无法运行参考解。请联系管理员。",
-  toolchain_smoke_failed: "执行镜像未通过编程语言工具链检查。请核对镜像是否支持题目允许的语言。",
+  toolchain_smoke_failed: "判题环境未通过编程语言工具链检查。请核对镜像是否支持题目允许的语言。",
   reference_does_not_pass_samples: "参考解未通过公开示例。请核对「公开示例」的输入、预期输出和参考解代码。",
   reference_does_not_pass_all_hidden_tests: "参考解未通过全部隐藏用例。请核对隐藏输入、预期输出和参考解代码。",
-  exceeds_resource_profile: "题目的内存限制超过了资源规格上限。请调整题目内存限制或选择其他资源规格。",
+  exceeds_resource_profile: "题目的内存限制超过了所选判题资源，请调低题目内存限制或选择更高的档位。",
   supported_unique_languages_required: "请为编程题选择至少一种受支持的允许语言。",
   allowed_language_reference_required: "请提供参考解，且参考解语言必须属于允许语言。",
   "starter_files.default_entrypoint_required": "初始文件缺少对应编程语言的入口文件。",

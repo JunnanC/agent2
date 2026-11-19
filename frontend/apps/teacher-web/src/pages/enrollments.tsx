@@ -116,14 +116,17 @@ export function Enrollments() {
 
   return (
     <>
-      <div className="page-actions align-end">
-        <Button onClick={() => fileInputRef.current?.click()}>批量导入</Button>
-        <input ref={fileInputRef} type="file" accept=".csv,text/csv" hidden
-          onChange={(event) => {
-            const file = event.target.files?.[0];
-            if (file) runImportPrecheck.mutate(file);
-            event.target.value = "";
-          }} />
+      <div className="tab-head">
+        <h2>成员与申请</h2>
+        <div className="page-actions">
+          <Button onClick={() => fileInputRef.current?.click()}>批量导入</Button>
+          <input ref={fileInputRef} type="file" accept=".csv,text/csv" hidden
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              if (file) runImportPrecheck.mutate(file);
+              event.target.value = "";
+            }} />
+        </div>
       </div>
 
       <Panel className="section">
@@ -199,12 +202,12 @@ export function Enrollments() {
         </RequestStateView>
       </Panel>
 
-      <Panel className="section" title={<><h2>学生导入任务</h2><span className="subtle">导入 CSV 学生名单的处理进度，不是实验作业</span>
+      <Panel className="section" title={<><h2>学生导入</h2>
         <span className={`status ${jobRunning ? "blue" : "neutral"}`}>{jobRunning ? "进行中" : "无进行中作业"}</span>
       </>}>
         {!importJobId || !importJob.data ? (
           <>
-            <p className="subtle" style={{ margin: "4px 0 10px" }}>先预检 CSV 中的学号、邮箱和课程分组，再执行导入。</p>
+            <p className="subtle" style={{ margin: "4px 0 10px" }}>先预检 CSV 中的学号、邮箱和课程分组。</p>
             <Button size="sm" onClick={() => fileInputRef.current?.click()}>选择文件</Button>
             {runImportPrecheck.isPending ? <small style={{ display: "block", marginTop: 8 }}>正在提交预检…</small> : null}
           </>

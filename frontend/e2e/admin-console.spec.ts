@@ -241,7 +241,7 @@ test("seven-page console preserves real write semantics and read-only resources"
   await page.getByRole("button", { name: "切换导航" }).click();
   await page
     .getByRole("navigation")
-    .getByRole("button", { name: "运行概览", exact: true })
+    .getByRole("button", { name: "概览", exact: true })
     .click();
   expect(
     await page.evaluate(

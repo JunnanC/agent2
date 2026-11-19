@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { meApi } from "@edu/api-client";
 import type { NotificationItem } from "@edu/api-client";
 import { keys } from "@edu/query-keys";
-import { Breadcrumbs, Button, EmptyState, Panel, RequestStateView, StatusBadge, useToast } from "@edu/ui";
+import { Breadcrumbs, Button, EmptyState, PageHeader, Panel, RequestStateView, StatusBadge, useToast } from "@edu/ui";
 import { formatDateTime } from "@/lib/task-format";
 
 export function Notifications() {
@@ -26,11 +26,12 @@ export function Notifications() {
   const unread = rows.filter((item) => !item.read).length;
 
   return <>
-    <Breadcrumbs items={[{ label: "教师门户" }]} current="通知中心" />
-    <Panel title={<><h2>通知中心</h2><StatusBadge tone={unread ? "warn" : "good"}>{unread} 条未读</StatusBadge></>}>
+    <Breadcrumbs items={[{ label: "教师门户" }]} current="通知" />
+    <PageHeader title="通知" actions={<StatusBadge tone={unread ? "warn" : "good"}>{unread} 条未读</StatusBadge>} />
+    <Panel>
       <RequestStateView loading={notifications.isLoading} error={notifications.error}
         onRetry={() => void notifications.refetch()} empty={!rows.length}
-        emptyState={<EmptyState title="暂无通知" hint="学生退课等课程消息会显示在这里。" />}>
+        emptyState={<EmptyState title="暂无通知" hint="课程消息会显示在这里。" />}>
         <div className="notification-list">
           {rows.map((item) => <article key={item.id} className={`notification-card${item.read ? " read" : ""}`}>
             <div style={{ minWidth: 0, flex: 1 }}>

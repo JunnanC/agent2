@@ -38,7 +38,7 @@
 .chapter-editor-footer { margin: 16px -24px 0; padding: 16px 24px; border-top: 1px solid #edf0ee; display: flex; justify-content: space-between; align-items: center; gap: 16px; }
 .chapter-editor-footer .actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
 .chapter-editor-footer .btn { font-size: 13px; min-height: 36px; }
-.chapter-editor-footer .btn.primary { background: #263c36; border-color: #263c36; }
+.chapter-editor-footer .btn.primary { background: var(--teal); border-color: var(--teal); }
 .material-chapter-scope { display: flex; align-items: center; gap: 10px; }
 .material-chapter-scope > label { font-size: 12px; color: #606e73; white-space: nowrap; }
 .material-chapter-scope select { width: 280px; max-width: 100%; font-size: 13px; min-height: 36px !important; }

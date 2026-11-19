@@ -1,3 +1,4 @@
+import { PlatformMark } from "@edu/ui";
 import { useState, type FormEvent } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { authFlow } from "@edu/auth-client";
@@ -28,10 +29,15 @@ export function Register() {
     }
   };
 
-  return <div style={{ minHeight: "100vh", display: "grid", placeItems: "center", padding: 20, background: "var(--paper)" }}>
-    <form className="panel" style={{ width: "min(420px, 94vw)", display: "grid", gap: 10, padding: 24 }} onSubmit={submit}>
-      <h1 style={{ fontSize: 22, margin: 0 }}>{token ? "验证邮箱" : "注册学生账号"}</h1>
-      {done ? <p>{token ? "邮箱验证成功，现在可以登录学生端。" : "若邮箱可用于注册，验证邮件已发送，请查收。"}</p> : token ? <p>确认邮箱后即可使用学生端。</p> : <>
+  return <div className="auth-shell">
+    <form className="auth-card" onSubmit={submit}>
+      <div className="auth-brand">
+        <span className="brand-mark"><PlatformMark size={26} /></span>
+        <span className="brand-name">实验教学平台</span>
+        <span className="auth-portal">学生门户</span>
+      </div>
+      <h1>{token ? "验证邮箱" : "注册学生账号"}</h1>
+      {done ? <p className="auth-hint">{token ? "邮箱验证成功，现在可以登录。" : "验证邮件已发送，请查收。"}</p> : token ? <p className="auth-hint">确认邮箱后即可登录学生门户。</p> : <>
         <label className="form-label" htmlFor="student-email">邮箱</label>
         <input className="field" id="student-email" name="email" type="email" autoComplete="email" required />
         <label className="form-label" htmlFor="student-username">用户名</label>
@@ -42,8 +48,8 @@ export function Register() {
         <input className="field" id="student-password" name="password" type="password" autoComplete="new-password" minLength={12} required />
       </>}
       {error ? <p className="field-error" role="alert">{error}</p> : null}
-      {!done ? <button className="btn primary" type="submit" disabled={submitting}>{submitting ? "处理中…" : token ? "完成验证" : "发送验证邮件"}</button> : null}
-      <Link to="/login">返回登录</Link>
+      {!done ? <button className="btn primary" type="submit" style={{ marginTop: 6 }} disabled={submitting}>{submitting ? "处理中…" : token ? "完成验证" : "发送验证邮件"}</button> : null}
+      <div className="auth-footer"><Link to="/login">返回登录</Link></div>
     </form>
   </div>;
 }

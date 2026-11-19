@@ -11,8 +11,8 @@ import { usePortalEvents } from "./providers";
 
 /** 一级扁平导航：不再使用下拉分组，点击即进入对应页面 */
 const TEACHER_NAV: Array<NavEntry> = [
-  { label: "教学概览", path: "/", icon: "layers" },
-  { label: "我的课程", path: "/courses", icon: "book" },
+  { label: "概览", path: "/", icon: "layers" },
+  { label: "课程", path: "/courses", icon: "book" },
   { label: "通知", path: "/notifications", icon: "bell" },
 ];
 
@@ -72,8 +72,8 @@ export function AuthGuard() {
   return (
     <div className="app-shell">
       <AppShell
-        brand="教学实验平台"
-        domainLabel="教师教学空间"
+        brand="实验教学平台"
+        domainLabel="教师门户"
         navigationPosition="side"
         collapsible
         collapseStorageKey="edu.teacher.sidebar-collapsed"

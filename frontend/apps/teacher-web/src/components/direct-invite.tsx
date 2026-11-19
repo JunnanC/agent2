@@ -11,10 +11,12 @@ export function DirectInvite({ courseId, onAdded }: { courseId: string; onAdded:
     onSuccess: () => { setIdentity(""); onAdded(); toast.notify("学生已直接加入课程"); },
     onError: (error: Error) => toast.notify(error.message, "error"),
   });
-  return <Panel title={<h2>教师邀请学生</h2>}>
-    <p className="subtle">教师指定学生后直接加入；学生自行使用邀请码时需要审核。</p>
-    <form onSubmit={event => { event.preventDefault(); invite.mutate(); }}>
-      <label className="form-label">学生账号或邮箱<input className="field" value={identity} onChange={event => setIdentity(event.target.value)} /></label>
+  return <Panel title={<h2>邀请学生</h2>}>
+    <form onSubmit={event => { event.preventDefault(); invite.mutate(); }}
+      style={{ display: "flex", gap: 12, alignItems: "flex-end", flexWrap: "wrap" }}>
+      <label className="form-label" style={{ flex: "1 1 260px", maxWidth: 420, margin: 0 }}>学生账号或邮箱
+        <input className="field" value={identity} onChange={event => setIdentity(event.target.value)} />
+      </label>
       <Button type="submit" disabled={!identity.trim() || invite.isPending}>{invite.isPending ? "添加中…" : "邀请并直接加入"}</Button>
     </form>
   </Panel>;

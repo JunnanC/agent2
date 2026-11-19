@@ -8,7 +8,7 @@ import { Button, Panel, RequestStateView, EmptyState, useToast } from "@edu/ui";
 
 import { CourseMaterials } from "@/components/course-materials";
 import { CourseInvitationActions } from "@/components/course-invitation";
-import { COURSE_STATUS_LABEL, PUBLICATION_STATUS_LABEL } from "@/lib/format";
+import { PUBLICATION_STATUS_LABEL } from "@/lib/format";
 
 export function CourseLayout({ children }: { children: ReactNode }) {
   const { courseId } = useParams();
@@ -20,7 +20,7 @@ export function CourseLayout({ children }: { children: ReactNode }) {
       <div className={enrollmentsPage ? "course-context-heading" : undefined}>
         <div>
           <h1>{course.data?.title ?? "课程教学空间"}</h1>
-          <p className="subtle">{course.data?.code} · 学生、实验与教学数据</p>
+          <p className="subtle">{course.data?.code}</p>
         </div>
         {enrollmentsPage && <CourseInvitationActions key={courseId} courseId={courseId} />}
       </div>
@@ -44,7 +44,7 @@ export function CourseOverview() {
     onError: (error) => toast.notify(error.message, "error"),
   });
   const publications = useQuery({ queryKey: keys.publications(courseId, {}), queryFn: () => teachingApi.publications(courseId, {}) });
-  return <RequestStateView loading={course.isLoading || publications.isLoading} error={course.error ?? publications.error} onRetry={() => { void course.refetch(); void publications.refetch(); }} empty={false} emptyState={null}><div className="page-actions">{course.data?.status === "DRAFT" ? <Button variant="primary" disabled={publish.isPending} onClick={() => publish.mutate()}>{publish.isPending ? "发布中…" : "发布课程"}</Button> : <span>课程状态：{COURSE_STATUS_LABEL[course.data?.status ?? ""] ?? course.data?.status}</span>}</div><div className="teacher-summary"><div><span>选课学生</span><strong>{course.data?.active_enrollment_count ?? "—"}</strong></div><div><span>实验发布</span><strong>{publications.data?.total ?? publications.data?.rows.length ?? "—"}</strong></div><div><span>课程容量</span><strong>{course.data?.capacity ?? "不限"}</strong></div></div><Panel title={<h2>课程实验</h2>}><div className="teacher-list">{(publications.data?.rows ?? []).map(p => <div className="item" key={p.public_id}><div><strong>{p.title}</strong><small>{PUBLICATION_STATUS_LABEL[p.status] ?? p.status} · {p.audience_count ?? 0} 名学生</small></div><Link className="btn" to={`/courses/${courseId}/publishing/${p.public_id}/reviews`}>报告与评审</Link></div>)}{publications.data?.rows.length === 0 && <EmptyState title="尚未发布实验" action={<Link to={`/courses/${courseId}/templates`}>设计第一个实验</Link>} />}</div></Panel><CourseAnnouncements courseId={courseId} /><CourseMaterials key={courseId} courseId={courseId} /></RequestStateView>;
+  return <RequestStateView loading={course.isLoading || publications.isLoading} error={course.error ?? publications.error} onRetry={() => { void course.refetch(); void publications.refetch(); }} empty={false} emptyState={null}>{course.data?.status === "DRAFT" ? <div className="page-actions"><Button variant="primary" disabled={publish.isPending} onClick={() => publish.mutate()}>{publish.isPending ? "发布中…" : "发布课程"}</Button></div> : null}<div className="teacher-summary"><div><span>选课学生</span><strong>{course.data?.active_enrollment_count ?? "—"}</strong></div><div><span>实验发布</span><strong>{publications.data?.total ?? publications.data?.rows.length ?? "—"}</strong></div><div><span>课程容量</span><strong>{course.data?.capacity ?? "不限"}</strong></div></div><Panel title={<h2>课程实验</h2>}><div className="teacher-list">{(publications.data?.rows ?? []).map(p => <div className="item" key={p.public_id}><div><strong>{p.title}</strong><small>{PUBLICATION_STATUS_LABEL[p.status] ?? p.status} · {p.audience_count ?? 0} 名学生</small></div><Link className="btn" to={`/courses/${courseId}/publishing/${p.public_id}/reviews`}>报告与评审</Link></div>)}{publications.data?.rows.length === 0 && <EmptyState title="尚未发布实验" action={<Link to={`/courses/${courseId}/templates`}>设计第一个实验</Link>} />}</div></Panel><CourseAnnouncements courseId={courseId} /><CourseMaterials key={courseId} courseId={courseId} /></RequestStateView>;
 }
 
 export function StudentDetail() {
@@ -79,7 +79,7 @@ export function CourseAnnouncements({ courseId }: { courseId: string }) {
     onError: (error) => toast.notify(error instanceof Error ? error.message : "公告发布失败", "error"),
   });
   const rows = announcements.data?.rows ?? [];
-  return <Panel title={<><h2>课程公告</h2><span className="subtle">发布后学生在课程空间看到</span></>}>
+  return <Panel title={<h2>课程公告</h2>}>
     {rows.length > 0 && <div className="teacher-list">
       {rows.map((item) => <div className="item" key={item.public_id}>
         <div>
@@ -89,19 +89,18 @@ export function CourseAnnouncements({ courseId }: { courseId: string }) {
       </div>)}
     </div>}
     {!rows.length && !announcements.isLoading && <p className="subtle">还没有公告。学生不会收到任何课程通知。</p>}
-    <label>公告标题<input className="field" value={title} maxLength={160} onChange={(e) => setTitle(e.target.value)} placeholder="例如：随堂练习 11 月 19 日截止" /></label>
-    <label>公告正文<textarea className="field" rows={4} value={body} onChange={(e) => setBody(e.target.value)} placeholder="写清楚要做什么、什么时候截止、有问题找谁。" /></label>
+    <label style={{ display: "block", maxWidth: 680 }}>公告标题<input className="field" value={title} maxLength={160} onChange={(e) => setTitle(e.target.value)} placeholder="例如：随堂练习 11 月 19 日截止" /></label>
+    <label style={{ display: "block", maxWidth: 680 }}>公告正文<textarea className="field" rows={4} value={body} onChange={(e) => setBody(e.target.value)} placeholder="写清楚要做什么、什么时候截止、有问题找谁。" /></label>
     <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
       <input type="checkbox" checked={pinned} onChange={(e) => setPinned(e.target.checked)} /> 置顶这条公告
     </label>
-    {(title.trim() || body.trim()) && <div className="section" aria-label="学生看到的预览">
+    {(title.trim() || body.trim()) ? <div className="section" aria-label="学生看到的预览">
       <p className="subtle">学生将看到：</p>
       <div className="panel" style={{ padding: 14 }}>
         <strong>{title.trim() || "（公告标题）"}</strong>
         <p style={{ whiteSpace: "pre-wrap", margin: "6px 0 0" }}>{body.trim() || "（公告正文）"}</p>
-        <p className="subtle" style={{ margin: "6px 0 0" }}>数据结构与算法（Python） · 刚刚发布</p>
       </div>
-    </div>}
+    </div> : null}
     <Button variant="primary" disabled={!title.trim() || create.isPending} onClick={() => create.mutate()}>
       {create.isPending ? "发布中…" : "发布公告"}
     </Button>

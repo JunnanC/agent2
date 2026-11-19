@@ -46,7 +46,7 @@ interface TodoItem {
 }
 
 export function Home() {
-  const courses = useQuery({ queryKey: keys.teachingCourses(), queryFn: () => teachingApi.courses({ page_size: 50 }) });
+  const courses = useQuery({ queryKey: keys.teachingCourses(), queryFn: () => teachingApi.courses({ page_size: 100 }) });
   const rows = courses.data?.rows ?? [];
 
   /** 聚合：各课程发布 / 待评审 / 任务完成度，一次并行拉取 */
@@ -148,9 +148,9 @@ export function Home() {
   return (
     <>
       <Breadcrumbs items={[{ label: "教师门户" }]} current="教学概览" />
-      <div className="overview-heading">
-        <h1>教学概览</h1>
-        <div className="page-actions align-end">
+      <div className="head">
+        <div><h1>教学概览</h1></div>
+        <div className="actions">
           <Link className="btn" to={rows.length > 0 ? `/courses/${rows[0]!.public_id}/analytics` : "/courses"}>查看教学分析</Link>
           <Link className="btn primary" to="/courses">新建实验模板</Link>
         </div>

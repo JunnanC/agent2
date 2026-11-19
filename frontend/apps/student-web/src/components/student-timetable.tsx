@@ -1,12 +1,13 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { studentApi, timetableApi } from "@edu/api-client";
-import type { TimetableImport } from "@edu/api-client";
+import { timetableApi } from "@edu/api-client";
+import type { TimetableImport, TimetableSchedule } from "@edu/api-client";
 import { keys } from "@edu/query-keys";
 import { Button, EmptyState, Panel, RequestStateView, useToast } from "@edu/ui";
 
 const weekdays = ["", "周一", "周二", "周三", "周四", "周五", "周六", "周日"];
+const displayTermName = (name?: string) => !name || /^legacy\b/i.test(name) ? "当前学期" : name;
 const statusNames: Record<TimetableImport["status"], string> = {
   MAPPING_REQUIRED: "待匹配列名", READY: "待确认", RUNNING: "导入中", COMPLETED: "已完成", FAILED: "导入失败",
 };
@@ -27,8 +28,27 @@ export function StudentTimetable({ uploadContainer }: { uploadContainer?: HTMLDi
   const [jobId, setJobId] = useState("");
   const [mapping, setMapping] = useState<Record<string, string> | null>(null);
   const timetable = useQuery({ queryKey: keys.timetable(), queryFn: () => timetableApi.retrieve() });
-  const enrollments = useQuery({ queryKey: keys.enrollments({ status: "ACTIVE" }), queryFn: () => studentApi.myEnrollments({ status: "ACTIVE", page_size: 100 }) });
-  const unscheduled = (enrollments.data?.rows ?? []).filter((row) => row.status === "ACTIVE" && !(timetable.data?.schedules ?? []).some((schedule) => schedule.course_id === row.course_id));
+  const groupedSchedules = useMemo(() => {
+    const schedules = timetable.data?.schedules ?? [];
+    const groups = new Map<string, { title: string; classroom: string; instructor: string; slots: TimetableSchedule[] }>();
+    for (const schedule of schedules) {
+      const key = schedule.course_id || `${schedule.course_title}|${schedule.course_code}`;
+      const group = groups.get(key) ?? {
+        title: schedule.course_title,
+        classroom: schedule.classroom,
+        instructor: schedule.instructor_name,
+        slots: [],
+      };
+      group.classroom ||= schedule.classroom;
+      group.instructor ||= schedule.instructor_name;
+      group.slots.push(schedule);
+      groups.set(key, group);
+    }
+    for (const group of groups.values()) {
+      group.slots.sort((left, right) => left.weekday - right.weekday || left.start_period - right.start_period);
+    }
+    return [...groups.values()].sort((left, right) => left.slots[0]!.weekday - right.slots[0]!.weekday);
+  }, [timetable.data]);
   const imports = useQuery({ queryKey: keys.timetableImports(), queryFn: timetableApi.imports });
   const job = useQuery({
     queryKey: keys.timetableImport(jobId), queryFn: () => timetableApi.importJob(jobId), enabled: Boolean(jobId),
@@ -85,17 +105,17 @@ export function StudentTimetable({ uploadContainer }: { uploadContainer?: HTMLDi
     </form>
   );
 
-  return <Panel className="section student-timetable" title={<><h2>我的课表</h2><span className="subtle">{timetable.data?.term.name ?? "当前学期"}</span></>}>
+  return <Panel className="section student-timetable" title={<><h2>我的课表</h2><span className="subtle">{displayTermName(timetable.data?.term.name)}</span></>}>
     <RequestStateView loading={timetable.isLoading} error={timetable.error} onRetry={() => void timetable.refetch()}
-      empty={!timetable.data?.schedules.length} emptyState={<EmptyState title="暂无课表" hint="暂无已安排的上课时间；已加入但未排课的课程列在下方。" />}>
-      {[...(timetable.data?.schedules ?? [])].sort((a, b) => a.weekday - b.weekday || a.start_period - b.start_period).map((schedule, index) =>
-        <div className="item" key={`${schedule.source}-${schedule.course_id ?? schedule.course_title}-${index}`}>
-          <div><strong>{schedule.course_title}</strong><small>{schedule.classroom || "教室待定"} · {schedule.instructor_name || "教师待定"}</small></div>
-          <span>{weekdays[schedule.weekday]} 第 {schedule.start_period}—{schedule.end_period} 节{schedule.week_start != null && schedule.week_end != null ? ` · 第 ${schedule.week_start}—${schedule.week_end} 周` : ""}</span>
-        </div>)}
-    </RequestStateView>
-    <RequestStateView loading={enrollments.isLoading} error={enrollments.error} onRetry={() => void enrollments.refetch()} empty={false}>
-      {unscheduled.map((row) => <div className="item" key={row.public_id}><div><strong>{row.course_title || row.course_code}</strong><small>已加入课程 · 教师尚未安排上课时间</small></div><span>待排课</span></div>)}
+      empty={!timetable.data?.schedules.length} emptyState={<EmptyState title="暂无已排课时间" hint="可在页面上方导入个人课表。" />}>
+      {groupedSchedules.map((group) => <div className="item timetable-course-row" key={`${group.title}-${group.slots[0]?.weekday}-${group.slots[0]?.start_period}`}>
+        <div><strong>{group.title}</strong><small>{group.classroom || "教室待定"} · {group.instructor || "教师待定"}</small></div>
+        <div className="timetable-slots">
+          {group.slots.map((schedule, index) => <span key={`${schedule.weekday}-${schedule.start_period}-${index}`}>
+            {weekdays[schedule.weekday]} 第 {schedule.start_period}—{schedule.end_period} 节{schedule.week_start != null && schedule.week_end != null ? ` · 第 ${schedule.week_start}—${schedule.week_end} 周` : ""}
+          </span>)}
+        </div>
+      </div>)}
     </RequestStateView>
     {uploadContainer ? createPortal(uploadForm, uploadContainer) : uploadContainer === undefined && uploadForm}
     <div ref={importResults} role="region" aria-label="课表导入结果" tabIndex={-1}>

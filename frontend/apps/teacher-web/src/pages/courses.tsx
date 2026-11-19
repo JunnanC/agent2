@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useState } from "react";
 import { teachingApi } from "@edu/api-client";
 import { keys } from "@edu/query-keys";
-import { Button, Modal, Breadcrumbs, Panel, RequestStateView, useToast } from "@edu/ui";
+import { Button, Modal, Breadcrumbs, PageHeader, Panel, RequestStateView, useToast } from "@edu/ui";
 import { CourseInvitation } from "@/components/course-invitation";
 import { COURSE_STATUS_LABEL, apiErrorMessage } from "@/lib/format";
 
@@ -16,7 +16,7 @@ export function Courses() {
   const [summary, setSummary] = useState("");
   const [visibility, setVisibility] = useState<"PUBLIC" | "UNLISTED">("UNLISTED");
 
-  const courses = useQuery({ queryKey: keys.teachingCourses({}), queryFn: () => teachingApi.courses({ page_size: 50 }) });
+  const courses = useQuery({ queryKey: keys.teachingCourses({}), queryFn: () => teachingApi.courses({ page_size: 100 }) });
 
   const create = useMutation({
     mutationFn: () => teachingApi.createCourse({ title: title.trim(), summary: summary.trim(), visibility, enrollment_mode: "APPROVAL" }),
@@ -33,10 +33,8 @@ export function Courses() {
   return (
     <>
       <Breadcrumbs items={[]} current="我的课程" />
-      <div className="page-actions align-end">
-        <Button variant="primary" onClick={() => setCreateOpen(true)}>新建课程</Button>
-      </div>
-      <Panel>
+      <PageHeader title="我的课程" actions={<Button variant="primary" onClick={() => setCreateOpen(true)}>新建课程</Button>} />
+      <Panel className="courses-browser">
         <RequestStateView
           loading={courses.isLoading}
           error={courses.error}
@@ -45,13 +43,13 @@ export function Courses() {
           emptyState={(
             <div className="state-block">
               <strong>还没有课程</strong>
-              <p>创建课程后，再邀请学生并配置实验。</p>
+              <p>创建课程后，可邀请学生并配置实验。</p>
               <Button variant="primary" onClick={() => setCreateOpen(true)}>新建课程</Button>
             </div>
           )}
         >
-          <div className="page-actions"><input className="field" aria-label="搜索课程" placeholder="搜索课程" value={search} onChange={e => setSearch(e.target.value)} /></div>
-          <div className="teacher-courses">{(courses.data?.rows ?? []).filter(course => `${course.title} ${course.code}`.includes(search.trim())).map(course => <article className="teacher-course" key={course.public_id}><small>{course.code} · {COURSE_STATUS_LABEL[course.status] ?? course.status}</small><h2>{course.title}</h2><p className="subtle">{course.summary || "管理课程实验、学生与教学数据"}</p><p>{course.active_enrollment_count} 名学生 · 教师邀请 / 邀请码审核</p><CourseInvitation courseId={course.public_id} /><footer><Link to={`/courses/${course.public_id}/analytics`}>教学分析</Link><Link className="btn primary" to={`/courses/${course.public_id}`}>进入课程</Link></footer></article>)}</div>
+          <div className="page-actions"><input className="field" style={{ maxWidth: 320 }} aria-label="搜索课程" placeholder="搜索课程" value={search} onChange={e => setSearch(e.target.value)} /></div>
+          <div className="teacher-courses">{(courses.data?.rows ?? []).filter(course => `${course.title} ${course.code}`.includes(search.trim())).map(course => <article className="teacher-course" key={course.public_id}><small>{course.code} · {COURSE_STATUS_LABEL[course.status] ?? course.status}</small><h2>{course.title}</h2><p className="subtle">{course.summary || "暂无课程简介"}</p><p>{course.active_enrollment_count} 名学生</p><CourseInvitation courseId={course.public_id} /><footer><Link to={`/courses/${course.public_id}/analytics`}>教学分析</Link><Link className="btn primary" to={`/courses/${course.public_id}`}>进入课程</Link></footer></article>)}</div>
         </RequestStateView>
       </Panel>
 

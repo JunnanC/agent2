@@ -16,6 +16,7 @@ import {
   type Course,
   type Image,
   type Runtime,
+  type ResourceProfile,
   type Audit,
   type Overview,
 } from "./api";
@@ -29,8 +30,19 @@ const names = {
   students: "学生管理",
   teachers: "教师管理",
   images: "镜像管理",
+  profiles: "资源规格",
   resources: "服务与资源",
   logs: "操作日志",
+};
+const navLabels = {
+  overview: "概览",
+  courses: "课程",
+  students: "学生",
+  teachers: "教师",
+  images: "镜像",
+  profiles: "规格",
+  resources: "资源",
+  logs: "日志",
 };
 type Page = keyof typeof names;
 const navIcons = {
@@ -39,17 +51,19 @@ const navIcons = {
   students: "users",
   teachers: "user",
   images: "box",
+  profiles: "cpu",
   resources: "server",
   logs: "list",
 } as const;
 const descriptions: Record<Page, string> = {
-  overview: "关注教学实验的运行情况与需要处理的问题",
-  courses: "每门课程对应一个教学班，教学内容与学生名单由任课教师维护",
-  students: "按班级查看学生名单，同一学生可以属于多个班级",
-  teachers: "查看教师及所建课程，管理账号使用状态",
-  images: "统一维护教师可选用的实验镜像",
-  resources: "查看服务健康与实验资源占用，不提供运行控制操作",
-  logs: "追踪账号、课程及镜像的管理操作",
+  overview: "",
+  courses: "",
+  students: "",
+  teachers: "",
+  images: "",
+  profiles: "",
+  resources: "",
+  logs: "",
 };
 const qk = (path: string) => ["admin-console", path];
 function useList<T>(path: string) {
@@ -63,19 +77,32 @@ const accountsPath = "/platform/users",
   adminsPath = "/platform/admin-assignments",
   coursesPath = "/platform/courses",
   imagesPath = "/platform/images",
+  profilesPath = "/platform/resource-profiles",
   runtimesPath = "/platform/runtime-adapters",
   logsPath = "/platform/operations/audit";
 const accountStates: [string, string][] = [
   ["ACTIVE", "正常"],
   ["DISABLED", "已禁用"],
 ];
+function formatCores(millicores: number): string {
+  return String(Number((millicores / 1000).toFixed(2)));
+}
+function formatMemory(megabytes: number): string {
+  return megabytes >= 1024 && megabytes % 1024 === 0
+    ? `${megabytes / 1024} GB`
+    : `${megabytes} MB`;
+}
 type Dialog =
   | { kind: "account"; account: Account }
   | { kind: "person"; account: Account; teacher: boolean }
   | { kind: "course"; course: Course }
   | { kind: "image"; image: Image }
   | { kind: "image-form" }
+  | { kind: "image-rename"; image: Image }
   | { kind: "image-toggle"; image: Image }
+  | { kind: "profile"; profile: ResourceProfile }
+  | { kind: "profile-form" }
+  | { kind: "profile-toggle"; profile: ResourceProfile }
   | { kind: "audit"; audit: Audit }
   | { kind: "runtime"; runtime: Runtime };
 
@@ -98,8 +125,8 @@ export default function Console() {
     ? (candidate as Page)
     : (aliases[candidate] ?? "overview");
   useEffect(() => {
-    document.title = names[current] + " · 教学实验平台管理";
-  }, [current]);
+    document.title = "实验教学平台";
+  }, []);
   function go(page: Page, tab?: string, query?: Record<string, string>) {
     const params = new URLSearchParams();
     if (tab) params.set("tab", tab);
@@ -110,14 +137,14 @@ export default function Console() {
     navigate(page === "overview" ? "/" : `/${page}${search ? `?${search}` : ""}`);
   }
   const adminNav = (Object.keys(names) as Page[]).map((page) => ({
-    label: names[page],
+    label: navLabels[page],
     path: page,
     icon: navIcons[page],
   }));
   return (
     <AppShell
-      brand="教学实验平台"
-      domainLabel="运维管理控制台"
+      brand="实验教学平台"
+      domainLabel="管理控制台"
       nav={adminNav}
       activePath={current}
       onNavigate={(path) => go(path as Page)}
@@ -222,6 +249,7 @@ function PageContent({
     admins = useList<Role>(adminsPath),
     courses = useList<Course>(coursesPath);
   const images = useList<Image>(imagesPath),
+    profiles = useList<ResourceProfile>(profilesPath),
     runtimes = useList<Runtime>(runtimesPath),
     audits = useList<Audit>(logsPath);
   const overview = useQuery({
@@ -237,9 +265,13 @@ function PageContent({
     admins.data ?? [],
   );
   const allCourses = courses.data ?? [],
-    allImages = images.data ?? [],
-    allRuntimes = runtimes.data ?? [],
-    allAudits = audits.data ?? [];
+    allImages = images.data ?? [];
+  const allProfiles = useMemo(
+    () => [...(profiles.data ?? [])].sort((left, right) => left.cpu_millicores - right.cpu_millicores),
+    [profiles.data],
+  );
+  const allRuntimes = useMemo(() => runtimes.data ?? [], [runtimes.data]);
+  const allAudits = useMemo(() => audits.data ?? [], [audits.data]);
   const issues = useMemo(() => {
     const items: Array<{
       key: string;
@@ -336,9 +368,11 @@ function PageContent({
         ? [courses]
         : current === "images"
           ? [images]
-          : current === "logs"
-            ? [audits]
-            : [runtimes, overview];
+          : current === "profiles"
+            ? [profiles]
+            : current === "logs"
+              ? [audits]
+              : [runtimes, overview];
   const failure = required.find((q) => q.error);
   let content: ReactNode;
   if (failure) content = <ErrorState error={failure.error} retry={refresh} />;
@@ -350,11 +384,22 @@ function PageContent({
     );
   else if (current === "students") {
     content = <>
-      <StudentImport onComplete={() => { void refresh(); }} />
-      {classId ? <><button className="link" onClick={() => setParams({})}>返回班级列表</button><h2>{members.data?.class.name ?? "班级学生名单"}</h2>
-        {members.isPending ? <p role="status">正在加载名单</p> : members.error ? <ErrorState error={members.error} retry={() => void members.refetch()} /> : <Table headings={["学生", "账号状态", "操作"]} empty={!members.data?.members.length}>
-          {(members.data?.members ?? []).map((member) => { const user = users.data?.find((item) => item.public_id === member.student_id); return <tr key={member.public_id}><td data-label="成员">{member.student_name}<span className="mono muted">{member.student_id}</span></td><td data-label="账号状态"><Status value={user?.account_status} /></td><td data-label="操作">{user && action("详情", () => open({ kind: "person", account: user, teacher: false }))}</td></tr>; })}
-        </Table>}</> : classes.isPending ? <p role="status">正在加载班级</p> : classes.error ? <ErrorState error={classes.error} retry={() => void classes.refetch()} /> : <List rows={[...allCourses.filter((course) => ["PUBLISHED", "CLOSED"].includes(course.status)).map((course) => ({ public_id: course.public_id, name: course.title, code: course.code, type: "teaching" })), ...(classes.data ?? []).filter((item) => item.status === "ACTIVE").map((item) => ({ ...item, type: "administrative" }))]} text={(item) => `${item.name} ${item.code}`} placeholder="搜索班级名称或代码" headings={["班级", "代码", "类型", "操作"]} render={(item) => <tr key={`${item.type}-${item.public_id}`}><td data-label="班级">{item.name}</td><td data-label="代码">{item.code}</td><td data-label="类型">{item.type === "teaching" ? "教学班" : "行政班"}</td><td data-label="操作">{action("查看学生名单", () => setParams({ class: item.public_id, type: item.type }))}</td></tr>} />}
+      {!classId && <StudentImport onComplete={() => { void refresh(); }} />}
+      {classId ? <div className="class-detail">
+        <button className="class-back" onClick={() => setParams({})}>返回班级列表</button>
+        <div className="class-detail-head">
+          <div className="class-title-line">
+            <h2>{members.data?.class.name ?? "班级学生名单"}</h2>
+            <span className="class-type-badge">{classType === "teaching" ? "教学班" : "行政班"}</span>
+            <span className="class-student-count">共 {members.data?.members.length ?? 0} 名学生</span>
+          </div>
+        </div>
+        {members.isPending ? <div className="console-list class-roster-list"><p className="empty" role="status">正在加载名单</p></div> : members.error ? <div className="console-list class-roster-list"><ErrorState error={members.error} retry={() => void members.refetch()} /></div> : <div className="console-list class-roster-list">
+          <Table headings={["学生", "账号状态", "操作"]} className="class-roster-table" empty={!members.data?.members.length} emptyText="该班级暂无学生名单">
+            {(members.data?.members ?? []).map((member) => { const user = users.data?.find((item) => item.public_id === member.student_id); return <tr key={member.public_id}><td data-label="成员"><strong>{member.student_name}</strong><span className="mono muted">{member.student_id}</span></td><td data-label="账号状态"><Status value={user?.account_status} /></td><td data-label="操作">{user && action("详情", () => open({ kind: "person", account: user, teacher: false }))}</td></tr>; })}
+          </Table>
+        </div>}
+      </div> : classes.isPending ? <p role="status">正在加载班级</p> : classes.error ? <ErrorState error={classes.error} retry={() => void classes.refetch()} /> : <List rows={[...allCourses.filter((course) => ["PUBLISHED", "CLOSED"].includes(course.status)).map((course) => ({ public_id: course.public_id, name: course.title, code: course.code, type: "teaching" })), ...(classes.data ?? []).filter((item) => item.status === "ACTIVE").map((item) => ({ ...item, type: "administrative" }))]} text={(item) => `${item.name} ${item.code}`} placeholder="搜索班级名称或代码" headings={["班级", "代码", "类型", "操作"]} storageKey="admin-classes-list" tableClassName="classes-table" reserveRows render={(item) => <tr key={`${item.type}-${item.public_id}`}><td data-label="班级">{item.name}</td><td data-label="代码">{item.code}</td><td data-label="类型">{item.type === "teaching" ? "教学班" : "行政班"}</td><td data-label="操作">{action("查看学生名单", () => setParams({ class: item.public_id, type: item.type }))}</td></tr>} />}
     </>;
   } else if (current === "teachers") {
     const isTeacher = current === "teachers",
@@ -424,6 +469,8 @@ function PageContent({
           )}
           state={(c) => c.status}
           placeholder="搜索课程名称、ID 或教师"
+          tableClassName="courses-table"
+          reserveRows
           headings={[
             "课程 / ID",
             "任课教师",
@@ -457,17 +504,11 @@ function PageContent({
             </tr>
           )}
         />
-        <p className="footer-note">课程下架能力尚未开放，当前只提供课程查询</p>
       </>
     );
   } else if (current === "images") {
     content = (
       <>
-        <div className="notice">
-          <span>
-            教师仅能使用已启用且已通过检查的镜像，停用不删除已有实验关联
-          </span>
-        </div>
         <List
           rows={allImages}
           text={(i) =>
@@ -497,7 +538,7 @@ function PageContent({
           render={(i) => (
             <tr key={i.public_id}>
               <td data-label="镜像 / ID">
-                <strong>{i.repository.split("/").at(-1)}</strong>
+                <strong>{i.display_name || i.repository.split("/").at(-1)}</strong>
                 <span className="mono muted">{i.public_id}</span>
               </td>
               <td data-label="地址及版本">
@@ -514,16 +555,51 @@ function PageContent({
               </td>
               <td className="actions" data-label="操作">
                 {action("详情", () => open({ kind: "image", image: i }))}
-                <button
-                  className="link"
-                  disabled
-                  title="后端不支持修改镜像名称、用途或地址"
-                >
-                  编辑
-                </button>
+                {action("改名", () => open({ kind: "image-rename", image: i }))}
                 {action(
                   i.approval_status === "APPROVED" ? "停用" : "启用",
                   () => open({ kind: "image-toggle", image: i }),
+                )}
+              </td>
+            </tr>
+          )}
+        />
+      </>
+    );
+  } else if (current === "profiles") {
+    content = (
+      <>
+        <List
+          rows={allProfiles}
+          text={(p) => `${p.name} ${p.code} ${p.public_id}`}
+          states={[
+            ["ACTIVE", "已启用"],
+            ["RETIRED", "已停用"],
+          ]}
+          state={(p) => p.status}
+          placeholder="搜索规格名称或编码"
+          headings={["规格", "CPU / 内存", "磁盘", "状态", "操作"]}
+          render={(p) => (
+            <tr key={p.public_id}>
+              <td data-label="规格">
+                <strong>{p.name}</strong>
+                <span className="mono muted">{p.code}</span>
+              </td>
+              <td className="num" data-label="CPU / 内存">
+                {formatCores(p.cpu_millicores)} 核 / {formatMemory(p.memory_mb)}
+              </td>
+              <td className="num" data-label="磁盘">
+                {p.disk_gb} GB
+              </td>
+              <td data-label="状态">
+                <Status value={p.status} />
+              </td>
+              <td className="actions" data-label="操作">
+                {action("详情", () => open({ kind: "profile", profile: p }))}
+                {action(
+                  p.status === "ACTIVE" ? "停用" : "启用",
+                  () => open({ kind: "profile-toggle", profile: p }),
+                  p.status === "ACTIVE",
                 )}
               </td>
             </tr>
@@ -626,38 +702,36 @@ function PageContent({
         </div>
         {resourceTab === "health" ? (
           <>
-            <Table
-              headings={[
-                "服务 / 运行环境",
-                "类型",
-                "健康状态",
-                "最近检查",
-                "操作",
-              ]}
-              empty={!allRuntimes.length}
-            >
-              {allRuntimes.map((r) => (
-                <tr key={r.public_id}>
-                  <td data-label="运行适配器">
-                    <strong>{r.name}</strong>
-                    <span className="mono muted">{r.code}</span>
-                  </td>
-                  <td data-label="驱动">{r.driver}</td>
-                  <td data-label="健康状态">
-                    <Status value={r.health_status} />
-                  </td>
-                  <td data-label="最近检查">{date(r.last_health_at)}</td>
-                  <td data-label="操作">
-                    {action("详情", () =>
-                      open({ kind: "runtime", runtime: r }),
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </Table>
-            <p className="footer-note">
-              当前展示运行适配器健康；数据库、缓存等服务的独立健康检查尚未接入
-            </p>
+            <div className="console-list">
+              <Table
+                headings={[
+                  "服务 / 运行环境",
+                  "类型",
+                  "健康状态",
+                  "最近检查",
+                  "操作",
+                ]}
+                empty={!allRuntimes.length}
+              >
+                {allRuntimes.map((r) => (
+                  <tr key={r.public_id}>
+                    <td data-label="运行适配器">
+                      <strong>{r.name}</strong>
+                    </td>
+                    <td data-label="驱动">{r.driver}</td>
+                    <td data-label="健康状态">
+                      <Status value={r.health_status} />
+                    </td>
+                    <td data-label="最近检查">{date(r.last_health_at)}</td>
+                    <td data-label="操作">
+                      {action("详情", () =>
+                        open({ kind: "runtime", runtime: r }),
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </Table>
+            </div>
             {overview.data?.runtime?.error_code && <p role="alert">采集失败：{overview.data.runtime.error_code} · Trace：{overview.data.runtime.trace_id}</p>}
             {overview.data?.runtime?.drivers?.map((driver, index) => <p key={`${driver.code}-${index}`}>{driver.code} · {driver.driver} · {driver.status}{driver.error_code ? ` · ${driver.error_code}` : ""}</p>)}
             {overview.data?.alerts?.map((a) => (
@@ -692,7 +766,6 @@ function PageContent({
                 </section>
               ))}
             </div>
-            <p>学生编辑不创建常驻实例，代码执行与评分资源由 worker 按需申请和回收。</p>
 
           </>
         )}
@@ -1016,6 +1089,7 @@ function PageContent({
                     idempotencyKey: key,
                     body: {
                       ...address,
+                      display_name: String(data.get("display_name")).trim(),
                       display_tag: String(data.get("version")).trim(),
                       risk_level: "LOW",
                       reason: String(data.get("reason")).trim(),
@@ -1028,9 +1102,14 @@ function PageContent({
             }
           }}
         >
-          <p className="muted">
-            镜像名称暂取仓库路径末段，独立显示名称和用途说明尚未支持保存
-          </p>
+          <label className="form-row">
+            显示名称
+            <input
+              name="display_name"
+              maxLength={120}
+              placeholder="例如：编程运行环境（可选）"
+            />
+          </label>
           <label className="form-row">
             镜像地址
             <input
@@ -1116,13 +1195,73 @@ function PageContent({
           </div>
         </>
       );
+    } else if (dialog.kind === "image-rename") {
+      const i = dialog.image;
+      title = "修改镜像名称";
+      wide = false;
+      body = (
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            const data = new FormData(e.currentTarget);
+            const displayName = String(data.get("display_name")).trim();
+            if (!displayName) {
+              setError("请填写显示名称");
+              return;
+            }
+            void mutate(
+              () =>
+                request(`${imagesPath}/${i.public_id}/rename`, {
+                  method: "POST",
+                  idempotencyKey: crypto.randomUUID(),
+                  ifMatch: String(i.row_version),
+                  body: {
+                    display_name: displayName,
+                    reason: String(data.get("reason")).trim(),
+                  },
+                }),
+              "镜像名称已更新",
+            );
+          }}
+        >
+          <p className="mono break">
+            {i.registry}/{i.repository}
+          </p>
+          <label className="form-row">
+            显示名称
+            <input
+              name="display_name"
+              required
+              maxLength={120}
+              defaultValue={i.display_name ?? ""}
+              placeholder="例如：编程运行环境"
+            />
+          </label>
+          <label className="form-row">
+            变更原因
+            <textarea name="reason" maxLength={500} />
+          </label>
+          <p role="alert" className="form-error">
+            {error}
+          </p>
+          <div className="dialog-actions">
+            <button type="button" disabled={busy} onClick={close}>
+              取消
+            </button>
+            <button className="primary" disabled={busy}>
+              {busy ? "保存中…" : "保存名称"}
+            </button>
+          </div>
+        </form>
+      );
     } else if (dialog.kind === "image") {
       const i = dialog.image;
-      title = i.repository;
+      title = i.display_name || i.repository;
       body = (
         <>
           <Fields
             values={[
+              ["显示名称", i.display_name || "未设置"],
               ["镜像 ID", i.public_id],
               ["使用状态", <Status value={i.approval_status} />],
               [
@@ -1139,7 +1278,9 @@ function PageContent({
               ],
             ]}
           />
-          <p className="muted">名称、用途与课程引用关系由教师端维护，管理端暂不展示</p>
+          <p className="muted">
+            显示名称只影响管理端展示；镜像地址、Digest 与审批状态由系统维护
+          </p>
           <p className="form-error">{error}</p>
           {!i.digest && (
             <button
@@ -1162,6 +1303,198 @@ function PageContent({
             </button>
           )}
         </>
+      );
+    } else if (dialog.kind === "profile-form") {
+      title = "新增资源规格";
+      wide = false;
+      body = (
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            const data = new FormData(e.currentTarget);
+            const cpu = Math.round(Number(data.get("cpu")) * 1000);
+            const memory = Math.round(Number(data.get("memory")));
+            const disk = Math.round(Number(data.get("disk")));
+            if (
+              !Number.isFinite(cpu) ||
+              cpu < 100 ||
+              !Number.isFinite(memory) ||
+              memory < 64 ||
+              !Number.isFinite(disk) ||
+              disk < 1
+            ) {
+              setError("CPU 至少 0.1 核、内存至少 64 MB、磁盘至少 1 GB");
+              return;
+            }
+            void mutate(
+              () =>
+                request(profilesPath, {
+                  method: "POST",
+                  idempotencyKey: crypto.randomUUID(),
+                  body: {
+                    code: String(data.get("code")).trim(),
+                    name: String(data.get("name")).trim(),
+                    runtime_type: "CONTAINER",
+                    cpu_millicores: cpu,
+                    memory_mb: memory,
+                    cpu_request_millicores: Math.max(Math.floor(cpu / 2), 1),
+                    cpu_limit_millicores: cpu * 2,
+                    memory_request_mb: Math.max(Math.floor(memory / 2), 1),
+                    memory_limit_mb: memory * 2,
+                    disk_gb: disk,
+                    network_mode: "DENY_ALL",
+                    cost_minor_per_hour: 0,
+                    currency_code: "CNY",
+                    reason: String(data.get("reason")).trim(),
+                  },
+                }),
+              "资源规格已创建，教师可以立即选用",
+            );
+          }}
+        >
+          <label className="form-row">
+            规格名称
+            <input
+              name="name"
+              required
+              maxLength={120}
+              placeholder="例如：标准 0.5 核 / 512 MB"
+            />
+          </label>
+          <label className="form-row">
+            规格编码
+            <input
+              name="code"
+              required
+              maxLength={64}
+              pattern="[A-Za-z0-9_-]+"
+              placeholder="STD-512M"
+            />
+          </label>
+          <label className="form-row">
+            CPU（核）
+            <input
+              name="cpu"
+              type="number"
+              required
+              min="0.1"
+              step="0.05"
+              defaultValue="0.5"
+            />
+          </label>
+          <label className="form-row">
+            内存（MB）
+            <input
+              name="memory"
+              type="number"
+              required
+              min="64"
+              step="64"
+              defaultValue="512"
+            />
+          </label>
+          <label className="form-row">
+            磁盘（GB）
+            <input
+              name="disk"
+              type="number"
+              required
+              min="1"
+              step="1"
+              defaultValue="2"
+            />
+          </label>
+          <label className="form-row">
+            变更原因
+            <textarea name="reason" required maxLength={500} />
+          </label>
+          <p className="muted">
+            请求量与上限按 CPU、内存的 50% / 200% 自动生成；网络固定禁止外联
+          </p>
+          <p role="alert" className="form-error">
+            {error}
+          </p>
+          <div className="dialog-actions">
+            <button type="button" disabled={busy} onClick={close}>
+              取消
+            </button>
+            <button className="primary" disabled={busy}>
+              {busy ? "保存中…" : "保存规格"}
+            </button>
+          </div>
+        </form>
+      );
+    } else if (dialog.kind === "profile-toggle") {
+      const p = dialog.profile,
+        disabling = p.status === "ACTIVE";
+      title = disabling ? "停用资源规格" : "启用资源规格";
+      body = (
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            const reason = String(
+              new FormData(e.currentTarget).get("reason"),
+            ).trim();
+            void mutate(
+              () =>
+                request(
+                  `${profilesPath}/${p.public_id}/${disabling ? "retire" : "activate"}`,
+                  {
+                    method: "POST",
+                    idempotencyKey: crypto.randomUUID(),
+                    ifMatch: p.row_version,
+                    body: { reason },
+                  },
+                ),
+              disabling ? "资源规格已停用" : "资源规格已启用",
+            );
+          }}
+        >
+          <p>
+            <strong>{p.name}</strong>
+          </p>
+          <p className="mono break">
+            {p.code} · {formatCores(p.cpu_millicores)} 核 /{" "}
+            {formatMemory(p.memory_mb)}
+          </p>
+          <p className="muted">
+            {disabling
+              ? "停用后教师不能再选到这一档；已保存的版本保持原样，不会被改写。"
+              : "启用后教师可以在判题资源里选择这一档。"}
+          </p>
+          <label className="form-row">
+            变更原因
+            <textarea name="reason" required maxLength={500} />
+          </label>
+          <p role="alert" className="form-error">
+            {error}
+          </p>
+          <div className="dialog-actions">
+            <button type="button" disabled={busy} onClick={close}>
+              取消
+            </button>
+            <button className="primary" disabled={busy}>
+              {busy ? "提交中…" : disabling ? "停用规格" : "启用规格"}
+            </button>
+          </div>
+        </form>
+      );
+    } else if (dialog.kind === "profile") {
+      const p = dialog.profile;
+      title = p.name;
+      body = (
+        <Fields
+          values={[
+            ["规格 ID", <span className="mono">{p.public_id}</span>],
+            ["编码", p.code],
+            ["状态", <Status value={p.status} />],
+            ["CPU", `${formatCores(p.cpu_millicores)} 核`],
+            ["内存", formatMemory(p.memory_mb)],
+            ["磁盘", `${p.disk_gb} GB`],
+            ["网络", p.network_mode === "DENY_ALL" ? "禁止外联" : p.network_mode],
+            ["类型", p.runtime_type === "CONTAINER" ? "容器" : p.runtime_type],
+          ]}
+        />
       );
     } else if (dialog.kind === "runtime") {
       const r = dialog.runtime;
@@ -1226,15 +1559,21 @@ function PageContent({
       <div className="heading">
         <div>
           <h1>{names[current]}</h1>
-          <div className="subtitle">{descriptions[current]}</div>
+          {descriptions[current] ? <div className="subtitle">{descriptions[current]}</div> : null}
         </div>
-        {current === "images" ? (
+        {current === "images" || current === "profiles" ? (
           <button
             className="primary"
-            disabled={images.isPending || images.isError}
-            onClick={() => open({ kind: "image-form" })}
+            disabled={
+              current === "images"
+                ? images.isPending || images.isError
+                : profiles.isPending || profiles.isError
+            }
+            onClick={() =>
+              open({ kind: current === "images" ? "image-form" : "profile-form" })
+            }
           >
-            新增镜像
+            {current === "images" ? "新增镜像" : "新增规格"}
           </button>
         ) : (
           <button onClick={refresh}>
@@ -1260,10 +1599,11 @@ function PageContent({
         </p>
       )}
       {content}
-      <div className="footer-note">
-        数据更新时间：{updated ? date(new Date(updated).toISOString()) : "—"}
-        （北京时间） · 读取平台实际数据
-      </div>
+      {current === "overview" ? (
+        <div className="footer-note">
+          数据更新时间：{updated ? date(new Date(updated).toISOString()) : "—"} · 读取平台实际数据
+        </div>
+      ) : null}
       {modal}
       {recentAuth.dialog}
     </>

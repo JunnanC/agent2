@@ -25,8 +25,8 @@ export default defineConfig({
     host: devHost,
     watch: { usePolling: process.env.CHOKIDAR_USEPOLLING === "true" },
     proxy: {
-      "/api": { target: devApiTarget, headers: { host: portalHost, origin: `http://${portalHost}:8080` } },
-      "/files": { target: devApiTarget, headers: { host: portalHost, origin: `http://${portalHost}:8080` } },
+      "/api": { target: devApiTarget, headers: { host: portalHost, origin: `http://${portalHost}:8080`, "X-Portal": "TEACHING", "X-Proxy-Context": "ingress-v1" } },
+      "/files": { target: devApiTarget, headers: { host: portalHost, origin: `http://${portalHost}:8080`, "X-Portal": "TEACHING", "X-Proxy-Context": "ingress-v1" } },
     },
   },
   build: {

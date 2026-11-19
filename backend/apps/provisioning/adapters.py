@@ -8,6 +8,10 @@ from typing import Any
 
 from django.conf import settings
 
+# 判题执行实际支持的运行时驱动。新增驱动（例如远程 Docker）时只改这一处：
+# precheck 与 runtime_for_driver 都从这里取，避免两处判断不一致。
+ASSESSMENT_RUNTIME_DRIVERS = frozenset({"DOCKER_LOCAL"})
+
 
 class RuntimeAdapterFailure(RuntimeError):
     def __init__(
@@ -236,7 +240,7 @@ class DockerLocalAdapter:
 
 
 def runtime_for_driver(driver: str, *, config_ref: str = "") -> DockerLocalAdapter:
-    if driver != "DOCKER_LOCAL":
+    if driver not in ASSESSMENT_RUNTIME_DRIVERS:
         raise RuntimeAdapterFailure("RUNTIME_ADAPTER_NOT_SUPPORTED", retryable=False)
     if settings.LOCAL_RUNTIME_MODE != "REAL":
         raise RuntimeAdapterFailure("REAL_DOCKER_REQUIRED", retryable=False)

@@ -5,7 +5,7 @@ import { studentApi } from "@edu/api-client";
 import { ApiError } from "@edu/auth-client";
 import { keys } from "@edu/query-keys";
 import { useToast } from "@edu/ui";
-import { Breadcrumbs, Button, EmptyState, FilterBar, Modal, Panel,  RequestStateView } from "@edu/ui";
+import { Breadcrumbs, Button, EmptyState, FilterBar, Modal, PageHeader, Panel,  RequestStateView } from "@edu/ui";
 import { formatDate } from "@/lib/task-format";
 import { EnrollmentExit } from "@/components/enrollment-exit";
 
@@ -89,7 +89,7 @@ export function JoinCourses() {
   return (
     <>
       <Breadcrumbs items={[{ label: "学生门户" }]} current="加入课程" />
-      
+      <PageHeader title="加入课程" />
 
       <div className="join-course-tabs" role="tablist" aria-label="课程列表">
         <button type="button" role="tab" aria-selected={tab === "discover"}
@@ -125,7 +125,7 @@ export function JoinCourses() {
           emptyState={(
             <EmptyState
               title={tab === "discover" ? "没有找到匹配的开放课程" : "暂无申请记录"}
-              hint={tab === "discover" ? "试试其他关键词或提交邀请码申请。" : "先去「发现课程」查看本学期可申请的课程。"}
+              hint={tab === "discover" ? "试试其他关键词或提交邀请码。" : "先去「发现课程」查看可申请课程。"}
             />
           )}
         >
@@ -199,11 +199,6 @@ export function JoinCourses() {
           </>
         )}
       >
-        <p className="subtle">
-          {invitationCode.trim()
-            ? "邀请码校验成功后提交申请，等待教师审核。"
-            : "未填写邀请码时需要教师审核，提交后可在「我的申请」中查看进度。"}
-        </p>
         <label className="form-label" htmlFor="invitation-code">课程邀请码 <span>必填</span></label>
         <input id="invitation-code" className="field" value={invitationCode} onChange={(event) => setInvitationCode(event.target.value)} />
         <label className="form-label" htmlFor="application-message">申请说明 <span>选填</span></label>

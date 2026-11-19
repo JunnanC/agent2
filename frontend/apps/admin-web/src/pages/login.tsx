@@ -40,16 +40,14 @@ export function Login() {
   };
 
   return (
-    <div style={{ minHeight: "100vh", display: "grid", placeItems: "center", padding: 20, background: "var(--paper)" }}>
-      <form className="panel" style={{ width: "min(420px, 94vw)", display: "grid", gap: 10, padding: 24 }} onSubmit={submit} noValidate>
-        <div className="brand-lockup" style={{ marginBottom: 4 }}>
+    <div className="auth-shell">
+      <form className="auth-card" onSubmit={submit} noValidate>
+        <div className="auth-brand">
           <span className="brand-mark"><PlatformMark size={26} /></span>
-          <span className="brand-name">Edu Agent Platform</span>
-          <span className="context-dot" />
-          <span className="context-label">admin.localhost · 平台管理</span>
+          <span className="brand-name">实验教学平台</span>
+          <span className="auth-portal">管理控制台</span>
         </div>
-        <h1 style={{ fontSize: 22, margin: "4px 0 2px" }}>登录平台管理</h1>
-        <p className="subtle" style={{ margin: 0 }}>管理教学账号、课程与镜像，查看平台服务及资源状态。</p>
+        <h1>登录平台管理</h1>
         <label className="form-label" htmlFor="a-identifier">账号 / 邮箱</label>
         <input id="a-identifier" className="field" autoComplete="username"
           value={identifier} onChange={(event) => setIdentifier(event.target.value)} />
@@ -57,10 +55,9 @@ export function Login() {
         <input id="a-password" type="password" className="field" autoComplete="current-password"
           value={password} onChange={(event) => setPassword(event.target.value)} />
         {error ? <div className="field-error" role="alert">{error}</div> : null}
-        <button type="submit" className="btn primary" style={{ marginTop: 10, justifyContent: "center" }} disabled={submitting}>
-          {submitting ? "登录中…" : "登录平台管理"}
+        <button type="submit" className="btn primary" style={{ marginTop: 6, justifyContent: "center" }} disabled={submitting}>
+          {submitting ? "登录中…" : "登录"}
         </button>
-        <small>平台操作会记录操作日志并支持 Trace 检索。</small>
       </form>
     </div>
   );

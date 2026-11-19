@@ -132,10 +132,10 @@ export function Home() {
     <>
       <Breadcrumbs items={[{ label: "学生门户" }]} current="概览" />
 
-      <header className="student-overview-heading">
-        <div><h1>学习概览</h1><p>查看实验安排，继续待完成的任务</p></div>
-        <time dateTime={new Date().toLocaleDateString("sv-SE")}>{new Date().toLocaleDateString("zh-CN", { year: "numeric", month: "long", day: "numeric", weekday: "long" })}</time>
-      </header>
+      <div className="head">
+        <div><h1>学习概览</h1></div>
+        <div className="actions"><time dateTime={new Date().toLocaleDateString("sv-SE")}>{new Date().toLocaleDateString("zh-CN", { year: "numeric", month: "long", day: "numeric", weekday: "long" })}</time></div>
+      </div>
       {/* 四个数据卡片：条带式单块，列间分隔线，内容等距 */}
       <Panel className="section">
         <RequestStateView loading={tasksQuery.isLoading && !tasks.length}
@@ -154,10 +154,10 @@ export function Home() {
       </Panel>
 
       <div className="grid two section student-overview-grid">
-        <Panel title={<><h2>任务日历</h2><span className="subtle">按实验开放区间查看每日待办</span></>}>
+        <Panel title={<><h2>任务日历</h2><span className="subtle">按天查看待办</span></>}>
           <RequestStateView loading={tasksQuery.isLoading} error={tasksQuery.error}
             onRetry={() => void tasksQuery.refetch()} empty={!calendarItems.length}
-            emptyState={<div className="state-block"><strong>暂无待办任务</strong><p>实验发布后，开放区间内每天都会显示对应待办。</p></div>}>
+            emptyState={<div className="state-block"><strong>暂无待办任务</strong><p>实验发布后会显示在这里。</p></div>}>
             <DateCalendar items={calendarItems} selectedDate={selectedDate} onDateSelect={(date) => {
               setManualDate(true);
               setSelectedDate(date);
@@ -165,7 +165,7 @@ export function Home() {
             }} showPopover={false} />
           </RequestStateView>
         </Panel>
-        <Panel title={<><h2>待完成任务</h2><span className="subtle">点击左侧日期查看当天待办</span></>}>
+        <Panel title={<><h2>待完成任务</h2><span className="subtle">选择日期查看待办</span></>}>
           {selectedDate ? (
             focusedItems.length ? (
               <div className="calendar-focus-list" aria-live="polite">

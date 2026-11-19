@@ -665,6 +665,7 @@ function AssessmentPage({ taskId }: { taskId: string }) {
     </Modal>
     <header className="assessment-header">
       <div>
+        <p className="assessment-brand">实验教学平台</p>
         {(data.course_title || data.chapter_title) && <p className="assessment-course">
           {[data.course_title, data.chapter_title].filter(Boolean).join(" / ")}
         </p>}
