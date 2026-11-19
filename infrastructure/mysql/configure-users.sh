@@ -124,6 +124,9 @@ GRANT SELECT, INSERT ON \`${MYSQL_DATABASE}\`.experiments_section_submission TO 
 GRANT SELECT, INSERT ON \`${MYSQL_DATABASE}\`.experiments_question_submission TO '${MYSQL_APP_USER}'@'%';
 GRANT SELECT, INSERT, UPDATE ON \`${MYSQL_DATABASE}\`.experiments_question_grade TO '${MYSQL_APP_USER}'@'%';
 GRANT SELECT, INSERT, UPDATE ON \`${MYSQL_DATABASE}\`.experiments_assessment_run TO '${MYSQL_APP_USER}'@'%';
+GRANT SELECT, INSERT, UPDATE ON \`${MYSQL_DATABASE}\`.experiments_assessmentsession TO '${MYSQL_APP_USER}'@'%';
+GRANT SELECT, INSERT, UPDATE ON \`${MYSQL_DATABASE}\`.experiments_partredo TO '${MYSQL_APP_USER}'@'%';
+GRANT SELECT, INSERT ON \`${MYSQL_DATABASE}\`.experiments_programmingsubmission TO '${MYSQL_APP_USER}'@'%';
 GRANT SELECT, INSERT, UPDATE ON \`${MYSQL_DATABASE}\`.experiments_report_grade TO '${MYSQL_APP_USER}'@'%';
 GRANT SELECT, INSERT, UPDATE ON \`${MYSQL_DATABASE}\`.experiments_experiment_retake_link TO '${MYSQL_APP_USER}'@'%';
 GRANT SELECT, INSERT ON \`${MYSQL_DATABASE}\`.experiments_task_state_transition TO '${MYSQL_APP_USER}'@'%';
@@ -133,10 +136,12 @@ GRANT SELECT, INSERT, UPDATE ON \`${MYSQL_DATABASE}\`.experiments_task_extension
 GRANT SELECT, INSERT ON \`${MYSQL_DATABASE}\`.experiments_task_extension_decision TO '${MYSQL_APP_USER}'@'%';
 GRANT SELECT, INSERT, UPDATE ON \`${MYSQL_DATABASE}\`.provisioning_runtime_capacity_reservation TO '${MYSQL_APP_USER}'@'%';
 GRANT SELECT, INSERT ON \`${MYSQL_DATABASE}\`.workspaces_workspace_snapshot TO '${MYSQL_APP_USER}'@'%';
+GRANT SELECT, INSERT, UPDATE ON \`${MYSQL_DATABASE}\`.workspaces_studentworkspace TO '${MYSQL_APP_USER}'@'%';
 GRANT SELECT, INSERT, UPDATE ON \`${MYSQL_DATABASE}\`.reports_report_draft TO '${MYSQL_APP_USER}'@'%';
 GRANT SELECT, INSERT ON \`${MYSQL_DATABASE}\`.reports_report_attachment TO '${MYSQL_APP_USER}'@'%';
 GRANT SELECT, INSERT ON \`${MYSQL_DATABASE}\`.reports_report_version TO '${MYSQL_APP_USER}'@'%';
 GRANT SELECT, INSERT ON \`${MYSQL_DATABASE}\`.reports_report_version_attachment TO '${MYSQL_APP_USER}'@'%';
+GRANT SELECT, INSERT, UPDATE ON \`${MYSQL_DATABASE}\`.reports_reportsubmission TO '${MYSQL_APP_USER}'@'%';
 GRANT SELECT, INSERT, UPDATE ON \`${MYSQL_DATABASE}\`.archives_archive_job TO '${MYSQL_APP_USER}'@'%';
 GRANT SELECT, INSERT ON \`${MYSQL_DATABASE}\`.archives_archive_manifest TO '${MYSQL_APP_USER}'@'%';
 GRANT SELECT, INSERT ON \`${MYSQL_DATABASE}\`.archives_archive_verification TO '${MYSQL_APP_USER}'@'%';

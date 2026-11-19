@@ -214,7 +214,7 @@ class AssessmentWorkerTests(TestCase):
                     {"Key": "assessment/orphan", "VersionId": "orphan-version",
                      "LastModified": old},
                     {"Key": "assessment/fresh", "VersionId": "fresh-version", "LastModified": now},
-                ]}], [],
+                ]}], [], [],
             ]
             assert cleanup_assessment_objects() == 1
             storage.return_value.delete_object.assert_called_once_with(

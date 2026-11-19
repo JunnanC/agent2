@@ -170,6 +170,7 @@ class PublicationDataSerializer(serializers.Serializer):
     window_end = serializers.DateTimeField()
     assignment_deadline = serializers.DateTimeField(allow_null=True)
     report_required = serializers.BooleanField()
+    report_template = serializers.DictField(allow_null=True)
     review_mode = serializers.ChoiceField(choices=TaskPublication.ReviewMode.choices)
     status = serializers.ChoiceField(choices=TaskPublication.Status.choices)
     audience_count = serializers.IntegerField()
@@ -182,6 +183,7 @@ class PublicationDataSerializer(serializers.Serializer):
 class TaskDataSerializer(serializers.Serializer):
     course_chapter_id = serializers.CharField(allow_null=True, required=False)
     assessment_available = serializers.BooleanField()
+    workspace_available = serializers.BooleanField(required=False)
     public_id = serializers.CharField()
     course_id = serializers.CharField()
     publication_id = serializers.CharField()
@@ -189,6 +191,7 @@ class TaskDataSerializer(serializers.Serializer):
     student_id = serializers.CharField()
     student_name = serializers.CharField(required=False)
     score = serializers.CharField(allow_null=True, required=False)
+    parts = serializers.ListField(child=serializers.DictField(), required=False)
     retake_of_task_id = serializers.CharField(allow_null=True, required=False)
     has_retake = serializers.BooleanField(required=False)
     retake_task_id = serializers.CharField(allow_null=True, required=False)
@@ -313,6 +316,10 @@ def publication_data(item: TaskPublication) -> dict[str, Any]:
         "score_release_at": item.score_release_at,
         "assignment_deadline": item.assignment_deadline,
         "report_required": item.report_required,
+        "report_template": ({
+            "asset_id": item.report_template_asset.public_id,
+            "file_name": item.report_template_asset.original_name,
+        } if item.report_template_asset_id else None),
         "review_mode": item.review_mode,
         "status": item.status,
         "audience_count": _audience_count(item),
@@ -413,6 +420,8 @@ def task_data(
     blockers: list[dict[str, object]] | None = None,
     actions: list[str] | None = None,
 ) -> dict[str, object]:
+    from .assessment_parts import can_start_session
+
     template = item.template_version
     adapter = item.runtime_adapter
     image = item.image
@@ -429,6 +438,7 @@ def task_data(
             "network_mode": profile.network_mode,
         }
     return {
+        "workspace_available": can_start_session(item),
         "assessment_available": PublicationTask.objects.filter(
             publication_chapter__publication_id=item.publication_id,
             task_type__in=("SINGLE_CHOICE", "MULTIPLE_CHOICE", "PROGRAMMING"),

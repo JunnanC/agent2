@@ -2,7 +2,9 @@
 
 import hashlib
 import json
+from contextlib import suppress
 from decimal import Decimal
+from functools import lru_cache
 from typing import Any
 
 from django.db import transaction
@@ -20,13 +22,22 @@ from apps.labtemplates.questions import (
     project_files,
     public_question,
 )
+from apps.provisioning.assessment_judge import ordered_cases
 
+from .assessment_parts import (
+    can_start_session,
+    part_scores,
+    require_part_open,
+    session_for,
+    sync_workspace_progress,
+)
 from .models import (
     AnswerDraft,
     AssessmentRun,
     AssessmentSection,
     CodeDraft,
     ExperimentTask,
+    ProgrammingSubmission,
     PublicationTask,
     QuestionGrade,
     QuestionSubmission,
@@ -37,7 +48,9 @@ from .models import (
 from .selectors import task_for_user
 
 
-def _task(actor: User, task_id: str, *, write: bool = False) -> ExperimentTask:
+def _task(
+    actor: User, task_id: str, *, write: bool = False, part: str = "",
+) -> ExperimentTask:
     task = task_for_user(actor=actor, task_id=task_id)
     if task.enrollment.status != Enrollment.Status.ACTIVE:
         raise ResourceNotFound()
@@ -50,6 +63,9 @@ def _task(actor: User, task_id: str, *, write: bool = False) -> ExperimentTask:
         publication = TaskPublication.objects.select_for_update().get(pk=task.publication_id)
         task = ExperimentTask.objects.select_for_update().get(pk=task.pk)
         task.publication = publication
+        if part and session_for(task):
+            require_part_open(task, part)
+            return task
         if task.publication.status != TaskPublication.Status.PUBLISHED:
             raise StateConflict(detail={"publication": "not_open"})
         if task.status in {
@@ -93,6 +109,9 @@ def _writable(task: ExperimentTask, kind: str) -> None:
 
 def sync_assessment_status(task: ExperimentTask) -> None:
     """Keep the existing task projection usable without coupling it to container lifecycle."""
+    if session_for(task):
+        sync_workspace_progress(task)
+        return
     if task.status in {"ARCHIVING", "COMPLETED", "CANCELLED", "EXPIRED"}:
         return
     kinds = {"CHOICE" if kind in CHOICE_TYPES else "PROGRAMMING" for kind in
@@ -154,9 +173,22 @@ def save_draft(
     *, actor: User, task_id: str, question_id: str, expected_version: int,
     data: dict[str, Any], language: str = "",
 ) -> dict[str, Any]:
-    task = _task(actor, task_id, write=True)
+    task = _task(actor, task_id, write=True, part="PROGRAMMING" if language else "CHOICE")
     question = _question(task, question_id)
-    _writable(task, _kind(question))
+    session = session_for(task)
+    if session:
+        kind = _kind(question)
+        require_part_open(task, kind)
+        if kind == "PROGRAMMING" and ProgrammingSubmission.objects.filter(
+            task=task, question=question,
+        ).exists():
+            raise StateConflict(detail={"question": "already_submitted"})
+        if kind == "CHOICE" and AssessmentSection.objects.filter(
+            task=task, kind=kind, status="SUBMITTED",
+        ).exists():
+            raise StateConflict(detail={"section": "already_submitted"})
+    else:
+        _writable(task, _kind(question))
     draft = _draft(task, question, language)
     changes: dict[str, Any]
     if isinstance(draft, CodeDraft):
@@ -186,6 +218,17 @@ def save_draft(
     return draft_data(changed)
 
 
+@lru_cache(maxsize=256)
+def _legacy_case_metadata(question_id: str) -> tuple[int, list[dict[str, str]]]:
+    question = PublicationTask.objects.select_related(
+        "publication_chapter__publication__template_version",
+    ).get(public_id=question_id)
+    cases = ordered_cases(
+        question, question.publication_chapter.publication.template_version.public_id,
+    )
+    return len(cases), cases[:2]
+
+
 def assessment_data(*, actor: User, task_id: str) -> dict[str, Any]:
     task = _task(actor, task_id)
     questions = list(PublicationTask.objects.filter(
@@ -194,7 +237,13 @@ def assessment_data(*, actor: User, task_id: str) -> dict[str, Any]:
     if not questions:
         raise ResourceNotFound()
     now = timezone.now()
-    answer_visible = now >= task.publication.window_end
+    session = session_for(task)
+    available = bool(session) or can_start_session(task)
+    passed = {
+        row.question_id: row for row in ProgrammingSubmission.objects.filter(task=task)
+        .select_related("code_snapshot")
+    } if session else {}
+    answer_visible = not session and now >= task.publication.window_end
     section_rows = {
         row.kind: row
         for row in AssessmentSection.objects.filter(task=task).select_related("current_submission")
@@ -210,6 +259,22 @@ def assessment_data(*, actor: User, task_id: str) -> dict[str, Any]:
             value["selected_language"] = (
                 selections.get(question.pk) or value["allowed_languages"][0]
             )
+            if available:
+                submission = passed.get(question.pk)
+                samples = question.execution_snapshot.get("visible_cases", value["samples"][:2])
+                case_count = question.execution_snapshot.get("case_count")
+                if session and case_count is None and question.execution_snapshot.get(
+                    "tests_digest",
+                ):
+                    # Old publication snapshots may predate the frozen case count.
+                    with suppress(Exception):
+                        case_count, samples = _legacy_case_metadata(question.public_id)
+                value.update(
+                    samples=samples[:2], submitted=bool(submission), case_count=case_count,
+                    case_results=submission.case_results if submission else [],
+                )
+                if submission:
+                    value["selected_language"] = submission.code_snapshot.language
         elif answer_visible:
             value["correct_option_ids"] = question.marking_spec["correct_option_ids"]
             value["explanation"] = question.marking_spec.get("explanation", "")
@@ -226,6 +291,12 @@ def assessment_data(*, actor: User, task_id: str) -> dict[str, Any]:
                 "COMPLETED", "CANCELLED", "EXPIRED", "FAILED", "ARCHIVING",
             } and now < deadline,
         })
+    parts = part_scores(task) if session else []
+    if session:
+        sections = [
+            {**section, **next(part for part in parts if part["kind"] == section["kind"])}
+            for section in sections
+        ]
     return {
         "task_id": task.public_id, "questions": values, "sections": sections,
         "title": task.publication.title,
@@ -236,6 +307,10 @@ def assessment_data(*, actor: User, task_id: str) -> dict[str, Any]:
         ),
         "all_submitted": all(s["status"] == "SUBMITTED" for s in sections),
         "server_time": now, "choice_answers_visible": answer_visible,
+        "workspace_available": available, "workspace_flow": bool(session),
+        "current_question_id": session.current_question.public_id
+        if session and session.current_question_id else None,
+        "parts": parts,
         "report_required": task.publication.report_required,
         "report_template": ({
             "asset_id": task.publication.template_version.report_template_asset.public_id,
@@ -248,8 +323,10 @@ def assessment_data(*, actor: User, task_id: str) -> dict[str, Any]:
 def submit_choices(
     *, actor: User, task_id: str, versions: dict[str, int], trace_id: str,
 ) -> SectionSubmission:
-    task = _task(actor, task_id, write=True)
-    _writable(task, "CHOICE")
+    task = _task(actor, task_id, write=True, part="CHOICE")
+    session = session_for(task)
+    if not session:
+        _writable(task, "CHOICE")
     questions = list(PublicationTask.objects.filter(
         publication_chapter__publication_id=task.publication_id, task_type__in=CHOICE_TYPES,
     ).order_by("id"))
@@ -268,6 +345,8 @@ def submit_choices(
             raise RowVersionConflict(detail={"question_id": question.public_id})
         drafts.append(draft)
     section, _ = AssessmentSection.objects.get_or_create(task=task, kind="CHOICE")
+    if session and section.status == "SUBMITTED":
+        raise StateConflict(detail={"section": "already_submitted"})
     last = section.current_submission
     submission = SectionSubmission.objects.create(
         section=section, version_no=last.version_no + 1 if last else 1,
@@ -313,6 +392,8 @@ def submit_programming(
     from .models import CodeDraft
 
     task = _task(actor, task_id, write=True)
+    if session_for(task):
+        raise StateConflict(detail={"section": "final_run_required"})
     _writable(task, "PROGRAMMING")
     questions = list(PublicationTask.objects.filter(
         publication_chapter__publication_id=task.publication_id, task_type="PROGRAMMING",
@@ -464,6 +545,8 @@ def request_run(
     from apps.workspaces.code_snapshots import create_code_snapshot
 
     task = _task(actor, task_id, write=True)
+    if session_for(task):
+        raise StateConflict(detail={"run": "workspace_required"})
     _writable(task, "PROGRAMMING")
     question = _question(task, question_id)
     if question.task_type != "PROGRAMMING" or not isinstance(stdin, str):

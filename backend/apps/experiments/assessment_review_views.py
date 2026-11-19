@@ -1,3 +1,4 @@
+from django.db.models import Max
 from django.http import HttpRequest
 from drf_spectacular.utils import extend_schema
 from rest_framework import serializers
@@ -11,8 +12,9 @@ from apps.core.idempotency import StoredResponse
 from apps.reviews.selectors import teaching_course
 
 from .assessment import choice_review_data, report_review_status, review_programming, section_result
+from .assessment_parts import part_scores, session_for
 from .assessment_views import AssessmentResponseSerializer
-from .models import AssessmentSection, ExperimentTask
+from .models import AssessmentSection, ExperimentTask, ProgrammingSubmission
 from .views import IDEMPOTENCY_KEY, IF_MATCH, _body, _idempotent, _response
 
 
@@ -138,6 +140,35 @@ class AssessmentTeachingView(APIView):
             ]
         choice = next((s for s in sections if s.kind == "CHOICE"), None)
         choice_answers = choice_review_data(choice) if choice else []
+        parts = part_scores(task) if session_for(task) else []
+        section_rows = [section_result(section, student=False) for section in sections]
+        program_part = next((part for part in parts if part["kind"] == "PROGRAMMING"), None)
+        if program_part:
+            from .assessment_workers import _read_source
+
+            submissions = ProgrammingSubmission.objects.filter(task=task).select_related(
+                "question__publication_chapter", "code_snapshot__asset",
+            ).order_by("question__publication_chapter__sort_order", "question__sort_order")
+            program_questions = []
+            for submission in submissions:
+                question = submission.question
+                sources.append({
+                    "question_id": question.public_id,
+                    "language": submission.code_snapshot.language,
+                    "files": _read_source(submission.code_snapshot),
+                })
+                program_questions.append({
+                    "id": question.public_id, "title": question.title,
+                    "description": question.description, "instructions": question.instructions,
+                    "language": submission.code_snapshot.language,
+                    "samples": question.question_spec.get("samples", [])[:2],
+                })
+            section_rows.append({
+                **program_part, "questions": program_questions,
+                "grading_status": "COMPLETED" if program_part["status"] == "SUBMITTED"
+                else "NOT_SUBMITTED",
+                "submission_version": None, "row_version": 1,
+            })
         history = [
             {
                 "kind": section.kind,
@@ -156,7 +187,8 @@ class AssessmentTeachingView(APIView):
             {
                 "task_id": task.public_id,
                 "student_name": task.student.display_name,
-                "sections": [section_result(section, student=False) for section in sections],
+                "sections": section_rows,
+                "parts": parts,
                 "choice_answers": choice_answers,
                 "report": {"body_markdown": report.body_markdown, "version_no": report.version_no}
                 if report
@@ -213,6 +245,7 @@ class AssessmentReviewListView(APIView):
             .select_related(
                 "task__student",
                 "task__publication__rubric_version",
+                "task__assessmentsession",
                 "current_submission__report_grade",
             )
             .order_by("-updated_at")
@@ -221,10 +254,23 @@ class AssessmentReviewListView(APIView):
             sections = sections.filter(
                 task__publication__public_id=request.query_params["publication_id"]
             )
+        programs = ProgrammingSubmission.objects.filter(task__course=course)
+        if publication_id := request.query_params.get("publication_id"):
+            programs = programs.filter(task__publication__public_id=publication_id)
+        programs = programs.values(
+            "task__public_id", "task__student__display_name", "task__publication__title",
+        ).annotate(last=Max("created_at")).order_by("-last")
+        program_rows = [{
+            "task_id": item["task__public_id"],
+            "student_name": item["task__student__display_name"],
+            "title": item["task__publication__title"],
+            "kind": "PROGRAMMING", "status": "SUBMITTED", "review_status": "NOT_REQUIRED",
+            "version_no": 1, "workspace_flow": True,
+        } for item in programs[:500]]
         return _response(
             request,
             {
-                "rows": [
+                "rows": program_rows + [
                     {
                         "task_id": section.task.public_id,
                         "student_name": section.task.student.display_name,
@@ -233,6 +279,7 @@ class AssessmentReviewListView(APIView):
                         "status": section.status,
                         "review_status": report_review_status(section),
                         "version_no": section.current_submission.version_no,
+                        "workspace_flow": hasattr(section.task, "assessmentsession"),
                     }
                     for section in sections[:500]
                 ]

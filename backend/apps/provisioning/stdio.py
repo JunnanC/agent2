@@ -60,7 +60,7 @@ def compile_plan(language: str, files: Mapping[str, str]) -> tuple[list[str], li
     raise ValueError("Unsupported assessment language")
 
 
-def source_archive(files: Mapping[str, bytes]) -> bytes:
+def source_archive(files: Mapping[str, bytes], *, owner: int = 10001) -> bytes:
     output = io.BytesIO()
     with tarfile.open(fileobj=output, mode="w") as archive:
         parents = sorted({
@@ -69,11 +69,11 @@ def source_archive(files: Mapping[str, bytes]) -> bytes:
         })
         for directory in parents:
             item = tarfile.TarInfo(directory)
-            item.type, item.mode = tarfile.DIRTYPE, 0o555
+            item.type, item.mode = tarfile.DIRTYPE, 0o755 if owner == 0 else 0o555
             archive.addfile(item)
         for path, content in files.items():
             item = tarfile.TarInfo(path)
-            item.uid = item.gid = 10001
+            item.uid = item.gid = owner
             item.mode, item.size = 0o555, len(content)
             archive.addfile(item, io.BytesIO(content))
     return output.getvalue()
@@ -130,12 +130,14 @@ class StdioExecutor:
         self.containers.remove(stager)
         return volume
 
-    def _exec(self, container: Any, argv: list[str], timeout: int) -> StdioResult:
+    def _exec(
+        self, container: Any, argv: list[str], timeout: int, *, workdir: str = "/source",
+    ) -> StdioResult:
         stdout, stderr = bytearray(), bytearray()
         done, exceeded = threading.Event(), threading.Event()
         failure: list[BaseException] = []
         execution = self.client.api.exec_create(
-            container.id, argv, stdout=True, stderr=True, user="10001:10001", workdir="/source",
+            container.id, argv, stdout=True, stderr=True, user="10001:10001", workdir=workdir,
         )["Id"]
 
         def collect() -> None:

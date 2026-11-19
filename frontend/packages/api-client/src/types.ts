@@ -273,8 +273,10 @@ export interface Blocker {
 }
 
 export interface Task {
+  parts?: import("./assessment").AssessmentPart[];
   course_chapter_id?: string | null;
   assessment_available?: boolean;
+  workspace_available?: boolean;
   public_id: string;
   course_id: string;
   publication_id: string;
@@ -383,6 +385,7 @@ export interface PrecheckRun {
 }
 
 export interface Publication {
+  report_template?: { asset_id: string; file_name: string } | null;
   course_chapter_id?: string | null;
   public_id: string;
   course_id: string;

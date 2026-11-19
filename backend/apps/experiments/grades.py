@@ -25,6 +25,7 @@ def task_grades(
         if link.retake_task_id in result:
             result[link.retake_task_id]["retake_of_task_id"] = link.source_task.public_id
     from .assessment import assessment_results
+    from .assessment_parts import part_scores, session_for
     from .models import PublicationTask
 
     assessment_tasks = {task.pk: task for task in tasks}
@@ -34,6 +35,10 @@ def task_grades(
             assessment_tasks[link.retake_task_id] = link.retake_task
     assessment_scores: dict[int, dict[str, object]] = {}
     for task in assessment_tasks.values():
+        if session_for(task):
+            if task.pk in result:
+                result[task.pk]["parts"] = part_scores(task)
+            continue
         questions = PublicationTask.objects.filter(
             publication_chapter__publication_id=task.publication_id,
             task_type__in=("SINGLE_CHOICE", "MULTIPLE_CHOICE", "PROGRAMMING"),

@@ -2281,6 +2281,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v2/tasks/{task_id}/questions/{question_id}/attempts/{run_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["api_v2_tasks_questions_attempts_retrieve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v2/tasks/{task_id}/questions/{question_id}/code/{language}": {
         parameters: {
             query?: never;
@@ -2313,6 +2329,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v2/tasks/{task_id}/questions/{question_id}/final-run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["api_v2_tasks_questions_final_run_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v2/tasks/{task_id}/questions/{question_id}/runs": {
         parameters: {
             query?: never;
@@ -2323,6 +2355,38 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["api_v2_tasks_questions_runs_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/tasks/{task_id}/questions/{question_id}/self-test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["api_v2_tasks_questions_self_test_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/tasks/{task_id}/report": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["api_v2_tasks_report_retrieve"];
+        put?: never;
+        post: operations["api_v2_tasks_report_create"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2370,6 +2434,38 @@ export interface paths {
         };
         get: operations["tasks_transitions_list"];
         put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/tasks/{task_id}/workspace": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["api_v2_tasks_workspace_retrieve"];
+        put?: never;
+        post: operations["api_v2_tasks_workspace_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/tasks/{task_id}/workspace/questions/{question_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["api_v2_tasks_workspace_questions_update"];
         post?: never;
         delete?: never;
         options?: never;
@@ -3321,6 +3417,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v2/teaching/courses/{course_id}/experiment-reports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["api_v2_teaching_courses_experiment_reports_retrieve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v2/teaching/courses/{course_id}/experiments": {
         parameters: {
             query?: never;
@@ -3395,6 +3507,22 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["teaching_experiments_publish"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/teaching/courses/{course_id}/experiments/{publication_id}/report-template": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["api_v2_teaching_courses_experiments_report_template_create"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3801,6 +3929,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v2/teaching/courses/{course_id}/tasks/{task_id}/assessment/parts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["api_v2_teaching_courses_tasks_assessment_parts_retrieve"];
+        put?: never;
+        post: operations["api_v2_teaching_courses_tasks_assessment_parts_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v2/teaching/courses/{course_id}/tasks/{task_id}/assessment/report-suggestion": {
         parameters: {
             query?: never;
@@ -3811,6 +3955,22 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["api_v2_teaching_courses_tasks_assessment_report_suggestion_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/teaching/courses/{course_id}/tasks/{task_id}/report": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["api_v2_teaching_courses_tasks_report_retrieve"];
+        put?: never;
+        post: operations["api_v2_teaching_courses_tasks_report_create"];
         delete?: never;
         options?: never;
         head?: never;
@@ -5020,6 +5180,10 @@ export interface components {
             issue_type?: string;
             note?: string;
         };
+        File: {
+            /** Format: uri */
+            file: string;
+        };
         GenericReportResponse: {
             data: {
                 [key: string]: unknown;
@@ -5241,6 +5405,13 @@ export interface components {
             new_owner_id: string;
             reason: string;
         };
+        /**
+         * @description * `CHOICE` - Choice
+         *     * `PROGRAMMING` - Programming
+         *     * `REPORT` - Report
+         * @enum {string}
+         */
+        PartEnum: "CHOICE" | "PROGRAMMING" | "REPORT";
         PasswordChange: {
             current_password: string;
             new_password: string;
@@ -5616,6 +5787,9 @@ export interface components {
             /** Format: date-time */
             assignment_deadline: string | null;
             report_required: boolean;
+            report_template: {
+                [key: string]: unknown;
+            } | null;
             review_mode: components["schemas"]["ReviewModeEnum"];
             status: components["schemas"]["PublicationDataStatusEnum"];
             audience_count: number;
@@ -5787,6 +5961,13 @@ export interface components {
         Reason: {
             reason: string;
         };
+        Redo: {
+            part: components["schemas"]["PartEnum"];
+            /** Format: date-time */
+            redo_until: string;
+            /** @default  */
+            reason: string;
+        };
         RegistrationResponse: {
             data: components["schemas"]["RegistrationStatus"];
             meta: components["schemas"]["AccountTraceMeta"];
@@ -5832,6 +6013,12 @@ export interface components {
             meta: {
                 [key: string]: unknown;
             };
+        };
+        ReportGrade: {
+            /** Format: decimal */
+            score: string;
+            /** @default  */
+            feedback: string;
         };
         ReportSuggestionWrite: {
             submission_version: number;
@@ -6178,6 +6365,7 @@ export interface components {
         TaskData: {
             course_chapter_id?: string | null;
             assessment_available: boolean;
+            workspace_available?: boolean;
             public_id: string;
             course_id: string;
             publication_id: string;
@@ -6185,6 +6373,9 @@ export interface components {
             student_id: string;
             student_name?: string;
             score?: string | null;
+            parts?: {
+                [key: string]: unknown;
+            }[];
             retake_of_task_id?: string | null;
             has_retake?: boolean;
             retake_task_id?: string | null;
@@ -6696,6 +6887,12 @@ export interface components {
             total_minutes: number;
             last_week_minutes: number;
             has_records: boolean;
+        };
+        WorkspaceAttemptWrite: {
+            language: components["schemas"]["LanguageEnum"];
+            row_version: number;
+            /** @default  */
+            stdin: string;
         };
     };
     responses: never;
@@ -10829,6 +11026,29 @@ export interface operations {
             };
         };
     };
+    api_v2_tasks_questions_attempts_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                question_id: string;
+                run_id: number;
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssessmentResponse"];
+                };
+            };
+        };
+    };
     api_v2_tasks_questions_code_retrieve: {
         parameters: {
             query?: never;
@@ -10935,6 +11155,36 @@ export interface operations {
             };
         };
     };
+    api_v2_tasks_questions_final_run_create: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                question_id: string;
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WorkspaceAttemptWrite"];
+                "application/x-www-form-urlencoded": components["schemas"]["WorkspaceAttemptWrite"];
+                "multipart/form-data": components["schemas"]["WorkspaceAttemptWrite"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssessmentResponse"];
+                };
+            };
+        };
+    };
     api_v2_tasks_questions_runs_create: {
         parameters: {
             query?: never;
@@ -10956,6 +11206,84 @@ export interface operations {
         };
         responses: {
             201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssessmentResponse"];
+                };
+            };
+        };
+    };
+    api_v2_tasks_questions_self_test_create: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                question_id: string;
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WorkspaceAttemptWrite"];
+                "application/x-www-form-urlencoded": components["schemas"]["WorkspaceAttemptWrite"];
+                "multipart/form-data": components["schemas"]["WorkspaceAttemptWrite"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssessmentResponse"];
+                };
+            };
+        };
+    };
+    api_v2_tasks_report_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssessmentResponse"];
+                };
+            };
+        };
+    };
+    api_v2_tasks_report_create: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["File"];
+            };
+        };
+        responses: {
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -11040,6 +11368,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TransitionData"][];
+                };
+            };
+        };
+    };
+    api_v2_tasks_workspace_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssessmentResponse"];
+                };
+            };
+        };
+    };
+    api_v2_tasks_workspace_create: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssessmentResponse"];
+                };
+            };
+        };
+    };
+    api_v2_tasks_workspace_questions_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                question_id: string;
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssessmentResponse"];
                 };
             };
         };
@@ -12826,6 +13220,27 @@ export interface operations {
             };
         };
     };
+    api_v2_teaching_courses_experiment_reports_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssessmentResponse"];
+                };
+            };
+        };
+    };
     teaching_experiments_list: {
         parameters: {
             query?: never;
@@ -13016,6 +13431,35 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PublicationData"];
+                };
+            };
+        };
+    };
+    api_v2_teaching_courses_experiments_report_template_create: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+                "If-Match": string;
+            };
+            path: {
+                course_id: string;
+                publication_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["File"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssessmentResponse"];
                 };
             };
         };
@@ -13875,6 +14319,58 @@ export interface operations {
             };
         };
     };
+    api_v2_teaching_courses_tasks_assessment_parts_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                course_id: string;
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssessmentResponse"];
+                };
+            };
+        };
+    };
+    api_v2_teaching_courses_tasks_assessment_parts_create: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                course_id: string;
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Redo"];
+                "application/x-www-form-urlencoded": components["schemas"]["Redo"];
+                "multipart/form-data": components["schemas"]["Redo"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssessmentResponse"];
+                };
+            };
+        };
+    };
     api_v2_teaching_courses_tasks_assessment_report_suggestion_create: {
         parameters: {
             query?: never;
@@ -13892,6 +14388,59 @@ export interface operations {
                 "application/json": components["schemas"]["ReportSuggestionWrite"];
                 "application/x-www-form-urlencoded": components["schemas"]["ReportSuggestionWrite"];
                 "multipart/form-data": components["schemas"]["ReportSuggestionWrite"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssessmentResponse"];
+                };
+            };
+        };
+    };
+    api_v2_teaching_courses_tasks_report_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                course_id: string;
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssessmentResponse"];
+                };
+            };
+        };
+    };
+    api_v2_teaching_courses_tasks_report_create: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+                "If-Match": string;
+            };
+            path: {
+                course_id: string;
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReportGrade"];
+                "application/x-www-form-urlencoded": components["schemas"]["ReportGrade"];
+                "multipart/form-data": components["schemas"]["ReportGrade"];
             };
         };
         responses: {

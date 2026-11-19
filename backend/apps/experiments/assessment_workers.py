@@ -12,6 +12,7 @@ from django.conf import settings
 from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
+from docker.errors import NotFound
 
 from apps.core.audit import append_failure
 from apps.core.concurrency import compare_and_swap
@@ -156,6 +157,11 @@ def execute_assessment_job(*, pk: int, formal: bool) -> None:
         question, snapshot = answer.question, answer.code_snapshot
     else:
         task, question, snapshot = row.task, row.question, row.snapshot
+        if row.mode != AssessmentRun.Mode.LEGACY:
+            from .workspace_judge import execute_workspace_attempt
+
+            execute_workspace_attempt(row)
+            return
     owner = f"assessment-{row.lease_token}"
     executor = client = reservation = None
     try:
@@ -224,21 +230,29 @@ def cleanup_assessment_resources() -> int:
         client = docker.DockerClient(base_url=host, timeout=30)
         try:
             owners = set()
-            filters = {"label": [
-                "edu.platform.managed=true", "edu.platform.kind=assessment-stdio",
-            ]}
+            filters = {"label": ["edu.platform.managed=true"]}
             for container in client.containers.list(all=True, filters=filters):
                 labels = container.labels
+                if labels.get("edu.platform.kind") not in {"assessment-stdio", "student-workspace"}:
+                    continue
                 if int(labels.get("edu.platform.expires_at", "0")) > time.time():
                     continue
-                container.remove(force=True)
+                try:
+                    container.remove(force=True)
+                except NotFound:
+                    continue
                 owners.add(labels.get("edu.platform.assessment", ""))
                 cleaned += 1
             for volume in client.volumes.list(filters=filters):
                 labels = volume.attrs.get("Labels") or {}
+                if labels.get("edu.platform.kind") not in {"assessment-stdio", "student-workspace"}:
+                    continue
                 if int(labels.get("edu.platform.expires_at", "0")) > time.time():
                     continue
-                volume.remove(force=True)
+                try:
+                    volume.remove(force=True)
+                except NotFound:
+                    continue
                 owners.add(labels.get("edu.platform.assessment", ""))
                 cleaned += 1
             for owner in owners:
@@ -264,7 +278,7 @@ def cleanup_assessment_objects() -> int:
     storage = object_storage()
     cutoff = timezone.now() - timedelta(hours=1)
     removed = 0
-    for prefix in ("assessment/", "assessment-tests/"):
+    for prefix in ("assessment/", "assessment-tests/", "assessment-uploads/"):
         pages = storage.client.get_paginator("list_object_versions").paginate(
             Bucket=settings.MINIO_BUCKET, Prefix=prefix,
         )
@@ -289,6 +303,12 @@ def cleanup_assessment_objects() -> int:
 def dispatch_assessments() -> int:
     now = timezone.now()
     count = 0
+    AssessmentRun.objects.exclude(mode="LEGACY").filter(
+        status="RUNNING", lease_until__lt=now, attempt_count__gte=5,
+    ).update(
+        status="COMPLETED", result_status="PLATFORM_ERROR", finished_at=now,
+        lease_token=None, lease_until=None,
+    )
     for model, formal in ((QuestionGrade, True), (AssessmentRun, False)):
         rows = model.objects.filter(
             Q(status__in=("PENDING", "RETRY")) | Q(status="RUNNING", lease_until__lt=now),
@@ -314,7 +334,9 @@ def archive_closed_assessments() -> int:
         publication__chapter_snapshots__task_snapshots__task_type__in=(
             "SINGLE_CHOICE", "MULTIPLE_CHOICE", "PROGRAMMING",
         ),
-    ).exclude(status__in=("ARCHIVING", "COMPLETED", "CANCELLED", "EXPIRED"))
+    ).exclude(
+        status__in=("ARCHIVING", "COMPLETED", "CANCELLED", "EXPIRED"),
+    ).filter(Q(assessmentsession__isnull=True) | Q(publication__status="WITHDRAWN"))
     count = 0
     for task in tasks.distinct()[:100]:
         results = assessment_results(task, student=False)

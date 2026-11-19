@@ -139,9 +139,22 @@ class QuestionGrade(VersionedModel):
 
 
 class AssessmentRun(VersionedModel):
+    class Mode(models.TextChoices):
+        LEGACY = "LEGACY"
+        SELF_TEST = "SELF_TEST"
+        FINAL = "FINAL"
+
     task = models.ForeignKey("experiments.ExperimentTask", on_delete=models.PROTECT)
     question = models.ForeignKey("experiments.PublicationTask", on_delete=models.PROTECT)
     snapshot = models.ForeignKey("workspaces.WorkspaceSnapshot", on_delete=models.PROTECT)
+    mode = models.CharField(max_length=12, choices=Mode.choices, default=Mode.LEGACY)
+    case_results = models.JSONField(default=list)
+    next_question = models.ForeignKey(
+        "experiments.PublicationTask", on_delete=models.PROTECT, null=True, blank=True,
+        related_name="+",
+    )
+    submitted = models.BooleanField(default=False)
+    draft_version = models.PositiveIntegerField(null=True, blank=True)
     stdin = models.TextField(blank=True, default="")
     status = models.CharField(max_length=16, default="PENDING")
     stdout = models.TextField(blank=True, default="")
@@ -179,4 +192,42 @@ class ReportGrade(VersionedModel):
         constraints = [models.CheckConstraint(
             condition=models.Q(score__isnull=True) | models.Q(score__gte=0),
             name="assessment_report_score_ck",
+        )]
+
+
+class AssessmentSession(VersionedModel):
+    task = models.OneToOneField("experiments.ExperimentTask", on_delete=models.PROTECT)
+    current_question = models.ForeignKey(
+        "experiments.PublicationTask", on_delete=models.PROTECT, null=True, blank=True,
+    )
+
+
+class ProgrammingSubmission(AppendOnlyModel):
+    task = models.ForeignKey("experiments.ExperimentTask", on_delete=models.PROTECT)
+    question = models.ForeignKey("experiments.PublicationTask", on_delete=models.PROTECT)
+    run = models.OneToOneField(AssessmentRun, on_delete=models.PROTECT)
+    code_snapshot = models.ForeignKey("workspaces.WorkspaceSnapshot", on_delete=models.PROTECT)
+    case_results = models.JSONField(default=list)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(
+            fields=("task", "question"), name="assessment_programming_question_uniq",
+        )]
+
+
+class PartRedo(VersionedModel):
+    class Part(models.TextChoices):
+        CHOICE = "CHOICE"
+        PROGRAMMING = "PROGRAMMING"
+        REPORT = "REPORT"
+
+    task = models.ForeignKey("experiments.ExperimentTask", on_delete=models.PROTECT)
+    part = models.CharField(max_length=16, choices=Part.choices)
+    redo_until = models.DateTimeField()
+    granted_by = models.ForeignKey("accounts.User", on_delete=models.PROTECT)
+    reason = models.CharField(max_length=500, blank=True, default="")
+
+    class Meta:
+        constraints = [models.UniqueConstraint(
+            fields=("task", "part"), name="assessment_part_redo_uniq",
         )]

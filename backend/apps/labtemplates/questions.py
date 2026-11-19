@@ -191,7 +191,9 @@ def public_question(question: Any) -> dict[str, Any]:
     return result
 
 
-def assessment_snapshot(version: Any, *, run_reference: bool = False) -> dict[str, Any] | None:
+def assessment_snapshot(
+    version: Any, *, run_reference: bool = False, include_case_metadata: bool = False,
+) -> dict[str, Any] | None:
     """Freeze the validated public questions and private grading configuration."""
     from .models import TemplateTask
 
@@ -237,6 +239,11 @@ def assessment_snapshot(version: Any, *, run_reference: bool = False) -> dict[st
             )
             groups = validated_groups(tests, private["groups"])
             record["tests_digest"] = asset.digest_sha256
+            if include_case_metadata:
+                cases = record["question_spec"]["samples"] + [
+                    case for group in groups for case in group["cases"]
+                ]
+                record["case_metadata"] = {"case_count": len(cases), "visible_cases": cases[:2]}
             profile = version.resource_profile
             for limit in record["question_spec"]["limits"].values():
                 if limit["memory_mb"] > (profile.memory_limit_mb or profile.memory_mb):

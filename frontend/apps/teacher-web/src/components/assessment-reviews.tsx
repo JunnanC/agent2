@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { assessmentTeachingApi } from "@edu/api-client";
+import { assessmentPartLabel, assessmentTeachingApi } from "@edu/api-client";
 import type { TeacherAssessmentReview } from "@edu/api-client";
 import { EmptyState, Panel, StatusBadge, useToast } from "@edu/ui";
 import { newIdempotencyKey } from "@edu/auth-client";
@@ -15,6 +15,7 @@ type ReviewQueueRow = {
   version_no: number;
   kinds: string[];
   review_status?: string;
+  workspace_flow?: boolean;
 };
 type ExamReviewQuestion = Omit<TeacherAssessmentReview["sections"][number]["questions"][number], "title"> & {
   title?: string;
@@ -68,6 +69,7 @@ export function AssessmentReviews({ courseId, publicationId = "", initialTaskId 
           version_no: row.version_no,
           kinds: [row.kind],
           review_status: row.kind === "PROGRAMMING" ? row.review_status : undefined,
+          workspace_flow: row.workspace_flow,
         });
       }
     }
@@ -132,7 +134,9 @@ export function AssessmentReviews({ courseId, publicationId = "", initialTaskId 
             const reviewTone = row.review_status === "PENDING" || row.review_status === "RETURNED"
               ? "warn" as const
               : row.review_status === "COMPLETED" ? "good" as const : "neutral" as const;
-            const kinds = row.kinds.includes("CHOICE") && row.kinds.includes("PROGRAMMING")
+            const kinds = row.workspace_flow
+              ? row.kinds.map((kind) => kind === "CHOICE" ? "选择题" : "编程题").join(" + ")
+              : row.kinds.includes("CHOICE") && row.kinds.includes("PROGRAMMING")
               ? "选择题 + 编程与报告"
               : row.kinds.includes("CHOICE") ? "选择题" : "编程与报告";
             return <button type="button" className={`assessment-review-queue-row${taskId === row.task_id ? " active" : ""}`}
@@ -141,8 +145,8 @@ export function AssessmentReviews({ courseId, publicationId = "", initialTaskId 
               onClick={() => selectTask(row.task_id)}>
               <span className="assessment-review-queue-student">{row.student_name}</span>
               <strong>{row.title}</strong>
-              <span className="subtle">{kinds} · 第 {row.version_no} 次提交</span>
-              <StatusBadge tone={reviewTone}>{reviewLabel}</StatusBadge>
+              <span className="subtle">{kinds}{!row.workspace_flow && ` · 第 ${row.version_no} 次提交`}</span>
+              <StatusBadge tone={reviewTone}>{row.workspace_flow ? "有提交记录" : reviewLabel}</StatusBadge>
             </button>;
           })}
         </div>
@@ -158,7 +162,7 @@ export function AssessmentReviews({ courseId, publicationId = "", initialTaskId 
       {taskId && detail.error && <p role="alert">学生答卷载入失败，请重试。</p>}
       {detail.data && <>
         <ExamPaper review={detail.data} title={selectedTask?.title ?? "实验答卷"} taskId={taskId} />
-        {section && <Panel className="assessment-report-review" title={<>
+        {section && !detail.data.parts?.length && <Panel className="assessment-report-review" title={<>
           <h2>评审操作</h2>
           <StatusBadge tone={reviewLocked ? "good" : "warn"}>
             {REPORT_REVIEW_STATUS_LABEL[section.review_status ?? ""] ?? "待评审"}
@@ -216,14 +220,19 @@ function ExamPaper({ review, title, taskId }: { review: ExamReview; title: strin
         <p>{title} · 固定提交记录</p>
       </div>
       <div className="assessment-exam-summary">
-        <div className="assessment-exam-score" aria-label="当前成绩">
+        {review.parts?.length ? <dl className="assessment-part-scores">
+          {review.parts.map((part) => <div key={part.kind}>
+            <dt>{assessmentPartLabel[part.kind]}</dt>
+            <dd>{part.score == null ? "—" : `${part.score} / 100`}{part.score_cap === 60 && " · 上限 60"}</dd>
+          </div>)}
+        </dl> : <><div className="assessment-exam-score" aria-label="当前成绩">
           <span>当前成绩</span>
           <div><strong>{scorePending ? (score ? `${score} · 部分` : "待评分") : score}</strong><span> / {maximum}</span></div>
         </div>
         <div className="assessment-exam-statuses">{sections.map(section => <StatusBadge key={section.kind}
           tone={section.grading_status === "COMPLETED" ? "good" : section.grading_status === "RETURNED" ? "warn" : "neutral"}>
           {section.kind === "CHOICE" ? "选择题" : "编程与报告"} · {GRADING_STATUS_LABEL[section.grading_status] ?? "状态未知"}
-        </StatusBadge>)}</div>
+        </StatusBadge>)}</div></>}
       </div>
     </header>
     {review.choice_answers?.length > 0 && <ChoiceReview data={review} />}
@@ -253,9 +262,10 @@ function ChoiceReview({ data }: { data: ExamReview }) {
     options.filter(option => ids.includes(option.id)).map(option => option.text).join("；") || "未作答";
   const total = data.choice_answers.reduce((sum, answer) => sum + Number(answer.score ?? 0), 0);
   const max = data.choice_answers.reduce((sum, answer) => sum + Number(answer.max_score ?? 0), 0);
+  const score = data.parts?.find((part) => part.kind === "CHOICE");
   return <section className="assessment-exam-section" aria-label="选择题答卷">
     <header className="assessment-exam-section-heading">
-      <div><h3>选择题答卷</h3><p className="subtle">自动判分 · 本卷 {total} / {max} 分</p></div>
+      <div><h3>选择题答卷</h3><p className="subtle">自动判分 · 本卷 {score ? `${score.score ?? "—"} / 100` : `${total} / ${max}`} 分</p></div>
       <StatusBadge tone="good">已提交</StatusBadge>
     </header>
     <div className="assessment-choice-list">
@@ -265,7 +275,7 @@ function ChoiceReview({ data }: { data: ExamReview }) {
         const result = earned == null ? "待评分" : earned >= possible ? "正确" : earned > 0 ? "部分得分" : "未得分";
         const tone = earned == null ? "neutral" as const : earned >= possible ? "good" as const : earned > 0 ? "warn" as const : "bad" as const;
         return <article className="assessment-choice-question" key={answer.question_id}>
-          <header><span>第 {index + 1} 题 · {answer.task_type === "MULTIPLE_CHOICE" ? "多选题" : "单选题"}</span><StatusBadge tone={tone}>{result} · {answer.score ?? "—"} / {answer.max_score}</StatusBadge></header>
+          <header><span>第 {index + 1} 题 · {answer.task_type === "MULTIPLE_CHOICE" ? "多选题" : "单选题"}</span><StatusBadge tone={tone}>{result}{!score && ` · ${answer.score ?? "—"} / ${answer.max_score}`}</StatusBadge></header>
           <h4>{answer.title}</h4>
           {answer.description && <p>{answer.description}</p>}
           {answer.instructions && <p className="subtle">{answer.instructions}</p>}
@@ -307,7 +317,7 @@ function ProgrammingReview({ review }: { review: ExamReview }) {
         const source = sources.get(question.id);
         return <article className="assessment-programming-question" key={question.id}>
           <header><span>第 {index + 1} 题{question.language ? ` · ${question.language}` : ""}</span>
-            <strong>{question.score == null ? "待判题" : `${question.score} / ${question.max_score}`}</strong></header>
+            <strong>{review.parts?.length ? "已通过" : question.score == null ? "待判题" : `${question.score} / ${question.max_score}`}</strong></header>
           <h4>{question.title || "未命名题目"}</h4>
           {question.description && <p>{question.description}</p>}
           {question.instructions && <p className="subtle">{question.instructions}</p>}
