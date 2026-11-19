@@ -15,15 +15,15 @@ it("retries the same batch key after a lost response and displays per-row outcom
     { row_number: 3, student_number: "2026001", status: "FAILED", error: "duplicate_identifier" },
   ] });
   render(<StudentImport onComplete={done} />);
-  fireEvent.click(screen.getByText("按学号批量创建学生账号"));
+  fireEvent.click(screen.getByText("批量创建学生账号"));
   fireEvent.change(screen.getByLabelText("学生账号 CSV"), { target: { files: [file] } });
-  await screen.findByText("文件已读取，可提交导入。");
+  await screen.findByText(/已读取/);
   fireEvent.click(screen.getByRole("button", { name: "创建学生账号" }));
   await screen.findByRole("alert");
   fireEvent.click(screen.getByRole("button", { name: "创建学生账号" }));
   await waitFor(() => expect(done).toHaveBeenCalledOnce());
   expect(platformApi.importStudents).toHaveBeenNthCalledWith(2, csv, vi.mocked(platformApi.importStudents).mock.calls[0]?.[1]);
-  expect(screen.getByText("创建 1 个，失败 1 行")).toBeInTheDocument();
+  expect(screen.getByText((_content, element) => element?.tagName === "P" && (element.textContent ?? "").includes("已创建 1 个账号"))).toBeInTheDocument();
   expect(screen.getByText("学号或用户名已存在")).toBeInTheDocument();
   expect(screen.queryByText(/Secret-2026/)).not.toBeInTheDocument();
 });

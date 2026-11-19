@@ -280,6 +280,45 @@ class GovernanceApiTests(TestCase):
         )
         self.assertEqual(stale_match.status_code, 412, stale_match.content)
 
+    def test_platform_image_rename_changes_display_name_only(self) -> None:
+        admin_client = Client(enforce_csrf_checks=True)
+        csrf = self._login(admin_client, portal="PLATFORM", identifier=self.admin.email)
+        created = admin_client.post(
+            "/api/v2/platform/images",
+            {
+                "registry": "docker.io",
+                "repository": "library/python",
+                "display_name": "标准编程环境",
+                "display_tag": "3.13",
+                "digest": "sha256:" + "e" * 64,
+                "risk_level": "LOW",
+                "reason": "rename test",
+            },
+            content_type="application/json",
+            HTTP_X_CSRFTOKEN=csrf,
+            HTTP_X_PORTAL="PLATFORM",
+            HTTP_IDEMPOTENCY_KEY="image-rename-create",
+            **PROXY_HEADERS,
+        )
+        self.assertEqual(created.status_code, 201, created.content)
+        image_id = created.json()["data"]["public_id"]
+
+        renamed = admin_client.post(
+            f"/api/v2/platform/images/{image_id}/rename",
+            {"display_name": "编程运行环境", "reason": "更易读的名称"},
+            content_type="application/json",
+            HTTP_X_CSRFTOKEN=csrf,
+            HTTP_X_PORTAL="PLATFORM",
+            HTTP_IDEMPOTENCY_KEY="image-rename-1",
+            HTTP_IF_MATCH=created["ETag"],
+            **PROXY_HEADERS,
+        )
+        self.assertEqual(renamed.status_code, 200, renamed.content)
+        data = renamed.json()["data"]
+        self.assertEqual(data["display_name"], "编程运行环境")
+        self.assertEqual(data["digest"], "sha256:" + "e" * 64)
+        self.assertEqual(data["repository"], "library/python")
+
     def test_platform_image_scan_and_approval_lifecycle(self) -> None:
         admin_client = Client(enforce_csrf_checks=True)
         csrf = self._login(admin_client, portal="PLATFORM", identifier=self.admin.email)

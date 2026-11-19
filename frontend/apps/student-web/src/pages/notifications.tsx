@@ -76,7 +76,7 @@ export function Notifications() {
     <>
       <Breadcrumbs items={[{ label: "学生门户" }]} current="通知" />
       <header className="student-overview-heading">
-        <div><h1>通知</h1><p>任务截止、报告评审与课程消息，在这里查看</p></div>
+        <div><h1>通知</h1></div>
       </header>
       <Panel className="student-notifications">
         <div className="notification-filters">
@@ -91,7 +91,7 @@ export function Notifications() {
           error={notifications.error}
           onRetry={() => void notifications.refetch()}
           empty={!visible.length}
-          emptyState={<EmptyState title="暂无通知" hint="任务截止、报告评审与平台消息会集中显示在这里。" />}
+          emptyState={<EmptyState title="暂无通知" />}
         >
           <div className="notification-list">
             {visible.map((row) => (

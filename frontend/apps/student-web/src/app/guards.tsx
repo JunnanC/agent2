@@ -7,7 +7,7 @@ import { usePortalEvents } from "./providers";
 
 const STUDENT_NAV: Array<NavEntry> = [
   { label: "概览", path: "/", icon: "layers" },
-  { label: "我的课程", path: "/courses", icon: "book" },
+  { label: "课程", path: "/courses", icon: "book" },
   { label: "通知", path: "/notifications", icon: "bell" },
 ];
 
@@ -61,8 +61,8 @@ export function AuthGuard({ fullscreen }: { fullscreen?: boolean }) {
   return (
     <div className="app-shell">
       <AppShell
-        brand="教学实验平台"
-        domainLabel="学生学习空间"
+        brand="实验教学平台"
+        domainLabel="学生门户"
         nav={STUDENT_NAV}
         activePath={location.pathname}
         onNavigate={navigate}

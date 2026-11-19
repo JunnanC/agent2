@@ -61,20 +61,24 @@ export function Table({
   headings,
   children,
   empty,
+  emptyText = "没有匹配的记录，请调整搜索或筛选条件",
+  className,
 }: {
   headings: string[];
   children: ReactNode;
   empty?: boolean;
+  emptyText?: string;
+  className?: string;
 }) {
   return (
     <div className="table-wrap">
-      <table>
+      <table className={className}>
         <thead>
           <tr>
             {headings.map((h) => (
               <th
                 key={h}
-                className={/人数|数量|CPU|内存/.test(h) ? "num" : undefined}
+                className={/人数|数量|CPU|内存|磁盘/.test(h) ? "num" : undefined}
               >
                 {h}
               </th>
@@ -85,7 +89,7 @@ export function Table({
           {empty ? (
             <tr>
               <td colSpan={headings.length} className="empty">
-                没有匹配的记录，请调整搜索或筛选条件
+                {emptyText}
               </td>
             </tr>
           ) : (
@@ -95,6 +99,26 @@ export function Table({
       </table>
     </div>
   );
+}
+
+type ListState = { search: string; filter: string; page: number };
+
+function loadListState(storageKey: string | undefined, initialFilter: string): ListState {
+  if (!storageKey) return { search: "", filter: initialFilter, page: 1 };
+  try {
+    const raw = window.sessionStorage.getItem(storageKey);
+    if (raw) {
+      const parsed = JSON.parse(raw) as Partial<ListState>;
+      return {
+        search: typeof parsed.search === "string" ? parsed.search : "",
+        filter: typeof parsed.filter === "string" ? parsed.filter : initialFilter,
+        page: typeof parsed.page === "number" && parsed.page > 0 ? parsed.page : 1,
+      };
+    }
+  } catch {
+    // A disabled or full session store must not break the list.
+  }
+  return { search: "", filter: initialFilter, page: 1 };
 }
 
 export function List<T>({
@@ -107,6 +131,9 @@ export function List<T>({
   render,
   extra,
   initialState = "",
+  storageKey,
+  tableClassName,
+  reserveRows,
 }: {
   rows: T[];
   text: (row: T) => string;
@@ -117,10 +144,22 @@ export function List<T>({
   render: (row: T) => ReactNode;
   extra?: ReactNode;
   initialState?: string;
+  storageKey?: string;
+  tableClassName?: string;
+  reserveRows?: boolean;
 }) {
-  const [search, setSearch] = useState(""),
-    [filter, setFilter] = useState(initialState),
-    [page, setPage] = useState(1);
+  const [restored] = useState(() => loadListState(storageKey, initialState));
+  const [search, setSearch] = useState(restored.search),
+    [filter, setFilter] = useState(restored.filter),
+    [page, setPage] = useState(restored.page);
+  useEffect(() => {
+    if (!storageKey) return;
+    try {
+      window.sessionStorage.setItem(storageKey, JSON.stringify({ search, filter, page }));
+    } catch {
+      // Persistence is a convenience; pagination still works without it.
+    }
+  }, [filter, page, search, storageKey]);
   const filtered = rows.filter(
     (row) =>
       text(row).toLowerCase().includes(search.trim().toLowerCase()) &&
@@ -128,8 +167,10 @@ export function List<T>({
   );
   const count = Math.max(1, Math.ceil(filtered.length / 8)),
     active = Math.min(page, count);
+  const pageRows = filtered.slice((active - 1) * 8, active * 8);
+  const fillers = reserveRows && filtered.length > 8 ? Math.max(0, 8 - pageRows.length) : 0;
   return (
-    <>
+    <section className="console-list">
       <div className="toolbar">
         <input
           type="search"
@@ -161,8 +202,13 @@ export function List<T>({
         {extra}
         <span className="count">{filtered.length} 条记录</span>
       </div>
-      <Table headings={headings} empty={!filtered.length}>
-        {filtered.slice((active - 1) * 8, active * 8).map(render)}
+      <Table headings={headings} empty={!filtered.length} className={tableClassName}>
+        {pageRows.map(render)}
+        {Array.from({ length: fillers }, (_, index) => (
+          <tr key={`reserve-${index}`} className="reserve-row" aria-hidden="true">
+            <td colSpan={headings.length} />
+          </tr>
+        ))}
       </Table>
       <div className="pagination">
         <span>共 {filtered.length} 条 · 每页 8 条</span>
@@ -181,7 +227,7 @@ export function List<T>({
           </button>
         </div>
       </div>
-    </>
+    </section>
   );
 }
 

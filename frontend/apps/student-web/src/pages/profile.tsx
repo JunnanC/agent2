@@ -1,7 +1,7 @@
-﻿import { useState } from "react";
+import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { meApi } from "@edu/api-client";
-import { Button, Panel,  useToast } from "@edu/ui";
+import { Breadcrumbs, Button, PageHeader, Panel,  useToast } from "@edu/ui";
 import { useSession } from "@/app/session";
 import { NotificationPreferencesPanel } from "@/components/notification-preferences";
 
@@ -29,14 +29,15 @@ export function Profile() {
 
   return (
     <>
-      
-      <div className="grid two">
+      <Breadcrumbs items={[{ label: "学生门户" }]} current="个人设置" />
+      <PageHeader title="个人设置" />
+      <div className="grid equal">
         <Panel title={<h2>个人资料</h2>}>
           <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 6 }}>
             <span className="avatar large">{(me?.display_name ?? me?.username ?? "").slice(0, 1)}</span>
             <div>
-              <strong>{me?.username}</strong>
-              <small style={{ display: "block" }}>学生</small>
+              <strong>{me?.display_name || me?.username}</strong>
+              <small style={{ display: "block" }}>{me?.username}</small>
             </div>
           </div>
           <label className="form-label" htmlFor="display-name">显示名称</label>

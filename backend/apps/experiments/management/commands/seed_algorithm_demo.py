@@ -93,7 +93,7 @@ from apps.reviews.services import (
 )
 
 COURSE_CODE = content.COURSE["code"]
-ADAPTER_CODE = "DEMO-LOCAL-DOCKER"
+ADAPTER_CODE = "DOCKER-LOCAL"
 PROFILE_CODE = "DEMO-STDIO-512M"
 IMAGE_REPOSITORY = "experimental-platform-stdio"
 PUBLICATION_SUFFIX = "（2026 秋）"
@@ -157,35 +157,44 @@ class Command(BaseCommand):
                 context=self.ctx,
             )
 
-        profile = ResourceProfile.objects.filter(code=PROFILE_CODE).first()
-        if profile is None:
-            profile = create_resource_profile(
-                actor=self.admin,
-                code=PROFILE_CODE,
-                name="演示容器规格 0.5C/512M",
-                runtime_type="CONTAINER",
-                cpu_millicores=500,
-                memory_mb=512,
-                cpu_request_millicores=250,
-                cpu_limit_millicores=1000,
-                memory_request_mb=256,
-                memory_limit_mb=1024,
-                disk_gb=2,
-                network_mode="DENY_ALL",
-                cost_minor_per_hour=0,
-                currency_code="CNY",
-                reason="算法演示课程运行规格",
-                context=self.ctx,
-            )
-        if profile.status != "ACTIVE":
-            profile = transition_resource_profile(
-                profile_id=profile.public_id,
-                actor=self.admin,
-                expected_version=profile.row_version,
-                target_status="ACTIVE",
-                reason="演示环境启用规格",
-                context=self.ctx,
-            )
+        profile_specs = (
+            ("DEMO-STDIO-256M", "轻量 0.25 核 / 256 MB", 250, 256, 1),
+            (PROFILE_CODE, "标准 0.5 核 / 512 MB", 500, 512, 2),
+            ("DEMO-STDIO-1G", "加强 1 核 / 1 GB", 1000, 1024, 2),
+        )
+        profile = None
+        for code, name, cpu_millicores, memory_mb, disk_gb in profile_specs:
+            item = ResourceProfile.objects.filter(code=code).first()
+            if item is None:
+                item = create_resource_profile(
+                    actor=self.admin,
+                    code=code,
+                    name=name,
+                    runtime_type="CONTAINER",
+                    cpu_millicores=cpu_millicores,
+                    memory_mb=memory_mb,
+                    cpu_request_millicores=max(cpu_millicores // 2, 100),
+                    cpu_limit_millicores=cpu_millicores * 2,
+                    memory_request_mb=max(memory_mb // 2, 128),
+                    memory_limit_mb=memory_mb * 2,
+                    disk_gb=disk_gb,
+                    network_mode="DENY_ALL",
+                    cost_minor_per_hour=0,
+                    currency_code="CNY",
+                    reason="算法演示课程运行规格",
+                    context=self.ctx,
+                )
+            if item.status != "ACTIVE":
+                item = transition_resource_profile(
+                    profile_id=item.public_id,
+                    actor=self.admin,
+                    expected_version=item.row_version,
+                    target_status="ACTIVE",
+                    reason="演示环境启用规格",
+                    context=self.ctx,
+                )
+            if code == PROFILE_CODE:
+                profile = item
 
         if not Quota.objects.filter(scope_type="PLATFORM").exists():
             create_quota(

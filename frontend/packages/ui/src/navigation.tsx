@@ -32,7 +32,7 @@ export interface AppShellProps {
 }
 
 export function AppShell({
-  brand = "教学云实验平台", domainLabel, nav, activePath, onNavigate,
+  brand = "实验教学平台", domainLabel, nav, activePath, onNavigate,
   avatar, avatarItems = [], actions, children, maxWidth,
   navigationPosition = "top", collapsible = false, collapseStorageKey,
 }: AppShellProps) {

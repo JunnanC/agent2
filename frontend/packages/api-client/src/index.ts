@@ -389,7 +389,7 @@ export const teachingApi = {
         public_id: string; name: string; code: string;
         runtime_type: string; driver: string; health_status: string;
       }>;
-      images: Array<{ public_id: string; repository: string; display_tag?: string; digest: string; risk_level?: string }>;
+      images: Array<{ public_id: string; repository: string; display_name?: string; display_tag?: string; digest: string; risk_level?: string }>;
       resource_profiles: Array<{
         public_id: string; code: string; name: string;
         cpu_millicores: number; memory_mb: number; disk_gb: number; network_mode?: string;

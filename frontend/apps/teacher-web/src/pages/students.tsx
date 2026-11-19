@@ -114,10 +114,13 @@ export function Students() {
 
   return (
     <>
-      <div className="page-actions align-end">
-        <button type="button" className="btn primary" onClick={() => navigate(`/courses/${courseId}/reviews`)} aria-label="进入评审中心">
-          进入评审
-        </button>
+      <div className="tab-head">
+        <h2>实验进度</h2>
+        <div className="page-actions">
+          <button type="button" className="btn primary" onClick={() => navigate(`/courses/${courseId}/reviews`)} aria-label="进入评审中心">
+            进入评审
+          </button>
+        </div>
       </div>
 
       <Panel className="section">
@@ -134,7 +137,7 @@ export function Students() {
         </RequestStateView>
       </Panel>
 
-      <Panel className="section" title={<><h2>按实验看谁没交</h2><span className="subtle">同一名学生的多条记录只算一次</span></>}>
+      <Panel className="section" title={<h2>未提交名单</h2>}>
         {byExperiment.length ? <div style={{ display: "grid", gap: 10 }}>
           {byExperiment.map((group) => <div key={group.title} className="item" style={{ display: "block" }}>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center" }}>

@@ -5,7 +5,7 @@ it("identifies which runtime settings to save when programming configuration is 
   expect(precheckFailureMessage({
     error_code: "TEMPLATE_VALIDATION_ERROR",
     error_detail: { runtime: "programming_runtime_required" },
-  })).toContain("选择运行适配器、执行镜像和资源规格");
+  })).toContain("缺少判题环境配置");
 });
 
 it("keeps unknown error codes diagnosable and handles missing details", () => {

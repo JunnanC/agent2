@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { studentApi, taskApi } from "@edu/api-client";
 import { keys } from "@edu/query-keys";
-import { Breadcrumbs, EmptyState, Markdown, Panel, RequestStateView, StatusBadge } from "@edu/ui";
+import { Breadcrumbs, EmptyState, Markdown, PageHeader, Panel, RequestStateView, StatusBadge } from "@edu/ui";
 import { formatDate, formatDateTime, taskStatusLabel, taskStatusTone } from "@/lib/task-format";
 import { CourseDiscussion } from "@/components/course-discussion";
 import { CourseAgent } from "@/components/course-agent";
@@ -115,7 +115,7 @@ export function CourseDetail({ discussionPage = false }: { discussionPage?: bool
   };
 
   if (detail.error instanceof ApiError && ["ACTIVE_ENROLLMENT_REQUIRED", "RESOURCE_NOT_FOUND"].includes(detail.error.payload?.code ?? "")) {
-    return <EmptyState title="暂时无法进入课程" hint="课程申请需要教师同意后才能进入；撤回或退出后也无法访问课程内容。"
+    return <EmptyState title="暂时无法进入课程" hint="需要教师通过选课申请后才能查看课程内容。"
       action={<Link className="btn primary" to="/courses">返回我的课程</Link>} />;
   }
   if (detail.isPending || detail.isFetching || detail.error || !detail.data) {
@@ -129,6 +129,7 @@ export function CourseDetail({ discussionPage = false }: { discussionPage?: bool
         items={[{ label: "学生门户", onClick: () => { window.location.assign("/"); } }, { label: "我的课程", onClick: () => { window.location.assign("/courses"); } }]}
         current={discussionPage ? `${detail.data.title} · 课程问答` : detail.data.title}
       />
+      <PageHeader title={discussionPage ? `${detail.data.title} · 课程问答` : detail.data.title} />
       <div className="course-learning-shell">
         <aside ref={chapterNavRef} className="panel course-chapter-nav">
           <div className="panel-title">
@@ -197,7 +198,7 @@ export function CourseDetail({ discussionPage = false }: { discussionPage?: bool
             <RequestStateView loading={tasks.isLoading} error={tasks.error}
               onRetry={() => void tasks.refetch()}
               empty={!tasks.data?.rows.length}
-              emptyState={<EmptyState title="本课程暂无实验任务" hint="实验发布后任务会出现在这里。" />}>
+              emptyState={<EmptyState title="本课程暂无实验任务" hint="实验发布后会出现在这里。" />}>
               <div>
                 {(tasks.data?.rows ?? []).map((task) => (
                   <div className="task-row" key={task.public_id}>
@@ -217,22 +218,23 @@ export function CourseDetail({ discussionPage = false }: { discussionPage?: bool
             </RequestStateView>
           </Panel>
 
-          <Panel title={<h2>课程公告</h2>}>
-            <RequestStateView loading={announcements.isLoading} error={announcements.error}
-              onRetry={() => void announcements.refetch()}
-              empty={!announcements.data?.rows.length}
-              emptyState={<EmptyState title="暂无公告" />}>
-              <div>
-                {(announcements.data?.rows ?? []).slice(0, 5).map((announcement) => (
-                  <div className="item" key={announcement.public_id}>
-                    <div><strong>{announcement.title}</strong><small>{formatDateTime(announcement.published_at)}</small></div>
-                  </div>
-                ))}
-              </div>
-            </RequestStateView>
-          </Panel>
+          <div className="grid equal">
+            <Panel title={<h2>课程公告</h2>}>
+              <RequestStateView loading={announcements.isLoading} error={announcements.error}
+                onRetry={() => void announcements.refetch()}
+                empty={!announcements.data?.rows.length}
+                emptyState={<EmptyState title="暂无公告" />}>
+                <div>
+                  {(announcements.data?.rows ?? []).slice(0, 5).map((announcement) => (
+                    <div className="item" key={announcement.public_id}>
+                      <div><strong>{announcement.title}</strong><small>{formatDateTime(announcement.published_at)}</small></div>
+                    </div>
+                  ))}
+                </div>
+              </RequestStateView>
+            </Panel>
 
-            <Panel title={<><h2>课程日历</h2><span className="subtle">截止与关键时间</span></>}>
+            <Panel title={<h2>课程日历</h2>}>
               <RequestStateView loading={events.isLoading} error={events.error}
                 onRetry={() => void events.refetch()}
                 empty={!events.data?.rows.length}
@@ -247,6 +249,7 @@ export function CourseDetail({ discussionPage = false }: { discussionPage?: bool
                 </div>
               </RequestStateView>
             </Panel>
+          </div>
           <CourseAgent key={courseId} courseId={courseId} />
           </>}
         </section>

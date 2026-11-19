@@ -451,6 +451,7 @@ def create_image(
     registry: str,
     repository: str,
     display_tag: str,
+    display_name: str = "",
     digest: str = "",
     risk_level: str,
     reason: str,
@@ -465,6 +466,7 @@ def create_image(
         image = ImageAsset.objects.create(
             registry=registry.strip().lower(),
             repository=repository.strip(),
+            display_name=display_name.strip(),
             display_tag=display_tag.strip(),
             digest=clean_digest or None,
             risk_level=risk_level,
@@ -487,6 +489,41 @@ def create_image(
         payload={"image_id": image.public_id, "digest": image.digest},
     )
     return image
+
+
+@transaction.atomic
+def rename_image(
+    *,
+    image_id: str,
+    actor: User,
+    expected_version: int,
+    display_name: str,
+    reason: str,
+    context: ActorContext,
+) -> ImageAsset:
+    """只改管理端展示名称；镜像地址、digest、扫描与审批状态保持不变。"""
+    try:
+        image = ImageAsset.objects.select_for_update().get(public_id=image_id)
+    except ImageAsset.DoesNotExist as exc:
+        raise ResourceNotFound() from exc
+    clean = display_name.strip()
+    if not clean or len(clean) > 120:
+        raise GovernanceValidationError(detail={"display_name": "invalid"})
+    changed = compare_and_swap(
+        ImageAsset,
+        pk=image.pk,
+        expected_version=expected_version,
+        changes={"display_name": clean, "change_reason": _reason(reason)},
+    )
+    _audit(
+        context,
+        action="governance.image.rename",
+        target_type="image_asset",
+        target_ref=changed.public_id,
+        before={"display_name": image.display_name},
+        after={"display_name": changed.display_name},
+    )
+    return changed
 
 
 @transaction.atomic

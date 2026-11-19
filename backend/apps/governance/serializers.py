@@ -37,10 +37,16 @@ class RuntimeAdapterUpdateSerializer(serializers.Serializer):
 class ImageCreateSerializer(serializers.Serializer):
     registry = serializers.CharField(max_length=255)
     repository = serializers.CharField(max_length=255)
+    display_name = serializers.CharField(max_length=120, required=False, allow_blank=True)
     display_tag = serializers.CharField(max_length=128, required=False, allow_blank=True)
     digest = serializers.CharField(max_length=71, required=False, allow_blank=True)
     risk_level = serializers.ChoiceField(choices=ImageAsset.RiskLevel.choices)
     reason = serializers.CharField(max_length=500)
+
+
+class ImageRenameSerializer(serializers.Serializer):
+    display_name = serializers.CharField(max_length=120)
+    reason = serializers.CharField(max_length=500, required=False, allow_blank=True)
 
 
 class ImageResolveSerializer(serializers.Serializer):
@@ -177,6 +183,7 @@ class ImageDataSerializer(serializers.Serializer):
     public_id = serializers.CharField()
     registry = serializers.CharField()
     repository = serializers.CharField()
+    display_name = serializers.CharField()
     display_tag = serializers.CharField()
     digest = serializers.CharField()
     scan_status = serializers.CharField()
@@ -377,6 +384,7 @@ def image_data(item: ImageAsset) -> dict[str, Any]:
         "public_id": item.public_id,
         "registry": item.registry,
         "repository": item.repository,
+        "display_name": item.display_name,
         "display_tag": item.display_tag,
         "digest": item.digest,
         "scan_status": item.scan_status,

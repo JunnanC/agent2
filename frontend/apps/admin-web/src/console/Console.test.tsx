@@ -1,7 +1,8 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { request } from "@edu/auth-client";
 import Console from "./Console";
 
 vi.mock("../app/session", () => ({ useSession: () => ({ me: { display_name: "管理" } }) }));
@@ -13,12 +14,17 @@ vi.mock("@edu/auth-client", async (original) => {
     if (path === "/platform/users") data = [{ public_id: "student-1", display_name: "学生甲", account_status: "ACTIVE" }];
     if (path === "/platform/courses") data = [{ public_id: "course-1", title: "已开设教学班", code: "TEACH-A", status: "PUBLISHED" }];
     if (path === "/platform/administrative-classes") data = [{ public_id: "class-1", name: "班级甲", code: "CLASS-A", status: "ACTIVE" }];
+    if (path === "/platform/resource-profiles") data = [{ public_id: "profile-1", code: "STD-512M", name: "标准 0.5 核 / 512 MB", runtime_type: "CONTAINER", status: "ACTIVE", cpu_millicores: 500, memory_mb: 512, disk_gb: 2, network_mode: "DENY_ALL", row_version: 3 }];
     if (path.endsWith("/members")) data = { class: { name: "班级甲" }, members: [{ public_id: "m-1", student_id: "student-1", student_name: "学生甲" }] };
     if (path.endsWith("/overview")) data = { runtime: { status: "HEALTHY" } };
     return { data, meta: { total: Array.isArray(data) ? data.length : 0 } };
   }) };
 });
 afterEach(cleanup);
+beforeEach(() => {
+  HTMLDialogElement.prototype.showModal = vi.fn();
+  HTMLDialogElement.prototype.close = vi.fn();
+});
 function show(path: string) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(<QueryClientProvider client={client}><MemoryRouter initialEntries={[path]}><Console /></MemoryRouter></QueryClientProvider>);
@@ -29,7 +35,8 @@ it("opens health and usage tabs from overview and supports the browser URL", asy
   fireEvent.click(await screen.findByRole("button", { name: "全部 →" }));
   expect(await screen.findByRole("button", { name: "健康状态" })).toHaveClass("active");
   fireEvent.click(screen.getByRole("button", { name: "资源占用" }));
-  expect(await screen.findByText("学生编辑不创建常驻实例，代码执行与评分资源由 worker 按需申请和回收。")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "资源占用" })).toHaveClass("active");
+  expect(screen.queryByText(/学生编辑不创建常驻实例/)).not.toBeInTheDocument();
   client.clear();
 });
 it("shows classes first then the selected class members", async () => {
@@ -40,6 +47,39 @@ it("shows classes first then the selected class members", async () => {
   expect(await screen.findByText("学生甲")).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "返回班级列表" }));
   expect(await screen.findByText("已开设教学班")).toBeInTheDocument();
+  client.clear();
+});
+
+it("lets an administrator add and retire judge resource profiles", async () => {
+  const client = show("/profiles");
+  expect(await screen.findByText("标准 0.5 核 / 512 MB")).toBeInTheDocument();
+  expect(screen.getByText("0.5 核 / 512 MB")).toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole("button", { name: "新增规格" }));
+  fireEvent.change(screen.getByLabelText("规格名称"), { target: { value: "加强 1 核 / 1 GB" } });
+  fireEvent.change(screen.getByLabelText("规格编码"), { target: { value: "LARGE-1G" } });
+  fireEvent.change(screen.getByLabelText("CPU（核）"), { target: { value: "1" } });
+  fireEvent.change(screen.getByLabelText("内存（MB）"), { target: { value: "1024" } });
+  fireEvent.change(screen.getByLabelText("磁盘（GB）"), { target: { value: "2" } });
+  fireEvent.change(screen.getByLabelText("变更原因"), { target: { value: "补充大作业档位" } });
+  fireEvent.click(screen.getByText("保存规格"));
+  await waitFor(() =>
+    expect(vi.mocked(request)).toHaveBeenCalledWith("/platform/resource-profiles", expect.objectContaining({
+      method: "POST",
+      body: expect.objectContaining({ code: "LARGE-1G", cpu_millicores: 1000, memory_mb: 1024, network_mode: "DENY_ALL" }),
+    })),
+  );
+
+  fireEvent.click(screen.getByRole("button", { name: "停用" }));
+  fireEvent.change(screen.getByLabelText("变更原因"), { target: { value: "下线该档位" } });
+  fireEvent.click(screen.getByText("停用规格"));
+  await waitFor(() =>
+    expect(vi.mocked(request)).toHaveBeenCalledWith("/platform/resource-profiles/profile-1/retire", expect.objectContaining({
+      method: "POST",
+      ifMatch: 3,
+      body: { reason: "下线该档位" },
+    })),
+  );
   client.clear();
 });
 

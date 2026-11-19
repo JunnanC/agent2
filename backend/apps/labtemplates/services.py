@@ -344,6 +344,47 @@ def delete_template(
     return changed  # type: ignore[return-value]
 
 
+def _platform_runtime_defaults() -> dict[str, str]:
+    """判题环境由平台统一维护：新建草稿版本时自动带上适配器、镜像和标准资源档位。"""
+    from apps.provisioning.adapters import ASSESSMENT_RUNTIME_DRIVERS
+
+    defaults: dict[str, str] = {}
+    adapter = (
+        RuntimeAdapter.objects.filter(
+            status=RuntimeAdapter.Status.ENABLED,
+            runtime_type=RuntimeAdapter.RuntimeType.CONTAINER,
+            driver__in=ASSESSMENT_RUNTIME_DRIVERS,
+        )
+        .order_by("code")
+        .first()
+    )
+    image = (
+        ImageAsset.objects.filter(
+            approval_status=ImageAsset.ApprovalStatus.APPROVED,
+            scan_status=ImageAsset.ScanStatus.CLEAN,
+        )
+        .order_by("repository", "display_tag")
+        .first()
+    )
+    profile = (
+        ResourceProfile.objects.filter(
+            status=ResourceProfile.Status.ACTIVE,
+            cpu_millicores=500,
+            memory_mb=512,
+        ).first()
+        or ResourceProfile.objects.filter(status=ResourceProfile.Status.ACTIVE)
+        .order_by("cpu_millicores", "memory_mb")
+        .first()
+    )
+    if adapter is not None:
+        defaults["runtime_adapter_id"] = adapter.public_id
+    if image is not None:
+        defaults["image_id"] = image.public_id
+    if profile is not None:
+        defaults["resource_profile_id"] = profile.public_id
+    return defaults
+
+
 @transaction.atomic
 def create_version(
     *,
@@ -360,7 +401,7 @@ def create_version(
         raise ResourceNotFound() from exc
     latest = template.versions.order_by("-version_no").first()
     version_no = 1 if latest is None else latest.version_no + 1
-    clean = _version_changes(course, data)
+    clean = _version_changes(course, {**_platform_runtime_defaults(), **data})
     version = TemplateVersion.objects.create(
         template=template,
         version_no=version_no,

@@ -1,4 +1,4 @@
-﻿import { request, newIdempotencyKey } from "@edu/auth-client";
+import { request, newIdempotencyKey } from "@edu/auth-client";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link, useParams, useSearchParams } from "react-router-dom";
@@ -177,9 +177,12 @@ export function Publishing() {
 
   return (
     <>
-      <div className="page-actions align-end">
-        <RubricCreate key={courseId} courseId={courseId} onCreated={() => void rubrics.refetch()} />
-        <button type="button" className="btn primary" onClick={() => { setCreateForm({ ...initialCreateForm }); setCreateOpen(true); }}>配置新发布</button>
+      <div className="tab-head">
+        <h2>实验发布</h2>
+        <div className="page-actions">
+          <RubricCreate key={courseId} courseId={courseId} onCreated={() => void rubrics.refetch()} />
+          <button type="button" className="btn primary" onClick={() => { setCreateForm({ ...initialCreateForm }); setCreateOpen(true); }}>配置新发布</button>
+        </div>
       </div>
 
       <Panel>
@@ -300,7 +303,7 @@ export function Publishing() {
         </Panel>
         <Panel title={<><h2>任务对账</h2>{taskTotal > 0 ? <span className="status blue">{`${taskTotal} 个任务`}</span> : null}</>}>
           <div className="section">
-            <p className="subtle" style={{ margin: 0 }}>发布后系统会按学生和章节生成任务；对账数字来自当前已发布实验的受众任务数。</p>
+            <p className="subtle" style={{ margin: 0 }}>按已发布实验的受众统计任务数。</p>
           </div>
         </Panel>
         <Panel title={<><h2>发布窗口</h2><span className="status blue">{`${rows.filter((row) => row.status === "PUBLISHED").length} 个进行中`}</span></>}>
@@ -313,7 +316,7 @@ export function Publishing() {
               </div>
             ))
           ) : (
-            <p className="subtle" style={{ margin: 0 }}>暂无进行中的发布窗口。支持按开放与截止时间设置;受众支持全体或按学生分组,创建发布时选择。</p>
+            <p className="subtle" style={{ margin: 0 }}>暂无进行中的发布窗口。</p>
           )}
         </Panel>
       </div>
@@ -388,7 +391,7 @@ export function Publishing() {
               onChange={(event) => setCreateForm((prev) => ({ ...prev, report_required: event.target.checked }))} />
             需要提交实验报告(评审后完成)
           </label>
-          <p className="subtle" style={{ margin: 0 }}>受众暂为全体选课学生;按学生分组的发布在教师评审(评分表)发布后可再调整。创建后运行预检,通过即可点「发布」。</p>
+          <p className="subtle" style={{ margin: 0 }}>创建后运行预检，通过即可发布。</p>
         </div>
       </Modal>
 

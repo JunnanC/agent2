@@ -1,4 +1,4 @@
-﻿/* unslop by Damir Sokolovsky (@heydamir), CC BY 4.0; https://heydamir.design/unslop */
+/* unslop by Damir Sokolovsky (@heydamir), CC BY 4.0; https://heydamir.design/unslop */
 
 .admin-console {
   font-family: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
@@ -46,9 +46,9 @@
   background: #f2f5f3;
 }
 .admin-console button.primary {
-  background: #293b34;
+  background: #246657;
   color: white;
-  border-color: #293b34;
+  border-color: #246657;
 }
 .admin-console button.danger {
   color: #a44037;
@@ -92,21 +92,24 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
-  margin-bottom: 28px;
+  margin-bottom: 20px;
 }
 .admin-console h1 {
   font-size: 24px;
-  font-weight: 500;
-  margin: 0 0 8px;
+  font-weight: 650;
+  line-height: 1.3;
+  margin: 0 0 6px;
 }
 .admin-console h2 {
   font-size: 16px;
-  font-weight: 600;
+  font-weight: 650;
+  line-height: 1.35;
   margin: 0;
 }
 .admin-console h3 {
-  font-size: 14px;
-  font-weight: 600;
+  font-size: 15px;
+  font-weight: 650;
+  line-height: 1.4;
   margin: 0 0 16px;
 }
 .admin-console p {
@@ -124,31 +127,68 @@
 }
 .admin-console .metrics {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   border: 1px solid var(--line);
   border-radius: 12px;
   background: #fff;
-  padding: 8px 24px;
+  padding: 24px;
   margin-bottom: 24px;
-  gap: 24px;
+  gap: 0;
+  min-height: 144px;
 }
 .admin-console .metric {
-  border-right: 1px solid var(--line);
-  padding: 16px 0;
+  border-left: 1px solid var(--line);
+  padding: 0 20px;
+  min-height: 96px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
-.admin-console .metric:last-child {
-  border: 0;
+.admin-console .metric:first-child {
+  border-left: 0;
+  padding-left: 4px;
 }
 .admin-console .metric b {
   display: block;
   font-size: 32px;
-  font-weight: 400;
-  margin: 12px 0 4px;
+  font-weight: 500;
+  line-height: 1.2;
+  margin: 8px 0 2px;
   font-variant-numeric: tabular-nums;
 }
+.admin-console .metric .muted,
 .admin-console .metric small {
   color: var(--muted);
   font-size: 12px;
+}
+.admin-console main > .panel + .grid {
+  margin-top: 24px;
+}
+@media (max-width: 1050px) {
+  .admin-console .metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .admin-console .metric:nth-child(3) {
+    border-left: 0;
+    padding-left: 4px;
+  }
+  .admin-console .metric:nth-child(n + 3) {
+    border-top: 1px solid var(--line);
+    padding-top: 16px;
+  }
+}
+@media (max-width: 760px) {
+  .admin-console .metrics {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .admin-console .metric {
+    border-left: 0;
+    border-top: 1px solid var(--line);
+    padding: 12px 0;
+  }
+  .admin-console .metric:first-child {
+    border-top: 0;
+  }
 }
 .admin-console .grid {
   display: grid;
@@ -186,34 +226,29 @@
 .admin-console .status {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  font-size: 12px;
+  align-self: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 2.5px 8px;
+  border-radius: 999px;
   white-space: nowrap;
-}
-.admin-console .status:before {
-  content: "";
-  width: 6px;
-  height: 6px;
-  background: #43806b;
-  border-radius: 50%;
+  line-height: 1.4;
+  background: var(--green-soft, #e8f1eb);
+  color: var(--green, #4d7d63);
 }
 .admin-console .status.bad {
-  color: #a34d3c;
-}
-.admin-console .status.bad:before {
-  background: #ba634a;
+  background: var(--red-soft, #f7e9e6);
+  color: var(--red, #a6534d);
 }
 .admin-console .status.off {
-  color: #7b817e;
-}
-.admin-console .status.off:before {
-  background: #939b96;
+  background: var(--surface-soft, #f4f6f4);
+  color: var(--muted, #69716e);
 }
 .admin-console .status.warn {
-  color: #936c27;
-}
-.admin-console .status.warn:before {
-  background: #b18435;
+  background: var(--amber-soft, #fbf1df);
+  color: var(--amber, #a76d21);
 }
 .admin-console .toolbar {
   display: flex;
@@ -254,28 +289,161 @@
   text-align: left;
   white-space: nowrap;
 }
-.admin-console th {
-  font-size: 12px;
-  font-weight: 400;
+.admin-console .console-list {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 20px 24px 16px;
+}
+.admin-console details.panel {
+  margin-bottom: 16px;
+}
+.admin-console .student-import {
+  padding: 0;
+  overflow: hidden;
+}
+.admin-console .student-import > summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 18px 24px;
+  cursor: pointer;
+  list-style: none;
+}
+.admin-console .student-import > summary::-webkit-details-marker {
+  display: none;
+}
+.admin-console .student-import > summary::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-right: 1.5px solid var(--muted);
+  border-bottom: 1.5px solid var(--muted);
+  transform: rotate(-45deg);
+  transition: transform 160ms ease-out;
+  flex: none;
+}
+.admin-console .student-import[open] > summary::before {
+  transform: rotate(45deg);
+}
+.admin-console .student-import[open] > summary {
+  border-bottom: 1px solid var(--line);
+}
+.admin-console .student-import > summary strong {
+  font-size: 15px;
+  font-weight: 600;
+}
+.admin-console .student-import-body {
+  display: grid;
+  gap: 14px;
+  padding: 18px 24px 20px;
+}
+.admin-console .student-import-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.admin-console .student-import-file {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+.admin-console .student-import-picker {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.admin-console .student-import-filename {
+  min-width: 0;
   color: var(--muted);
-  padding: 12px 16px;
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.admin-console .student-import-template {
+  margin-left: auto;
+  white-space: nowrap;
+}
+.admin-console .student-import-submit {
+  margin-left: 0;
+}
+.admin-console .student-import-hint,
+.admin-console .student-import-error {
+  margin: 0;
+  font-size: 13px;
+}
+.admin-console .student-import-hint {
+  color: var(--muted);
+}
+.admin-console .student-import-error {
+  color: #a6534d;
+}
+.admin-console .student-import-result {
+  display: grid;
+  gap: 8px;
+  padding-top: 4px;
+  border-top: 1px solid var(--line);
+}
+.admin-console .student-import-result > p {
+  margin: 8px 0 0;
+  font-size: 13px;
+}
+.admin-console .student-import-result .table-wrap {
+  margin-top: 4px;
+}
+@media (max-width: 720px) {
+  .admin-console .student-import > summary,
+  .admin-console .student-import-body {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+  .admin-console .student-import-template {
+    margin-left: 0;
+  }
+  .admin-console .student-import-submit {
+    margin-left: 0;
+  }
+}
+.admin-console th {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding: 7px 10px;
   border-bottom: 1px solid var(--line);
 }
 .admin-console td {
-  padding: 15px 16px;
+  padding: 9px 10px;
   border-bottom: 1px solid var(--line);
   font-size: 13px;
 }
 .admin-console td:first-child,
 .admin-console th:first-child {
-  padding-left: 0;
+  padding-left: 10px;
 }
 .admin-console td:last-child,
 .admin-console th:last-child {
-  padding-right: 0;
+  padding-right: 10px;
 }
 .admin-console tbody tr:hover {
   background: #fbfcfb;
+}
+.admin-console .reserve-row td {
+  height: 62px;
+  padding: 0;
+  border-bottom: 0;
+}
+.admin-console .classes-table .reserve-row td {
+  height: 46px;
+}
+.admin-console .reserve-row:hover {
+  background: transparent;
 }
 .admin-console td strong {
   font-weight: 500;
@@ -289,6 +457,85 @@
 .admin-console .actions {
   white-space: nowrap;
   text-align: right;
+}
+/* Keep long titles/IDs from squeezing the status and action columns. */
+.admin-console table.courses-table,
+.admin-console table.classes-table,
+.admin-console table.class-roster-table {
+  table-layout: fixed;
+}
+.admin-console table.courses-table th:nth-child(1) { width: 29%; }
+.admin-console table.courses-table th:nth-child(2) { width: 13%; }
+.admin-console table.courses-table th:nth-child(3) { width: 10%; }
+.admin-console table.courses-table th:nth-child(4) { width: 10%; }
+.admin-console table.courses-table th:nth-child(5) { width: 18%; }
+.admin-console table.courses-table th:nth-child(6) { width: 20%; }
+.admin-console table.courses-table td:first-child { white-space: normal; }
+.admin-console table.classes-table th:nth-child(1) { width: 38%; }
+.admin-console table.classes-table th:nth-child(2) { width: 25%; }
+.admin-console table.classes-table th:nth-child(3) { width: 14%; }
+.admin-console table.classes-table th:nth-child(4) { width: 23%; }
+.admin-console table.class-roster-table th:nth-child(1) { width: 55%; }
+.admin-console table.class-roster-table th:nth-child(2) { width: 20%; }
+.admin-console table.class-roster-table th:nth-child(3) { width: 25%; }
+.admin-console table.courses-table td,
+.admin-console table.classes-table td,
+.admin-console table.class-roster-table td {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.admin-console .class-back {
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  padding: 2px 0 14px;
+  font-size: 13px;
+}
+.admin-console .class-back::before {
+  content: "← ";
+}
+.admin-console .class-back:hover {
+  background: transparent;
+  text-decoration: underline;
+}
+.admin-console .class-detail-head {
+  margin-bottom: 16px;
+}
+.admin-console .class-title-line {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.admin-console .class-title-line h2 {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 650;
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+}
+.admin-console .class-type-badge {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface-soft);
+  color: var(--muted);
+  padding: 2px 8px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.admin-console .class-student-count {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.admin-console .class-roster-list {
+  padding: 20px 24px 16px;
+}
+@media (max-width: 720px) {
+  .admin-console .class-student-count {
+    margin-left: 0;
+  }
 }
 .admin-console .pagination {
   display: flex;
@@ -570,7 +817,7 @@
   }
 }
 .admin-console {
-  min-height: 100vh;
+  min-height: 0;
   background: #f1f3f2;
   --ink: #252b2a;
   --muted: #69716e;
@@ -642,9 +889,11 @@
   max-width: 280px;
 }
 .admin-console .status {
-  background: transparent;
   border: 0;
-  padding: 0;
+}
+.admin-console .activity > .status {
+  align-self: center;
+  justify-self: end;
 }
 .admin-console .footer-note {
   color: #69716e;
@@ -653,7 +902,7 @@
   white-space: normal;
 }
 .admin-console .heading h1 {
-  line-height: 1.4;
+  line-height: 1.3;
 }
 .admin-console .panel {
   box-shadow: none;
@@ -683,20 +932,27 @@
     font-size: 12px;
   }
   .admin-console .metrics .metric {
-    padding: 0;
+    padding: 0 20px;
   }
   .admin-console .heading {
     margin-bottom: 24px;
   }
 }
 .admin-console .metric {
-  padding: 0;
-  min-height: 0;
+  padding: 0 20px;
+  min-height: 96px;
   box-shadow: none;
   background: transparent;
   border: 0;
-  border-right: 1px solid var(--line);
+  border-left: 1px solid var(--line);
   border-radius: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.admin-console .metric:first-child {
+  border-left: 0;
+  padding-left: 4px;
 }
 .admin-console .metric:last-child {
   border-right: 0;
@@ -727,10 +983,10 @@
   font-size: 16px;
 }
 .admin-console .metric b {
-  line-height: 1.5;
+  line-height: 1.2;
 }
 .admin-console .status {
-  font-weight: 400;
+  font-weight: 600;
 }
 .admin-console .brand {
   line-height: 1.5;
@@ -754,7 +1010,7 @@
 
 
 
-.admin-console .status.bad{background:transparent;border:0;border-radius:0;padding:0}
+.admin-console .status.bad{background:var(--red-soft, #f7e9e6);color:var(--red, #a6534d)}
 .admin-console .status.bad:before{background:#c83b38;flex-shrink:0}
 
 /* Tables become labeled cards on narrow screens. */

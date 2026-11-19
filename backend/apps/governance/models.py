@@ -139,6 +139,7 @@ class ImageAsset(GovernanceModel):
 
     registry = models.CharField(max_length=255)
     repository = models.CharField(max_length=255)
+    display_name = models.CharField(max_length=120, blank=True, default="")
     display_tag = models.CharField(max_length=128, blank=True, default="")
     digest = models.CharField(
         max_length=71,

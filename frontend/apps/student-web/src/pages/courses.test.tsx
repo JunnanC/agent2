@@ -59,7 +59,7 @@ it("已加入课程允许学生自行退出并从课程列表移除", async () =
   fireEvent.change(await screen.findByLabelText("退出原因"), { target: { value: "选课调整" } });
   await waitFor(() => expect(screen.getByRole("button", { name: "确认退出" })).toBeEnabled());
   fireEvent.click(screen.getByRole("button", { name: "确认退出" }));
-  expect(await screen.findByText("还没有加入课程")).toBeInTheDocument();
+  expect(await screen.findByText("暂无进行中的课程")).toBeInTheDocument();
   expect(studentApi.dropEnrollment).toHaveBeenCalledWith("en-active", { reason: "选课调整" }, "9");
   expect(screen.queryByRole("link", { name: "进入课程 已加入课程" })).not.toBeInTheDocument();
 });

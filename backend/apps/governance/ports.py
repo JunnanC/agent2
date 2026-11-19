@@ -63,6 +63,7 @@ def template_resource_options() -> dict[str, list[dict[str, Any]]]:
             {
                 "public_id": item.public_id,
                 "repository": item.repository,
+                "display_name": item.display_name,
                 "display_tag": item.display_tag,
                 "digest": item.digest,
                 "risk_level": item.risk_level,
