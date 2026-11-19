@@ -1,7 +1,7 @@
 from django.db import models
 
 from apps.core.identifiers import new_ulid
-from apps.core.models import AppendOnlyModel, ObjectAsset
+from apps.core.models import AppendOnlyModel, ObjectAsset, VersionedModel
 from apps.experiments.models import ExperimentTask
 
 
@@ -54,3 +54,25 @@ class WorkspaceSnapshot(AppendOnlyModel):
         indexes = [
             models.Index(fields=("task", "version_no"), name="workspace_snapshot_task_idx"),
         ]
+
+
+class StudentWorkspace(VersionedModel):
+    class Status(models.TextChoices):
+        PENDING = "PENDING"
+        RUNNING = "RUNNING"
+        FAILED = "FAILED"
+        EXPIRED = "EXPIRED"
+
+    # ExperimentTask already identifies the student and freezes the image and adapter.
+    task = models.OneToOneField(ExperimentTask, on_delete=models.PROTECT)
+    status = models.CharField(max_length=12, choices=Status.choices, default=Status.PENDING)
+    expires_at = models.DateTimeField(db_index=True)
+    synced_at = models.DateTimeField(null=True, blank=True)
+
+    @property
+    def container_name(self) -> str:
+        return f"edu-workspace-{self.task.public_id}-{int(self.expires_at.timestamp())}"
+
+    @property
+    def volume_name(self) -> str:
+        return self.container_name + "-data"

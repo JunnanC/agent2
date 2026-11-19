@@ -29,6 +29,10 @@ vi.mock("@edu/api-client", () => ({ assessmentApi: {
   submitProgramming: vi.fn(async () => ({ version_no: 1 })),
   run: vi.fn(),
   runResult: vi.fn(),
+  enterWorkspace: vi.fn(),
+  workspace: vi.fn(),
+  attempt: vi.fn(),
+  attemptResult: vi.fn(),
 } }));
 
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
@@ -195,5 +199,58 @@ it("switches programming questions through the list and shows attachment-only re
   fireEvent.click(screen.getByRole("button", { name: "2. 排序" }));
   await waitFor(() => expect(screen.getByRole("button", { name: "2. 排序" })).toHaveAttribute("aria-pressed", "true"));
   expect(assessmentApi.codeDraft).toHaveBeenCalledWith("task", "p2", "python");
+  client.clear();
+});
+
+it("displays hidden case verdicts and advances after a passing final run", async () => {
+  const deadline = "2099-01-01T00:00:00Z";
+  const question = {
+    id: "first", title: "求和", description: "", instructions: "", sort_order: 1, task_type: "PROGRAMMING",
+    max_score: "10", allowed_languages: ["python"], selected_language: "python",
+    samples: [{ input: "1 2", output: "3" }], starter_files: {}, limits: {}, case_count: 5,
+  };
+  let completed = false;
+  vi.mocked(assessmentApi.get).mockImplementation(async () => ({
+    task_id: "task", report_required: false, workspace_available: true, workspace_flow: true,
+    current_question_id: completed ? "next" : "first",
+    questions: [{ ...question, submitted: completed }, { ...question, id: "next", title: "排序" }],
+    sections: [{ kind: "PROGRAMMING", status: "NOT_SUBMITTED", editable: true, deadline }],
+    server_time: new Date().toISOString(), all_submitted: false,
+  }) as never);
+  const workspace = { status: "RUNNING" as const, expires_at: deadline };
+  vi.mocked(assessmentApi.enterWorkspace).mockResolvedValue(workspace);
+  vi.mocked(assessmentApi.workspace).mockResolvedValue(workspace);
+  vi.mocked(assessmentApi.codeDraft).mockResolvedValue({
+    files: { "main.py": "print(input())" }, row_version: 1, language: "python",
+  });
+  vi.mocked(assessmentApi.saveCode).mockImplementation(async (_taskId, _questionId, language, files, version) =>
+    ({ files, row_version: version + 1, language }));
+  vi.mocked(assessmentApi.attempt).mockResolvedValueOnce({ id: 101 } as never)
+    .mockResolvedValueOnce({ id: 102 } as never);
+  vi.mocked(assessmentApi.attemptResult).mockImplementation(async (_taskId, _questionId, id) => {
+    completed = id === 102;
+    return {
+      id, status: "COMPLETED", result_status: completed ? "PASSED" : "FAILED",
+      submitted: completed, next_question_id: completed ? "next" : null,
+      case_results: [
+        { number: 1, passed: true, input: "1 2", expected_output: "3", actual_output: "3" },
+        ...[2, 3, 4, 5].map(number => ({ number, passed: completed || number < 5 })),
+      ],
+    } as never;
+  });
+
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(<QueryClientProvider client={client}><ToastProvider><MemoryRouter initialEntries={["/experiments/task/assessment"]}>
+    <Routes><Route path="/experiments/:taskId/assessment" element={<AssessmentWorkbench />} /></Routes>
+  </MemoryRouter></ToastProvider></QueryClientProvider>);
+  const finalRun = await screen.findByRole("button", { name: "最终运行" });
+  await waitFor(() => expect(finalRun).toBeEnabled());
+  fireEvent.click(finalRun);
+  expect(await screen.findByText("✗ 未通过")).toBeInTheDocument();
+  expect(screen.getAllByText("· 无权查看")).toHaveLength(3);
+  expect(screen.getByRole("button", { name: "1. 求和" })).toHaveAttribute("aria-pressed", "true");
+  fireEvent.click(finalRun);
+  await waitFor(() => expect(screen.getByRole("button", { name: "2. 排序" })).toHaveAttribute("aria-pressed", "true"));
+  expect(screen.getByRole("button", { name: "1. 求和 · 已通过" })).toBeInTheDocument();
   client.clear();
 });

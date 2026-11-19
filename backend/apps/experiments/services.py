@@ -204,8 +204,12 @@ def _content_snapshot(template: TemplateVersion) -> dict[str, Any]:
     from apps.labtemplates.questions import assessment_snapshot
     from apps.labtemplates.services import _digest
 
-    assessment = assessment_snapshot(template)
+    assessment = assessment_snapshot(template, include_case_metadata=True)
     if assessment is not None:
+        case_metadata = {
+            question["id"]: question.pop("case_metadata", {})
+            for question in assessment["questions"]
+        }
         if _digest(assessment) != template.spec_digest:
             raise PublicationValidationError(detail={"template": "precheck_digest_mismatch"})
         has_programming = any(q["task_type"] == "PROGRAMMING" for q in assessment["questions"])
@@ -251,6 +255,7 @@ def _content_snapshot(template: TemplateVersion) -> dict[str, Any]:
                             "resource_profile_snapshot": profile,
                             "execution_snapshot": {
                                 "tests_digest": question.get("tests_digest", ""),
+                                **case_metadata[question["id"]],
                             },
                             "submission_policy": {},
                             "grading_policy": {},
@@ -485,7 +490,9 @@ def _validate_dependencies(*, publication: TaskPublication) -> None:
         raise PublicationValidationError(detail={"template_version_status": template.status})
     rubric = publication.rubric_version
     if rubric is None:
-        if publication.report_required:
+        if publication.report_required and not (
+            publication.report_template_asset_id or template.report_template_asset_id
+        ):
             raise PublicationValidationError(detail={"rubric_version_id": "report_rubric_required"})
         return
     if rubric.rubric.course_id != publication.course_id:
@@ -952,6 +959,8 @@ def publish_publication(
             else None
         ),
         "report_required": publication.report_required,
+        "report_template": publication.report_template_asset.digest_sha256
+        if publication.report_template_asset_id else None,
         "review_mode": publication.review_mode,
     })
     now = timezone.now()
@@ -1097,7 +1106,7 @@ def create_retake_publication(
         TaskPublication,
         pk=retake.pk,
         expected_version=retake.row_version,
-        changes={"retake_of": source},
+        changes={"retake_of": source, "report_template_asset": source.report_template_asset},
     )
     ExperimentRetakeLink.objects.bulk_create([
         ExperimentRetakeLink(

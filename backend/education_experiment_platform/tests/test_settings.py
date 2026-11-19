@@ -126,7 +126,7 @@ class SettingsTests(SimpleTestCase):
         )
         self.assertEqual(
             {m.__name__ for m in apps.get_app_config("workspaces").get_models()},
-            {"WorkspaceSnapshot"},
+            {"WorkspaceSnapshot", "StudentWorkspace"},
         )
         self.assertEqual(
             {m.__name__ for m in apps.get_app_config("reviews").get_models()},
@@ -134,5 +134,8 @@ class SettingsTests(SimpleTestCase):
         )
         self.assertEqual(
             {m.__name__ for m in apps.get_app_config("reports").get_models()},
-            {"ReportDraft", "ReportVersion", "ReportAttachment", "ReportVersionAttachment"},
+            {
+                "ReportDraft", "ReportVersion", "ReportAttachment", "ReportVersionAttachment",
+                "ReportSubmission",
+            },
         )

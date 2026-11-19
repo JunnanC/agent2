@@ -25,6 +25,50 @@ export interface ProgrammingQuestion extends QuestionBase {
   samples: Array<{ input: string; output: string }>;
   starter_files: Partial<Record<AssessmentLanguage, Record<string, string>>>;
   limits: Partial<Record<AssessmentLanguage, { timeout_seconds: number; memory_mb: number }>>;
+  submitted?: boolean;
+  case_count?: number | null;
+  case_results?: CaseResult[];
+}
+
+export interface CaseResult {
+  number: number;
+  passed: boolean;
+  input?: string;
+  expected_output?: string;
+  actual_output?: string;
+  stderr?: string;
+  status?: string;
+}
+
+export interface AssessmentPart {
+  kind: "CHOICE" | "PROGRAMMING" | "REPORT";
+  status: string;
+  score: string | null;
+  max_score: string;
+  score_cap: number;
+  deadline: string;
+  redo_until: string | null;
+  editable: boolean;
+  passed_questions?: number;
+  total_questions?: number;
+}
+
+export interface AssessmentFile {
+  asset_id: string;
+  file_name: string;
+}
+
+export interface AssessmentReport extends AssessmentPart {
+  template: AssessmentFile | null;
+  attachment: AssessmentFile | null;
+  submitted_at: string | null;
+  row_version: number | null;
+  feedback: string;
+}
+
+export interface StudentWorkspace {
+  status: "NOT_REQUIRED" | "PENDING" | "RUNNING" | "FAILED" | "EXPIRED";
+  expires_at: string;
 }
 
 export interface Assessment {
@@ -51,6 +95,10 @@ export interface Assessment {
   all_submitted: boolean;
   server_time: string;
   choice_answers_visible: boolean;
+  workspace_available?: boolean;
+  workspace_flow?: boolean;
+  current_question_id?: string | null;
+  parts?: AssessmentPart[];
 }
 
 export interface ChoiceDraft {
@@ -84,6 +132,16 @@ export interface HiddenGroup {
 
 const questionPath = (taskId: string, questionId: string) =>
   `/tasks/${encodeURIComponent(taskId)}/questions/${encodeURIComponent(questionId)}`;
+const taskPath = (taskId: string) => `/tasks/${encodeURIComponent(taskId)}`;
+const teachingCoursePath = (courseId: string) => `/teaching/courses/${encodeURIComponent(courseId)}`;
+const teachingTaskPath = (courseId: string, taskId: string) =>
+  `${teachingCoursePath(courseId)}${taskPath(taskId)}`;
+
+function fileBody(file: File) {
+  const body = new FormData();
+  body.append("file", file);
+  return body;
+}
 
 export const assessmentApi = {
   get: (taskId: string) =>
@@ -144,6 +202,28 @@ export const assessmentApi = {
   runResult: (taskId: string, runId: number) => request<AssessmentRun>(
     `/tasks/${taskId}/assessment/runs/${runId}`,
   ).then((r) => r.data),
+  enterWorkspace: (taskId: string) => request<StudentWorkspace>(`${taskPath(taskId)}/workspace`, {
+    method: "POST", idempotencyKey: newIdempotencyKey(),
+  }).then((r) => r.data),
+  workspace: (taskId: string) =>
+    request<StudentWorkspace>(`${taskPath(taskId)}/workspace`).then((r) => r.data),
+  selectQuestion: (taskId: string, questionId: string) =>
+    request(`${taskPath(taskId)}/workspace/questions/${encodeURIComponent(questionId)}`, {
+      method: "PUT",
+    }).then((r) => r.data),
+  attempt: (
+    taskId: string, questionId: string, mode: "self-test" | "final-run",
+    language: AssessmentLanguage, rowVersion: number, stdin: string, idempotencyKey: string,
+  ) => request<AssessmentRun>(`${questionPath(taskId, questionId)}/${mode}`, {
+    method: "POST", body: { language, row_version: rowVersion, stdin }, idempotencyKey,
+  }).then((r) => r.data),
+  attemptResult: (taskId: string, questionId: string, runId: number) =>
+    request<AssessmentRun>(`${questionPath(taskId, questionId)}/attempts/${runId}`).then((r) => r.data),
+  attachmentReport: (taskId: string) =>
+    request<AssessmentReport>(`${taskPath(taskId)}/report`).then((r) => r.data),
+  submitReport: (taskId: string, file: File, key = newIdempotencyKey()) => request<AssessmentReport>(`${taskPath(taskId)}/report`, {
+    method: "POST", body: fileBody(file), idempotencyKey: key,
+  }).then((r) => r.data),
 };
 
 export interface AssessmentRun {
@@ -154,7 +234,48 @@ export interface AssessmentRun {
   stderr: string;
   language: AssessmentLanguage;
   snapshot_digest: string;
+  case_results?: CaseResult[];
+  submitted?: boolean;
+  duration_ms?: number | null;
+  next_question_id?: string | null;
 }
+
+export interface ReportQueueItem {
+  task_id: string;
+  student_name: string;
+  title: string;
+  status: string;
+  submitted_at: string;
+}
+
+export const assessmentPartsApi = {
+  uploadTemplate: (courseId: string, publicationId: string, file: File, version: string | number) =>
+    request(`${teachingCoursePath(courseId)}/experiments/${encodeURIComponent(publicationId)}/report-template`, {
+      method: "POST", body: fileBody(file), ifMatch: version, idempotencyKey: newIdempotencyKey(),
+    }).then((r) => r.data),
+  reports: (courseId: string, publicationId?: string) =>
+    request<{ rows: ReportQueueItem[] }>(`${teachingCoursePath(courseId)}/experiment-reports`, {
+      query: { publication_id: publicationId || undefined },
+    }).then((r) => r.data.rows),
+  report: (courseId: string, taskId: string) =>
+    request<AssessmentReport>(`${teachingTaskPath(courseId, taskId)}/report`).then((r) => r.data),
+  gradeReport: (courseId: string, taskId: string, score: string, feedback: string, version: number) =>
+    request<AssessmentReport>(`${teachingTaskPath(courseId, taskId)}/report`, {
+      method: "POST", body: { score, feedback }, ifMatch: version, idempotencyKey: newIdempotencyKey(),
+    }).then((r) => r.data),
+  parts: (courseId: string, taskId: string) =>
+    request<{ parts: AssessmentPart[]; redo_available: boolean }>(
+      `${teachingTaskPath(courseId, taskId)}/assessment/parts`,
+    ).then((r) => r.data),
+  redo: (courseId: string, taskId: string, part: AssessmentPart["kind"], redoUntil: string, reason: string) =>
+    request<{ parts: AssessmentPart[] }>(`${teachingTaskPath(courseId, taskId)}/assessment/parts`, {
+      method: "POST", body: { part, redo_until: redoUntil, reason }, idempotencyKey: newIdempotencyKey(),
+    }).then((r) => r.data.parts),
+};
+
+export const assessmentPartLabel: Record<AssessmentPart["kind"], string> = {
+  CHOICE: "选择题", PROGRAMMING: "编程题", REPORT: "实验报告",
+};
 
 export const assessmentTeachingApi = {
   reportSuggestion: (courseId: string, taskId: string, version: number, key: string) => request<{
@@ -169,6 +290,7 @@ export const assessmentTeachingApi = {
     }).then((r) => r.data),
   reviews: (courseId: string, publicationId?: string) => request<{ rows: Array<{
     task_id: string; student_name: string; title: string; kind: string; status: string; review_status?: string; version_no: number;
+    workspace_flow?: boolean;
   }> }>(`/teaching/courses/${courseId}/assessment-reviews`, { query: { publication_id: publicationId || undefined } }).then((r) => r.data.rows),
   review: (courseId: string, taskId: string) => request<TeacherAssessmentReview>(
     `/teaching/courses/${courseId}/tasks/${taskId}/assessment`,
@@ -223,6 +345,7 @@ export const assessmentTeachingApi = {
 };
 
 export interface TeacherAssessmentReview {
+  parts?: AssessmentPart[];
   sources: Array<{ question_id: string; language: string; files: Record<string, string> }>;
   task_id: string;
   student_name: string;

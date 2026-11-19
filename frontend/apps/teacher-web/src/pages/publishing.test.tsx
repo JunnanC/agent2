@@ -56,7 +56,7 @@ it("creates a programming publication without requiring a report or rubric", asy
   render(<QueryClientProvider client={client}><ToastProvider><MemoryRouter initialEntries={["/courses/c1/publishing?template=template-1"]}><Routes>
     <Route path="/courses/:courseId/publishing" element={<Publishing />} />
   </Routes></MemoryRouter></ToastProvider></QueryClientProvider>);
-  const reportRequired = await screen.findByRole("checkbox", { name: "需要提交实验报告(评审后完成)" });
+  const reportRequired = await screen.findByRole("checkbox", { name: "需要提交实验报告" });
   fireEvent.click(reportRequired);
   expect(reportRequired).not.toBeChecked();
   fireEvent.change(screen.getByLabelText("所属课程章节"), { target: { value: "chapter-1" } });

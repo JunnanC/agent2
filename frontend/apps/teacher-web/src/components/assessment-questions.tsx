@@ -272,13 +272,15 @@ export function AssessmentQuestions({ courseId, templateId, version, refresh }: 
             });
           }} /></label>
         </details>)}
-        <h3>公开示例</h3>{samples.map((sample, index) => <div key={index} className="section">
+        <h3>样例用例</h3>
+        <p className="subtle">最终运行按样例、测试组的顺序判题。学生能查看前两组用例的内容，其余只显示通过状态。</p>
+        {samples.map((sample, index) => <div key={index} className="section">
           <label>示例输入<textarea className="field" value={sample.input} onChange={(e) => setSamples(samples.map((v, i) => i === index ? { ...v, input: e.target.value } : v))} /></label>
           <label>示例输出<textarea className="field" value={sample.output} onChange={(e) => setSamples(samples.map((v, i) => i === index ? { ...v, output: e.target.value } : v))} /></label>
           <button className="btn" disabled={samples.length <= 1} onClick={() => setSamples(samples.filter((_, i) => i !== index))}>删除示例</button>
         </div>)}
         <button className="btn" onClick={() => setSamples([...samples, { input: "", output: "" }])}>新增示例</button>
-        <h3>隐藏测试组（学生不可见）</h3>
+        <h3>其余测试组</h3>
         <label>导入隐藏用例 JSON<input type="file" accept=".json" onChange={(e) => {
           const file = e.target.files?.[0]; if (!file) return;
           void act(async () => {

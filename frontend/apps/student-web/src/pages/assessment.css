@@ -98,6 +98,7 @@
 
 .assessment-samples { display: grid; gap: 12px; margin-top: 20px; }
 .assessment-samples details { padding: 12px; background: #f3f7f9; border: 1px solid #d1dce4; border-radius: var(--radius-input); }
+.assessment-private-case { margin: 0; padding: 8px 12px; border-bottom: 1px solid var(--assessment-edge); }
 .assessment-samples summary, .assessment-history summary { cursor: pointer; font-weight: 600; }
 .assessment-sample-content { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 8px; margin: 8px 0 12px; }
 .assessment-sample-content p { color: #455d65; font-size: 13px; margin-bottom: 4px; }
@@ -159,6 +160,16 @@
 .assessment-run-panel label { display: grid; gap: 4px; }
 .assessment-run-panel textarea.field { min-height: 72px; border-color: #aabfc6; font-family: Consolas, monospace; }
 .assessment-run-panel > p { margin: 8px 0 0; font-size: 13px; }
+.assessment-run-actions, .assessment-report-template {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+}
+.assessment-attachment-report { display: grid; gap: 12px; }
+.assessment-attachment-report p { margin: 0; }
+.assessment-report-upload { display: grid; justify-items: start; gap: 8px; }
+.assessment-report-upload label { display: grid; max-width: 100%; gap: 4px; }
+.assessment-samples h3 { margin: 12px 0 8px; }
+.case-passed { color: var(--green); }
+.case-failed { color: var(--red); }
 .assessment-run-result { margin-top: 12px; padding: 12px; border-radius: var(--radius-input); background: #243b45; color: #f2f8fa; }
 .assessment-run-result h4 { margin: 8px 0 4px; color: #d7e6eb; }
 .assessment-run-result pre { background: #172c35; }

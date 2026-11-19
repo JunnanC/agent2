@@ -14,7 +14,12 @@ from .assessment_views import (
     AssessmentView,
     ChoiceSubmitView,
     ProgrammingSubmitView,
+    WorkspaceAttemptDetailView,
+    WorkspaceAttemptView,
+    WorkspaceQuestionView,
+    WorkspaceView,
 )
+from .models import AssessmentRun
 from .views import (
     ClosePublicationView,
     PlatformTaskAnomalyView,
@@ -51,6 +56,23 @@ urlpatterns = [
         AssessmentTeachingView.as_view(), name="assessment-teaching-review",
     ),
     path("tasks/<str:task_id>/assessment", AssessmentView.as_view(), name="assessment"),
+    path("tasks/<str:task_id>/workspace", WorkspaceView.as_view(), name="student-workspace"),
+    path(
+        "tasks/<str:task_id>/workspace/questions/<str:question_id>",
+        WorkspaceQuestionView.as_view(), name="workspace-question",
+    ),
+    path(
+        "tasks/<str:task_id>/questions/<str:question_id>/self-test",
+        WorkspaceAttemptView.as_view(mode=AssessmentRun.Mode.SELF_TEST), name="workspace-self-test",
+    ),
+    path(
+        "tasks/<str:task_id>/questions/<str:question_id>/final-run",
+        WorkspaceAttemptView.as_view(mode=AssessmentRun.Mode.FINAL), name="workspace-final-run",
+    ),
+    path(
+        "tasks/<str:task_id>/questions/<str:question_id>/attempts/<int:run_id>",
+        WorkspaceAttemptDetailView.as_view(), name="workspace-attempt",
+    ),
     path(
         "tasks/<str:task_id>/assessment/submissions", AssessmentHistoryView.as_view(),
         name="assessment-submission-history",

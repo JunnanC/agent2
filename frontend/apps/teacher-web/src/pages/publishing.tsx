@@ -2,7 +2,7 @@ import { request, newIdempotencyKey } from "@edu/auth-client";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link, useParams, useSearchParams } from "react-router-dom";
-import { teachingApi } from "@edu/api-client";
+import { assessmentPartsApi, teachingApi } from "@edu/api-client";
 import type { Chapter, Publication, Template } from "@edu/api-client";
 import { keys } from "@edu/query-keys";
 import {
@@ -99,6 +99,12 @@ export function Publishing() {
     .reduce((sum, row) => sum + (row.audience_count ?? 0), 0);
 
   const invalidate = () => void publications.refetch();
+  const templateUpload = useMutation({
+    mutationFn: ({ publication, file }: { publication: Publication; file: File }) =>
+      assessmentPartsApi.uploadTemplate(courseId, publication.public_id, file, publication.row_version),
+    onSuccess: () => { toast.notify("报告模板已上传"); invalidate(); },
+    onError: (error) => toast.notify(apiErrorMessage(error), "error"),
+  });
 
   const publish = useMutation({
     mutationFn: (target: Publication) =>
@@ -141,12 +147,12 @@ export function Publishing() {
     mutationFn: () => {
       const versionId = selectedTemplate?.current_version_id ?? "";
       const rubricVersionId = selectedRubric?.current_version_id ?? "";
-      if (!versionId || (hasProgramming && createForm.report_required && !rubricVersionId)) {
-        return Promise.reject(new Error("请选择已发布模板；必填报告需要评分表"));
+      if (!versionId) {
+        return Promise.reject(new Error("请选择已发布实验模板"));
       }
       return teachingApi.createPublication(courseId, {
         template_version_id: versionId,
-        rubric_version_id: hasProgramming && createForm.report_required ? rubricVersionId : null,
+        rubric_version_id: hasProgramming && createForm.report_required ? rubricVersionId || null : null,
         title: createForm.title.trim(),
         course_chapter_id: createForm.chapterId,
         description: createForm.description.trim(),
@@ -171,7 +177,7 @@ export function Publishing() {
   });
 
   const createReady = Boolean(
-    createForm.chapterId && createForm.templateId && (!hasProgramming || !createForm.report_required || createForm.rubricId) && createForm.title.trim()
+    createForm.chapterId && createForm.templateId && createForm.title.trim()
     && createForm.window_start && createForm.window_end,
   );
 
@@ -240,6 +246,17 @@ export function Publishing() {
                       </td>
                       <td className="table-actions">
                         <Link className="btn sm" to={`/courses/${courseId}/publishing/${row.public_id}/reviews`}>报告与评审</Link>
+                        {["DRAFT", "PUBLISH_FAILED"].includes(row.status) && <label className="btn sm" aria-label={`${row.title}的报告模板`}>
+                          <span>{row.report_template ? "替换报告模板" : "上传报告模板"}</span>
+                          <input type="file" accept=".docx,.pdf,.md,.txt" className="report-template-file-input"
+                            aria-label={`上传 ${row.title} 的报告模板`} disabled={templateUpload.isPending}
+                            onChange={(event) => {
+                              const file = event.currentTarget.files?.[0];
+                              event.currentTarget.value = "";
+                              if (file) templateUpload.mutate({ publication: row, file });
+                            }} />
+                        </label>}
+                        {row.report_template && <span className="subtle">{row.report_template.file_name}</span>}
                         {row.status === "DRAFT" ? (
                           <button type="button" className="btn sm" disabled={runPrecheck.isPending}
                             onClick={() => row.template_version_id && runPrecheck.mutate(row.template_version_id)}>
@@ -247,7 +264,7 @@ export function Publishing() {
                           </button>
                         ) : null}
                         {allowed.includes("publish") ? (
-                          <button type="button" className="btn sm primary" disabled={publish.isPending}
+                          <button type="button" className="btn sm primary" disabled={publish.isPending || templateUpload.isPending}
                             onClick={() => publish.mutate(row)}>
                             {publish.isPending && publish.variables === row ? "提交中…" : "发布"}
                           </button>
@@ -344,7 +361,7 @@ export function Publishing() {
               </option>
             ))}
           </select>
-          <label className="form-label" htmlFor="pub-rubric">报告评分表 <span>必填报告时选择</span></label>
+          <label className="form-label" htmlFor="pub-rubric">报告评分表 <span>可选</span></label>
           <select id="pub-rubric" className="field" value={createForm.rubricId}
             onChange={(event) => setCreateForm((prev) => ({ ...prev, rubricId: event.target.value }))}>
             <option value="">选择评分表</option>
@@ -389,9 +406,9 @@ export function Publishing() {
           <label className="form-label" style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <input type="checkbox" checked={hasProgramming && createForm.report_required} disabled={!hasProgramming}
               onChange={(event) => setCreateForm((prev) => ({ ...prev, report_required: event.target.checked }))} />
-            需要提交实验报告(评审后完成)
+            需要提交实验报告
           </label>
-          <p className="subtle" style={{ margin: 0 }}>创建后运行预检，通过即可发布。</p>
+          <p className="subtle" style={{ margin: 0 }}>创建后运行预检；需要实验报告时，先在发布草稿中上传报告模板，再发布给学生。</p>
         </div>
       </Modal>
 

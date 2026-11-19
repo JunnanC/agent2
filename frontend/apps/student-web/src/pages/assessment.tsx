@@ -3,11 +3,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { assessmentApi, reportApi } from "@edu/api-client";
-import type { Assessment, AssessmentLanguage, ChoiceQuestion, ProgrammingQuestion } from "@edu/api-client";
+import type { Assessment, AssessmentLanguage, CaseResult, ChoiceQuestion, ProgrammingQuestion } from "@edu/api-client";
 import { newIdempotencyKey } from "@edu/auth-client";
 import { keys } from "@edu/query-keys";
 import { CodeEditor, Icon, LoadingState, Modal, useToast } from "@edu/ui";
 import { formatDateTime } from "@/lib/task-format";
+import { useStudentWorkspace } from "@/lib/use-student-workspace";
 import "./assessment.css";
 
 type Flush = () => Promise<boolean>;
@@ -21,6 +22,8 @@ const STATUS_LABEL: Record<string, string> = {
   PENDING: "待评分", RUNNING: "运行中", RETRY: "服务重试中", COMPLETED: "已完成",
   PASSED: "运行成功", COMPILE_ERROR: "编译失败", RUNTIME_ERROR: "运行错误",
   TIMEOUT: "运行超时", MEMORY_LIMIT: "内存超限", OUTPUT_LIMIT: "输出超限",
+  FAILED: "部分用例未通过", PLATFORM_ERROR: "实验环境运行失败", WINDOW_CLOSED: "本部分已截止",
+  ALREADY_SUBMITTED: "本题已提交", DRAFT_CHANGED: "代码已更新，请重新运行",
 };
 
 type Section = Assessment["sections"][number];
@@ -189,14 +192,18 @@ function AnswerSheet({ submission, questions, result }: {
   </div>;
 }
 
-function CodeAnswer({ taskId, question, language, onLanguageChange, register, disabled }: {
+function CodeAnswer({ taskId, question, language, onLanguageChange, register, disabled,
+  workspaceFlow = false, workspaceReady = false, onSubmitted }: {
   taskId: string; question: ProgrammingQuestion; language: AssessmentLanguage;
   onLanguageChange: (language: AssessmentLanguage) => void;
   register: Register; disabled: boolean;
+  workspaceFlow?: boolean; workspaceReady?: boolean;
+  onSubmitted?: (nextQuestion: string | null) => void;
 }) {
   const [path, setPath] = useState("");
   const [stdin, setStdin] = useState("");
   const [runId, setRunId] = useState<number | null>(null);
+  const [mode, setMode] = useState<"self-test" | "final-run">("self-test");
   const [running, setRunning] = useState(false);
   const toast = useToast();
   const command = useRef<string | null>(null);
@@ -209,29 +216,49 @@ function CodeAnswer({ taskId, question, language, onLanguageChange, register, di
   const selectedPath = path && draft.value && path in draft.value ? path : Object.keys(draft.value ?? {})[0] ?? "";
   const run = useQuery({
     queryKey: ["assessment-run", taskId, runId],
-    queryFn: () => assessmentApi.runResult(taskId, runId!), enabled: runId !== null,
+    queryFn: () => workspaceFlow ? assessmentApi.attemptResult(taskId, question.id, runId!)
+      : assessmentApi.runResult(taskId, runId!),
+    enabled: runId !== null,
     refetchInterval: (query) => query.state.data?.status === "COMPLETED" ? false : 1500,
   });
-  const runCode = async () => {
+  const handledRun = useRef<number | null>(null);
+  useEffect(() => {
+    const result = run.data;
+    if (result?.submitted && result.id !== handledRun.current) {
+      handledRun.current = result.id;
+      onSubmitted?.(result.next_question_id ?? null);
+    }
+  }, [run.data, onSubmitted]);
+  const runCode = async (nextMode: "self-test" | "final-run" = "self-test") => {
     setRunning(true);
     try {
       if (!await draft.flush()) return;
       const saved = await assessmentApi.codeDraft(taskId, question.id, language);
-      const payload = JSON.stringify([question.id, language, saved.row_version, stdin]);
+      const input = nextMode === "self-test" ? stdin : "";
+      const payload = JSON.stringify([question.id, language, saved.row_version, input, nextMode]);
       if (commandPayload.current !== payload) command.current = null;
       commandPayload.current = payload;
       command.current ??= newIdempotencyKey();
-      const result = await assessmentApi.run(taskId, question.id, language, saved.row_version, stdin, command.current);
-      command.current = null; setRunId(result.id);
+      const result = workspaceFlow
+        ? await assessmentApi.attempt(taskId, question.id, nextMode, language, saved.row_version, input, command.current)
+        : await assessmentApi.run(taskId, question.id, language, saved.row_version, stdin, command.current);
+      command.current = null; setMode(nextMode); setRunId(result.id);
     } catch (error) { toast.notify(error instanceof Error ? error.message : "运行请求失败", "error"); }
     finally { setRunning(false); }
   };
+  const pending = running || (runId !== null && run.data?.status !== "COMPLETED");
+  const runDisabled = disabled || pending || draft.value === null || (workspaceFlow && !workspaceReady);
+  const caseResults = mode === "final-run" && run.data?.case_results?.length
+    ? run.data.case_results : question.case_results ?? [];
   return <article className="assessment-programming">
     <section className="assessment-statement" aria-labelledby="assessment-question-title">
-      <h2 className="assessment-question-title" id="assessment-question-title">{question.title} <small>{question.max_score} 分</small></h2>
+      <h2 className="assessment-question-title" id="assessment-question-title">{question.title}
+        {workspaceFlow ? (question.submitted && <small>已通过 · 已提交</small>) : <small>{question.max_score} 分</small>}
+      </h2>
       {question.description && <p className="assessment-question-text">{question.description}</p>}
       {question.instructions && <p className="assessment-question-text">{question.instructions}</p>}
-      {question.samples.length > 0 && <div className="assessment-samples">
+      {workspaceFlow ? <CaseList question={question} results={caseResults} onUseInput={setStdin} />
+      : question.samples.length > 0 && <div className="assessment-samples">
         {question.samples.slice(0, 2).map((sample, index) => <details open key={index}>
           <summary>示例 {index + 1}</summary>
           <div className="assessment-sample-content">
@@ -291,20 +318,118 @@ function CodeAnswer({ taskId, question, language, onLanguageChange, register, di
       <section className="assessment-run-panel" aria-labelledby="assessment-run-title">
         <header>
           <h3 id="assessment-run-title">运行调试</h3>
-          <button type="button" className="btn primary" disabled={disabled || running || draft.value === null || run.data?.status === "RUNNING" || run.data?.status === "PENDING"} onClick={() => void runCode()}>
-            <Icon name="play" size={16} /> 运行代码
-          </button>
+          <div className="assessment-run-actions">
+            <button type="button" className={workspaceFlow ? "btn" : "btn primary"} disabled={runDisabled} onClick={() => void runCode()}>
+              <Icon name="play" size={16} /> {workspaceFlow ? "自测运行" : "运行代码"}
+            </button>
+            {workspaceFlow && <button type="button" className="btn primary" disabled={runDisabled}
+              onClick={() => void runCode("final-run")}>最终运行</button>}
+          </div>
         </header>
         <label>自定义输入<textarea className="field" rows={3} value={stdin} onChange={(e) => { setStdin(e.target.value); command.current = null; }} /></label>
-        <p className="subtle">运行仅使用本页输入。隐藏测试只在正式交卷后执行。</p>
+        <p className="subtle">{workspaceFlow ? "自测使用你填写的输入。最终运行使用教师的全部用例，通过后自动提交本题。" : "运行仅使用本页输入。隐藏测试只在正式交卷后执行。"}</p>
+        {workspaceFlow && pending && <p role="status">等待运行结果…</p>}
+        {run.error && <p role="alert">无法获取运行结果。 <button className="btn sm" onClick={() => void run.refetch()}>重试获取</button></p>}
         {run.data && <section className="assessment-run-result" aria-label="运行结果">
           <h3>{STATUS_LABEL[run.data.result_status || run.data.status] ?? run.data.status}</h3>
-          <h4>标准输出</h4><pre>{run.data.stdout || "（无输出）"}</pre>
-          <h4>错误输出</h4><pre>{run.data.stderr || "（无错误输出）"}</pre>
+          {run.data.duration_ms != null && <p>耗时 {run.data.duration_ms} 毫秒</p>}
+          {mode === "self-test" && <><h4>标准输出</h4><pre>{run.data.stdout || "（无输出）"}</pre></>}
+          {(mode === "self-test" || run.data.stderr) && <><h4>错误输出</h4><pre>{run.data.stderr || "（无错误输出）"}</pre></>}
         </section>}
       </section>
     </section>
   </article>;
+}
+
+function CaseList({ question, results, onUseInput }: {
+  question: ProgrammingQuestion; results: CaseResult[]; onUseInput: (input: string) => void;
+}) {
+  const total = results.length || question.case_count || question.samples.length;
+  return <div className="assessment-samples" aria-label="判题用例">
+    <h3>判题用例</h3>
+    {Array.from({ length: total }, (_, index) => {
+      const result = results[index];
+      const sample = question.samples[index];
+      const input = result?.input ?? sample?.input;
+      const expected = result?.expected_output ?? sample?.output;
+      const status = result ? result.passed ? "✓ 通过" : "✗ 未通过" : "未运行";
+      const label = <>用例 {index + 1} · <span className={result
+        ? result.passed ? "case-passed" : "case-failed" : ""}>{status}</span></>;
+      if (index >= 2) return <p key={index} className="assessment-private-case">
+        {label} <span className="subtle">· 无权查看</span>
+      </p>;
+      return <details key={index}>
+        <summary>{label}</summary>
+        {input !== undefined ? <>
+          <div className="assessment-sample-content">
+            <div><p>输入</p><pre>{input}</pre></div>
+            <div><p>预期输出</p><pre>{expected}</pre></div>
+            {result?.actual_output !== undefined && <div><p>实际输出</p><pre>{result.actual_output || "（无输出）"}</pre></div>}
+            {result?.stderr && <div><p>错误输出</p><pre>{result.stderr}</pre></div>}
+          </div>
+          {!question.submitted && <button type="button" className="btn sm" onClick={() => onUseInput(input)}>填入自测输入</button>}
+        </> : <p className="subtle">最终运行后显示用例详情</p>}
+      </details>;
+    })}
+  </div>;
+}
+
+function AttachmentReport({ taskId, onChange }: { taskId: string; onChange: () => void }) {
+  const toast = useToast();
+  const report = useQuery({
+    queryKey: ["attachment-report", taskId], queryFn: () => assessmentApi.attachmentReport(taskId),
+    refetchInterval: 10000,
+  });
+  const [file, setFile] = useState<File | null>(null);
+  const uploadKey = useRef<string | undefined>(undefined);
+  const [uploading, setUploading] = useState(false);
+  const form = useRef<HTMLFormElement>(null);
+  const data = report.data;
+  if (report.isPending) return <LoadingState label="正在载入实验报告" />;
+  if (!data) return <p role="alert">无法读取实验报告。 <button className="btn" onClick={() => void report.refetch()}>重试</button></p>;
+  async function upload() {
+    if (!file) return;
+    setUploading(true);
+    try {
+      uploadKey.current ??= newIdempotencyKey();
+      await assessmentApi.submitReport(taskId, file, uploadKey.current);
+      form.current?.reset();
+      setFile(null);
+      await report.refetch();
+      onChange();
+      toast.notify("实验报告已提交");
+    } catch (error) {
+      toast.notify(error instanceof Error ? error.message : "报告上传失败", "error");
+    } finally {
+      setUploading(false);
+    }
+  }
+  return <section className="panel assessment-attachment-report">
+    <h2>实验报告</h2>
+    <p>{data.redo_until ? "补做截止" : "提交截止"} {formatDateTime(data.deadline)}</p>
+    {data.status === "RETURNED" && <p role="status">教师已退回，请在补做截止前重交。</p>}
+    {data.template
+      ? <div className="assessment-report-template"><span>教师模板 · {data.template.file_name}</span>
+        <AssetActions assetId={data.template.asset_id} title={data.template.file_name} /></div>
+      : <p className="subtle">教师尚未上传报告模板。</p>}
+    {data.attachment && <div className="assessment-report-template">
+      <span>当前附件 · {data.attachment.file_name}{data.submitted_at && ` · ${formatDateTime(data.submitted_at)}`}</span>
+      <AssetActions assetId={data.attachment.asset_id} title={data.attachment.file_name} />
+    </div>}
+    {data.score != null && <p>报告成绩 {data.score} / 100</p>}
+    {data.score_cap === 60 && <p className="subtle">本次报告评分上限 60 分。</p>}
+    {data.feedback && <p>教师评语 · {data.feedback}</p>}
+    {data.editable && <form ref={form} className="assessment-report-upload" onSubmit={(event) => { event.preventDefault(); void upload(); }}>
+      <label>报告附件<input type="file" accept=".pdf,.docx,.md,.txt" disabled={uploading}
+        onChange={(event) => {
+          uploadKey.current = undefined;
+          setFile(event.currentTarget.files?.[0] ?? null);
+        }} /></label>
+      <button type="submit" className="btn primary" disabled={!file || uploading}>
+        {uploading ? "正在上传和扫描附件…" : data.attachment ? "替换并提交报告" : "提交报告"}
+      </button>
+    </form>}
+  </section>;
 }
 
 function ReportAnswer({ taskId, register, disabled }: { taskId: string; register: Register; disabled: boolean }) {
@@ -388,8 +513,9 @@ function downloadSubmittedReport(
 
 function AssessmentPage({ taskId }: { taskId: string }) {
   const toast = useToast();
-  const [section, setSection] = useState<"CHOICE" | "PROGRAMMING">("CHOICE");
+  const [section, setSection] = useState<"CHOICE" | "PROGRAMMING" | "REPORT" | null>(null);
   const [active, setActive] = useState("");
+  const selectionQueue = useRef<Promise<void>>(Promise.resolve());
   const [selectedLanguages, setSelectedLanguages] = useState<Record<string, AssessmentLanguage>>({});
   const [busy, setBusy] = useState(false);
   const [confirmation, setConfirmation] = useState<{ message: string; execute: () => Promise<unknown> } | null>(null);
@@ -401,13 +527,26 @@ function AssessmentPage({ taskId }: { taskId: string }) {
   const submitPayload = useRef("");
   const register = useCallback<Register>((key, flush) => { if (flush) flushes.current.set(key, flush); else flushes.current.delete(key); }, []);
   const assessment = useQuery({ queryKey: keys.assessment(taskId), queryFn: () => assessmentApi.get(taskId), refetchInterval: 10000 });
+  const refetchAssessment = assessment.refetch;
   const history = useQuery({ queryKey: ["assessment-history", taskId], queryFn: () => assessmentApi.history(taskId), refetchInterval: 10000 });
   const data = assessment.data;
+  const workspaceFlow = Boolean(data?.workspace_available || data?.workspace_flow);
+  const workspace = useStudentWorkspace(taskId, workspaceFlow);
+  const entered = workspace.entry.isSuccess;
+  useEffect(() => {
+    if (entered) void refetchAssessment();
+  }, [entered, refetchAssessment]);
   const choices = data?.questions.filter((q): q is ChoiceQuestion => q.task_type !== "PROGRAMMING") ?? [];
   const programs = data?.questions.filter((q): q is ProgrammingQuestion => q.task_type === "PROGRAMMING") ?? [];
-  const selectedSection = choices.length ? section : "PROGRAMMING";
-  const selectedQuestion = programs.find((q) => q.id === active) ?? programs[0];
-  const language = selectedQuestion ? selectedLanguages[selectedQuestion.id] ?? selectedQuestion.selected_language : "python";
+  const selectedSection = section ?? (
+    choices.length && !data?.current_question_id ? "CHOICE" : "PROGRAMMING"
+  );
+  const selectedQuestion = programs.find((q) => q.id === (active || data?.current_question_id))
+    ?? programs.find((q) => !q.submitted) ?? programs[0];
+  const language = selectedQuestion
+    ? (selectedQuestion.submitted ? selectedQuestion.selected_language
+      : selectedLanguages[selectedQuestion.id] ?? selectedQuestion.selected_language)
+    : "python";
   const sectionState = data?.sections.find((s) => s.kind === selectedSection);
   const choiceSubmission = history.data?.find(
     (row) => row.kind === "CHOICE" && row.is_current,
@@ -426,7 +565,7 @@ function AssessmentPage({ taskId }: { taskId: string }) {
     programs.length > 0 && programmingState?.status !== "SUBMITTED" ? "编程与报告" : null,
   ].filter((label): label is string => Boolean(label));
   const serverNow = data ? new Date(data.server_time).getTime() + Date.now() - assessment.dataUpdatedAt : Date.now();
-  const disabled = !!sectionState && (
+  const disabled = (workspaceFlow && (!entered || !data?.workspace_flow)) || !!sectionState && (
     sectionState.editable === false || serverNow >= new Date(sectionState.deadline).getTime()
   );
 
@@ -478,6 +617,11 @@ function AssessmentPage({ taskId }: { taskId: string }) {
     setBusy(true);
     try {
       await confirmation.execute(); submitKey.current = null; setConfirmation(null);
+      if (workspaceFlow) {
+        await Promise.all([assessment.refetch(), history.refetch()]);
+        toast.notify("选择题已提交");
+        return;
+      }
       const kind = selectedSection === "CHOICE" ? "CHOICE" : "PROGRAMMING";
       const result = await history.refetch();
       const rows = (result.data ?? []) as HistoryRow[];
@@ -488,6 +632,20 @@ function AssessmentPage({ taskId }: { taskId: string }) {
       toast.notify("交卷成功，已固定本次提交版本"); await assessment.refetch();
     } catch (error) { toast.notify(error instanceof Error ? error.message : "交卷失败，请重试", "error"); }
     finally { setBusy(false); }
+  }
+  function selectProgram(questionId: string) {
+    void switchView(() => {
+      setActive(questionId);
+      if (workspaceFlow && data?.parts?.find((part) => part.kind === "PROGRAMMING")?.editable) {
+        selectionQueue.current = selectionQueue.current.then(async () => {
+          await assessmentApi.selectQuestion(taskId, questionId);
+          await assessment.refetch();
+          setActive((selected) => selected === questionId ? "" : selected);
+        }).catch((error: unknown) => {
+          toast.notify(error instanceof Error ? error.message : "无法保存当前题目", "error");
+        });
+      }
+    });
   }
 
   if (assessment.isPending) return <LoadingState label="正在载入实验题目" />;
@@ -504,7 +662,7 @@ function AssessmentPage({ taskId }: { taskId: string }) {
   return <main className="assessment-workbench">
     <Modal open={confirmation !== null} onClose={() => { if (!busy) setConfirmation(null); }} title="确认交卷"
       actions={<><button className="btn" disabled={busy} onClick={() => setConfirmation(null)}>返回检查</button><button className="btn primary" disabled={busy} onClick={() => void confirmSubmit()}>{busy ? "提交中…" : "确认交卷"}</button></>}>
-      <p>{confirmation?.message}</p><p>提交后本次内容不能再修改，已提交的版本会保留在交卷历史里。</p>
+      <p>{confirmation?.message}</p><p>{workspaceFlow ? "提交后锁定本次答案。" : "提交后本次内容不能再修改，已提交的版本会保留在交卷历史里。"}</p>
     </Modal>
     <header className="assessment-header">
       <div>
@@ -527,34 +685,65 @@ function AssessmentPage({ taskId }: { taskId: string }) {
     <div className="assessment-section-bar">
       <nav className="assessment-sections" aria-label="试卷部分">
         {choices.length > 0 && <button className="btn" aria-pressed={selectedSection === "CHOICE"} onClick={() => void switchView(() => setSection("CHOICE"))}>选择题</button>}
-        {programs.length > 0 && <button className="btn" aria-pressed={selectedSection === "PROGRAMMING"} onClick={() => void switchView(() => setSection("PROGRAMMING"))}>编程与报告</button>}
+        {programs.length > 0 && <button className="btn" aria-pressed={selectedSection === "PROGRAMMING"} onClick={() => void switchView(() => setSection("PROGRAMMING"))}>{workspaceFlow ? "编程题" : "编程与报告"}</button>}
+        {workspaceFlow && data.report_required && <button className="btn" aria-pressed={selectedSection === "REPORT"} onClick={() => void switchView(() => setSection("REPORT"))}>实验报告</button>}
       </nav>
       <p role="status" className="assessment-meta">
-        {partLabels.map((label, index) => <span key={label}>
+        {(workspaceFlow ? (data.parts ?? []).map((part) => {
+          const name = { CHOICE: "选择题", PROGRAMMING: "编程题", REPORT: "报告" }[part.kind];
+          const value = part.score != null ? `${part.score} / 100`
+            : part.status === "SUBMITTED" ? "待评分" : STATUS_LABEL[part.status] ?? "待评分";
+          const progress = part.total_questions ? `（通过 ${part.passed_questions} / ${part.total_questions} 题）` : "";
+          return `${name} ${value}${progress}${part.score_cap === 60 ? "（补做上限 60）" : ""}`;
+        }) : partLabels).map((label, index) => <span key={label}>
           {index > 0 && <span aria-hidden="true"> · </span>}{label}
         </span>)}
       </p>
     </div>
+    {workspaceFlow && workspace.entry.isError && <p role="alert">无法进入实验。
+      <button className="btn sm" onClick={() => void workspace.entry.refetch()}>重试</button></p>}
     {sectionState?.feedback && <p className="assessment-feedback" role="note">教师评语：{sectionState.feedback}</p>}
-    {selectedSection === "CHOICE" ? choices.map((question) => <ChoiceAnswer key={question.id} taskId={taskId} question={question} register={register} disabled={disabled}
-      submittedSelected={disabled ? choiceSubmission?.answers.find((answer) => answer.question_id === question.id)?.selected_option_ids ?? [] : undefined}
-      result={disabled ? sectionState?.questions?.find((item) => item.id === question.id) : undefined} />) : <>
+    {selectedSection === "REPORT" && workspaceFlow
+      ? data.workspace_flow ? <AttachmentReport taskId={taskId} onChange={() => void assessment.refetch()} /> : <LoadingState label="正在准备实验报告" />
+      : selectedSection === "CHOICE" ? choices.map((question) => <ChoiceAnswer key={question.id} taskId={taskId} question={question} register={register} disabled={disabled}
+      submittedSelected={disabled && (!workspaceFlow || choiceState?.status === "SUBMITTED")
+        ? choiceSubmission?.answers.find((answer) => answer.question_id === question.id)?.selected_option_ids : undefined}
+      result={disabled && !workspaceFlow ? sectionState?.questions?.find((item) => item.id === question.id) : undefined} />) : <>
       <nav className="assessment-question-list" aria-label="编程题列表">
         {programs.map((question, index) => <button type="button" className="btn" key={question.id}
-          aria-pressed={question.id === selectedQuestion?.id} onClick={() => void switchView(() => setActive(question.id))}>
-          {index + 1}. {question.title}
+          aria-pressed={question.id === selectedQuestion?.id} onClick={() => selectProgram(question.id)}>
+          {index + 1}. {question.title}{question.submitted ? " · 已通过" : ""}
         </button>)}
       </nav>
+      {workspaceFlow && (!workspace.status || workspace.status === "PENDING") && !workspace.entry.isError
+        && <p role="status">正在准备实验环境…</p>}
+      {workspaceFlow && workspace.status === "FAILED" && <p role="alert">实验环境准备失败。
+        <button className="btn sm" onClick={() => void workspace.entry.refetch()}>重试准备</button></p>}
+      {workspaceFlow && programmingState?.status === "SUBMITTED" && <p role="status">全部编程题已通过，实验已完成。</p>}
       {selectedQuestion && <CodeAnswer key={`${selectedQuestion.id}:${language}`} taskId={taskId} question={selectedQuestion}
-        language={language} register={register} disabled={disabled} onLanguageChange={(nextLanguage) => {
+        language={language} register={register} disabled={disabled || Boolean(selectedQuestion.submitted)}
+        workspaceFlow={workspaceFlow} workspaceReady={workspace.status === "RUNNING"} onSubmitted={(nextQuestion) => {
+          if (nextQuestion) setActive(nextQuestion);
+          toast.notify(nextQuestion ? "本题已通过，进入下一题" : "全部编程题已通过");
+          void assessment.refetch().then(() => {
+            setActive((selected) => selected === nextQuestion ? "" : selected);
+          });
+        }} onLanguageChange={(nextLanguage) => {
           void switchView(() => setSelectedLanguages((current) => ({ ...current, [selectedQuestion.id]: nextLanguage })));
         }} />}
-      {data.report_required !== false && <>
+      {!workspaceFlow && data.report_required !== false && <>
         {data.report_template && <p className="assessment-report-template">教师报告附件：{data.report_template.file_name}<AssetActions assetId={data.report_template.asset_id} title={data.report_template.file_name} /></p>}
         <ReportAnswer taskId={taskId} register={register} disabled={disabled} />
       </>}
     </>}
-    <footer className="panel assessment-submission">
+    {workspaceFlow && selectedSection === "CHOICE" && <footer className="panel assessment-submission">
+      <div className="assessment-submit-row">
+        <p>{choiceState?.score != null ? `选择题成绩 ${choiceState.score} / 100` : "完成作答后提交选择题。"}</p>
+        <button type="button" className="btn primary" disabled={disabled || busy || choiceState?.status === "SUBMITTED"}
+          onClick={() => void submit()}>{choiceState?.status === "SUBMITTED" ? "已提交选择题" : busy ? "提交中…" : "提交选择题卷"}</button>
+      </div>
+    </footer>}
+    {!workspaceFlow && <footer className="panel assessment-submission">
       <div className="assessment-submit-row">
         <div>
           <p>{missingParts.length ? `本实验还有未交部分：${missingParts.join("、")}。` : "本实验各部分已交齐。"}</p>
@@ -573,7 +762,7 @@ function AssessmentPage({ taskId }: { taskId: string }) {
           {submission.kind === "CHOICE" && <button className="btn sm" onClick={() => setViewing(submission)}>查看答卷</button>}
         </p>) : <p className="subtle">还没有提交记录。提交后这里会显示每次交卷的时间与版本。</p>}
       </details>
-    </footer>
+    </footer>}
     <Modal open={viewing !== null} onClose={() => setViewing(null)} wide
       title={viewing ? `第 ${viewing.version_no} 次提交答卷` : ""}
       actions={<button className="btn" onClick={() => setViewing(null)}>关闭</button>}>

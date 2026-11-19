@@ -235,6 +235,7 @@ CELERY_WORKER_HIJACK_ROOT_LOGGER = False
 CELERY_TASK_ROUTES = {
     "apps.experiments.run_assessment_job": {"queue": "q_provision"},
     "apps.experiments.cleanup_assessment_resources": {"queue": "q_provision"},
+    "apps.workspaces.sync_student_workspace": {"queue": "q_provision"},
     "apps.provisioning.*": {"queue": "q_provision"},
     "apps.core.relay_outbox": {"queue": "q_relay"},
     "apps.governance.probe_runtime_adapters": {"queue": "q_provision"},
@@ -253,6 +254,10 @@ CELERY_TASK_ROUTES = {
 }
 NOTIFICATION_DEADLINE_REMINDER_HOURS = int(env("NOTIFICATION_DEADLINE_REMINDER_HOURS", "24"))
 CELERY_BEAT_SCHEDULE = {
+    "dispatch-student-workspaces": {
+        "task": "apps.workspaces.dispatch_student_workspaces",
+        "schedule": 5.0,
+    },
     "cleanup-assessment-objects": {
         "task": "apps.experiments.cleanup_assessment_objects",
         "schedule": 3600.0,

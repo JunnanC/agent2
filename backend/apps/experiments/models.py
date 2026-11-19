@@ -2,7 +2,7 @@ from django.db import models
 
 from apps.accounts.models import User
 from apps.core.identifiers import new_ulid
-from apps.core.models import AppendOnlyModel, VersionedModel
+from apps.core.models import AppendOnlyModel, ObjectAsset, VersionedModel
 from apps.courses.models import Chapter, Course, Enrollment
 from apps.governance.models import ImageAsset, ResourceProfile, RuntimeAdapter
 from apps.labtemplates.models import TemplateVersion
@@ -12,7 +12,10 @@ from .assessment_models import (  # noqa: F401 - register assessment models with
     AnswerDraft,
     AssessmentRun,
     AssessmentSection,
+    AssessmentSession,
     CodeDraft,
+    PartRedo,
+    ProgrammingSubmission,
     QuestionGrade,
     QuestionSubmission,
     ReportGrade,
@@ -143,6 +146,10 @@ class TaskPublication(VersionedModel):
     score_release_at = models.DateTimeField(null=True, blank=True)
     assignment_deadline = models.DateTimeField(null=True, blank=True)
     report_required = models.BooleanField(default=True)
+    report_template_asset = models.ForeignKey(
+        ObjectAsset, on_delete=models.PROTECT, null=True, blank=True,
+        related_name="experiment_report_templates",
+    )
     review_mode = models.CharField(max_length=32, choices=ReviewMode.choices)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.DRAFT)
     published_by = models.ForeignKey(

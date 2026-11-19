@@ -18,6 +18,7 @@ import re
 import secrets
 from typing import Any
 
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
 
@@ -54,7 +55,7 @@ from apps.courses.services import (
 )
 from apps.experiments import demo_content as content
 from apps.experiments.assessment import submit_choices
-from apps.experiments.models import AnswerDraft, ExperimentTask, TaskPublication
+from apps.experiments.models import AnswerDraft, AssessmentSection, ExperimentTask, TaskPublication
 from apps.experiments.services import (
     close_publication,
     create_publication,
@@ -86,6 +87,7 @@ from apps.labtemplates.services import (
     publish_version,
     request_precheck,
 )
+from apps.reports.assessment_reports import attach_template
 from apps.reviews.services import (
     create_rubric,
     create_rubric_version,
@@ -548,6 +550,7 @@ class Command(BaseCommand):
             publication = TaskPublication.objects.filter(course=course, title=title).first()
             if publication is not None:
                 if publication.status == "DRAFT":
+                    publication = self._attach_demo_report_template(publication, spec)
                     publish_publication(
                         course_id=course.public_id,
                         publication_id=publication.public_id,
@@ -628,6 +631,7 @@ class Command(BaseCommand):
                     "review_mode": "MANUAL_WITH_AUTO_CHECK",
                 },
             )
+            publication = self._attach_demo_report_template(publication, spec)
             publish_publication(
                 course_id=course.public_id,
                 publication_id=publication.public_id,
@@ -637,6 +641,23 @@ class Command(BaseCommand):
                 context=self.teacher_ctx,
             )
             self.stdout.write(f"published: {title}")
+
+    @staticmethod
+    def _attach_demo_report_template(
+        publication: TaskPublication, spec: dict[str, Any],
+    ) -> TaskPublication:
+        if not spec["report_required"] or publication.report_template_asset_id:
+            return publication
+        content = (
+            f"# {spec['name']}实验报告\n\n"
+            "姓名与学号：\n\n## 实验过程\n\n## 结果与验证\n\n## 分析与反思\n"
+        )
+        return attach_template(
+            publication=publication, expected_version=publication.row_version,
+            file=SimpleUploadedFile(
+                "实验报告模板.md", content.encode(), content_type="text/markdown",
+            ),
+        )
 
     def _build_version(
         self, course: Course, version: TemplateVersion, spec: dict[str, Any]
@@ -817,6 +838,10 @@ class Command(BaseCommand):
             limit = len(tasks) if spec["code"] == "EXP1" else 3
             for index, task in enumerate(tasks[:limit]):
                 if task.status in {"APPROVED", "UNDER_REVIEW", "COMPLETED"}:
+                    continue
+                if AssessmentSection.objects.filter(
+                    task=task, kind="CHOICE", status="SUBMITTED",
+                ).exists():
                     continue
                 versions = {}
                 for question_index, question in enumerate(questions):

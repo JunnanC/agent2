@@ -75,6 +75,16 @@ def validated_groups(data: Any, scores: list[dict[str, Any]]) -> list[dict[str, 
     return groups
 
 
+def ordered_cases(question: Any, template_version_id: str) -> list[dict[str, str]]:
+    asset, data = read_private_tests(
+        asset_id=question.marking_spec["tests_asset_id"], template_version_id=template_version_id,
+    )
+    if asset.digest_sha256 != question.execution_snapshot.get("tests_digest"):
+        raise RuntimeError("Published assessment tests digest mismatch")
+    groups = validated_groups(data, question.marking_spec["groups"])
+    return question.question_spec["samples"] + [case for group in groups for case in group["cases"]]
+
+
 def grade_groups(
     *, executor: StdioExecutor, language: str, files: dict[str, str],
     groups: list[dict[str, Any]], scores: list[dict[str, Any]], limits: Mapping[str, int],

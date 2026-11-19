@@ -116,3 +116,18 @@ class ReportVersionAttachment(AppendOnlyModel):
         indexes = [
             models.Index(fields=("version", "created_at"), name="reports_ver_attach_version_idx")
         ]
+
+
+class ReportSubmission(VersionedModel):
+    class Status(models.TextChoices):
+        SUBMITTED = "SUBMITTED"
+        RETURNED = "RETURNED"
+        GRADED = "GRADED"
+
+    task = models.OneToOneField(ExperimentTask, on_delete=models.PROTECT)
+    asset = models.OneToOneField(ObjectAsset, on_delete=models.PROTECT)
+    submitted_at = models.DateTimeField()
+    status = models.CharField(max_length=12, choices=Status.choices, default=Status.SUBMITTED)
+    score = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
+    graded_by = models.ForeignKey(User, on_delete=models.PROTECT, null=True, blank=True)
+    feedback = models.CharField(max_length=1000, blank=True, default="")

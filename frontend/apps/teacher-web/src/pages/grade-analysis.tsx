@@ -1,7 +1,8 @@
 import { useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { teachingApi } from "@edu/api-client";
+import { assessmentPartLabel, teachingApi } from "@edu/api-client";
+import { partStatus } from "@/lib/assessment-status";
 import { newIdempotencyKey } from "@edu/auth-client";
 import { Panel, RequestStateView, EmptyState, Modal, useToast } from "@edu/ui";
 import { allPages } from "@/lib/all-pages";
@@ -73,8 +74,43 @@ export function GradeAnalysis({ courseId }: { courseId: string }) {
     onError: error => toast.notify(error instanceof Error ? error.message : "创建补做实验失败", "error"),
   });
   const openRetake = () => { setSelectedEnrollments([]); setStudentSearch(""); setRetake(true); };
-  const average = meanGrade(tasks.map(t => gradeFor(t.public_id ?? "")));
-  return <Panel title={<h2>实验成绩与任务</h2>} actions={<div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}><select className="field" aria-label="选择成绩统计实验" value={publication} onChange={e => { setPublication(e.target.value); setSelectedEnrollments([]); setRetake(false); }}><option value="">全部实验</option>{data.data?.publications.filter(p => !p.retake_of_publication_id).map(p => <option key={p.public_id} value={p.public_id}>{p.title}</option>)}</select><input className="field" type="search" aria-label="搜索全部实验中的学生" placeholder="搜索学生姓名或学号" value={experimentSearch} onChange={e => setExperimentSearch(e.target.value)} /></div>}><RequestStateView loading={data.isLoading} error={data.error} onRetry={() => void data.refetch()} empty={!tasks.length} emptyState={<EmptyState title="暂无已分配实验任务" />}><div className="teacher-summary"><div><span>平均成绩</span><strong>{average?.toFixed(2) ?? "—"}</strong></div><div><span>应提交任务</span><strong>{tasks.length}</strong></div><div><span>未提交任务</span><strong>{tasks.filter(t => !["SUBMITTED", "UNDER_REVIEW", "COMPLETED", "APPROVED"].includes(t.status ?? "")).length}</strong></div></div><p className="subtle">按全部已分配任务计算，未提交按 0 分；已提交待教师确认的成绩暂计 0 分。补做成绩按关联原实验计入。</p><div className="table-wrap"><table className="table"><thead><tr><th>学生</th><th>实验</th><th>任务状态</th><th>已确认成绩</th><th /></tr></thead><tbody>{visibleTasks.map(t => <tr key={t.public_id}><td>{t.student_name ?? "—"}</td><td>{t.title}</td><td>{TASK_STATUS_LABEL[t.status ?? ""] ?? t.status}</td><td>{gradeFor(t.public_id ?? "")}</td><td><Link to={`/courses/${courseId}/reviews?task=${t.public_id}`}>编程与报告评审</Link></td></tr>)}</tbody></table></div>{!visibleTasks.length && <p className="subtle">没有匹配的学生实验。</p>}<button type="button" className="btn" disabled={!publication} onClick={openRetake}>重新发布实验</button></RequestStateView><Modal open={retake} onClose={() => setRetake(false)} title="重新发布实验" wide>
+  const legacyTasks = tasks.filter(task => !task.parts?.length);
+  const average = meanGrade(legacyTasks.map(t => gradeFor(t.public_id ?? "")));
+  return <Panel title={<h2>实验成绩与任务</h2>} actions={<div className="page-actions">
+    <select className="field" aria-label="选择成绩统计实验" value={publication}
+      onChange={(event) => { setPublication(event.target.value); setSelectedEnrollments([]); setRetake(false); }}>
+      <option value="">全部实验</option>
+      {data.data?.publications.filter(p => !p.retake_of_publication_id).map(p =>
+        <option key={p.public_id} value={p.public_id}>{p.title}</option>)}
+    </select>
+    <input className="field" type="search" aria-label="搜索全部实验中的学生" placeholder="搜索学生姓名或学号"
+      value={experimentSearch} onChange={(event) => setExperimentSearch(event.target.value)} />
+  </div>}>
+    <RequestStateView loading={data.isLoading} error={data.error} onRetry={() => void data.refetch()}
+      empty={!tasks.length} emptyState={<EmptyState title="暂无已分配实验任务" />}>
+      <div className="teacher-summary">
+        {legacyTasks.length > 0 && <div><span>旧版实验平均成绩</span><strong>{average?.toFixed(2) ?? "—"}</strong></div>}
+        <div><span>应提交任务</span><strong>{tasks.length}</strong></div>
+        <div><span>未完成任务</span><strong>{tasks.filter(t => !["COMPLETED", "APPROVED"].includes(t.status ?? "")).length}</strong></div>
+      </div>
+      <div className="table-wrap"><table className="table"><thead><tr>
+        <th>学生</th><th>实验</th><th>任务状态</th><th>成绩</th><th />
+      </tr></thead><tbody>
+        {visibleTasks.map(t => <tr key={t.public_id}>
+          <td>{t.student_name ?? "—"}</td><td>{t.title}</td><td>{TASK_STATUS_LABEL[t.status ?? ""] ?? t.status}</td>
+          <td>{t.parts?.length ? t.parts.map(part => <div key={part.kind}>
+            {assessmentPartLabel[part.kind]} · {part.score == null ? "—" : part.score + " / 100"} · {partStatus[part.status]}
+            {part.score_cap === 60 && " · 上限 60"}
+          </div>) : gradeFor(t.public_id ?? "")}</td>
+          <td>{t.workspace_available || t.parts?.length
+            ? <Link to={`/courses/${courseId}/reviews?task=${t.public_id}&tab=reports`}>分项成绩与补做</Link>
+            : <Link to={`/courses/${courseId}/reviews?task=${t.public_id}`}>编程与报告评审</Link>}</td>
+        </tr>)}
+      </tbody></table></div>
+      {!visibleTasks.length && <p className="subtle">没有匹配的学生实验。</p>}
+      <button type="button" className="btn" disabled={!publication} onClick={openRetake}>重新发布实验</button>
+    </RequestStateView>
+    <Modal open={retake} onClose={() => setRetake(false)} title="重新发布实验" wide>
       <p>{data.data?.publications.find(p => p.public_id === publication)?.title}</p>
       <p className="subtle">从本课程有效选课学生中选择补做对象；同一原实验每位学生只能补做一次。</p>
       <input className="field" aria-label="搜索重新发布学生" placeholder="搜索学生" value={studentSearch} onChange={e => setStudentSearch(e.target.value)} />

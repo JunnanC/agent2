@@ -31,8 +31,9 @@ it("starts a programming question from an empty version and creates its default 
   expect(screen.queryByText("导入课程章节")).toBeNull();
   expect(screen.queryByText("新增章节")).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "新增编程题" }));
-  expect(await screen.findByText("公开示例")).toBeInTheDocument();
-  expect(screen.getByText("隐藏测试组（学生不可见）")).toBeInTheDocument();
+  expect(await screen.findByText("样例用例")).toBeInTheDocument();
+  expect(screen.getByText(/学生能查看前两组用例/)).toBeInTheDocument();
+  expect(screen.getByText("其余测试组")).toBeInTheDocument();
   expect(screen.getByLabelText("参考解代码")).toBeInTheDocument();
   expect(screen.queryByLabelText("正确选项 1")).toBeNull();
   expect(teachingApi.createTemplateChapter).toHaveBeenCalledWith("course", "version", { title: "题目" }, 5);
