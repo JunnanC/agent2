@@ -257,7 +257,7 @@ function CodeAnswer({ taskId, question, language, onLanguageChange, register, di
       </h2>
       {question.description && <p className="assessment-question-text">{question.description}</p>}
       {question.instructions && <p className="assessment-question-text">{question.instructions}</p>}
-      {workspaceFlow ? <CaseList question={question} results={caseResults} useInput={setStdin} />
+      {workspaceFlow ? <CaseList question={question} results={caseResults} onUseInput={setStdin} />
       : question.samples.length > 0 && <div className="assessment-samples">
         {question.samples.slice(0, 2).map((sample, index) => <details open key={index}>
           <summary>示例 {index + 1}</summary>
@@ -341,8 +341,8 @@ function CodeAnswer({ taskId, question, language, onLanguageChange, register, di
   </article>;
 }
 
-function CaseList({ question, results, useInput }: {
-  question: ProgrammingQuestion; results: CaseResult[]; useInput: (input: string) => void;
+function CaseList({ question, results, onUseInput }: {
+  question: ProgrammingQuestion; results: CaseResult[]; onUseInput: (input: string) => void;
 }) {
   const total = results.length || question.case_count || question.samples.length;
   return <div className="assessment-samples" aria-label="判题用例">
@@ -367,7 +367,7 @@ function CaseList({ question, results, useInput }: {
             {result?.actual_output !== undefined && <div><p>实际输出</p><pre>{result.actual_output || "（无输出）"}</pre></div>}
             {result?.stderr && <div><p>错误输出</p><pre>{result.stderr}</pre></div>}
           </div>
-          {!question.submitted && <button type="button" className="btn sm" onClick={() => useInput(input)}>填入自测输入</button>}
+          {!question.submitted && <button type="button" className="btn sm" onClick={() => onUseInput(input)}>填入自测输入</button>}
         </> : <p className="subtle">最终运行后显示用例详情</p>}
       </details>;
     })}
@@ -527,14 +527,15 @@ function AssessmentPage({ taskId }: { taskId: string }) {
   const submitPayload = useRef("");
   const register = useCallback<Register>((key, flush) => { if (flush) flushes.current.set(key, flush); else flushes.current.delete(key); }, []);
   const assessment = useQuery({ queryKey: keys.assessment(taskId), queryFn: () => assessmentApi.get(taskId), refetchInterval: 10000 });
+  const refetchAssessment = assessment.refetch;
   const history = useQuery({ queryKey: ["assessment-history", taskId], queryFn: () => assessmentApi.history(taskId), refetchInterval: 10000 });
   const data = assessment.data;
   const workspaceFlow = Boolean(data?.workspace_available || data?.workspace_flow);
   const workspace = useStudentWorkspace(taskId, workspaceFlow);
   const entered = workspace.entry.isSuccess;
   useEffect(() => {
-    if (entered) void assessment.refetch();
-  }, [entered, assessment.refetch]);
+    if (entered) void refetchAssessment();
+  }, [entered, refetchAssessment]);
   const choices = data?.questions.filter((q): q is ChoiceQuestion => q.task_type !== "PROGRAMMING") ?? [];
   const programs = data?.questions.filter((q): q is ProgrammingQuestion => q.task_type === "PROGRAMMING") ?? [];
   const selectedSection = section ?? (

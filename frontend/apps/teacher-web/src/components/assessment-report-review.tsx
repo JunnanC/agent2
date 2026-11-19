@@ -4,11 +4,8 @@ import { assessmentPartLabel, assessmentPartsApi, fileApi } from "@edu/api-clien
 import type { AssessmentPart } from "@edu/api-client";
 import { EmptyState, Panel, StatusBadge, useToast } from "@edu/ui";
 import { formatDateTime } from "@/lib/format";
+import { partStatus } from "@/lib/assessment-status";
 import "./assessment-reviews.css";
-
-export const partStatus: Record<string, string> = {
-  NOT_SUBMITTED: "未提交", IN_PROGRESS: "进行中", SUBMITTED: "已提交", GRADED: "已评分", RETURNED: "待补做",
-};
 
 export function AssessmentReportReview({
   courseId, publicationId, initialTaskId,

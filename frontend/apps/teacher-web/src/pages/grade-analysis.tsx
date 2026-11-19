@@ -2,7 +2,7 @@ import { useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { assessmentPartLabel, teachingApi } from "@edu/api-client";
-import { partStatus } from "@/components/assessment-report-review";
+import { partStatus } from "@/lib/assessment-status";
 import { newIdempotencyKey } from "@edu/auth-client";
 import { Panel, RequestStateView, EmptyState, Modal, useToast } from "@edu/ui";
 import { allPages } from "@/lib/all-pages";
