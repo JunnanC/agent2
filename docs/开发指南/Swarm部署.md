@@ -6,7 +6,7 @@
 
 部署模板已移除旧工作区网关、常驻学生容器、参考容器、存储 worker 及上游令牌。保留 worker、Beat、对象存储与扫描服务。学生页面不公开容器端口，不挂载应用密钥或 Docker socket。
 
-ACR/CD 的实际本地 Docker 发布入口见 [ACR-CD](ACR-CD.md)。该流程先检查既有卷与配置、扫描服务健康和资源归属，备份后执行迁移；新链路需要 Beat 与 ClamAV，原小内存主机应单独验证容量。脚本预检拒绝仍声明旧服务的 override，不会隐式创建空业务库。
+ACR/CD 的实际本地 Docker 发布入口见 `scripts/cd/deploy.sh`。该流程先检查既有卷与配置、扫描服务健康和资源归属，备份后执行迁移；新链路需要 Beat 与 ClamAV，原小内存主机应单独验证容量。脚本预检拒绝仍声明旧服务的 override，不会隐式创建空业务库。
 
 部署命令以 `scripts/deploy` 当前文件为准。`docker stack config --skip-interpolation` 只证明模板语法，不证明运行成功。生产 DNS/TLS、存储、备份恢复、镜像回滚、并发容量和多节点故障必须在目标环境验收；本地浏览器与容器测试不能代替这些结论。
 

@@ -12,7 +12,7 @@ function jsonResponse(status: number, body: unknown, headers?: Record<string, st
 const okEnvelope = { data: {}, meta: { trace_id: "t1" } };
 
 /**
- * 契约对齐测试（对应 docs/frontend/frontend-backend-integration-guide.md）：
+ * 契约对齐测试（对应 docs/前端/前端开发与联调.md）：
  * - row_version 实测为数字，前端需转字符串展示
  * - allowed_actions 实测为大写（ENTER / REQUEST_EXTENSION），前端统一小写
  * - current_failure 为对象（可以为空对象），非数组

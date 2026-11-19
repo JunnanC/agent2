@@ -1,4 +1,4 @@
-# Experimental Platform
+# 教学实验平台
 
 教学实验平台，包含 React 学生端、教师端和管理端，以及 Django API、Celery 后台任务、Docker 短生命周期代码执行、报告审核和受控 Agent 等模块。
 
@@ -26,7 +26,7 @@ npm run dev:student   # 教师端 dev:teacher，管理端 dev:admin
 
 开发端口以各应用 `vite.config.ts` 为准。Vite 代理 `/api`、`/files` 并转发门户 Host；后端地址默认 `http://127.0.0.1:8080`，可用 `VITE_DEV_API_TARGET` 覆盖。部署构建仍使用 `http://*.localhost:8080`。
 
-The edge entry point listens on port `8080`. Use the hostnames below so portal cookies and trusted host mapping remain isolated:
+入口监听 `8080`。请按下列主机名访问，以保持各门户的 Cookie 与可信 Host 映射相互隔离：
 
 | 门户 | 地址 |
 | --- | --- |

@@ -1,5 +1,5 @@
 /**
- * 门户请求层（对接 docs/frontend/frontend-backend-integration-guide.md）：
+ * 门户请求层（对接 docs/前端/前端开发与联调.md）：
  * - Django session/cookie 认证：credentials: "include"，不用 Bearer。
  * - CSRF：首次写请求前调用 GET /auth/csrf 设置 csrftoken cookie，请求自动携带 X-CSRFToken；CSRF_FAILED 重试一次。
  * - 幂等：需要幂等的命令必须带 Idempotency-Key；同一业务命令重试复用同一 key；IN_PROGRESS 延迟重试。

@@ -1,5 +1,5 @@
 /**
- * 业务资源类型（对齐 docs/frontend/frontend-backend-integration-guide.md 第 7 章）。
+ * 业务资源类型（对齐 docs/前端/前端开发与联调.md 第 7 章）。
  * 生成类型可用后（npm run generate:api），这里以本地宽松结构承载，最终以 schema 为准校验。
  */
 
