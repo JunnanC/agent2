@@ -97,8 +97,19 @@
 .student-portal .course-exit-actions{padding:0 24px 16px}
 .student-portal .course-exit-actions .btn{border:0;background:transparent;color:var(--muted);padding:4px 0;min-height:32px}
 .student-portal .student-timetable .item,.student-portal .student-learning-history .item{padding:20px 0;gap:24px;flex-wrap:wrap}
-.student-portal .student-timetable form{background:var(--surface-soft);padding:20px;border:1px solid var(--line);border-radius:8px}
-.student-portal .student-timetable input[type=file]{max-width:100%;margin:8px 12px 12px 0}
+.student-portal .student-courses-heading{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,24rem);gap:12px 16px}
+.student-portal .student-courses-heading>.btn{justify-self:end;white-space:nowrap}
+.student-portal .student-timetable-upload{width:100%;max-width:24rem;display:grid;grid-template-columns:minmax(0,1fr);gap:6px;background:var(--surface-soft);padding:10px 12px;border:1px solid var(--line);border-radius:8px}
+.student-portal .student-timetable-upload .form-label,.student-portal .student-timetable-upload p{margin:0}
+.student-portal .student-timetable-upload p{color:var(--muted)}
+.student-portal .student-timetable-upload-controls{display:flex;align-items:center;gap:8px}
+.student-portal .student-timetable-upload-controls input{flex:1;min-width:0;font:inherit;font-size:12px}
+.student-portal .student-timetable-upload-controls .btn{flex:none;white-space:nowrap;min-height:32px;padding:4px 10px}
+@media(max-width:760px){
+.student-portal .student-courses-heading{grid-template-columns:minmax(0,1fr) auto}
+.student-portal .student-timetable-upload-slot{grid-column:1 / -1}
+.student-portal .student-timetable-upload-controls .btn{min-height:44px}
+}
 .student-portal .student-timetable .form-label{margin-top:0}
 .student-portal .student-timetable .subtle{margin-top:12px}
 .student-portal .student-learning-history summary{cursor:pointer;padding:12px 0}
