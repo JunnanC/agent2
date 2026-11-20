@@ -15,6 +15,23 @@ const questionTypeLabels: Record<TeacherQuestion["task_type"], string> = {
 };
 type Option = { id: string; text: string };
 
+function createQuestionItemId(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  // Set the UUID v4 version and variant bits.
+  bytes[6] = (bytes[6]! & 0x0f) | 0x40;
+  bytes[8] = (bytes[8]! & 0x3f) | 0x80;
+  const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
+function createEmptyOption(): Option {
+  return { id: createQuestionItemId(), text: "" };
+}
+
+function createInitialOptions(): Option[] {
+  return [createEmptyOption(), createEmptyOption()];
+}
+
 export function AssessmentQuestions({ courseId, templateId, version, refresh }: {
   courseId: string; templateId: string; version?: TemplateVersion; refresh: () => Promise<unknown>;
 }) {
@@ -29,7 +46,7 @@ export function AssessmentQuestions({ courseId, templateId, version, refresh }: 
   const [title, setTitle] = useState("");
   const [stem, setStem] = useState("");
   const [points, setPoints] = useState("5");
-  const [options, setOptions] = useState<Option[]>([{ id: crypto.randomUUID(), text: "" }, { id: crypto.randomUUID(), text: "" }]);
+  const [options, setOptions] = useState(createInitialOptions);
   const [correct, setCorrect] = useState<string[]>([]);
   const [explanation, setExplanation] = useState("");
   const [allowed, setAllowed] = useState<AssessmentLanguage[]>(["python"]);
@@ -91,7 +108,7 @@ export function AssessmentQuestions({ courseId, templateId, version, refresh }: 
     setTitle("");
     setStem("");
     setPoints("5");
-    setOptions([{ id: crypto.randomUUID(), text: "" }, { id: crypto.randomUUID(), text: "" }]);
+    setOptions(createInitialOptions());
     setCorrect([]);
     setExplanation("");
     setAllowed(["python"]);
@@ -247,7 +264,7 @@ export function AssessmentQuestions({ courseId, templateId, version, refresh }: 
             const reordered = [...options]; [reordered[index - 1], reordered[index]] = [reordered[index]!, reordered[index - 1]!]; setOptions(reordered);
           }}>选项上移</button>
         </div>)}
-        <button className="btn" disabled={options.length >= 6} onClick={() => setOptions([...options, { id: crypto.randomUUID(), text: "" }])}>添加选项</button>
+        <button className="btn" disabled={options.length >= 6} onClick={() => setOptions([...options, createEmptyOption()])}>添加选项</button>
         <label>解析<textarea className="field" value={explanation} onChange={(e) => setExplanation(e.target.value)} /></label>
       </> : <>
         <p>允许语言</p>{languages.map((language) => <label key={language} style={{ marginRight: 16 }}>
@@ -303,7 +320,7 @@ export function AssessmentQuestions({ courseId, templateId, version, refresh }: 
           <button className="btn" onClick={() => setGroups(groups.map((g, i) => i === index ? { ...g, cases: [...g.cases, { input: "", output: "" }] } : g))}>本组新增用例</button>
           <button className="btn" disabled={groups.length <= 1} onClick={() => setGroups(groups.filter((_, i) => i !== index))}>删除测试组</button>
         </div>)}
-        <button className="btn" onClick={() => setGroups([...groups, { id: crypto.randomUUID(), score: "1", cases: [{ input: "", output: "" }] }])}>新增测试组</button>
+        <button className="btn" onClick={() => setGroups([...groups, { id: createQuestionItemId(), score: "1", cases: [{ input: "", output: "" }] }])}>新增测试组</button>
         <label>参考解语言<select className="field" value={referenceLanguage} disabled={!allowed.length} onChange={(e) => setReferenceLanguage(e.target.value as AssessmentLanguage)}>
           {allowed.map((language) => <option key={language}>{language}</option>)}
         </select></label>

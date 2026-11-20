@@ -42,7 +42,7 @@ TOOLCHAIN_CATALOG: Final[tuple[ToolchainEntry, ...]] = (
     {
         "language": "java",
         "toolchain_id": "openjdk",
-        "versions": ({"version": "17.0.21", "default": True},),
+        "versions": ({"version": "17.0.21.1", "default": True},),
         "default_standard": "17",
         "standards": ("17",),
         "entrypoint": "Main.java",
@@ -144,10 +144,14 @@ def validate_frozen_language_policy(value: Any, *, language: str | None) -> dict
     for selected_language in allowed_languages:
         entry = TOOLCHAINS_BY_LANGUAGE.get(selected_language)
         version = default_versions[selected_language]
+        # Accept Java metadata frozen before the security update.
         if (
             entry is None
             or not isinstance(version, str)
-            or version not in {item["version"] for item in entry["versions"]}
+            or (
+                (selected_language, version) != ("java", "17.0.21")
+                and version not in {item["version"] for item in entry["versions"]}
+            )
         ):
             raise TemplateValidationError(detail={"toolchain": "unknown_frozen_toolchain"})
     if language is None:
@@ -166,9 +170,6 @@ def validate_frozen_language_policy(value: Any, *, language: str | None) -> dict
             or value["mode"] != "FIXED"
             or value["language"] != language
             or value["toolchain_id"] != entry["toolchain_id"]
-            or value["toolchain_version"] not in {
-                item["version"] for item in entry["versions"]
-            }
             or value["language_standard"] not in entry["standards"]
             or allowed_languages != [language]
             or default_versions.get(language) != value["toolchain_version"]

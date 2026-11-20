@@ -36,7 +36,11 @@ from ..services import (
     update_version,
 )
 from ..tasks import prepare_experiment_image_task
-from ..toolchains import TOOLCHAIN_CATALOG
+from ..toolchains import (
+    TOOLCHAIN_CATALOG,
+    resolve_language_policy,
+    validate_frozen_language_policy,
+)
 from .helpers import context, create_template_version
 
 
@@ -62,6 +66,18 @@ class TemplateServiceTests(TestCase):
             all(any(version["default"] for version in item["versions"]) for item in available)
         )
         self.assertTrue(all(len(item["versions"]) == 1 for item in TOOLCHAIN_CATALOG))
+
+    def test_java_security_update_preserves_frozen_language_policy(self) -> None:
+        policy = resolve_language_policy(
+            language="java", toolchain_version=None, language_standard=None
+        )
+        self.assertEqual(policy["toolchain_version"], "17.0.21.1")
+        frozen = {
+            **policy,
+            "toolchain_version": "17.0.21",
+            "default_versions": {"java": "17.0.21"},
+        }
+        self.assertEqual(validate_frozen_language_policy(frozen, language="java"), frozen)
 
     def test_prepare_task_payload_contains_no_build_args(self) -> None:
         self.assertNotIn("build_args", str(inspect.signature(prepare_experiment_image_task.run)))
