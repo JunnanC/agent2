@@ -13,6 +13,33 @@ vi.mock("@edu/api-client", () => ({
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  vi.unstubAllGlobals();
+});
+
+it("supports draft editing without randomUUID", () => {
+  const getRandomValues = vi.fn(crypto.getRandomValues.bind(crypto));
+  vi.stubGlobal("crypto", { getRandomValues });
+  render(<ToastProvider><AssessmentQuestions
+    courseId="course" templateId="template"
+    version={{
+      public_id: "version", status: "DRAFT", row_version: 5,
+      chapters: [{ public_id: "chapter-1", title: "题目", tasks: [] }],
+    } as never}
+    refresh={async () => undefined}
+  /></ToastProvider>);
+
+  expect(screen.getByRole("region", { name: "实验题目编辑" })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "新增选择题" }));
+  fireEvent.click(screen.getByRole("button", { name: "添加选项" }));
+  const callsAfterAddingOption = getRandomValues.mock.calls.length;
+  fireEvent.click(screen.getByLabelText("正确选项 3"));
+  fireEvent.change(screen.getByLabelText("选项 3"), { target: { value: "正确答案" } });
+  expect(screen.getByLabelText("正确选项 3")).toBeChecked();
+  expect(getRandomValues).toHaveBeenCalledTimes(callsAfterAddingOption);
+
+  fireEvent.click(screen.getByRole("button", { name: "新增编程题" }));
+  fireEvent.click(screen.getByRole("button", { name: "新增测试组" }));
+  expect(screen.getAllByLabelText("本组分值")).toHaveLength(2);
 });
 
 it("starts a programming question from an empty version and creates its default group", async () => {
