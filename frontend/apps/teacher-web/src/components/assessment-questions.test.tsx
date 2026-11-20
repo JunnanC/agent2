@@ -13,6 +13,46 @@ vi.mock("@edu/api-client", () => ({
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  vi.unstubAllGlobals();
+});
+
+it("edits a draft when only getRandomValues is available", async () => {
+  const getRandomValues = vi.fn(crypto.getRandomValues.bind(crypto));
+  vi.stubGlobal("crypto", { getRandomValues });
+  render(<ToastProvider><AssessmentQuestions
+    courseId="course" templateId="template"
+    version={{
+      public_id: "version", status: "DRAFT", row_version: 5,
+      chapters: [{ public_id: "chapter-1", title: "题目", tasks: [] }],
+    } as never}
+    refresh={async () => undefined}
+  /></ToastProvider>);
+
+  expect(screen.getByRole("region", { name: "实验题目编辑" })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "新增选择题" }));
+  fireEvent.click(screen.getByRole("button", { name: "添加选项" }));
+  const callsAfterAddingOption = getRandomValues.mock.calls.length;
+  fireEvent.change(screen.getByLabelText("标题"), { target: { value: "选择题" } });
+  for (const [index, text] of ["A", "B", "C"].entries()) {
+    fireEvent.change(screen.getByLabelText(`选项 ${index + 1}`), { target: { value: text } });
+  }
+  fireEvent.click(screen.getByLabelText("正确选项 3"));
+  expect(getRandomValues).toHaveBeenCalledTimes(callsAfterAddingOption);
+  fireEvent.click(screen.getByRole("button", { name: "保存题目" }));
+  await waitFor(() => expect(screen.queryByRole("button", { name: "保存题目" })).not.toBeInTheDocument());
+
+  const savedQuestion = vi.mocked(assessmentTeachingApi.saveQuestion).mock.calls[0]?.[3];
+  const options = savedQuestion?.question_spec.options as Array<{ id: string; text: string }>;
+  expect(options.map(({ text }) => text)).toEqual(["A", "B", "C"]);
+  expect(new Set(options.map(({ id }) => id)).size).toBe(3);
+  for (const { id } of options) {
+    expect(id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+  }
+  expect(savedQuestion?.marking_spec.correct_option_ids).toEqual([options[2]?.id]);
+
+  fireEvent.click(screen.getByRole("button", { name: "新增编程题" }));
+  fireEvent.click(screen.getByRole("button", { name: "新增测试组" }));
+  expect(screen.getAllByLabelText("本组分值")).toHaveLength(2);
 });
 
 it("starts a programming question from an empty version and creates its default group", async () => {
