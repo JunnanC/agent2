@@ -17,6 +17,7 @@ from .assessment_workers import (  # noqa: F401
     dispatch_assessments,
     run_assessment_job,
 )
+from .environments import run_environment_test, sample_environment_usage  # noqa: F401
 from .events import PUBLICATION_FAILED
 from .models import TaskPublication
 from .services import assign_late_enrollment_task as assign_late_enrollment_service

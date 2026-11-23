@@ -2,6 +2,7 @@ from typing import Any
 
 from celery import shared_task
 
+from .assessment_review import review_word_report  # noqa: F401
 from .services import fail_report_attachment_scan, scan_report_attachment
 
 

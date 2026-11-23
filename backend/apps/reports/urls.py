@@ -4,6 +4,7 @@ from .assessment_views import (
     AssessmentPartsView,
     PublicationReportTemplateView,
     StudentReportView,
+    StudentReviewedReportDownloadView,
     TeachingReportListView,
     TeachingReportView,
 )
@@ -16,6 +17,8 @@ from .views import (
 
 urlpatterns = [
     path("tasks/<str:task_id>/report", StudentReportView.as_view(), name="student-report"),
+    path("tasks/<str:task_id>/report/reviewed", StudentReviewedReportDownloadView.as_view(),
+         name="student-reviewed-report"),
     path(
         "teaching/courses/<str:course_id>/experiments/<str:publication_id>/report-template",
         PublicationReportTemplateView.as_view(), name="publication-report-template",

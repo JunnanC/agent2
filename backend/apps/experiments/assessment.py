@@ -63,6 +63,8 @@ def _task(
         publication = TaskPublication.objects.select_for_update().get(pk=task.publication_id)
         task = ExperimentTask.objects.select_for_update().get(pk=task.pk)
         task.publication = publication
+        if publication.grades_published_at:
+            raise StateConflict(detail={"publication": "grades_locked"})
         if part and session_for(task):
             require_part_open(task, part)
             return task
@@ -226,7 +228,18 @@ def _legacy_case_metadata(question_id: str) -> tuple[int, list[dict[str, str]]]:
     cases = ordered_cases(
         question, question.publication_chapter.publication.template_version.public_id,
     )
-    return len(cases), cases[:2]
+    return len(cases), question.question_spec["samples"][:2]
+
+
+def public_case_results(
+    question: PublicationTask, rows: list[dict[str, Any]], *, direct: bool = False,
+) -> list[dict[str, Any]]:
+    samples = question.question_spec.get("samples", [])
+    visible_count = len(samples) if direct else min(2, len(samples))
+    return [
+        row if index < visible_count else {"number": row["number"], "passed": row["passed"]}
+        for index, row in enumerate(rows)
+    ]
 
 
 def assessment_data(*, actor: User, task_id: str) -> dict[str, Any]:
@@ -234,7 +247,10 @@ def assessment_data(*, actor: User, task_id: str) -> dict[str, Any]:
     questions = list(PublicationTask.objects.filter(
         publication_chapter__publication_id=task.publication_id, task_type__in=QUESTION_TYPES,
     ).order_by("publication_chapter__sort_order", "sort_order", "id"))
-    if not questions:
+    publication = task.publication
+    direct = publication.direct_assessment
+    released = bool(publication.grades_published_at)
+    if not questions and not (direct and publication.report_required):
         raise ResourceNotFound()
     now = timezone.now()
     session = session_for(task)
@@ -243,7 +259,7 @@ def assessment_data(*, actor: User, task_id: str) -> dict[str, Any]:
         row.question_id: row for row in ProgrammingSubmission.objects.filter(task=task)
         .select_related("code_snapshot")
     } if session else {}
-    answer_visible = not session and now >= task.publication.window_end
+    answer_visible = released if direct else not session and now >= publication.window_end
     section_rows = {
         row.kind: row
         for row in AssessmentSection.objects.filter(task=task).select_related("current_submission")
@@ -261,7 +277,7 @@ def assessment_data(*, actor: User, task_id: str) -> dict[str, Any]:
             )
             if available:
                 submission = passed.get(question.pk)
-                samples = question.execution_snapshot.get("visible_cases", value["samples"][:2])
+                samples = value["samples"] if direct else value["samples"][:2]
                 case_count = question.execution_snapshot.get("case_count")
                 if session and case_count is None and question.execution_snapshot.get(
                     "tests_digest",
@@ -270,13 +286,17 @@ def assessment_data(*, actor: User, task_id: str) -> dict[str, Any]:
                     with suppress(Exception):
                         case_count, samples = _legacy_case_metadata(question.public_id)
                 value.update(
-                    samples=samples[:2], submitted=bool(submission), case_count=case_count,
-                    case_results=submission.case_results if submission else [],
+                    samples=samples, submitted=bool(submission), case_count=case_count,
+                    case_results=public_case_results(
+                        question, submission.case_results, direct=direct,
+                    ) if submission else [],
                 )
                 if submission:
                     value["selected_language"] = submission.code_snapshot.language
         elif answer_visible:
             value["correct_option_ids"] = question.marking_spec["correct_option_ids"]
+            value["explanation"] = question.marking_spec.get("explanation", "")
+        if direct and released:
             value["explanation"] = question.marking_spec.get("explanation", "")
         values.append(value)
     sections = []
@@ -291,12 +311,13 @@ def assessment_data(*, actor: User, task_id: str) -> dict[str, Any]:
                 "COMPLETED", "CANCELLED", "EXPIRED", "FAILED", "ARCHIVING",
             } and now < deadline,
         })
-    parts = part_scores(task) if session else []
-    if session:
+    parts = part_scores(task, student=True) if session or direct and released else []
+    if session or direct and released:
         sections = [
             {**section, **next(part for part in parts if part["kind"] == section["kind"])}
             for section in sections
         ]
+    report_template = publication.assessment_report_template
     return {
         "task_id": task.public_id, "questions": values, "sections": sections,
         "title": task.publication.title,
@@ -308,14 +329,17 @@ def assessment_data(*, actor: User, task_id: str) -> dict[str, Any]:
         "all_submitted": all(s["status"] == "SUBMITTED" for s in sections),
         "server_time": now, "choice_answers_visible": answer_visible,
         "workspace_available": available, "workspace_flow": bool(session),
+        "direct_assessment": direct, "grades_published_at": publication.grades_published_at,
+        "guidance": publication.experiment_spec.get("guidance", ""),
+        "report_requirements": publication.experiment_spec.get("report_requirements", ""),
         "current_question_id": session.current_question.public_id
         if session and session.current_question_id else None,
         "parts": parts,
         "report_required": task.publication.report_required,
         "report_template": ({
-            "asset_id": task.publication.template_version.report_template_asset.public_id,
-            "file_name": task.publication.template_version.report_template_asset.original_name,
-        } if task.publication.template_version.report_template_asset_id else None),
+            "asset_id": report_template.public_id,
+            "file_name": report_template.original_name,
+        } if report_template else None),
     }
 
 
@@ -325,6 +349,8 @@ def submit_choices(
 ) -> SectionSubmission:
     task = _task(actor, task_id, write=True, part="CHOICE")
     session = session_for(task)
+    if task.publication.direct_assessment and not session:
+        raise StateConflict(detail={"section": "workspace_required"})
     if not session:
         _writable(task, "CHOICE")
     questions = list(PublicationTask.objects.filter(
@@ -392,7 +418,7 @@ def submit_programming(
     from .models import CodeDraft
 
     task = _task(actor, task_id, write=True)
-    if session_for(task):
+    if task.publication.direct_assessment or session_for(task):
         raise StateConflict(detail={"section": "final_run_required"})
     _writable(task, "PROGRAMMING")
     questions = list(PublicationTask.objects.filter(
@@ -514,6 +540,8 @@ def report_draft(
     from apps.reports.models import ReportDraft
 
     task = _task(actor, task_id, write=body_markdown is not None)
+    if task.publication.direct_assessment:
+        raise ResourceNotFound()
     if not PublicationTask.objects.filter(
         publication_chapter__publication_id=task.publication_id, task_type="PROGRAMMING",
     ).exists():
@@ -545,7 +573,7 @@ def request_run(
     from apps.workspaces.code_snapshots import create_code_snapshot
 
     task = _task(actor, task_id, write=True)
-    if session_for(task):
+    if task.publication.direct_assessment or session_for(task):
         raise StateConflict(detail={"run": "workspace_required"})
     _writable(task, "PROGRAMMING")
     question = _question(task, question_id)
@@ -605,6 +633,8 @@ def section_result(section: AssessmentSection, *, student: bool) -> dict[str, An
             task.publication.score_release_at or task.publication.window_end,
         )
     )
+    if student and task.publication.direct_assessment:
+        visible = bool(task.publication.grades_published_at)
     result: dict[str, Any] = {
         "kind": section.kind, "status": section.status, "row_version": section.row_version,
         "max_score": str(maximum), "score": None, "questions": [],

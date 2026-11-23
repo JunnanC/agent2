@@ -293,7 +293,10 @@ def publication_data(item: TaskPublication) -> dict[str, Any]:
         "course_id": item.course.public_id,
         "course_chapter_id": item.course_chapter.public_id if item.course_chapter else None,
         "retake_of_publication_id": (item.retake_of.public_id if item.retake_of_id else None),
-        "template_version_id": item.template_version.public_id,
+        "template_version_id": item.template_version.public_id if item.template_version_id else "",
+        "direct_assessment": item.direct_assessment,
+        "grades_published_at": item.grades_published_at,
+        "environment_id": item.environment.public_id if item.environment_id else None,
         "rubric_version_id": item.rubric_version.public_id if item.rubric_version else None,
         "template_spec_digest": template_spec_digest,
         "template_digest": item.template_digest,
@@ -442,7 +445,7 @@ def task_data(
         "assessment_available": PublicationTask.objects.filter(
             publication_chapter__publication_id=item.publication_id,
             task_type__in=("SINGLE_CHOICE", "MULTIPLE_CHOICE", "PROGRAMMING"),
-        ).exists(),
+        ).exists() or (item.publication.direct_assessment and item.publication.report_required),
         "public_id": item.public_id,
         "course_id": item.course.public_id,
         "course_chapter_id": item.publication.course_chapter.public_id
@@ -453,9 +456,10 @@ def task_data(
         "student_id": item.student.public_id,
         "student_name": item.student.display_name,
         "title": item.publication.title,
-        "template_version_id": item.template_version.public_id,
-        "template_name": template.template.name,
-        "template_spec_digest": item.template_spec_digest or template.spec_digest,
+        "template_version_id": template.public_id if template else "",
+        "template_name": template.template.name if template else "",
+        "template_spec_digest": item.template_spec_digest
+        or (template.spec_digest if template else ""),
         "runtime_type": item.runtime_type,
         "runtime_adapter_id": adapter.public_id if adapter else None,
         "runtime_adapter_driver": item.runtime_adapter_driver

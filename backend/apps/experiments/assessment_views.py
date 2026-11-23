@@ -140,7 +140,8 @@ class ChoiceSubmitView(APIView):
 
             if session_for(submission.section.task):
                 data["part"] = next(
-                    row for row in part_scores(submission.section.task) if row["kind"] == "CHOICE"
+                    row for row in part_scores(submission.section.task, student=True)
+                    if row["kind"] == "CHOICE"
                 )
             return StoredResponse(201, _body(request, data), {})
 
@@ -264,8 +265,14 @@ class WorkspaceQuestionView(APIView):
 
 
 def attempt_data(run: AssessmentRun) -> dict[str, Any]:
+    from .assessment import public_case_results
+
     return {
-        **run_data(run), "case_results": run.case_results, "submitted": run.submitted,
+        **run_data(run),
+        "case_results": public_case_results(
+            run.question, run.case_results, direct=run.task.template_version_id is None,
+        ),
+        "submitted": run.submitted,
         "duration_ms": run.duration_ms,
         "next_question_id": run.next_question.public_id if run.next_question_id else None,
     }

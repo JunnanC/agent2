@@ -2,7 +2,7 @@ import { AssetActions } from "@/components/asset-actions";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { assessmentApi, reportApi } from "@edu/api-client";
+import { assessmentApi, labAssessmentApi, reportApi } from "@edu/api-client";
 import type { Assessment, AssessmentLanguage, CaseResult, ChoiceQuestion, ProgrammingQuestion } from "@edu/api-client";
 import { newIdempotencyKey } from "@edu/auth-client";
 import { keys } from "@edu/query-keys";
@@ -119,9 +119,10 @@ function useAutosave<T>({ load, save, register, draftKey, immediate = false, sav
   return { value, change, status, touched, failed: /保存失败|版本冲突/.test(status), flush };
 }
 
-function ChoiceAnswer({ taskId, question, register, disabled, submittedSelected, result }: {
+function ChoiceAnswer({ taskId, question, register, disabled, submittedSelected, result, direct }: {
   taskId: string; question: ChoiceQuestion; register: Register; disabled: boolean;
   submittedSelected?: string[]; result?: { score: string | null; max_score: string };
+  direct?: boolean;
 }) {
   const draft = useAutosave<string[]>({
     draftKey: question.id, register, immediate: true,
@@ -136,7 +137,7 @@ function ChoiceAnswer({ taskId, question, register, disabled, submittedSelected,
       : sameOptions(submittedSelected, question.correct_option_ids) ? "正确" : "错误";
   }
   return <article className="panel assessment-choice">
-    <h2 className="assessment-question-title">{question.title} <small>{question.max_score} 分</small></h2>
+    <h2 className="assessment-question-title">{question.title} {!direct && <small>{question.max_score} 分</small>}</h2>
     <p className="assessment-question-text">{question.description}</p>
     <fieldset disabled={disabled || draft.value === null}>
       <legend>{question.task_type === "SINGLE_CHOICE" ? "单选题" : "多选题（完全正确才得分）"}</legend>
@@ -374,7 +375,9 @@ function CaseList({ question, results, onUseInput }: {
   </div>;
 }
 
-function AttachmentReport({ taskId, onChange }: { taskId: string; onChange: () => void }) {
+function AttachmentReport({ taskId, onChange, requirements }: {
+  taskId: string; onChange: () => void; requirements?: string;
+}) {
   const toast = useToast();
   const report = useQuery({
     queryKey: ["attachment-report", taskId], queryFn: () => assessmentApi.attachmentReport(taskId),
@@ -408,19 +411,27 @@ function AttachmentReport({ taskId, onChange }: { taskId: string; onChange: () =
     <h2>实验报告</h2>
     <p>{data.redo_until ? "补做截止" : "提交截止"} {formatDateTime(data.deadline)}</p>
     {data.status === "RETURNED" && <p role="status">教师已退回，请在补做截止前重交。</p>}
+    {requirements && <div className="assessment-guidance-text">{requirements}</div>}
     {data.template
       ? <div className="assessment-report-template"><span>教师模板 · {data.template.file_name}</span>
         <AssetActions assetId={data.template.asset_id} title={data.template.file_name} /></div>
-      : <p className="subtle">教师尚未上传报告模板。</p>}
+      : !data.direct_assessment && <p className="subtle">教师尚未上传报告模板。</p>}
     {data.attachment && <div className="assessment-report-template">
       <span>当前附件 · {data.attachment.file_name}{data.submitted_at && ` · ${formatDateTime(data.submitted_at)}`}</span>
       <AssetActions assetId={data.attachment.asset_id} title={data.attachment.file_name} />
     </div>}
-    {data.score != null && <p>报告成绩 {data.score} / 100</p>}
-    {data.score_cap === 60 && <p className="subtle">本次报告评分上限 60 分。</p>}
+    {data.score != null && <p>报告成绩 {data.score} / {data.max_score}</p>}
+    {data.score_cap < Number(data.max_score) && <p className="subtle">本次报告评分上限 {data.score_cap} 分。</p>}
     {data.feedback && <p>教师评语 · {data.feedback}</p>}
+    {data.released_at && data.attachment && data.status === "GRADED" && <>
+      {data.comments?.length ? <ol aria-label="教师批注">{data.comments.map((comment, index) =>
+        <li key={index}>第 {comment.paragraph} 段 · {comment.text}</li>)}</ol> : null}
+      <p>{data.signer} · {formatDateTime(data.released_at)}</p>
+      <a className="btn" href={labAssessmentApi.reviewedReportUrl(taskId)}>下载已批阅 Word</a>
+    </>}
     {data.editable && <form ref={form} className="assessment-report-upload" onSubmit={(event) => { event.preventDefault(); void upload(); }}>
-      <label>报告附件<input type="file" accept=".pdf,.docx,.md,.txt" disabled={uploading}
+      <label>{data.direct_assessment ? "Word 报告" : "报告附件"}<input type="file"
+        accept={data.direct_assessment ? ".docx" : ".pdf,.docx,.md,.txt"} disabled={uploading}
         onChange={(event) => {
           uploadKey.current = undefined;
           setFile(event.currentTarget.files?.[0] ?? null);
@@ -530,6 +541,11 @@ function AssessmentPage({ taskId }: { taskId: string }) {
   const refetchAssessment = assessment.refetch;
   const history = useQuery({ queryKey: ["assessment-history", taskId], queryFn: () => assessmentApi.history(taskId), refetchInterval: 10000 });
   const data = assessment.data;
+  const publishedGrade = useQuery({
+    queryKey: ["published-experiment-grade", taskId],
+    queryFn: () => labAssessmentApi.publishedGrade(taskId),
+    enabled: Boolean(data?.grades_published_at),
+  });
   const workspaceFlow = Boolean(data?.workspace_available || data?.workspace_flow);
   const workspace = useStudentWorkspace(taskId, workspaceFlow);
   const entered = workspace.entry.isSuccess;
@@ -539,7 +555,7 @@ function AssessmentPage({ taskId }: { taskId: string }) {
   const choices = data?.questions.filter((q): q is ChoiceQuestion => q.task_type !== "PROGRAMMING") ?? [];
   const programs = data?.questions.filter((q): q is ProgrammingQuestion => q.task_type === "PROGRAMMING") ?? [];
   const selectedSection = section ?? (
-    choices.length && !data?.current_question_id ? "CHOICE" : "PROGRAMMING"
+    choices.length && !data?.current_question_id ? "CHOICE" : programs.length ? "PROGRAMMING" : "REPORT"
   );
   const selectedQuestion = programs.find((q) => q.id === (active || data?.current_question_id))
     ?? programs.find((q) => !q.submitted) ?? programs[0];
@@ -565,7 +581,7 @@ function AssessmentPage({ taskId }: { taskId: string }) {
     programs.length > 0 && programmingState?.status !== "SUBMITTED" ? "编程与报告" : null,
   ].filter((label): label is string => Boolean(label));
   const serverNow = data ? new Date(data.server_time).getTime() + Date.now() - assessment.dataUpdatedAt : Date.now();
-  const disabled = (workspaceFlow && (!entered || !data?.workspace_flow)) || !!sectionState && (
+  const disabled = Boolean(data?.grades_published_at) || (workspaceFlow && (!entered || !data?.workspace_flow)) || !!sectionState && (
     sectionState.editable === false || serverNow >= new Date(sectionState.deadline).getTime()
   );
 
@@ -659,6 +675,12 @@ function AssessmentPage({ taskId }: { taskId: string }) {
         : error?.payload?.message ?? "实验暂时无法打开";
     return <div className="state-block"><p role="alert">{message}</p><button className="btn" onClick={() => void assessment.refetch()}>重试</button><Link to="/experiments">返回实验列表</Link></div>;
   }
+  const programNavigation = <nav className="assessment-question-list" aria-label="编程题列表">
+    {programs.map((question, index) => <button type="button" className="btn" key={question.id}
+      aria-pressed={question.id === selectedQuestion?.id} onClick={() => selectProgram(question.id)}>
+      {index + 1}. {question.title}{question.submitted ? " · 已通过" : ""}
+    </button>)}
+  </nav>;
   return <main className="assessment-workbench">
     <Modal open={confirmation !== null} onClose={() => { if (!busy) setConfirmation(null); }} title="确认交卷"
       actions={<><button className="btn" disabled={busy} onClick={() => setConfirmation(null)}>返回检查</button><button className="btn primary" disabled={busy} onClick={() => void confirmSubmit()}>{busy ? "提交中…" : "确认交卷"}</button></>}>
@@ -691,30 +713,38 @@ function AssessmentPage({ taskId }: { taskId: string }) {
       <p role="status" className="assessment-meta">
         {(workspaceFlow ? (data.parts ?? []).map((part) => {
           const name = { CHOICE: "选择题", PROGRAMMING: "编程题", REPORT: "报告" }[part.kind];
-          const value = part.score != null ? `${part.score} / 100`
+          const value = part.score != null ? `${part.score} / ${part.max_score}`
             : part.status === "SUBMITTED" ? "待评分" : STATUS_LABEL[part.status] ?? "待评分";
           const progress = part.total_questions ? `（通过 ${part.passed_questions} / ${part.total_questions} 题）` : "";
-          return `${name} ${value}${progress}${part.score_cap === 60 ? "（补做上限 60）" : ""}`;
+          return `${name} ${value}${progress}${part.score_cap < Number(part.max_score) ? `（补做上限 ${part.score_cap}）` : ""}`;
         }) : partLabels).map((label, index) => <span key={label}>
           {index > 0 && <span aria-hidden="true"> · </span>}{label}
         </span>)}
       </p>
     </div>
+    {data.grades_published_at && <p role="status" className="assessment-receipt">
+      <strong>{publishedGrade.data ? `实验总分 ${publishedGrade.data.score} / ${publishedGrade.data.max_score}` : "实验成绩已发布"}</strong>
+      <span>{formatDateTime(data.grades_published_at)}</span>
+    </p>}
     {workspaceFlow && workspace.entry.isError && <p role="alert">无法进入实验。
       <button className="btn sm" onClick={() => void workspace.entry.refetch()}>重试</button></p>}
     {sectionState?.feedback && <p className="assessment-feedback" role="note">教师评语：{sectionState.feedback}</p>}
+    <div className={data.direct_assessment ? "assessment-guided-workspace" : undefined}>
+      {data.direct_assessment && <aside className="panel assessment-guidance" aria-label="实验指导">
+        <h2>实验指导</h2>
+        {data.guidance ? <div className="assessment-guidance-text">{data.guidance}</div> : <p className="subtle">暂无实验指导。</p>}
+        {selectedSection === "PROGRAMMING" && programNavigation}
+      </aside>}
+      <div className={data.direct_assessment ? "assessment-guided-answer" : undefined}>
     {selectedSection === "REPORT" && workspaceFlow
-      ? data.workspace_flow ? <AttachmentReport taskId={taskId} onChange={() => void assessment.refetch()} /> : <LoadingState label="正在准备实验报告" />
+      ? data.workspace_flow ? <AttachmentReport taskId={taskId} requirements={data.report_requirements} onChange={() => void assessment.refetch()} />
+        : data.direct_assessment && entered ? <p>报告未提交。</p> : <LoadingState label="正在准备实验报告" />
       : selectedSection === "CHOICE" ? choices.map((question) => <ChoiceAnswer key={question.id} taskId={taskId} question={question} register={register} disabled={disabled}
+      direct={data.direct_assessment}
       submittedSelected={disabled && (!workspaceFlow || choiceState?.status === "SUBMITTED")
         ? choiceSubmission?.answers.find((answer) => answer.question_id === question.id)?.selected_option_ids : undefined}
       result={disabled && !workspaceFlow ? sectionState?.questions?.find((item) => item.id === question.id) : undefined} />) : <>
-      <nav className="assessment-question-list" aria-label="编程题列表">
-        {programs.map((question, index) => <button type="button" className="btn" key={question.id}
-          aria-pressed={question.id === selectedQuestion?.id} onClick={() => selectProgram(question.id)}>
-          {index + 1}. {question.title}{question.submitted ? " · 已通过" : ""}
-        </button>)}
-      </nav>
+      {!data.direct_assessment && programNavigation}
       {workspaceFlow && (!workspace.status || workspace.status === "PENDING") && !workspace.entry.isError
         && <p role="status">正在准备实验环境…</p>}
       {workspaceFlow && workspace.status === "FAILED" && <p role="alert">实验环境准备失败。
@@ -731,14 +761,20 @@ function AssessmentPage({ taskId }: { taskId: string }) {
         }} onLanguageChange={(nextLanguage) => {
           void switchView(() => setSelectedLanguages((current) => ({ ...current, [selectedQuestion.id]: nextLanguage })));
         }} />}
+      {selectedQuestion?.explanation && <section className="panel assessment-guidance">
+        <h2>题目解析</h2><p className="assessment-guidance-text">{selectedQuestion.explanation}</p>
+      </section>}
       {!workspaceFlow && data.report_required !== false && <>
         {data.report_template && <p className="assessment-report-template">教师报告附件：{data.report_template.file_name}<AssetActions assetId={data.report_template.asset_id} title={data.report_template.file_name} /></p>}
         <ReportAnswer taskId={taskId} register={register} disabled={disabled} />
       </>}
     </>}
+      </div>
+    </div>
     {workspaceFlow && selectedSection === "CHOICE" && <footer className="panel assessment-submission">
       <div className="assessment-submit-row">
-        <p>{choiceState?.score != null ? `选择题成绩 ${choiceState.score} / 100` : "完成作答后提交选择题。"}</p>
+        <p>{choiceState?.score != null ? `选择题成绩 ${choiceState.score} / ${choiceState.max_score}`
+          : data.grades_published_at ? "本部分已锁定。" : "完成作答后提交选择题。"}</p>
         <button type="button" className="btn primary" disabled={disabled || busy || choiceState?.status === "SUBMITTED"}
           onClick={() => void submit()}>{choiceState?.status === "SUBMITTED" ? "已提交选择题" : busy ? "提交中…" : "提交选择题卷"}</button>
       </div>

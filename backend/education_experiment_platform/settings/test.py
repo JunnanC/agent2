@@ -15,3 +15,7 @@ DATABASES = {"default": {"ENGINE": "django.db.backends.sqlite3", "NAME": ":memor
 PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
 MAILERS = {"default": {"BACKEND": "django.core.mail.backends.locmem.EmailBackend"}}
 LOCAL_RUNTIME_MODE = "STUB"
+CACHES = {
+    name: {"BACKEND": "django.core.cache.backends.locmem.LocMemCache", "LOCATION": name}
+    for name in ("default", "lab_runtime")
+}

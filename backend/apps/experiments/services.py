@@ -483,6 +483,8 @@ def _validate_prerequisite_spec(
 def _validate_dependencies(*, publication: TaskPublication) -> None:
     if publication.course.status != publication.course.Status.PUBLISHED:
         raise PublicationValidationError(detail={"course_status": publication.course.status})
+    if publication.direct_assessment:
+        return
     template = publication.template_version
     if template.template.course_id != publication.course_id:
         raise PublicationValidationError(detail={"template_version_id": template.public_id})
@@ -600,6 +602,8 @@ def update_publication(
     )
     if publication.status != TaskPublication.Status.DRAFT:
         raise PublicationStateConflict(detail={"status": publication.status})
+    if publication.direct_assessment:
+        raise PublicationValidationError(detail={"draft": "use_experiment_design"})
     changes = {
         key: value
         for key, value in data.items()
@@ -818,7 +822,7 @@ def _create_task(
             enrollment=enrollment,
             student=enrollment.student,
             template_version=template,
-            runtime_type=template.runtime_type,
+            runtime_type=template.runtime_type if template else "CONTAINER",
             template_spec_digest=snapshot["template_spec_digest"],
             runtime_adapter=snapshot["runtime_adapter"],
             runtime_adapter_driver=snapshot["runtime_adapter_driver"],
@@ -928,18 +932,24 @@ def publish_publication(
     )
     if publication.status != TaskPublication.Status.DRAFT:
         raise PublicationStateConflict(detail={"status": publication.status})
-    try:
-        template = (
-            TemplateVersion.objects
-            .select_for_update()
-            .select_related("template", "runtime_adapter", "image", "resource_profile")
-            .get(pk=publication.template_version_id)
+    if publication.direct_assessment:
+        from .design import direct_content
+        from .models import TeachingEnvironment
+
+        if publication.environment_id:
+            publication.environment = TeachingEnvironment.objects.select_for_update().get(
+                pk=publication.environment_id,
+            )
+        _validate_dependencies(publication=publication)
+        content, runtime_snapshot = direct_content(publication)
+    else:
+        template = TemplateVersion.objects.select_for_update().get(
+            pk=publication.template_version_id,
         )
-    except TemplateVersion.DoesNotExist as exc:
-        raise ResourceNotFound() from exc
-    publication.template_version = template
-    _validate_dependencies(publication=publication)
-    content = publish_template_version(template_version=template)
+        publication.template_version = template
+        _validate_dependencies(publication=publication)
+        content = publish_template_version(template_version=template)
+        runtime_snapshot = _runtime_snapshot(template, content)
     enrollments = _freeze_audience(publication=publication, selected_ids=selected_ids)
     publication_digest = _json_digest({
         "course_id": course.public_id,
@@ -973,7 +983,7 @@ def publish_publication(
         "published_by": actor,
         "template_digest": content["template_digest"],
         "publication_digest": publication_digest,
-        **_runtime_snapshot(template, content),
+        **runtime_snapshot,
     }
     if not async_assignment:
         changes["published_at"] = now
@@ -1038,6 +1048,8 @@ def create_retake_publication(
     require_course_capability(
         course=course, actor=actor, capability=CourseStaffGrant.Capability.PUBLISH_EXPERIMENT
     )
+    if source.direct_assessment:
+        raise PublicationValidationError(detail={"publication_id": "use_part_redo"})
     if source.retake_of_id is not None:
         raise PublicationValidationError(detail={"publication_id": "不能对补做实验再次创建补做"})
     if source.status not in {TaskPublication.Status.PUBLISHED, TaskPublication.Status.CLOSED}:
@@ -1366,6 +1378,8 @@ def withdraw_publication(
     require_course_capability(
         course=course, actor=actor, capability=CourseStaffGrant.Capability.PUBLISH_EXPERIMENT
     )
+    if publication.grades_published_at:
+        raise PublicationStateConflict(detail={"publication": "grades_locked"})
     if publication.status not in {
         TaskPublication.Status.PUBLISHED,
         TaskPublication.Status.PUBLISHING,

@@ -28,6 +28,7 @@ export interface ProgrammingQuestion extends QuestionBase {
   submitted?: boolean;
   case_count?: number | null;
   case_results?: CaseResult[];
+  explanation?: string;
 }
 
 export interface CaseResult {
@@ -64,6 +65,19 @@ export interface AssessmentReport extends AssessmentPart {
   submitted_at: string | null;
   row_version: number | null;
   feedback: string;
+  direct_assessment?: boolean;
+  released_at?: string | null;
+  signer?: string;
+  review_status?: string;
+  comments?: ReportComment[];
+  ai_review?: { score?: string; feedback?: string; comments?: ReportComment[]; error?: string };
+  paragraphs?: Array<{ paragraph: number; text: string; sizes_pt: string[] }>;
+  paragraphs_unavailable?: boolean;
+}
+
+export interface ReportComment {
+  paragraph: number;
+  text: string;
 }
 
 export interface StudentWorkspace {
@@ -99,6 +113,10 @@ export interface Assessment {
   workspace_flow?: boolean;
   current_question_id?: string | null;
   parts?: AssessmentPart[];
+  direct_assessment?: boolean;
+  grades_published_at?: string | null;
+  guidance?: string;
+  report_requirements?: string;
 }
 
 export interface ChoiceDraft {
@@ -246,6 +264,7 @@ export interface ReportQueueItem {
   title: string;
   status: string;
   submitted_at: string;
+  review_status?: string;
 }
 
 export const assessmentPartsApi = {
@@ -257,11 +276,14 @@ export const assessmentPartsApi = {
     request<{ rows: ReportQueueItem[] }>(`${teachingCoursePath(courseId)}/experiment-reports`, {
       query: { publication_id: publicationId || undefined },
     }).then((r) => r.data.rows),
-  report: (courseId: string, taskId: string) =>
-    request<AssessmentReport>(`${teachingTaskPath(courseId, taskId)}/report`).then((r) => r.data),
-  gradeReport: (courseId: string, taskId: string, score: string, feedback: string, version: number) =>
+  report: (courseId: string, taskId: string, paragraphs = false) =>
     request<AssessmentReport>(`${teachingTaskPath(courseId, taskId)}/report`, {
-      method: "POST", body: { score, feedback }, ifMatch: version, idempotencyKey: newIdempotencyKey(),
+      query: { paragraphs: paragraphs ? 1 : undefined },
+    }).then((r) => r.data),
+  gradeReport: (courseId: string, taskId: string, score: string, feedback: string, version: number,
+    comments?: ReportComment[]) =>
+    request<AssessmentReport>(`${teachingTaskPath(courseId, taskId)}/report`, {
+      method: "POST", body: { score, feedback, comments }, ifMatch: version, idempotencyKey: newIdempotencyKey(),
     }).then((r) => r.data),
   parts: (courseId: string, taskId: string) =>
     request<{ parts: AssessmentPart[]; redo_available: boolean }>(
@@ -364,3 +386,144 @@ export interface TeacherAssessmentReview {
   }>;
   report_criteria: Array<{ id: string; title: string; max_score: string }>;
 }
+
+export interface LabEnvironmentInput {
+  name: string;
+  language: AssessmentLanguage;
+  runtime_adapter_id: string;
+  image_id: string;
+  cpu_millicores: number;
+  memory_mb: number;
+}
+
+export interface LabEnvironment extends LabEnvironmentInput {
+  public_id: string;
+  row_version: number;
+  display_name: string;
+  usage: {
+    status: "PENDING" | "UNAVAILABLE" | "AVAILABLE";
+    cpu_millicores?: number;
+    memory_bytes?: number;
+    containers?: number;
+    sampled_at?: string;
+  };
+  experiments: Array<{ course_id: string; publication_id: string; title: string; status: string }>;
+}
+
+interface LabEnvironmentList {
+  rows: LabEnvironment[];
+  adapters: Array<{ public_id: string; name: string }>;
+  images: Array<{ public_id: string; name: string }>;
+}
+
+export interface LabCase {
+  input: string;
+  output: string;
+}
+
+export interface LabQuestion {
+  task_type: TeacherQuestion["task_type"];
+  title: string;
+  description: string;
+  explanation: string;
+  options?: Array<{ id: string; text: string }>;
+  correct_option_ids?: string[];
+  samples?: LabCase[];
+  hidden_cases?: LabCase[];
+  starter_code?: string;
+  timeout_seconds?: number;
+}
+
+export interface LabDesignInput {
+  title: string;
+  guidance: string;
+  report_requirements: string;
+  environment_id: string;
+  window_start: string;
+  window_end: string;
+  part_maxima: Record<AssessmentPart["kind"], string>;
+  questions: LabQuestion[];
+}
+
+interface SavedLabDesign {
+  public_id: string;
+  row_version: number;
+  title: string;
+  environment_id: string | null;
+  window_start: string;
+  window_end: string;
+  design: {
+    guidance: string;
+    report_requirements: string;
+    part_maxima: LabDesignInput["part_maxima"];
+    questions: Array<Pick<LabQuestion, "task_type" | "title" | "description"> & {
+      question_spec: {
+        allowed_languages?: AssessmentLanguage[];
+        options?: LabQuestion["options"];
+        samples?: LabCase[];
+        starter_files?: Partial<Record<AssessmentLanguage, Record<string, string>>>;
+        limits?: Partial<Record<AssessmentLanguage, { timeout_seconds: number }>>;
+      };
+      marking_spec: Pick<LabQuestion, "correct_option_ids" | "explanation" | "hidden_cases">;
+    }>;
+  };
+}
+
+export interface GradeRelease {
+  grades_published_at: string | null;
+  deadline: string;
+  pending_reports: number;
+  pending_runs: number;
+  open_redos: number;
+}
+
+const labEnvironmentsPath = (courseId: string) => `${teachingCoursePath(courseId)}/lab-environments`;
+const labDesignPath = (courseId: string) => `${teachingCoursePath(courseId)}/experiment-designs`;
+const labPublicationPath = (courseId: string, publicationId: string) =>
+  `${teachingCoursePath(courseId)}/experiments/${encodeURIComponent(publicationId)}`;
+
+export const labAssessmentApi = {
+  environments: (courseId: string) =>
+    request<LabEnvironmentList>(labEnvironmentsPath(courseId)).then((r) => r.data),
+  saveEnvironment: (courseId: string, body: LabEnvironmentInput, target?: LabEnvironment) =>
+    request<{ public_id: string }>(labEnvironmentsPath(courseId) + (target ? `/${target.public_id}` : ""), {
+      method: target ? "PATCH" : "POST", body, ifMatch: target?.row_version,
+      idempotencyKey: newIdempotencyKey(),
+    }).then((r) => r.data),
+  testEnvironment: (courseId: string, environmentId: string, publicationId?: string) =>
+    request<{ test_id: string }>(`${labEnvironmentsPath(courseId)}/${environmentId}/test`, {
+      method: "POST", idempotencyKey: newIdempotencyKey(), query: { publication_id: publicationId },
+    }).then((r) => r.data),
+  testStatus: (courseId: string, environmentId: string, testId: string) =>
+    request<{ status: string; reason?: string; stderr?: string }>(
+      `${labEnvironmentsPath(courseId)}/${environmentId}/test`, { query: { test_id: testId } },
+    ).then((r) => r.data),
+  suggest: (courseId: string, purpose: string, language: AssessmentLanguage | "" = "") =>
+    request<Pick<LabDesignInput, "guidance" | "questions" | "report_requirements">>(
+      `${labDesignPath(courseId)}/suggest`, {
+        method: "POST", body: { purpose, language }, idempotencyKey: newIdempotencyKey(),
+      },
+    ).then((r) => r.data),
+  design: (courseId: string, id: string) =>
+    request<SavedLabDesign>(`${labDesignPath(courseId)}/${id}`).then((r) => r.data),
+  saveDesign: (courseId: string, body: LabDesignInput, target?: { id: string; version: number }) =>
+    request<{ public_id: string; row_version: number }>(
+      labDesignPath(courseId) + (target ? `/${target.id}` : ""), {
+        method: target ? "PATCH" : "POST", body, ifMatch: target?.version,
+        idempotencyKey: newIdempotencyKey(),
+      },
+    ).then((r) => r.data),
+  releaseStatus: (courseId: string, publicationId: string) =>
+    request<GradeRelease>(`${labPublicationPath(courseId, publicationId)}/grade-release`).then((r) => r.data),
+  release: (courseId: string, publicationId: string) =>
+    request<GradeRelease>(`${labPublicationPath(courseId, publicationId)}/grade-release`, {
+      method: "POST", idempotencyKey: newIdempotencyKey(),
+    }).then((r) => r.data),
+  batchReview: (courseId: string, publicationId: string) =>
+    request<{ queued: number; submitted: number }>(`${labPublicationPath(courseId, publicationId)}/word-reviews`, {
+      method: "POST", idempotencyKey: newIdempotencyKey(),
+    }).then((r) => r.data),
+  publishedGrade: (taskId: string) =>
+    request<{ score: string; max_score: string }>(`${taskPath(taskId)}/published-grade`).then((r) => r.data),
+  reviewedReportUrl: (taskId: string) => `/api/v2${taskPath(taskId)}/report/reviewed`,
+};

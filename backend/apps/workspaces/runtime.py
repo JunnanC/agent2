@@ -27,6 +27,12 @@ class WorkspaceRuntime:
             "edu.platform.task": workspace.task.public_id,
             "edu.platform.expires_at": str(int(workspace.expires_at.timestamp())),
         }
+        config = workspace.task.resource_profile_snapshot or {}
+        environment_id = config.get("environment_id")
+        if environment_id:
+            self.labels["edu.platform.environment"] = environment_id
+        self.memory_mb = config["memory_mb"] if environment_id else 512
+        self.cpu_millicores = config["cpu_millicores"] if environment_id else 500
 
     def ensure(self) -> Any:
         try:
@@ -43,9 +49,9 @@ class WorkspaceRuntime:
                 init=True,
                 cap_drop=["ALL"],
                 security_opt=["no-new-privileges:true"],
-                mem_limit="512m",
-                memswap_limit="512m",
-                nano_cpus=500_000_000,
+                mem_limit=f"{self.memory_mb}m",
+                memswap_limit=f"{self.memory_mb}m",
+                nano_cpus=self.cpu_millicores * 1_000_000,
                 pids_limit=128,
                 tmpfs={
                     "/tmp": "rw,nosuid,nodev,noexec,size=128m,uid=10001,gid=10001",

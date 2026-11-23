@@ -10,28 +10,31 @@ from apps.provisioning.stdio import StdioResult, stdio_outputs_match
 from apps.workspaces.models import StudentWorkspace
 from apps.workspaces.tasks import sync_drafts, workspace_runtime
 
-from .assessment_parts import part_open
 from .assessment_workers import _finish, _read_source
 from .models import AssessmentRun, ProgrammingSubmission
-from .workspace_assessment import complete_attempt
+from .workspace_assessment import attempt_deadline, complete_attempt
 
 logger = logging.getLogger(__name__)
 
 
 def _cases(run: AssessmentRun) -> list[dict[str, str]]:
+    if run.task.template_version_id is None:
+        return run.question.question_spec["samples"] + run.question.marking_spec["hidden_cases"]
     return ordered_cases(run.question, run.task.template_version.public_id)
 
 
 def case_results(
     cases: list[dict[str, str]],
     results: list[StdioResult],
+    *,
+    visible_count: int,
 ) -> list[dict[str, Any]]:
     rows = []
     for index, case in enumerate(cases):
         result = results[index] if index < len(results) else StdioResult("NOT_RUN")
         passed = result.status == "PASSED" and stdio_outputs_match(result.stdout, case["output"])
         row: dict[str, Any] = {"number": index + 1, "passed": passed}
-        if index < 2:
+        if index < visible_count:
             row.update(
                 input=case["input"],
                 expected_output=case["output"],
@@ -51,7 +54,8 @@ def execute_workspace_attempt(run: AssessmentRun) -> None:
         files = _read_source(run.snapshot)
         with transaction.atomic():
             workspace = StudentWorkspace.objects.select_for_update().get(task_id=run.task_id)
-            if not part_open(workspace.task, workspace.expires_at):
+            deadline = attempt_deadline(run, workspace.task)
+            if deadline is None:
                 _finish(run, status="COMPLETED", result_status="WINDOW_CLOSED")
                 return
             if ProgrammingSubmission.objects.filter(
@@ -71,10 +75,14 @@ def execute_workspace_attempt(run: AssessmentRun) -> None:
                     timeout_seconds=run.question.question_spec["limits"][run.snapshot.language][
                         "timeout_seconds"
                     ],
-                    expires_at=workspace.expires_at.timestamp(),
+                    expires_at=deadline,
                 )
         if final:
-            rows = case_results(cases, results)
+            rows = case_results(
+                cases, results, visible_count=len(run.question.question_spec["samples"])
+                if run.task.template_version_id is None
+                else min(2, len(run.question.question_spec["samples"])),
+            )
             passed = bool(rows) and all(case["passed"] for case in rows)
             status = "PASSED" if passed else "COMPILE_ERROR" if compilation else "FAILED"
             complete_attempt(

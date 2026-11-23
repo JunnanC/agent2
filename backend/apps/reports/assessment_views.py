@@ -1,8 +1,11 @@
 import hashlib
+from decimal import Decimal
+from io import BytesIO
 
 from django.core.files.uploadedfile import UploadedFile
-from django.http import HttpRequest
+from django.http import FileResponse, HttpRequest
 from django.utils import timezone
+from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema
 from rest_framework import serializers
 from rest_framework.parsers import MultiPartParser
@@ -11,7 +14,7 @@ from rest_framework.views import APIView
 
 from apps.accounts.permissions import IsTeachingPortal, IsUserPortal
 from apps.core.concurrency import etag_for_version, parse_if_match
-from apps.core.errors import ResourceNotFound
+from apps.core.errors import ResourceNotFound, StateConflict
 from apps.core.idempotency import StoredResponse
 from apps.courses.models import CourseStaffGrant
 from apps.experiments.assessment import _task
@@ -24,15 +27,22 @@ from apps.experiments.views import IDEMPOTENCY_KEY, IF_MATCH, _body, _idempotent
 
 from .assessment_reports import attach_template, grade_report, report_data, submit_report
 from .models import ReportSubmission
+from .word_review import annotated_docx, asset_bytes, document_paragraphs
 
 
 class FileSerializer(serializers.Serializer):
     file = serializers.FileField()
 
 
+class ReportCommentSerializer(serializers.Serializer):
+    paragraph = serializers.IntegerField(min_value=1)
+    text = serializers.CharField(max_length=1000)
+
+
 class ReportGradeSerializer(serializers.Serializer):
-    score = serializers.DecimalField(max_digits=5, decimal_places=2, min_value=0, max_value=100)
+    score = serializers.DecimalField(max_digits=5, decimal_places=2, min_value=Decimal(0))
     feedback = serializers.CharField(max_length=1000, default="", allow_blank=True)
+    comments = ReportCommentSerializer(many=True, max_length=50, required=False)
 
 
 class RedoSerializer(serializers.Serializer):
@@ -148,6 +158,7 @@ class TeachingReportListView(APIView):
                 "student_name": report.task.student.display_name,
                 "title": report.task.publication.title,
                 "status": report.status,
+                "review_status": report.review_status,
                 "submitted_at": report.submitted_at,
             }
             for report in reports[:500]
@@ -160,7 +171,19 @@ class TeachingReportView(APIView):
 
     @extend_schema(responses=AssessmentResponseSerializer)
     def get(self, request: HttpRequest, course_id: str, task_id: str) -> Response:
-        return _response(request, report_data(_teaching_task(request, course_id, task_id)))
+        task = _teaching_task(request, course_id, task_id)
+        result = report_data(task, teaching=True)
+        if task.publication.direct_assessment and request.query_params.get("paragraphs") == "1":
+            report = ReportSubmission.objects.select_related("asset").filter(task=task).first()
+            if report:
+                try:
+                    rows = document_paragraphs(asset_bytes(report.asset))
+                    result["paragraphs"] = [
+                        {**item, "text": item["text"][:300]} for item in rows[:300]
+                    ]
+                except Exception:
+                    result["paragraphs_unavailable"] = True
+        return _response(request, result)
 
     @extend_schema(
         request=ReportGradeSerializer,
@@ -199,7 +222,8 @@ class AssessmentPartsView(APIView):
             request,
             {
                 "parts": part_scores(task) if can_start_session(task) else [],
-                "redo_available": task.publication.status in {"PUBLISHED", "CLOSED"}
+                "redo_available": not task.publication.grades_published_at
+                and task.publication.status in {"PUBLISHED", "CLOSED"}
                 and timezone.now() >= task.publication.window_end,
             },
         )
@@ -220,3 +244,34 @@ class AssessmentPartsView(APIView):
             return StoredResponse(200, _body(request, data), {})
 
         return _idempotent(request, payload=serializer.validated_data, operation=operation)
+
+
+class StudentReviewedReportDownloadView(APIView):
+    permission_classes = [IsUserPortal]
+
+    @extend_schema(responses={
+        (200, "application/vnd.openxmlformats-officedocument.wordprocessingml.document"):
+        OpenApiTypes.BINARY,
+    })
+    def get(self, request: HttpRequest, task_id: str) -> FileResponse:
+        task = _task(request.user, task_id)
+        publication = task.publication
+        report = ReportSubmission.objects.select_related("asset").filter(
+            task=task, status="GRADED", asset__status="ACTIVE", asset__scan_status="CLEAN",
+        ).first()
+        if not publication.grades_published_at or report is None:
+            raise ResourceNotFound()
+        try:
+            content = annotated_docx(
+                asset_bytes(report.asset), entries=report.comments, signer=publication.grade_signer,
+                date=timezone.localtime(publication.grades_published_at).date().isoformat(),
+                score=str(report_data(task)["score"]), feedback=report.feedback,
+            )
+        except Exception as exc:
+            raise StateConflict(detail={"report": "review_file_unavailable"}) from exc
+        result = FileResponse(
+            BytesIO(content), as_attachment=True, filename="实验报告-已批阅.docx",
+            content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        )
+        result["Cache-Control"] = "private, no-store"
+        return result
