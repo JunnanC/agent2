@@ -57,13 +57,16 @@ describe("课程加入策略", () => {
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ["student-enrollments"] });
   });
 
-  it("邀请码直达先解析课程再提交待审核申请", async () => {
+  it("凭课程码查到教学班后需明确确认才申请", async () => {
     vi.mocked(studentApi.courses).mockResolvedValue({ rows: [], total: 0, page: 1, pageSize: 100 });
     vi.mocked(studentApi.resolveInvitation).mockResolvedValue({ ...course, public_id: "invited-course" });
     vi.mocked(studentApi.joinCourse).mockResolvedValue({ ...enrollment("PENDING"), course_id: "invited-course" });
     show();
-    fireEvent.change(await screen.findByLabelText("邀请码直达"), { target: { value: "invite-code" } });
-    fireEvent.click(screen.getByRole("button", { name: "提交邀请码申请" }));
+    fireEvent.change(await screen.findByLabelText("课程码"), { target: { value: "invite-code" } });
+    fireEvent.click(screen.getByRole("button", { name: "查找教学班" }));
+    const confirm = await screen.findByRole("button", { name: "确认申请加入" });
+    expect(studentApi.joinCourse).not.toHaveBeenCalled();
+    fireEvent.click(confirm);
     expect(await screen.findByText("申请已提交，等待教师审核")).toBeInTheDocument();
     expect(studentApi.resolveInvitation).toHaveBeenCalledWith("invite-code");
     expect(studentApi.joinCourse).toHaveBeenCalledWith("invited-course", { invitation_code: "invite-code" });
@@ -72,8 +75,8 @@ describe("课程加入策略", () => {
   it("无效邀请码不发送加入申请", async () => {
     vi.mocked(studentApi.resolveInvitation).mockRejectedValue(new Error("invalid"));
     show();
-    fireEvent.change(await screen.findByLabelText("邀请码直达"), { target: { value: "wrong-code" } });
-    fireEvent.click(screen.getByRole("button", { name: "提交邀请码申请" }));
+    fireEvent.change(await screen.findByLabelText("课程码"), { target: { value: "wrong-code" } });
+    fireEvent.click(screen.getByRole("button", { name: "查找教学班" }));
     await waitFor(() => expect(screen.getByText("邀请码无效或已失效")).toBeInTheDocument());
     expect(studentApi.joinCourse).not.toHaveBeenCalled();
   });

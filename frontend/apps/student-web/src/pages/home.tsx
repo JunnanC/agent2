@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { assessmentApi, studentApi, taskApi } from "@edu/api-client";
 import { keys } from "@edu/query-keys";
 import { Breadcrumbs, Button, DateCalendar, Metric, Panel, RequestStateView, StatusBadge } from "@edu/ui";
 import type { CalendarItem } from "@edu/ui";
 import { isTaskActionable, taskStatusLabel, taskStatusTone, formatDate } from "@/lib/task-format";
+import { StudentTimetable } from "@/components/student-timetable";
+
 const TERMINAL_STATUSES = new Set(["COMPLETED", "WITHDRAWN"]);
 const UNFINISHED_STATUSES = new Set(["ASSIGNED", "IN_PROGRESS", "REPORT_DRAFT", "REJECTED", "FAILED"]);
 const FOCUSED_TASKS_PAGE_SIZE = 3;
@@ -131,6 +133,13 @@ export function Home() {
   return (
     <>
       <Breadcrumbs items={[{ label: "学生门户" }]} current="概览" />
+      <StudentTimetable />
+      <div className="page-actions section">
+        <Link className="btn primary" to="/courses/join">凭课程码加入教学班</Link>
+        <Link className="btn" to="/courses">我的教学班</Link>
+        <Link className="btn" to="/experiments">我的实验</Link>
+        <Link className="btn" to="/notifications">通知中心</Link>
+      </div>
 
       <div className="head">
         <div><h1>学习概览</h1></div>

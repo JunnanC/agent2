@@ -211,6 +211,7 @@ def create_course(
     teaching_end: Any,
     context: ActorContext,
     term: AcademicTerm | None = None,
+    timetable_code: str | None = None,
 ) -> Course:
     actor = User.objects.select_for_update().get(pk=actor.pk)
     _active_teacher(actor)
@@ -243,6 +244,7 @@ def create_course(
                     description=description.strip(),
                     owner=actor,
                     term=term,
+                    timetable_code=timetable_code,
                     visibility=visibility,
                     enrollment_mode=Course.EnrollmentMode.APPROVAL,
                     capacity=capacity,

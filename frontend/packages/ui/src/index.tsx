@@ -29,3 +29,5 @@ export { isSafeUrl } from "./url-safety";
 
 export { PlatformMark } from "./platform-mark";
 export { Markdown } from "./markdown";
+
+export { ClassTimetable, ScheduleSlots } from "./class-timetable";

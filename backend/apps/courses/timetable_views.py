@@ -1,23 +1,33 @@
 from typing import Any
 
 from django.db import IntegrityError, transaction
+from django.db.models import Q, QuerySet
 from django.http import HttpRequest
-from drf_spectacular.utils import extend_schema, extend_schema_view
+from drf_spectacular.utils import OpenApiParameter, extend_schema, extend_schema_view
+from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.accounts.models import User
 from apps.accounts.permissions import IsPlatformPortal, IsTeachingPortal, IsUserPortal
-from apps.core.errors import ResourceNotFound, StateConflict
+from apps.core.errors import ResourceNotFound
+from apps.core.pagination import PageSpec
 from apps.courses.models import (
     AcademicTerm,
     AdministrativeClass,
     AdministrativeClassMembership,
+    Course,
     CourseSchedule,
+    CourseStaff,
     Enrollment,
-    StudentScheduleEntry,
     TimetableImportJob,
 )
-from apps.courses.selectors import require_course_capability, visible_course
+from apps.courses.selectors import (
+    require_course_capability,
+    term_for_ref,
+    visible_course,
+    visible_courses,
+)
 
 from .errors import ContentStateConflict
 from .tasks import run_timetable_import
@@ -25,6 +35,7 @@ from .timetable_serializers import (
     AdministrativeClassMemberWriteSerializer,
     AdministrativeClassWriteSerializer,
     GenericTimetableResponseSerializer,
+    TermTimetableResponseSerializer,
     TimetableMappingSerializer,
     TimetableUploadSerializer,
 )
@@ -47,33 +58,33 @@ def _response(request: HttpRequest, data: Any, *, status: int = 200) -> Response
     return response
 
 
-def _schedule_data(item: CourseSchedule | StudentScheduleEntry, *, source: str) -> dict[str, Any]:
-    if isinstance(item, CourseSchedule):
-        course = item.course
-        term_id = course.term.public_id
-        code = course.code
-        title = course.title
-        course_id = course.public_id
-    else:
-        course = item.course
-        term_id = item.term.public_id
-        code = item.course_code
-        title = item.course_title
-        course_id = course.public_id if course else None
+def _term_data(term: AcademicTerm) -> dict[str, Any]:
+    return {"public_id": term.public_id, "code": term.code, "name": term.name}
+
+
+def _class_data(course: Course) -> dict[str, str]:
     return {
-        "source": source,
-        "class_type": "TEACHING" if course else "EXTERNAL",
-        "course_id": course_id,
-        "course_code": code,
-        "course_title": title,
-        "term_id": term_id,
+        "course_id": course.public_id,
+        "course_code": course.timetable_code or course.code,
+        "course_title": course.title,
+        "instructor_name": course.owner.display_name,
+    }
+
+
+def _schedule_data(item: CourseSchedule) -> dict[str, Any]:
+    return {
+        **_class_data(item.course),
+        "source": "PLATFORM",
+        "class_type": "TEACHING",
+        "term_id": item.course.term.public_id,
         "weekday": item.weekday,
         "start_period": item.start_period,
         "end_period": item.end_period,
         "week_start": item.week_start or None,
         "week_end": item.week_end or None,
+        "week_parity": item.week_parity,
         "classroom": item.classroom,
-        "instructor_name": item.instructor_name,
+        "instructor_name": item.instructor_name or item.course.owner.display_name,
     }
 
 
@@ -107,11 +118,6 @@ class TimetableImportCollectionView(APIView):
             term_id=serializer.validated_data.get("term_id", ""),
         )
         return _response(request, timetable_import_data(job), status=201)
-
-
-class StudentTimetableImportView(TimetableImportCollectionView):
-    permission_classes = [IsUserPortal]
-    kind = TimetableImportJob.Kind.STUDENT
 
 
 class TeachingTimetableImportView(TimetableImportCollectionView):
@@ -162,23 +168,6 @@ class TimetableImportDetailView(APIView):
         return _response(request, timetable_import_data(job), status=202)
 
 
-@extend_schema_view(get=extend_schema(operation_id="student_timetable_import_retrieve"))
-class StudentTimetableImportDetailView(TimetableImportDetailView):
-    permission_classes = [IsUserPortal]
-    kind = TimetableImportJob.Kind.STUDENT
-    http_method_names = ["get", "head", "options"]
-
-
-@extend_schema_view(put=extend_schema(operation_id="student_timetable_import_mapping_update"))
-class StudentTimetableImportMappingView(StudentTimetableImportDetailView):
-    http_method_names = ["put", "options"]
-
-
-@extend_schema_view(post=extend_schema(operation_id="student_timetable_import_confirm"))
-class StudentTimetableImportConfirmView(StudentTimetableImportDetailView):
-    http_method_names = ["post", "options"]
-
-
 @extend_schema_view(get=extend_schema(operation_id="teaching_timetable_import_retrieve"))
 class TeachingTimetableImportDetailView(TimetableImportDetailView):
     permission_classes = [IsTeachingPortal]
@@ -196,42 +185,52 @@ class TeachingTimetableImportConfirmView(TeachingTimetableImportDetailView):
     http_method_names = ["post", "options"]
 
 
+def _term_timetable(
+    courses: QuerySet[Course], term: AcademicTerm, page: PageSpec | None = None
+) -> dict[str, Any]:
+    courses = courses.filter(term=term).select_related("owner").order_by("title", "pk")
+    total = courses.count() if page else None
+    class_rows = list(courses[page.offset : page.offset + page.page_size] if page else courses)
+    schedules = (
+        CourseSchedule.objects.filter(course_id__in=[course.pk for course in class_rows])
+        .select_related("course__term", "course__owner")
+        .order_by("weekday", "start_period", "course__title", "pk")
+    )
+    return {
+        "term": _term_data(term),
+        "terms": [_term_data(item) for item in AcademicTerm.objects.order_by("-starts_at", "pk")],
+        "classes": [_class_data(course) for course in class_rows],
+        **({"total": total} if page else {}),
+        "schedules": [_schedule_data(item) for item in schedules],
+    }
+
+
 class UserTimetableView(APIView):
     permission_classes = [IsUserPortal]
 
-    @extend_schema(responses={200: GenericTimetableResponseSerializer})
+    @extend_schema(
+        parameters=[OpenApiParameter("term_id", str)],
+        responses={200: TermTimetableResponseSerializer},
+    )
     def get(self, request: HttpRequest) -> Response:
-        term_id = request.query_params.get("term_id", "")
-        term = (
-            AcademicTerm.objects.filter(public_id=term_id).first()
-            if term_id
-            else AcademicTerm.objects.filter(is_current=True).first()
+        term = term_for_ref(request.query_params.get("term_id") or "current")
+        courses = Course.objects.select_related("owner").filter(
+            enrollments__student=request.user, enrollments__status=Enrollment.Status.ACTIVE
         )
-        if term is None:
-            raise StateConflict(detail={"academic_term": "current_term_required"})
-        imported = list(
-            StudentScheduleEntry.objects.filter(student=request.user, term=term)
-            .select_related("term", "course")
-            .order_by("weekday", "start_period", "course_title")
-        )
-        course_ids = Enrollment.objects.filter(
-            student=request.user, course__term=term, status=Enrollment.Status.ACTIVE
-        ).values_list("course_id", flat=True)
-        platform = (
-            CourseSchedule.objects.filter(course_id__in=course_ids)
-            .select_related("course__term")
-            .order_by("weekday", "start_period", "course__title")
-        )
-        return _response(
-            request,
-            {
-                "term": {"public_id": term.public_id, "code": term.code, "name": term.name},
-                "schedules": [
-                    *[_schedule_data(item, source="IMPORTED") for item in imported],
-                    *[_schedule_data(item, source="PLATFORM") for item in platform],
-                ],
-            },
-        )
+        return _response(request, _term_timetable(courses, term))
+
+
+class TeachingTimetableView(APIView):
+    permission_classes = [IsTeachingPortal]
+
+    @extend_schema(
+        parameters=[OpenApiParameter("term_id", str)],
+        responses={200: TermTimetableResponseSerializer},
+    )
+    def get(self, request: HttpRequest) -> Response:
+        term = term_for_ref(request.query_params.get("term_id") or "current")
+        courses = visible_courses(actor=request.user, portal="TEACHING")
+        return _response(request, _term_timetable(courses, term))
 
 
 class TeachingCourseTimetableView(APIView):
@@ -247,7 +246,7 @@ class TeachingCourseTimetableView(APIView):
             {
                 "course_id": course.public_id,
                 "class_type": "TEACHING",
-                "schedules": [_schedule_data(item, source="PLATFORM") for item in schedules],
+                "schedules": [_schedule_data(item) for item in schedules],
             },
         )
 
@@ -283,17 +282,28 @@ class PlatformTeachingClassMembersView(APIView):
     @extend_schema(responses={200: GenericTimetableResponseSerializer})
     def get(self, request: HttpRequest, course_id: str) -> Response:
         course = visible_course(actor=request.user, portal="PLATFORM", course_id=course_id)
-        enrollments = Enrollment.objects.filter(
-            course=course, status=Enrollment.Status.ACTIVE,
-        ).select_related("student").order_by("student__display_name", "pk")
-        return _response(request, {
-            "class": {"public_id": course.public_id, "name": course.title},
-            "members": [{
-                "public_id": item.public_id,
-                "student_id": item.student.public_id,
-                "student_name": item.student.display_name,
-            } for item in enrollments],
-        })
+        enrollments = (
+            Enrollment.objects.filter(
+                course=course,
+                status=Enrollment.Status.ACTIVE,
+            )
+            .select_related("student")
+            .order_by("student__display_name", "pk")
+        )
+        return _response(
+            request,
+            {
+                "class": {"public_id": course.public_id, "name": course.title},
+                "members": [
+                    {
+                        "public_id": item.public_id,
+                        "student_id": item.student.public_id,
+                        "student_name": item.student.display_name,
+                    }
+                    for item in enrollments
+                ],
+            },
+        )
 
 
 class AdministrativeClassCollectionView(APIView):
@@ -379,3 +389,51 @@ class AdministrativeClassMemberEndView(APIView):
     def post(self, request: HttpRequest, class_id: str, student_id: str) -> Response:
         item = end_administrative_class_membership(class_id=class_id, student_id=student_id)
         return _response(request, _membership_data(item))
+
+
+class PlatformTermClassesView(APIView):
+    permission_classes = [IsPlatformPortal]
+
+    @extend_schema(
+        parameters=[
+            OpenApiParameter(name, kind)
+            for name, kind in (
+                ("term_id", str),
+                ("role", str),
+                ("person_id", str),
+                ("q", str),
+                ("page", int),
+                ("page_size", int),
+            )
+        ],
+        responses={200: TermTimetableResponseSerializer},
+    )
+    def get(self, request: HttpRequest) -> Response:
+        params = request.query_params
+        term = term_for_ref(params.get("term_id") or "current")
+        page = PageSpec.parse(params.get("page", 1), params.get("page_size", 20))
+        courses = Course.objects.all()
+        person = params.get("person_id")
+        role = params.get("role")
+        if role not in (None, "TEACHER", "STUDENT") or (person and not role):
+            raise ValidationError({"role": "请选择教师或学生"})
+        if person:
+            if not User.objects.filter(public_id=person).exists():
+                raise ResourceNotFound()
+            if role == "TEACHER":
+                courses = courses.filter(
+                    staff__user__public_id=person, staff__status=CourseStaff.Status.ACTIVE
+                )
+            else:
+                courses = courses.filter(
+                    enrollments__student__public_id=person,
+                    enrollments__status=Enrollment.Status.ACTIVE,
+                )
+        query = (params.get("q") or "").strip()
+        if query:
+            courses = courses.filter(
+                Q(title__icontains=query)
+                | Q(timetable_code__icontains=query)
+                | Q(code__icontains=query)
+            )
+        return _response(request, _term_timetable(courses.distinct(), term, page))

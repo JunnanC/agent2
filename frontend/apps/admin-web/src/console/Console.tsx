@@ -1,3 +1,4 @@
+import { TermClasses } from "./TermClasses";
 import { StudentImport } from "./StudentImport";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -439,6 +440,9 @@ function PageContent({
               {action("详情", () =>
                 open({ kind: "person", account: u, teacher: isTeacher }),
               )}
+              {action(isTeacher ? "按学期查开课" : "按学期查课表", () => go("courses", undefined, {
+                person: u.public_id, role: isTeacher ? "TEACHER" : "STUDENT",
+              }))}
               {action(
                 u.account_status === "ACTIVE" ? "禁用" : "恢复",
                 () => open({ kind: "account", account: u }),
@@ -452,6 +456,8 @@ function PageContent({
   } else if (current === "courses") {
     content = (
       <>
+        <TermClasses teachers={people.teachers} students={people.students} />
+        <details><summary>全部课程与治理记录</summary>
         <List
           rows={allCourses}
           text={(c) => `${c.title} ${c.public_id} ${c.code} ${c.owner_name}`}
@@ -504,6 +510,7 @@ function PageContent({
             </tr>
           )}
         />
+        </details>
       </>
     );
   } else if (current === "images") {

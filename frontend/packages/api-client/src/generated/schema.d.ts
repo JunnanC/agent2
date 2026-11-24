@@ -760,70 +760,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v2/me/timetable-imports": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["api_v2_me_timetable_imports_retrieve"];
-        put?: never;
-        post: operations["api_v2_me_timetable_imports_create"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v2/me/timetable-imports/{job_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["student_timetable_import_retrieve"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v2/me/timetable-imports/{job_id}/confirm": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["student_timetable_import_confirm"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v2/me/timetable-imports/{job_id}/mapping": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put: operations["student_timetable_import_mapping_update"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v2/me/verification": {
         parameters: {
             query?: never;
@@ -1347,6 +1283,22 @@ export interface paths {
         put?: never;
         /** @description 对已解析摘要的镜像重新向运行时查询当前摘要(如镜像被重建)。 */
         post: operations["platform_images_reresolve"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/platform/images/{image_id}/rename": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["platform_images_rename"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1953,6 +1905,22 @@ export interface paths {
             cookie?: never;
         };
         get: operations["platform_template_prechecks_summary"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/platform/term-classes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["api_v2_platform_term_classes_retrieve"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2851,6 +2819,38 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["teaching_agent_source_version_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/teaching/courses/{course_id}/analytics/grades": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["api_v2_teaching_courses_analytics_grades_retrieve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/teaching/courses/{course_id}/analytics/grades/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["api_v2_teaching_courses_analytics_grades_export_retrieve"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -4393,6 +4393,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v2/teaching/timetable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["api_v2_teaching_timetable_retrieve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v2/teaching/timetable-imports": {
         parameters: {
             query?: never;
@@ -4753,6 +4769,25 @@ export interface components {
                 [key: string]: number;
             };
         };
+        ClassGradeSummary: {
+            expected: number;
+            completed: number;
+            /** Format: double */
+            completion_rate: number | null;
+            /** Format: double */
+            score: number;
+            /** Format: double */
+            max_score: number;
+            /** Format: double */
+            percent: number | null;
+            /** Format: double */
+            failure_rate: number | null;
+        };
+        /**
+         * @description * `TEACHING` - TEACHING
+         * @enum {string}
+         */
+        ClassTypeEnum: "TEACHING";
         CodeVersion: {
             language: components["schemas"]["LanguageEnum"];
             row_version: number;
@@ -4881,6 +4916,9 @@ export interface components {
             public_id: string;
             code: string;
             title: string;
+            timetable_code: string | null;
+            term_id: string;
+            term_name: string;
             summary: string;
             description: string;
             owner_id: string;
@@ -5062,6 +5100,24 @@ export interface components {
                 [key: string]: unknown;
             };
         };
+        ExperimentGradeSummary: {
+            expected: number;
+            completed: number;
+            /** Format: double */
+            completion_rate: number | null;
+            /** Format: double */
+            score: number;
+            /** Format: double */
+            max_score: number;
+            /** Format: double */
+            percent: number | null;
+            publication_id: string;
+            title: string;
+            /** Format: date-time */
+            deadline: string;
+            /** Format: date-time */
+            released_at: string;
+        };
         ExperimentImageCreate: {
             template_version_id: string;
             source_type: components["schemas"]["ExperimentImageSourceTypeEnum"];
@@ -5218,6 +5274,30 @@ export interface components {
         GovernanceTraceMeta: {
             trace_id: string;
         };
+        GradeExportData: {
+            filename: string;
+            csv: string;
+        };
+        GradeExportResponse: {
+            data: components["schemas"]["GradeExportData"];
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        GradePartSummary: {
+            kind: components["schemas"]["GradePartSummaryKindEnum"];
+            label: string;
+            /** Format: double */
+            percent: number | null;
+            suggestion: string;
+        };
+        /**
+         * @description * `CHOICE` - CHOICE
+         *     * `PROGRAMMING` - PROGRAMMING
+         *     * `REPORT` - REPORT
+         * @enum {string}
+         */
+        GradePartSummaryKindEnum: "CHOICE" | "PROGRAMMING" | "REPORT";
         GrantCreate: {
             capability: components["schemas"]["CapabilityEnum"];
             /** Format: date-time */
@@ -5273,6 +5353,7 @@ export interface components {
         ImageCreate: {
             registry: string;
             repository: string;
+            display_name?: string;
             display_tag?: string;
             digest?: string;
             risk_level: components["schemas"]["RiskLevelEnum"];
@@ -5282,6 +5363,7 @@ export interface components {
             public_id: string;
             registry: string;
             repository: string;
+            display_name: string;
             display_tag: string;
             digest: string;
             scan_status: string;
@@ -5303,6 +5385,10 @@ export interface components {
             meta: components["schemas"]["GovernancePageMeta"];
         };
         ImageReResolve: {
+            reason?: string;
+        };
+        ImageRename: {
+            display_name: string;
             reason?: string;
         };
         ImageResolve: {
@@ -5975,6 +6061,38 @@ export interface components {
         RegistrationStatus: {
             status: string;
         };
+        ReleasedGradeReport: {
+            summary: components["schemas"]["ClassGradeSummary"];
+            experiments: components["schemas"]["ExperimentGradeSummary"][];
+            students: components["schemas"]["StudentGradeSummary"][];
+            parts: components["schemas"]["GradePartSummary"][];
+            results: components["schemas"]["ReleasedResult"][];
+            awaiting_confirmation: components["schemas"]["UnconfirmedGrade"][];
+        };
+        ReleasedGradeResponse: {
+            data: components["schemas"]["ReleasedGradeReport"];
+            meta: {
+                [key: string]: unknown;
+            };
+        };
+        ReleasedResult: {
+            publication_id: string;
+            task_id: string | null;
+            student_id: string;
+            student_name: string;
+            status: components["schemas"]["ReleasedResultStatusEnum"];
+            /** Format: double */
+            score: number;
+            /** Format: double */
+            max_score: number;
+        };
+        /**
+         * @description * `SUBMITTED` - SUBMITTED
+         *     * `PARTIAL` - PARTIAL
+         *     * `NOT_SUBMITTED` - NOT_SUBMITTED
+         * @enum {string}
+         */
+        ReleasedResultStatusEnum: "SUBMITTED" | "PARTIAL" | "NOT_SUBMITTED";
         ReorderWrite: {
             ids: string[];
         };
@@ -6290,6 +6408,11 @@ export interface components {
             size_bytes: number;
             digest_sha256: string;
         };
+        /**
+         * @description * `PLATFORM` - PLATFORM
+         * @enum {string}
+         */
+        SourceEnum: "PLATFORM";
         SourceVersionWrite: {
             object_asset_id?: string;
         };
@@ -6330,6 +6453,22 @@ export interface components {
         StatusAction: {
             status: string;
             reason?: string;
+        };
+        StudentGradeSummary: {
+            expected: number;
+            completed: number;
+            /** Format: double */
+            completion_rate: number | null;
+            /** Format: double */
+            score: number;
+            /** Format: double */
+            max_score: number;
+            /** Format: double */
+            percent: number | null;
+            student_id: string;
+            student_name: string;
+            rank: number | null;
+            failed: boolean | null;
         };
         StudentImportData: {
             rows: components["schemas"]["StudentImportRow"][];
@@ -6726,10 +6865,50 @@ export interface components {
             category?: string;
             description?: string;
         };
+        TermTimetableData: {
+            term: components["schemas"]["TimetableTerm"];
+            terms: components["schemas"]["TimetableTerm"][];
+            classes: components["schemas"]["TimetableClass"][];
+            total?: number;
+            schedules: components["schemas"]["TimetableSchedule"][];
+        };
+        TermTimetableResponse: {
+            data: components["schemas"]["TermTimetableData"];
+            meta?: {
+                [key: string]: unknown;
+            };
+        };
+        TimetableClass: {
+            course_id: string;
+            course_code: string;
+            course_title: string;
+            instructor_name: string;
+        };
         TimetableMapping: {
             mapping: {
                 [key: string]: string;
             };
+        };
+        TimetableSchedule: {
+            course_id: string;
+            course_code: string;
+            course_title: string;
+            instructor_name: string;
+            source: components["schemas"]["SourceEnum"];
+            class_type: components["schemas"]["ClassTypeEnum"];
+            term_id: string;
+            weekday: number;
+            start_period: number;
+            end_period: number;
+            week_start: number | null;
+            week_end: number | null;
+            week_parity: components["schemas"]["WeekParityEnum"];
+            classroom: string;
+        };
+        TimetableTerm: {
+            public_id: string;
+            code: string;
+            name: string;
         };
         TimetableUpload: {
             /** Format: uri */
@@ -6798,6 +6977,11 @@ export interface components {
          * @enum {string}
          */
         TriageStatusEnum: "OPEN" | "TRIAGED" | "CLOSED";
+        UnconfirmedGrade: {
+            publication_id?: string;
+            task_id: string;
+            reason: string;
+        };
         UsageData: {
             reservation: {
                 [key: string]: number;
@@ -6882,6 +7066,13 @@ export interface components {
             course_id?: string;
             secret?: string;
         };
+        /**
+         * @description * `ALL` - ALL
+         *     * `ODD` - ODD
+         *     * `EVEN` - EVEN
+         * @enum {string}
+         */
+        WeekParityEnum: "ALL" | "ODD" | "EVEN";
         WeeklyStudyData: {
             minutes_by_day: number[];
             total_minutes: number;
@@ -8039,7 +8230,9 @@ export interface operations {
     };
     api_v2_me_timetable_retrieve: {
         parameters: {
-            query?: never;
+            query?: {
+                term_id?: string;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -8051,120 +8244,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["GenericTimetableResponse"];
-                };
-            };
-        };
-    };
-    api_v2_me_timetable_imports_retrieve: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["GenericTimetableResponse"];
-                };
-            };
-        };
-    };
-    api_v2_me_timetable_imports_create: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["TimetableUpload"];
-                "application/x-www-form-urlencoded": components["schemas"]["TimetableUpload"];
-                "multipart/form-data": components["schemas"]["TimetableUpload"];
-            };
-        };
-        responses: {
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["GenericTimetableResponse"];
-                };
-            };
-        };
-    };
-    student_timetable_import_retrieve: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                job_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["GenericTimetableResponse"];
-                };
-            };
-        };
-    };
-    student_timetable_import_confirm: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                job_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            202: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["GenericTimetableResponse"];
-                };
-            };
-        };
-    };
-    student_timetable_import_mapping_update: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                job_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["TimetableMapping"];
-                "application/x-www-form-urlencoded": components["schemas"]["TimetableMapping"];
-                "multipart/form-data": components["schemas"]["TimetableMapping"];
-            };
-        };
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["GenericTimetableResponse"];
+                    "application/json": components["schemas"]["TermTimetableResponse"];
                 };
             };
         };
@@ -9177,6 +9257,38 @@ export interface operations {
         };
         responses: {
             202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageResponse"];
+                };
+            };
+        };
+    };
+    platform_images_rename: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Stable key for one user intent. */
+                "Idempotency-Key": string;
+                /** @description Quoted row version ETag. */
+                "If-Match": string;
+            };
+            path: {
+                image_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ImageRename"];
+                "application/x-www-form-urlencoded": components["schemas"]["ImageRename"];
+                "multipart/form-data": components["schemas"]["ImageRename"];
+            };
+        };
+        responses: {
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -10474,6 +10586,32 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PlatformPrecheckSummaryResponse"];
+                };
+            };
+        };
+    };
+    api_v2_platform_term_classes_retrieve: {
+        parameters: {
+            query?: {
+                page?: number;
+                page_size?: number;
+                person_id?: string;
+                q?: string;
+                role?: string;
+                term_id?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TermTimetableResponse"];
                 };
             };
         };
@@ -12322,6 +12460,52 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AgentEnvelope"];
+                };
+            };
+        };
+    };
+    api_v2_teaching_courses_analytics_grades_retrieve: {
+        parameters: {
+            query?: {
+                publication_ids?: string;
+            };
+            header?: never;
+            path: {
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReleasedGradeResponse"];
+                };
+            };
+        };
+    };
+    api_v2_teaching_courses_analytics_grades_export_retrieve: {
+        parameters: {
+            query?: {
+                publication_ids?: string;
+            };
+            header?: never;
+            path: {
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GradeExportResponse"];
                 };
             };
         };
@@ -15385,6 +15569,27 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CourseResponse"];
+                };
+            };
+        };
+    };
+    api_v2_teaching_timetable_retrieve: {
+        parameters: {
+            query?: {
+                term_id?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TermTimetableResponse"];
                 };
             };
         };

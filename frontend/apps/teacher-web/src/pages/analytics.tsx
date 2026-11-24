@@ -1,3 +1,4 @@
+import { ReleasedGradeBoard } from "@/components/released-grade-board";
 import { GradeAnalysis } from "./grade-analysis";
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -101,7 +102,10 @@ export function Analytics() {
           </select>
         </div>
       </div>
-      <GradeAnalysis key={courseId} courseId={courseId} />
+      <ReleasedGradeBoard key={courseId} courseId={courseId} />
+      <details className="section"><summary>历史任务成绩与补做</summary>
+        <GradeAnalysis key={courseId} courseId={courseId} />
+      </details>
 
       <Panel className="section">
         <RequestStateView loading={progress.isLoading && !rows.length}

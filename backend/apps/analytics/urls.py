@@ -1,5 +1,6 @@
 from django.urls import path
 
+from .class_grade_views import TeachingClassGradesExportView, TeachingClassGradesView
 from .views import (
     PlatformAnalyticsProjectionView,
     PlatformAnalyticsQualityView,
@@ -18,6 +19,11 @@ from .views import (
 )
 
 urlpatterns = [
+    path("teaching/courses/<str:course_id>/analytics/grades", TeachingClassGradesView.as_view()),
+    path(
+        "teaching/courses/<str:course_id>/analytics/grades/export",
+        TeachingClassGradesExportView.as_view(),
+    ),
     path("analytics/recommendations", UserAnalyticsRecommendationView.as_view()),
     path("analytics/risk-signals", UserAnalyticsRiskSignalView.as_view()),
     path(

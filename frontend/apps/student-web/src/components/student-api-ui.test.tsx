@@ -2,19 +2,17 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { agentApi, meApi, studentApi, timetableApi } from "@edu/api-client";
-import type { AgentMessage, Enrollment, TimetableImport } from "@edu/api-client";
+import { agentApi, meApi, studentApi } from "@edu/api-client";
+import type { AgentMessage, Enrollment } from "@edu/api-client";
 import { ToastProvider } from "@edu/ui";
 import { EnrollmentExit } from "./enrollment-exit";
 import { LearningHistory } from "./learning-history";
-import { StudentTimetable } from "./student-timetable";
 import { CourseAgent } from "./course-agent";
 import type { ReactNode } from "react";
 
 vi.mock("@edu/api-client", () => ({
   studentApi: { enrollment: vi.fn(), dropCheck: vi.fn(), dropEnrollment: vi.fn(), withdrawEnrollment: vi.fn() },
   meApi: { learningHistory: vi.fn() },
-  timetableApi: { retrieve: vi.fn(), imports: vi.fn(), importJob: vi.fn(), upload: vi.fn(), updateMapping: vi.fn(), confirm: vi.fn() },
   agentApi: { courseProfile: vi.fn(), createCourseSession: vi.fn(), createTaskSession: vi.fn(), session: vi.fn(), messages: vi.fn(), sendMessage: vi.fn(), feedback: vi.fn(), decideToolCall: vi.fn() },
   fileApi: { createDownloadGrant: vi.fn() },
 }));
@@ -84,52 +82,6 @@ describe("学生课程接口入口", () => {
     expect(await screen.findByText("秋季学期")).toBeInTheDocument();
     expect(screen.getByText(/98.00 分/)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "函数练习" })).toHaveAttribute("href", "/experiments/task-1");
-  });
-});
-
-describe("课表导入", () => {
-  it("显示具体错误行并阻止带错误的课表确认", async () => {
-    const job = { public_id: "job-error", status: "READY", filename: "invalid.xlsx", fields: [], headers: [], mapping: {}, summary: { total: 1, errors: 1 }, row_errors: [{ row_no: 3, code: "weekday_required" }] } as unknown as TimetableImport;
-    vi.mocked(timetableApi.retrieve).mockResolvedValue({ term: { public_id: "term-1", code: "fall", name: "秋季学期" }, schedules: [] });
-    vi.mocked(timetableApi.imports).mockResolvedValue(list([job]));
-    vi.mocked(timetableApi.importJob).mockResolvedValue(job);
-    show(<StudentTimetable />);
-    const imports = await screen.findByLabelText("最近的导入");
-    fireEvent.change(imports, { target: { value: "job-error" } });
-    expect(await screen.findByText("第 3 行：无法识别星期")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "确认导入" })).toBeDisabled();
-  });
-
-  it("修改映射后先保存再确认，异步完成后刷新课表", async () => {
-    const job: TimetableImport = { public_id: "job-1", kind: "STUDENT", status: "READY", filename: "schedule.xlsx", term_id: "term-1", row_version: 1,
-      fields: [{ key: "course_title", label: "课程名称" }, { key: "weekday", label: "星期" }, { key: "start_period", label: "开始节次" }, { key: "end_period", label: "结束节次" }],
-      headers: ["课程", "名称", "星期", "开始", "结束"], mapping: { course_title: "课程", weekday: "星期", start_period: "开始", end_period: "结束" }, summary: { total: 1, valid: 1, errors: 0 }, row_errors: [],
-    };
-    vi.mocked(timetableApi.retrieve).mockResolvedValue({ term: { public_id: "term-1", code: "fall", name: "秋季学期" }, schedules: [] });
-    vi.mocked(timetableApi.imports).mockResolvedValue(list([job]));
-    vi.mocked(timetableApi.upload).mockResolvedValue(job);
-    vi.mocked(timetableApi.importJob).mockResolvedValue(job);
-    vi.mocked(timetableApi.updateMapping).mockResolvedValue({ ...job, mapping: { ...job.mapping, course_title: "名称" } });
-    vi.mocked(timetableApi.confirm).mockResolvedValue({ ...job, status: "RUNNING" });
-    const client = show(<StudentTimetable />);
-    const invalidate = vi.spyOn(client, "invalidateQueries");
-    await screen.findByText("秋季学期");
-    const workbook = new File(["xlsx"], "schedule.xlsx");
-    fireEvent.change(screen.getByLabelText(/导入个人课表/), { target: { files: [workbook] } });
-    fireEvent.click(screen.getByRole("button", { name: "上传课表" }));
-    await waitFor(() => expect(timetableApi.upload).toHaveBeenCalledWith(workbook, "term-1"));
-    await screen.findByLabelText("课程名称 *");
-    fireEvent.change(screen.getByLabelText("课程名称 *"), { target: { value: "名称" } });
-    expect(screen.getByRole("button", { name: "确认导入" })).toBeDisabled();
-    fireEvent.click(screen.getByRole("button", { name: "保存并检查" }));
-    await waitFor(() => expect(screen.getByRole("button", { name: "确认导入" })).toBeEnabled());
-    expect(timetableApi.updateMapping).toHaveBeenCalledWith("job-1", { ...job.mapping, course_title: "名称" });
-    // The worker completes on the next polling read.
-    vi.mocked(timetableApi.importJob).mockResolvedValue({ ...job, status: "COMPLETED" });
-    fireEvent.click(screen.getByRole("button", { name: "确认导入" }));
-    expect(await screen.findByText("正在导入，完成后课表会自动更新。")).toBeInTheDocument();
-    expect(await screen.findByText("课表已导入。", {}, { timeout: 4000 })).toBeInTheDocument();
-    expect(invalidate).toHaveBeenCalledWith({ queryKey: ["student", "timetable", "current"] });
   });
 });
 

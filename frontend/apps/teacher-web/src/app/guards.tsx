@@ -3,18 +3,10 @@ import { useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { meApi } from "@edu/api-client";
 import { keys } from "@edu/query-keys";
-import { Outlet, useLocation, useNavigate, useParams } from "react-router-dom";
+import { Link, Outlet, useLocation, useNavigate, useParams } from "react-router-dom";
 import { AppShell, EmptyState, Icon, LoadingState } from "@edu/ui";
-import type { NavEntry } from "@edu/ui";
 import { useSession } from "./session";
 import { usePortalEvents } from "./providers";
-
-/** 一级扁平导航：不再使用下拉分组，点击即进入对应页面 */
-const TEACHER_NAV: Array<NavEntry> = [
-  { label: "概览", path: "/", icon: "layers" },
-  { label: "课程", path: "/courses", icon: "book" },
-  { label: "通知", path: "/notifications", icon: "bell" },
-];
 
 /** 全站 SSE 桥：会话就绪后连接 */
 export function PortalSSEBridge() {
@@ -68,16 +60,12 @@ export function AuthGuard() {
   const { me, logout } = session;
   const displayName = me.display_name || me.username;
   void params;
-  const nav = TEACHER_NAV;
   return (
     <div className="app-shell">
       <AppShell
         brand="实验教学平台"
         domainLabel="教师门户"
-        navigationPosition="side"
-        collapsible
-        collapseStorageKey="edu.teacher.sidebar-collapsed"
-        nav={nav}
+        nav={[]}
         activePath={location.pathname.startsWith("/courses/") ? "/courses" : location.pathname}
         onNavigate={(path) => navigate(path === "/courses" ? "/courses" : path)}
         avatar={{ name: displayName, role: "教师", badge: displayName.slice(0, 1) }}
@@ -87,6 +75,7 @@ export function AuthGuard() {
           { label: "退出登录", icon: "log-out", onClick: () => { void logout().then(() => navigate("/login", { replace: true })); } },
         ]}
       >
+        {location.pathname !== "/" && <Link className="btn sm" to="/">返回课表</Link>}
         <CourseLayout><Outlet /></CourseLayout>
       </AppShell>
     </div>

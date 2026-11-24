@@ -2,6 +2,7 @@ import hashlib
 import json
 import re
 import zipfile
+from contextlib import closing
 from io import BytesIO
 from typing import Any
 
@@ -23,10 +24,10 @@ from .models import (
     StudentScheduleEntry,
     TimetableImportJob,
 )
-from .services import ActorContext, create_course
+from .services import ActorContext, create_course, publish_course
 
 TIMETABLE_FIELDS = {
-    "course_code": "课程代码",
+    "course_code": "教务教学班编号",
     "course_title": "课程名称",
     "weekday": "星期",
     "start_period": "开始节次",
@@ -61,28 +62,37 @@ def _read_workbook(content: bytes, filename: str) -> tuple[list[str], list[dict[
         with zipfile.ZipFile(BytesIO(content)) as archive:
             if sum(item.file_size for item in archive.infolist()) > MAX_WORKBOOK_XML_BYTES:
                 raise ContentStateConflict(detail={"file": "expanded_content_too_large"})
-        workbook = load_workbook(BytesIO(content), read_only=True, data_only=True)
-        sheet = workbook.active
-        if sheet.max_column > MAX_TIMETABLE_COLUMNS:
-            raise ContentStateConflict(detail={"file": "too_many_columns"})
-        iterator = sheet.iter_rows(values_only=True)
-        header_row = next(iterator, None)
-        if not header_row:
-            raise ContentStateConflict(detail={"file": "header_row_required"})
-        headers = [_cell_text(value) for value in header_row]
-        while headers and not headers[-1]:
-            headers.pop()
-        if not headers or any(not value for value in headers) or len(set(headers)) != len(headers):
-            raise ContentStateConflict(detail={"file": "headers_must_be_nonempty_and_unique"})
-        rows: list[dict[str, Any]] = []
-        for row_no, values in enumerate(iterator, start=2):
-            cells = [_cell_text(value) for value in values[: len(headers)]]
-            if not any(cells):
-                continue
-            if len(rows) >= MAX_TIMETABLE_ROWS:
-                raise ContentStateConflict(detail={"file": "too_many_rows"})
-            rows.append({"row_no": row_no, "cells": dict(zip(headers, cells, strict=False))})
-        workbook.close()
+        with closing(load_workbook(BytesIO(content), read_only=True, data_only=True)) as workbook:
+            sheet = workbook.active
+            if (sheet.max_column or 0) > MAX_TIMETABLE_COLUMNS:
+                raise ContentStateConflict(detail={"file": "too_many_columns"})
+            iterator = sheet.iter_rows(values_only=True, max_row=MAX_TIMETABLE_ROWS + 2)
+            header_row = next(iterator, None)
+            if not header_row:
+                raise ContentStateConflict(detail={"file": "header_row_required"})
+            if len(header_row) > MAX_TIMETABLE_COLUMNS:
+                raise ContentStateConflict(detail={"file": "too_many_columns"})
+            headers = [_cell_text(value) for value in header_row]
+            while headers and not headers[-1]:
+                headers.pop()
+            if (
+                not headers
+                or any(not value for value in headers)
+                or len(set(headers)) != len(headers)
+            ):
+                raise ContentStateConflict(detail={"file": "headers_must_be_nonempty_and_unique"})
+            rows: list[dict[str, Any]] = []
+            for row_no, values in enumerate(iterator, start=2):
+                if row_no > MAX_TIMETABLE_ROWS + 1:
+                    raise ContentStateConflict(detail={"file": "too_many_rows"})
+                if len(values) > MAX_TIMETABLE_COLUMNS:
+                    raise ContentStateConflict(detail={"file": "too_many_columns"})
+                cells = [_cell_text(value) for value in values[: len(headers)]]
+                if any(cells):
+                    rows.append({
+                        "row_no": row_no,
+                        "cells": dict(zip(headers, cells, strict=False)),
+                    })
         if not rows:
             raise ContentStateConflict(detail={"file": "no_timetable_rows"})
         return headers, rows
@@ -149,7 +159,7 @@ def _weekday(value: str) -> int:
         "sat": 6,
         "sun": 7,
     }
-    match = re.search(r"(?:星期|礼拜|周)?\s*([一二三四五六日天1-7])", text)
+    match = re.fullmatch(r"(?:星期|礼拜|周)?\s*([一二三四五六日天1-7])", text)
     if not match:
         for prefix, number in day_names.items():
             if len(prefix) == 3 and text.startswith(prefix):
@@ -179,8 +189,21 @@ def _mapped_schedule(row: dict[str, Any], mapping: dict[str, str], kind: str) ->
         week_end = _integer(raw["week_end"], part="second") if raw.get("week_end") else 0
     except ValueError as exc:
         raise ValueError(str(exc)) from exc
-    if not 1 <= start_period <= end_period or (week_start and week_end and week_end < week_start):
+    if not 1 <= start_period <= end_period <= 32767 or not (
+        week_start == week_end == 0 or 1 <= week_start <= week_end <= 32767
+    ):
         raise ValueError("invalid_period_or_week_range")
+    if len(code) > 64:
+        raise ValueError("course_code_too_long")
+    week_text = raw.get("week_start", "") + raw.get("week_end", "")
+    if "单" in week_text and "双" in week_text:
+        raise ValueError("conflicting_week_parity")
+    week_parity = "ODD" if "单" in week_text else "EVEN" if "双" in week_text else "ALL"
+    if week_parity != "ALL" and not any(
+        week % 2 == (week_parity == "ODD")
+        for week in range(week_start, min(week_end, week_start + 1) + 1)
+    ):
+        raise ValueError("week_parity_outside_range")
     return {
         "row_no": row["row_no"],
         "course_code": code,
@@ -190,6 +213,7 @@ def _mapped_schedule(row: dict[str, Any], mapping: dict[str, str], kind: str) ->
         "end_period": end_period,
         "week_start": week_start,
         "week_end": week_end,
+        "week_parity": week_parity,
         "classroom": raw.get("classroom", "")[:128],
         "instructor_name": raw.get("instructor_name", "")[:128],
     }
@@ -222,6 +246,7 @@ def _validate_rows(
                 item["end_period"],
                 item["week_start"],
                 item["week_end"],
+                item["week_parity"],
             )
             if item["course_code"]:
                 course_codes.add(item["course_code"])
@@ -235,15 +260,13 @@ def _validate_rows(
         except (KeyError, TypeError, ValueError) as exc:
             errors.append({"row_no": row["row_no"], "code": str(exc) or "invalid_row"})
     if job.kind == TimetableImportJob.Kind.TEACHER and course_codes:
-        existing = Course.objects.filter(code__in=course_codes)
-        existing_by_code = {item.code: item for item in existing}
+        existing = Course.objects.filter(
+            owner_id=job.owner_id, term_id=job.term_id, timetable_code__in=course_codes
+        )
+        existing_by_code = {item.timetable_code: item for item in existing}
         for item in normalized:
             course = existing_by_code.get(item["course_code"])
-            if course and (
-                course.owner_id != job.owner_id
-                or course.term_id != job.term_id
-                or course.title != item["course_title"]
-            ):
+            if course and course.title != item["course_title"]:
                 errors.append({"row_no": item["row_no"], "code": "course_code_conflict"})
     return normalized, errors
 
@@ -332,6 +355,8 @@ def execute_timetable_import(
         return job
     if job.status != TimetableImportJob.Status.RUNNING:
         raise ContentStateConflict(detail={"status": job.status})
+    if kind == TimetableImportJob.Kind.TEACHER:
+        User.objects.select_for_update().get(pk=actor.pk)
     normalized, errors = _validate_rows(job, job.mapping)
     if errors:
         raise ContentStateConflict(detail={"row_errors": errors})
@@ -364,11 +389,35 @@ def execute_timetable_import(
         code = item["course_code"]
         course = courses.get(code)
         if course is None:
-            course = Course.objects.filter(code=code, owner=actor, term=job.term).first()
+            course = Course.objects.filter(timetable_code=code, owner=actor, term=job.term).first()
+            if course is None:
+                # Old imports used the external number as Course.code. Only adopt an exact
+                # owner/term/title match with an existing matching slot.
+                course = Course.objects.filter(
+                    timetable_code__isnull=True,
+                    code=code,
+                    owner=actor,
+                    term=job.term,
+                    title=item["course_title"],
+                    weekly_schedules__weekday=item["weekday"],
+                    weekly_schedules__start_period=item["start_period"],
+                    weekly_schedules__end_period=item["end_period"],
+                    weekly_schedules__week_start=item["week_start"],
+                    weekly_schedules__week_end=item["week_end"],
+                ).first()
+                if course:
+                    course = compare_and_swap(
+                        Course,
+                        pk=course.pk,
+                        expected_version=course.row_version,
+                        changes={"timetable_code": code},
+                    )
+                    assert isinstance(course, Course)
             if course is None:
                 course = create_course(
                     actor=actor,
-                    code=code,
+                    code="",
+                    timetable_code=code,
                     title=item["course_title"],
                     summary="",
                     description="",
@@ -382,6 +431,13 @@ def execute_timetable_import(
                     context=context,
                     term=job.term,
                 )
+            if course.status == Course.Status.DRAFT:
+                course = publish_course(
+                    course_id=course.public_id,
+                    actor=actor,
+                    expected_version=course.row_version,
+                    context=context,
+                )
             courses[code] = course
         _, created = CourseSchedule.objects.get_or_create(
             course=course,
@@ -390,6 +446,7 @@ def execute_timetable_import(
             end_period=item["end_period"],
             week_start=item["week_start"],
             week_end=item["week_end"],
+            week_parity=item["week_parity"],
             defaults={"classroom": item["classroom"], "instructor_name": item["instructor_name"]},
         )
         schedule_count += int(created)

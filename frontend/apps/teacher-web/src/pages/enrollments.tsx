@@ -119,7 +119,7 @@ export function Enrollments() {
       <div className="tab-head">
         <h2>成员与申请</h2>
         <div className="page-actions">
-          <Button onClick={() => fileInputRef.current?.click()}>批量导入</Button>
+          <Button onClick={() => fileInputRef.current?.click()}>导入学号名单</Button>
           <input ref={fileInputRef} type="file" accept=".csv,text/csv" hidden
             onChange={(event) => {
               const file = event.target.files?.[0];
@@ -128,6 +128,7 @@ export function Enrollments() {
             }} />
         </div>
       </div>
+      <p className="subtle">名单使用 UTF-8 CSV，学号列名为 student_number。系统会匹配已注册的学生账号。</p>
 
       <Panel className="section">
         <RequestStateView loading={enrollments.isLoading && course.isLoading && !rows.length}
