@@ -131,3 +131,6 @@ class ReportSubmission(VersionedModel):
     score = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
     graded_by = models.ForeignKey(User, on_delete=models.PROTECT, null=True, blank=True)
     feedback = models.CharField(max_length=1000, blank=True, default="")
+    review_status = models.CharField(max_length=12, blank=True, default="")
+    ai_review = models.JSONField(default=dict, blank=True)
+    comments = models.JSONField(default=list, blank=True)

@@ -192,6 +192,14 @@ SPECTACULAR_SETTINGS: dict[str, object] = {
 }
 
 REDIS_URL = env("REDIS_URL", "redis://redis:6379/0")
+CACHES = {
+    "default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"},
+    "lab_runtime": {
+        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        "LOCATION": REDIS_URL,
+        "KEY_PREFIX": "edu-lab-runtime",
+    },
+}
 OUTBOX_REDIS_STREAM = env("OUTBOX_REDIS_STREAM", "edu:events:v2")
 OUTBOX_REDIS_MAXLEN = int(env("OUTBOX_REDIS_MAXLEN", "10000"))
 AUDIT_IP_HASH_SALT = env("AUDIT_IP_HASH_SALT", SECRET_KEY)

@@ -30,6 +30,7 @@ from apps.experiments.models import ExperimentTask, TaskPublication
 
 from .models import ReportSubmission
 from .services import ALLOWED_FILES, _magic_matches, _safe_filename
+from .word_review import asset_bytes, document_paragraphs, valid_docx
 
 TEMPLATE_OWNER = "EXPERIMENT_REPORT_TEMPLATE"
 REPORT_OWNER = "ASSESSMENT_REPORT"
@@ -99,21 +100,29 @@ def file_data(asset: ObjectAsset | None) -> dict[str, str] | None:
     return {"asset_id": asset.public_id, "file_name": asset.original_name} if asset else None
 
 
-def report_data(task: ExperimentTask) -> dict[str, Any]:
-    part = next((part for part in part_scores(task) if part["kind"] == "REPORT"), None)
+def report_data(task: ExperimentTask, *, teaching: bool = False) -> dict[str, Any]:
+    part = next(
+        (part for part in part_scores(task, student=not teaching) if part["kind"] == "REPORT"),
+        None,
+    )
     if part is None or not session_for(task):
         raise ResourceNotFound()
     publication = task.publication
     report = ReportSubmission.objects.select_related("asset").filter(task=task).first()
+    visible = teaching or not publication.direct_assessment or bool(publication.grades_published_at)
     return {
         **part,
-        "template": file_data(
-            publication.report_template_asset or publication.template_version.report_template_asset,
-        ),
+        "template": file_data(publication.assessment_report_template),
         "attachment": file_data(report.asset if report else None),
         "submitted_at": report.submitted_at if report else None,
         "row_version": report.row_version if report else None,
-        "feedback": report.feedback if report else "",
+        "feedback": report.feedback if report and visible else "",
+        "comments": report.comments if report and visible else [],
+        "review_status": report.review_status if report and teaching else "",
+        "ai_review": report.ai_review if report and teaching else {},
+        "released_at": publication.grades_published_at,
+        "signer": publication.grade_signer,
+        "direct_assessment": publication.direct_assessment,
     }
 
 
@@ -121,6 +130,12 @@ def report_data(task: ExperimentTask) -> dict[str, Any]:
 def submit_report(*, actor: User, task_id: str, file: UploadedFile) -> dict[str, Any]:
     task = _task(actor, task_id, write=True, part="REPORT")
     report_data(task)
+    if task.publication.direct_assessment and (
+        PurePath(file.name or "").suffix.casefold() != ".docx"
+        or not 1 <= file.size <= settings.REPORT_ATTACHMENT_MAX_BYTES
+        or not valid_docx(file)
+    ):
+        raise StateConflict(detail={"file": "valid_docx_required"})
     report = ReportSubmission.objects.filter(task=task).select_related("asset").first()
     with _store(file, owner=REPORT_OWNER, ref=task.public_id) as asset:
         from apps.experiments.assessment_parts import require_part_open
@@ -133,6 +148,7 @@ def submit_report(*, actor: User, task_id: str, file: UploadedFile) -> dict[str,
             "score": None,
             "graded_by": None,
             "feedback": "",
+            "review_status": "", "ai_review": {}, "comments": [],
         }
         if report is None:
             ReportSubmission.objects.create(task=task, **fields)
@@ -155,24 +171,36 @@ def grade_report(
     score: Decimal,
     feedback: str,
     expected_version: int,
+    comments: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
+    publication = TaskPublication.objects.select_for_update().get(pk=task.publication_id)
+    if publication.grades_published_at:
+        raise StateConflict(detail={"publication": "grades_locked"})
     task = ExperimentTask.objects.select_for_update().get(pk=task.pk)
-    state = report_data(task)
-    report = ReportSubmission.objects.filter(task=task).first()
+    task.publication = publication
+    state = report_data(task, teaching=True)
+    report = ReportSubmission.objects.select_related("asset").filter(task=task).first()
     if not report or report.status == "RETURNED" or task.publication.status == "WITHDRAWN":
         raise StateConflict(detail={"report": "submission_required"})
+    if score > Decimal(state["max_score"]):
+        raise StateConflict(detail={"score": "exceeds_report_maximum"})
+    if comments is not None and publication.direct_assessment and comments:
+        paragraphs = {row["paragraph"] for row in document_paragraphs(asset_bytes(report.asset))}
+        if any(item["paragraph"] not in paragraphs for item in comments):
+            raise StateConflict(detail={"comments": "invalid_paragraph"})
     compare_and_swap(
         ReportSubmission,
         pk=report.pk,
         expected_version=expected_version,
         changes={
             "status": "GRADED",
-            "score": min(score, Decimal(state["score_cap"])),
+            "score": min(score, Decimal(str(state["score_cap"]))),
             "graded_by": actor,
             "feedback": feedback,
+            **({"comments": comments} if comments is not None else {}),
         },
     )
-    return report_data(task)
+    return report_data(task, teaching=True)
 
 
 @transaction.atomic
@@ -187,6 +215,15 @@ def attach_template(
         raise RowVersionConflict()
     if publication.status not in {"DRAFT", "PUBLISH_FAILED"}:
         raise StateConflict(detail={"publication": "draft_required"})
+    if publication.direct_assessment:
+        if not publication.report_required:
+            raise StateConflict(detail={"report": "not_required"})
+        if (
+            PurePath(file.name or "").suffix.casefold() != ".docx"
+            or not 1 <= file.size <= settings.REPORT_ATTACHMENT_MAX_BYTES
+            or not valid_docx(file)
+        ):
+            raise StateConflict(detail={"file": "valid_docx_required"})
     old = publication.report_template_asset
     with _store(file, owner=TEMPLATE_OWNER, ref=publication.public_id) as asset:
         publication = compare_and_swap(

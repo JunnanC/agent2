@@ -41,6 +41,7 @@ def part_open(task: ExperimentTask, deadline: datetime) -> bool:
     publication = task.publication
     return (
         task.status not in INACTIVE_TASKS
+        and not publication.grades_published_at
         and task.enrollment.status == "ACTIVE"
         and publication.window_start <= timezone.now() < deadline
         and (
@@ -64,7 +65,8 @@ def session_for(task: ExperimentTask) -> AssessmentSession | None:
 
 def can_start_session(task: ExperimentTask) -> bool:
     return (
-        questions_for(task).exists()
+        (questions_for(task).exists() or task.publication.direct_assessment
+         and task.publication.report_required)
         and not AssessmentSection.objects.filter(
             task=task,
             kind="PROGRAMMING",
@@ -77,7 +79,7 @@ def percentage(passed: int, total: int) -> Decimal:
     return (Decimal(passed * 100) / total).quantize(Decimal("0.01"))
 
 
-def part_scores(task: ExperimentTask) -> list[dict[str, Any]]:
+def part_scores(task: ExperimentTask, *, student: bool = False) -> list[dict[str, Any]]:
     from apps.reports.models import ReportSubmission
 
     kinds = list(questions_for(task).values_list("task_type", flat=True))
@@ -85,10 +87,14 @@ def part_scores(task: ExperimentTask) -> list[dict[str, Any]]:
     programs = kinds.count("PROGRAMMING")
     redos = {row.part: row for row in PartRedo.objects.filter(task=task)}
     parts: list[dict[str, Any]] = []
+    maxima = task.publication.experiment_spec.get("part_maxima", {})
 
     def add(part: str, status: str, score: Decimal | None) -> None:
         redo = redos.get(part)
-        maximum = 60 if redo or task.publication.retake_of_id else 100
+        full_score = Decimal(maxima.get(part, "100"))
+        maximum = full_score
+        if redo or task.publication.retake_of_id:
+            maximum = (full_score * Decimal("0.60")).quantize(Decimal("0.01"))
         deadline = redo.redo_until if redo else task.publication.window_end
         if score is None and timezone.now() >= deadline and status == "NOT_SUBMITTED":
             score = Decimal("0")
@@ -98,8 +104,8 @@ def part_scores(task: ExperimentTask) -> list[dict[str, Any]]:
             "score": str(min(score, Decimal(maximum)).quantize(Decimal("0.01")))
             if score is not None
             else None,
-            "max_score": "100",
-            "score_cap": maximum,
+            "max_score": str(full_score),
+            "score_cap": float(maximum),
             "deadline": deadline,
             "redo_until": redo.redo_until if redo else None,
             "editable": part_open(task, deadline) and (part == "REPORT" or status != "SUBMITTED"),
@@ -121,7 +127,7 @@ def part_scores(task: ExperimentTask) -> list[dict[str, Any]]:
                 == set(answer.question.marking_spec["correct_option_ids"])
                 for answer in section.current_submission.answers.select_related("question")
             )
-            score = percentage(correct, choices)
+            score = Decimal(correct) * Decimal(maxima.get("CHOICE", "100")) / choices
         add("CHOICE", status, score)
     if programs:
         passed = ProgrammingSubmission.objects.filter(task=task).count()
@@ -132,12 +138,26 @@ def part_scores(task: ExperimentTask) -> list[dict[str, Any]]:
             if "PROGRAMMING" in redos
             else ("IN_PROGRESS" if passed else "NOT_SUBMITTED")
         )
-        add("PROGRAMMING", status, percentage(passed, programs))
+        scaled = Decimal(passed) * Decimal(maxima.get("PROGRAMMING", "100")) / programs
+        add("PROGRAMMING", status, scaled)
         parts[-1].update(passed_questions=passed, total_questions=programs)
     if task.publication.report_required or task.publication.report_template_asset_id:
         report = ReportSubmission.objects.filter(task=task).first()
         status = report.status if report else "RETURNED" if "REPORT" in redos else "NOT_SUBMITTED"
         add("REPORT", status, report.score if report else None)
+    if student and task.publication.direct_assessment:
+        if not task.publication.grades_published_at:
+            return [
+                {**part, "score": None,
+                 "status": "SUBMITTED" if part["status"] == "GRADED" else part["status"]}
+                for part in parts
+            ]
+        from .models import PublishedExperimentGrade
+
+        released = PublishedExperimentGrade.objects.filter(task=task).first()
+        if released is not None:
+            scores = {part["kind"]: part for part in released.result["parts"]}
+            return [{**part, **scores.get(part["kind"], {}), "editable": False} for part in parts]
     return parts
 
 
@@ -191,7 +211,11 @@ def grant_redo(
             raise ResourceNotFound()
         AssessmentSession.objects.create(task=task)
     now = timezone.now()
-    if task.publication.status not in {"PUBLISHED", "CLOSED"} or task.status in INACTIVE_TASKS:
+    if (
+        publication.grades_published_at
+        or publication.status not in {"PUBLISHED", "CLOSED"}
+        or task.status in INACTIVE_TASKS
+    ):
         raise StateConflict(detail={"task": "not_open"})
     if now < task.publication.window_end or redo_until <= now:
         raise StateConflict(detail={"redo_until": "after_experiment_and_future_required"})

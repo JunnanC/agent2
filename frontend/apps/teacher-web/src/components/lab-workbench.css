@@ -1,0 +1,28 @@
+.lab-form, .lab-form label, .lab-fields, .lab-cases { display: grid; gap: 0.55rem; }
+.lab-form { gap: 1rem; }
+.lab-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.8rem; }
+.lab-fields.lab-maxima { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.lab-form textarea { resize: vertical; }
+.lab-section { display: grid; gap: 0.85rem; padding-top: 0.9rem; border-top: 1px solid var(--border, #dfe4e8); }
+.lab-section h3, .lab-heading-row h4 { margin: 0; }
+.lab-heading-row, .lab-inline-action { display: flex; gap: 0.75rem; align-items: end; justify-content: space-between; }
+.lab-inline-action label { flex: 1; min-width: 0; }
+.lab-question-workspace { display: grid; grid-template-columns: minmax(8rem, 0.42fr) minmax(0, 1fr); gap: 1rem; }
+.lab-question-tabs { display: grid; gap: 0.4rem; align-content: start; }
+.lab-question-tabs button { overflow-wrap: anywhere; justify-content: start; text-align: start; white-space: normal; }
+.lab-question-tabs button[aria-pressed="true"] { font-weight: 700; }
+.lab-cases { min-width: 0; border: 1px solid var(--border, #dfe4e8); padding: 0.65rem; }
+.lab-cases > .btn { justify-self: start; }
+.lab-case-row, .lab-option { display: grid; gap: 0.5rem; align-items: end; }
+.lab-case-row { grid-template-columns: repeat(2, minmax(0, 1fr)) auto; }
+.lab-option { grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; }
+.lab-option label { display: flex; align-items: center; white-space: nowrap; }
+.lab-code { font-family: ui-monospace, monospace; }
+.lab-usage { font-variant-numeric: tabular-nums; }
+.lab-review-controls { margin-block: 0.8rem; }
+.lab-review-controls h2 { margin: 0; }
+.lab-review-controls .panel-body { display: grid; gap: 0.65rem; }
+@media (max-width: 620px) {
+  .lab-question-workspace, .lab-fields { grid-template-columns: minmax(0, 1fr); }
+  .lab-question-tabs { grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr)); }
+}

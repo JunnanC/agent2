@@ -35,9 +35,9 @@ def task_grades(
             assessment_tasks[link.retake_task_id] = link.retake_task
     assessment_scores: dict[int, dict[str, object]] = {}
     for task in assessment_tasks.values():
-        if session_for(task):
+        if session_for(task) or task.publication.direct_assessment:
             if task.pk in result:
-                result[task.pk]["parts"] = part_scores(task)
+                result[task.pk]["parts"] = part_scores(task, student=student)
             continue
         questions = PublicationTask.objects.filter(
             publication_chapter__publication_id=task.publication_id,

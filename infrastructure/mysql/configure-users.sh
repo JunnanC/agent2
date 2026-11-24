@@ -114,6 +114,8 @@ GRANT SELECT, INSERT, UPDATE ON \`${MYSQL_DATABASE}\`.reviews_rubric TO '${MYSQL
 GRANT SELECT, INSERT, UPDATE ON \`${MYSQL_DATABASE}\`.reviews_rubric_version TO '${MYSQL_APP_USER}'@'%';
 GRANT SELECT, INSERT, UPDATE ON \`${MYSQL_DATABASE}\`.reviews_rubric_criterion TO '${MYSQL_APP_USER}'@'%';
 GRANT SELECT, INSERT, UPDATE ON \`${MYSQL_DATABASE}\`.experiments_task_publication TO '${MYSQL_APP_USER}'@'%';
+GRANT SELECT, INSERT, UPDATE ON \`${MYSQL_DATABASE}\`.experiments_teachingenvironment TO '${MYSQL_APP_USER}'@'%';
+GRANT SELECT, INSERT ON \`${MYSQL_DATABASE}\`.experiments_publishedexperimentgrade TO '${MYSQL_APP_USER}'@'%';
 GRANT SELECT, INSERT ON \`${MYSQL_DATABASE}\`.experiments_publication_audience TO '${MYSQL_APP_USER}'@'%';
 GRANT SELECT, INSERT ON \`${MYSQL_DATABASE}\`.experiments_publication_prerequisite TO '${MYSQL_APP_USER}'@'%';
 GRANT SELECT, INSERT, UPDATE ON \`${MYSQL_DATABASE}\`.experiments_experiment_task TO '${MYSQL_APP_USER}'@'%';

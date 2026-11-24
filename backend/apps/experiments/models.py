@@ -47,6 +47,17 @@ def public_id_field() -> models.CharField:
     )
 
 
+class TeachingEnvironment(VersionedModel):
+    public_id = public_id_field()
+    course = models.ForeignKey(Course, on_delete=models.PROTECT, related_name="lab_environments")
+    name = models.CharField(max_length=120)
+    language = models.CharField(max_length=12)
+    runtime_adapter = models.ForeignKey(RuntimeAdapter, on_delete=models.PROTECT)
+    image = models.ForeignKey(ImageAsset, on_delete=models.PROTECT)
+    cpu_millicores = models.PositiveIntegerField()
+    memory_mb = models.PositiveIntegerField()
+
+
 class TaskPublication(VersionedModel):
     class AudienceMode(models.TextChoices):
         ALL_ACTIVE = "ALL_ACTIVE"
@@ -85,8 +96,26 @@ class TaskPublication(VersionedModel):
         related_name="retake_publications",
     )
     template_version = models.ForeignKey(
-        TemplateVersion, on_delete=models.PROTECT, related_name="task_publications"
+        TemplateVersion, on_delete=models.PROTECT, related_name="task_publications",
+        null=True, blank=True,
     )
+    environment = models.ForeignKey(
+        TeachingEnvironment, on_delete=models.PROTECT, null=True, blank=True,
+        related_name="publications",
+    )
+    experiment_spec = models.JSONField(default=dict, blank=True)
+    grades_published_at = models.DateTimeField(null=True, blank=True)
+    grade_signer = models.CharField(max_length=120, blank=True, default="")
+
+    @property
+    def direct_assessment(self) -> bool:
+        return self.template_version_id is None
+
+    @property
+    def assessment_report_template(self) -> ObjectAsset | None:
+        if self.report_template_asset_id or self.direct_assessment:
+            return self.report_template_asset
+        return self.template_version.report_template_asset
     # These fields are populated at publish time.  They deliberately duplicate
     # the template's runtime inputs so later governance/template edits cannot
     # change an already published task.
@@ -245,6 +274,11 @@ class PublicationChapter(AppendOnlyModel):
                 name="exp_pub_chapter_order_idx",
             )
         ]
+
+
+class PublishedExperimentGrade(AppendOnlyModel):
+    task = models.OneToOneField("ExperimentTask", on_delete=models.PROTECT)
+    result = models.JSONField()
 
 
 class PublicationTask(AppendOnlyModel):
@@ -416,7 +450,8 @@ class ExperimentTask(VersionedModel):
     )
     student = models.ForeignKey(User, on_delete=models.PROTECT, related_name="experiment_tasks")
     template_version = models.ForeignKey(
-        TemplateVersion, on_delete=models.PROTECT, related_name="experiment_tasks"
+        TemplateVersion, on_delete=models.PROTECT, related_name="experiment_tasks",
+        null=True, blank=True,
     )
     runtime_type = models.CharField(max_length=16)
     template_spec_digest = models.CharField(

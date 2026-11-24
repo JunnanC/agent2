@@ -9,6 +9,8 @@ import {
   ConfirmDialog, EmptyState, Modal, Panel, RequestStateView, StatusBadge, useToast,
 } from "@edu/ui";
 import { RubricCreate } from "@/components/rubric-create";
+import { LabDesignDialog } from "@/components/lab-design";
+import { LabEnvironments, TestLabEnvironment } from "@/components/lab-environments";
 import { PRECHECK_STATUS_LABEL, PUBLICATION_STATUS_LABEL, apiErrorMessage, formatDateTime } from "@/lib/format";
 import { precheckFailureMessage } from "@/lib/precheck-errors";
 
@@ -44,6 +46,8 @@ export function Publishing() {
   const [withdrawTarget, setWithdrawTarget] = useState<Publication | null>(null);
   const [closeTarget, setCloseTarget] = useState<Publication | null>(null);
   const [createOpen, setCreateOpen] = useState(Boolean(searchParams.get("template")));
+  const [designTarget, setDesignTarget] = useState<string | null>(null);
+  const [environmentsOpen, setEnvironmentsOpen] = useState(false);
   const [createForm, setCreateForm] = useState({ ...initialCreateForm, templateId: searchParams.get("template") ?? "" });
 
   const publications = useQuery({
@@ -77,7 +81,8 @@ export function Publishing() {
   const rows = useMemo(() => publications.data?.rows ?? [], [publications.data]);
 
   /** 预检面板：取第一门待处理发布（DRAFT/PRECHECK/READY）的最新预检运行 */
-  const pendingPublication = rows.find((row) => ["DRAFT", "PRECHECK", "READY"].includes(row.status));
+  const pendingPublication = rows.find((row) => row.template_version_id
+    && ["DRAFT", "PRECHECK", "READY"].includes(row.status));
   const pendingVersionId = pendingPublication?.template_version_id ?? "";
   const precheckRuns = useQuery({
     queryKey: keys.precheckRuns(pendingVersionId),
@@ -186,8 +191,8 @@ export function Publishing() {
       <div className="tab-head">
         <h2>实验发布</h2>
         <div className="page-actions">
-          <RubricCreate key={courseId} courseId={courseId} onCreated={() => void rubrics.refetch()} />
-          <button type="button" className="btn primary" onClick={() => { setCreateForm({ ...initialCreateForm }); setCreateOpen(true); }}>配置新发布</button>
+          <button type="button" className="btn" onClick={() => setEnvironmentsOpen(true)}>实验环境</button>
+          <button type="button" className="btn primary" onClick={() => setDesignTarget("")}>新建实验</button>
         </div>
       </div>
 
@@ -200,8 +205,8 @@ export function Publishing() {
           emptyState={(
             <EmptyState
               title="暂无实验发布"
-              hint="先在实验设计里完成模板版本与预检，再创建发布。"
-              action={<Link className="btn primary" to={`/courses/${courseId}/templates`}>去实验设计</Link>}
+              hint="设置实验指导、题目、分值和截止时间后发布给本教学班。"
+              action={<button type="button" className="btn primary" onClick={() => setDesignTarget("")}>新建实验</button>}
             />
           )}
         >
@@ -213,10 +218,13 @@ export function Publishing() {
               <tbody>
                 {rows.map((row) => {
                   const allowed = row.allowed_actions ?? [];
+                  const direct = !row.template_version_id;
+                  const environmentId = "environment_id" in row && typeof row.environment_id === "string"
+                    ? row.environment_id : "";
                   return (
                     <tr key={row.public_id}>
                       <td><strong>{row.title}</strong><small style={{ display: "block" }}>{row.template_name ?? row.template_version_id}</small>
-                        <select className="field" aria-label={`${row.title} 所属课程章节`} value={row.course_chapter_id ?? ""} disabled={assignChapter.isPending} onChange={event => assignChapter.mutate({publication:row,chapterId:event.target.value})}><option value="" disabled>尚未归入章节</option>{courseChapters.data?.rows.map(chapter => <option key={chapter.public_id} value={chapter.public_id}>{chapter.title}</option>)}</select>
+                        {!direct && <select className="field" aria-label={`${row.title} 所属课程章节`} value={row.course_chapter_id ?? ""} disabled={assignChapter.isPending} onChange={event => assignChapter.mutate({publication:row,chapterId:event.target.value})}><option value="" disabled>尚未归入章节</option>{courseChapters.data?.rows.map(chapter => <option key={chapter.public_id} value={chapter.public_id}>{chapter.title}</option>)}</select>}
                       </td>
                       <td>{row.version_no ? `v${row.version_no}` : "—"}</td>
                       <td>
@@ -245,10 +253,15 @@ export function Publishing() {
                         ) : null}
                       </td>
                       <td className="table-actions">
-                        <Link className="btn sm" to={`/courses/${courseId}/publishing/${row.public_id}/reviews`}>报告与评审</Link>
-                        {["DRAFT", "PUBLISH_FAILED"].includes(row.status) && <label className="btn sm" aria-label={`${row.title}的报告模板`}>
+                        {(!direct || row.status !== "DRAFT") && <Link className="btn sm"
+                          to={`/courses/${courseId}/publishing/${row.public_id}/reviews${direct ? "?tab=reports&direct=1" : ""}`}>报告与评审</Link>}
+                        {direct && row.status === "DRAFT" && <button type="button" className="btn sm"
+                          onClick={() => setDesignTarget(row.public_id)}>编辑草稿</button>}
+                        {direct && environmentId && <TestLabEnvironment courseId={courseId}
+                          environmentId={environmentId} publicationId={row.public_id} />}
+                        {["DRAFT", "PUBLISH_FAILED"].includes(row.status) && (!direct || row.report_required) && <label className="btn sm" aria-label={`${row.title}的报告模板`}>
                           <span>{row.report_template ? "替换报告模板" : "上传报告模板"}</span>
-                          <input type="file" accept=".docx,.pdf,.md,.txt" className="report-template-file-input"
+                          <input type="file" accept={direct ? ".docx" : ".docx,.pdf,.md,.txt"} className="report-template-file-input"
                             aria-label={`上传 ${row.title} 的报告模板`} disabled={templateUpload.isPending}
                             onChange={(event) => {
                               const file = event.currentTarget.files?.[0];
@@ -257,7 +270,7 @@ export function Publishing() {
                             }} />
                         </label>}
                         {row.report_template && <span className="subtle">{row.report_template.file_name}</span>}
-                        {row.status === "DRAFT" ? (
+                        {!direct && row.status === "DRAFT" ? (
                           <button type="button" className="btn sm" disabled={runPrecheck.isPending}
                             onClick={() => row.template_version_id && runPrecheck.mutate(row.template_version_id)}>
                             {runPrecheck.isPending ? "提交中…" : "检查预检状态"}
@@ -338,6 +351,9 @@ export function Publishing() {
         </Panel>
       </div>
 
+      {designTarget !== null && <LabDesignDialog courseId={courseId} publicationId={designTarget}
+        onClose={() => setDesignTarget(null)} onSaved={() => { setDesignTarget(null); invalidate(); }} />}
+      {environmentsOpen && <LabEnvironments courseId={courseId} onClose={() => setEnvironmentsOpen(false)} />}
       <Modal open={createOpen} onClose={() => setCreateOpen(false)} eyebrow="实验发布"
         title="创建发布草稿"
         wide
@@ -351,6 +367,7 @@ export function Publishing() {
           </>
         )}>
         <div style={{ display: "grid", gap: 10 }}>
+          {createOpen && <RubricCreate key={courseId} courseId={courseId} onCreated={() => void rubrics.refetch()} />}
           <label className="form-label" htmlFor="pub-template">实验模板 <span>必选</span></label>
           <select id="pub-template" className="field" value={createForm.templateId}
             onChange={(event) => setCreateForm((prev) => ({ ...prev, templateId: event.target.value }))}>

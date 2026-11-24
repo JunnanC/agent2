@@ -1,8 +1,10 @@
 """Student workspace and single-question attempts."""
 
+from datetime import timedelta
 from typing import Any
 
 from django.db import transaction
+from django.utils import timezone
 
 from apps.accounts.models import User
 from apps.core.concurrency import compare_and_swap
@@ -84,6 +86,8 @@ def enter_workspace(*, actor: User, task_id: str) -> dict[str, Any]:
     publication = TaskPublication.objects.select_for_update().get(pk=task.publication_id)
     task = ExperimentTask.objects.select_for_update().get(pk=task.pk)
     task.publication = publication
+    if publication.direct_assessment and not part_open(task, publication.window_end):
+        return workspace_data(task)
     if not can_start_session(task):
         raise ResourceNotFound()
     _, created = AssessmentSession.objects.get_or_create(task=task)
@@ -152,6 +156,24 @@ def request_attempt(
     return run
 
 
+def attempt_deadline(run: AssessmentRun, task: ExperimentTask) -> float | None:
+    """An on-time final submission may finish while the teacher waits to release grades."""
+    publication = task.publication
+    deadline = part_deadline(task, "PROGRAMMING")
+    if publication.direct_assessment and run.mode == AssessmentRun.Mode.FINAL:
+        grace = deadline + timedelta(minutes=15)
+        if (
+            not publication.grades_published_at and task.enrollment.status == "ACTIVE"
+            and task.status not in {"CANCELLED", "EXPIRED", "FAILED", "ARCHIVING"}
+            and publication.status in {"PUBLISHED", "CLOSED"}
+            and publication.window_start <= run.created_at < deadline
+            and timezone.now() < grace
+        ):
+            return grace.timestamp()
+        return None
+    return deadline.timestamp() if part_open(task, deadline) else None
+
+
 @transaction.atomic
 def complete_attempt(run: AssessmentRun, *, result: dict[str, Any], all_passed: bool) -> None:
     from .assessment_workers import _finish
@@ -162,7 +184,7 @@ def complete_attempt(run: AssessmentRun, *, result: dict[str, Any], all_passed: 
     current = AssessmentRun.objects.select_for_update().get(pk=run.pk)
     if current.lease_token != run.lease_token or current.status != "RUNNING":
         return
-    if all_passed and part_open(task, part_deadline(task, "PROGRAMMING")):
+    if all_passed and attempt_deadline(current, task) is not None:
         existing = ProgrammingSubmission.objects.filter(task=task, question=run.question).first()
         if existing:
             result.update(result_status="ALREADY_SUBMITTED")

@@ -245,7 +245,10 @@ def assessment_snapshot(
                 cases = record["question_spec"]["samples"] + [
                     case for group in groups for case in group["cases"]
                 ]
-                record["case_metadata"] = {"case_count": len(cases), "visible_cases": cases[:2]}
+                record["case_metadata"] = {
+                    "case_count": len(cases),
+                    "visible_cases": record["question_spec"]["samples"][:2],
+                }
             profile = version.resource_profile
             for limit in record["question_spec"]["limits"].values():
                 if limit["memory_mb"] > (profile.memory_limit_mb or profile.memory_mb):

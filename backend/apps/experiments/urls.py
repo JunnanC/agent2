@@ -19,6 +19,20 @@ from .assessment_views import (
     WorkspaceQuestionView,
     WorkspaceView,
 )
+from .design_views import (
+    ExperimentDesignCreateView,
+    ExperimentDesignDetailView,
+    ExperimentDraftSuggestionView,
+    TeachingEnvironmentDetailView,
+    TeachingEnvironmentListView,
+    TeachingEnvironmentTestView,
+)
+from .grade_views import (
+    BatchWordReviewView,
+    GradeReleaseView,
+    StudentPublishedGradeView,
+    TeachingPublishedGradesView,
+)
 from .models import AssessmentRun
 from .views import (
     ClosePublicationView,
@@ -43,6 +57,28 @@ from .views import (
 )
 
 urlpatterns = [
+    path(
+        "teaching/courses/<str:course_id>/lab-environments", TeachingEnvironmentListView.as_view(),
+    ),
+    path("teaching/courses/<str:course_id>/lab-environments/<str:environment_id>",
+         TeachingEnvironmentDetailView.as_view()),
+    path("teaching/courses/<str:course_id>/lab-environments/<str:environment_id>/test",
+         TeachingEnvironmentTestView.as_view()),
+    path(
+        "teaching/courses/<str:course_id>/experiment-designs",
+        ExperimentDesignCreateView.as_view(),
+    ),
+    path("teaching/courses/<str:course_id>/experiment-designs/suggest",
+         ExperimentDraftSuggestionView.as_view()),
+    path("teaching/courses/<str:course_id>/experiment-designs/<str:publication_id>",
+         ExperimentDesignDetailView.as_view()),
+    path("teaching/courses/<str:course_id>/experiments/<str:publication_id>/word-reviews",
+         BatchWordReviewView.as_view()),
+    path("teaching/courses/<str:course_id>/experiments/<str:publication_id>/grade-release",
+         GradeReleaseView.as_view()),
+    path("teaching/courses/<str:course_id>/experiments/<str:publication_id>/published-grades",
+         TeachingPublishedGradesView.as_view()),
+    path("tasks/<str:task_id>/published-grade", StudentPublishedGradeView.as_view()),
     path(
         "teaching/courses/<str:course_id>/tasks/<str:task_id>/assessment/report-suggestion",
         AssessmentReportSuggestionView.as_view(), name="assessment-report-suggestion",

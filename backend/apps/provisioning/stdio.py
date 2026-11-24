@@ -82,9 +82,13 @@ def source_archive(files: Mapping[str, bytes], *, owner: int = 10001) -> bytes:
 class StdioExecutor:
     """Use the configured Docker Engine; callers handle quota admission and durable jobs."""
 
-    def __init__(self, client: Any, image: str, *, owner: str) -> None:
+    def __init__(
+        self, client: Any, image: str, *, owner: str, cpu_millicores: int = 1000,
+        environment_id: str = "",
+    ) -> None:
         self.client, self.image = client, image
         self.owner = owner
+        self.cpu_millicores = cpu_millicores
         self.containers: list[Any] = []
         self.volumes: list[Any] = []
         self.labels = {
@@ -92,6 +96,8 @@ class StdioExecutor:
             "edu.platform.assessment": owner,
             "edu.platform.expires_at": str(int(time.time()) + 3600),
         }
+        if environment_id:
+            self.labels["edu.platform.environment"] = environment_id
 
     def _container(self, *, memory_mb: int, volumes: dict[str, Any]) -> Any:
         container = self.client.containers.create(
@@ -100,7 +106,7 @@ class StdioExecutor:
             user="10001:10001", network_mode="none", read_only=True,
             cap_drop=["ALL"], security_opt=["no-new-privileges:true"],
             mem_limit=f"{memory_mb}m", memswap_limit=f"{memory_mb}m",
-            nano_cpus=1_000_000_000, pids_limit=128,
+            nano_cpus=self.cpu_millicores * 1_000_000, pids_limit=128,
             tmpfs={
                 "/tmp": "rw,nosuid,nodev,size=128m,uid=10001,gid=10001",
                 "/build": "rw,exec,nosuid,nodev,size=128m,uid=10001,gid=10001",
@@ -210,7 +216,7 @@ class StdioExecutor:
 
     def execute(
         self, *, language: str, files: dict[str, str], inputs: list[str],
-        timeout_seconds: int, memory_mb: int,
+        timeout_seconds: int, memory_mb: int, compile_memory_mb: int = 1024,
     ) -> tuple[StdioResult | None, list[StdioResult]]:
         """Compile once; each input receives a fresh sandbox and private current-input file."""
         from apps.labtemplates.questions import project_files
@@ -221,7 +227,8 @@ class StdioExecutor:
         artifacts = None
         if compile_argv:
             compiler = self._container(
-                memory_mb=1024, volumes={source.name: {"bind": "/source", "mode": "ro"}},
+                memory_mb=compile_memory_mb,
+                volumes={source.name: {"bind": "/source", "mode": "ro"}},
             )
             compilation = self._exec(compiler, compile_argv, 30)
             if compilation.status != "PASSED":
