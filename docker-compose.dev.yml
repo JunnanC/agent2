@@ -389,6 +389,8 @@ services:
     build:
       context: ./runtime/algorithm-workspace
       dockerfile: Dockerfile.stdio
+      args:
+        STDIO_BASE_REGISTRY: public.ecr.aws/docker/library
     image: experimental-platform-stdio:local
     entrypoint: ["python", "--version"]
     network_mode: none
