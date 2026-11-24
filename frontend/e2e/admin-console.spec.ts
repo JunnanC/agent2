@@ -130,6 +130,10 @@ test("seven-page console preserves real write semantics and read-only resources"
     else if (path === "/platform/admin-assignments")
       data = [{ public_id: "A-1", user_id: "U-2", status: "ACTIVE" }];
     else if (path === "/platform/courses") data = courses;
+    else if (path === "/platform/term-classes") {
+      const term = { public_id: "TERM-1", code: "FALL", name: "秋季学期" };
+      data = { term, terms: [term], classes: [], schedules: [], total: 0 };
+    }
     else if (path === "/platform/images") data = images;
     else if (path === "/platform/runtime-adapters")
       data = [
@@ -168,32 +172,32 @@ test("seven-page console preserves real write semantics and read-only resources"
   await expect(
     page.getByRole("heading", { name: "运行概览", exact: true }),
   ).toBeVisible();
-  for (const label of [
-    "课程与班级",
-    "学生管理",
-    "教师管理",
-    "镜像管理",
-    "服务与资源",
-    "操作日志",
+  for (const [label, heading] of [
+    ["课程", "课程与班级"],
+    ["学生", "学生管理"],
+    ["教师", "教师管理"],
+    ["镜像", "镜像管理"],
+    ["资源", "服务与资源"],
+    ["日志", "操作日志"],
   ]) {
     await page
       .getByRole("navigation")
       .getByRole("button", { name: label, exact: true })
       .click();
     await expect(
-      page.getByRole("heading", { name: label, exact: true }),
+      page.getByRole("heading", { name: heading, exact: true }),
     ).toBeVisible();
     await page.screenshot({
-      path: "../outputs/admin-web1/" + label + ".png",
+      path: test.info().outputPath(heading + ".png"),
       fullPage: true,
     });
   }
   await page
     .getByRole("navigation")
-    .getByRole("button", { name: "学生管理", exact: true })
+    .getByRole("button", { name: "教师", exact: true })
     .click();
-  await expect(page.getByRole("cell", { name: "周明远" })).toHaveCount(0);
-  await page.getByPlaceholder("搜索姓名、账号 ID 或邮箱").fill("林知远");
+  await expect(page.getByRole("cell", { name: /林知远/ })).toHaveCount(0);
+  await page.getByPlaceholder("搜索姓名、账号 ID 或邮箱").fill("周明远");
   await page.getByRole("button", { name: "禁用", exact: true }).click();
   await page.getByLabel("操作原因").fill("安全核查");
   await page.getByRole("button", { name: "确认禁用", exact: true }).click();
@@ -208,18 +212,19 @@ test("seven-page console preserves real write semantics and read-only resources"
   rejectMutation = false;
   await page
     .getByRole("navigation")
-    .getByRole("button", { name: "课程与班级", exact: true })
+    .getByRole("button", { name: "课程", exact: true })
     .click();
+  await page.getByText("全部课程与治理记录", { exact: true }).click();
   await expect(
     page.getByRole("button", { name: "下架", exact: true }).first(),
   ).toBeDisabled();
   await page.getByRole("button", { name: "详情", exact: true }).first().click();
   await page.getByRole("button", { name: "学生名单", exact: true }).click();
-  await expect(page.getByRole("dialog")).toContainText("查询接口尚未开放");
+  await expect(page.getByRole("dialog")).toContainText("由任课教师维护");
   await page.getByRole("button", { name: "关闭弹窗" }).click();
   await page
     .getByRole("navigation")
-    .getByRole("button", { name: "镜像管理", exact: true })
+    .getByRole("button", { name: "镜像", exact: true })
     .click();
   await page.getByRole("button", { name: "停用", exact: true }).click();
   await page.getByRole("button", { name: "确认停用" }).click();
@@ -227,18 +232,17 @@ test("seven-page console preserves real write semantics and read-only resources"
   expect(writes.at(-1)?.body.decision).toBe("RETIRED");
   await page
     .getByRole("navigation")
-    .getByRole("button", { name: "服务与资源", exact: true })
+    .getByRole("button", { name: "资源", exact: true })
     .click();
   await page.getByRole("button", { name: "资源占用", exact: true }).click();
   await expect(
     page.getByRole("button", { name: /重启|销毁|停止实例|扩缩容/ }),
   ).toHaveCount(0);
   await page.screenshot({
-    path: "../outputs/admin-web1/resources-desktop.png",
+    path: test.info().outputPath("resources-desktop.png"),
     fullPage: true,
   });
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.getByRole("button", { name: "切换导航" }).click();
   await page
     .getByRole("navigation")
     .getByRole("button", { name: "概览", exact: true })
@@ -249,7 +253,7 @@ test("seven-page console preserves real write semantics and read-only resources"
     ),
   ).toBeTruthy();
   await page.screenshot({
-    path: "../outputs/admin-web1/overview-mobile.png",
+    path: test.info().outputPath("overview-mobile.png"),
     fullPage: true,
   });
   expect(errors).toEqual([]);

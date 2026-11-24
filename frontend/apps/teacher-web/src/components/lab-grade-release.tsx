@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { labAssessmentApi } from "@edu/api-client";
 import { ConfirmDialog, Panel, useToast } from "@edu/ui";
+import { keys } from "@edu/query-keys";
 import { apiErrorMessage, formatDateTime } from "@/lib/format";
 import "./lab-workbench.css";
 
@@ -23,6 +24,9 @@ export function LabGradeRelease({ courseId, publicationId }: { courseId: string;
       void client.invalidateQueries({ queryKey: ["assessment-report-review", courseId] });
       void client.invalidateQueries({ queryKey: ["assessment-report-queue", courseId] });
       void client.invalidateQueries({ queryKey: ["assessment-parts", courseId] });
+      void client.invalidateQueries({ queryKey: keys.publications(courseId) });
+      void client.invalidateQueries({ queryKey: keys.releasedGrades(courseId) });
+      void client.invalidateQueries({ queryKey: ["review-publication", courseId, publicationId] });
     },
     onError: (error) => {
       toast.notify(apiErrorMessage(error), "error");

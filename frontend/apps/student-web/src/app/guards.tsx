@@ -1,6 +1,6 @@
 import { useRef } from "react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
-import { AppShell, EmptyState, LoadingState } from "@edu/ui";
+import { AppShell, EmptyState, Icon, LoadingState } from "@edu/ui";
 import { useSession } from "./session";
 import { usePortalEvents } from "./providers";
 
@@ -59,13 +59,14 @@ export function AuthGuard({ fullscreen }: { fullscreen?: boolean }) {
         nav={[]}
         activePath={location.pathname}
         onNavigate={navigate}
+        actions={<Link className="icon-btn" to="/notifications" aria-label="通知中心" title="通知中心"><Icon name="bell" size={18} /></Link>}
         avatar={{ name: displayName, role: "学生", badge: displayName.slice(0, 1) }}
         avatarItems={[
           { label: "个人设置", icon: "settings", onClick: () => navigate("/profile") },
           { label: "退出登录", icon: "log-out", onClick: () => { void logout().then(() => navigate("/login", { replace: true })); } },
         ]}
       >
-        {location.pathname !== "/" && <Link className="btn sm" to="/">返回课表</Link>}
+        {location.pathname !== "/" && <Link className="student-back" to="/"><Icon name="chevron-left" size={15} />返回学习日程</Link>}
         <Outlet />
       </AppShell>
     </div>

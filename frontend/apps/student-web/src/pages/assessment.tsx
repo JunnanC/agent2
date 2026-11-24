@@ -1,6 +1,6 @@
 import { AssetActions } from "@/components/asset-actions";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { assessmentApi, labAssessmentApi, reportApi } from "@edu/api-client";
 import type { Assessment, AssessmentLanguage, CaseResult, ChoiceQuestion, ProgrammingQuestion } from "@edu/api-client";
@@ -523,6 +523,7 @@ function downloadSubmittedReport(
 }
 
 function AssessmentPage({ taskId }: { taskId: string }) {
+  const navigate = useNavigate();
   const toast = useToast();
   const [section, setSection] = useState<"CHOICE" | "PROGRAMMING" | "REPORT" | null>(null);
   const [active, setActive] = useState("");
@@ -695,8 +696,12 @@ function AssessmentPage({ taskId }: { taskId: string }) {
         <h1>{data.title || "实验答题"}</h1>
         {sectionState?.deadline && <p className="assessment-deadline"><Icon name="clock" size={15} /> 本部分截止 {formatDateTime(sectionState.deadline)}</p>}
       </div>
-      <Link className="btn assessment-back" to="/experiments" onClick={(e) => { e.preventDefault(); void switchView(() => { window.location.assign("/experiments"); }); }}>
-        <Icon name="arrow-left" size={16} /> 返回实验列表
+      <Link className="btn assessment-back" to={`/experiments/${taskId}`} onClick={(event) => {
+        if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return;
+        event.preventDefault();
+        void switchView(() => navigate(`/experiments/${taskId}`));
+      }}>
+        <Icon name="arrow-left" size={16} /> 返回实验详情
       </Link>
     </header>
     {receipt && <p role="status" className="assessment-receipt">
