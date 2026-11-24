@@ -36,6 +36,9 @@ export interface Course {
   summary?: string | null;
   description?: string | null;
   owner_name?: string;
+  timetable_code?: string | null;
+  term_id?: string;
+  term_name?: string;
   status: string;
   visibility?: string;
   enrollment_mode: "OPEN" | "APPROVAL";
@@ -78,8 +81,20 @@ export interface CourseResourceSummary {
   prewarm_active?: number;
 }
 
+export interface TimetableTerm { public_id: string; code: string; name: string }
+
+export interface TimetableClass {
+  course_id: string;
+  course_code: string;
+  course_title: string;
+  instructor_name: string;
+}
+
 export interface TimetableData {
-  term: { public_id: string; code: string; name: string };
+  term: TimetableTerm;
+  terms: TimetableTerm[];
+  classes: TimetableClass[];
+  total?: number;
   schedules: TimetableSchedule[];
 }
 
@@ -95,6 +110,7 @@ export interface TimetableSchedule {
   end_period: number;
   week_start: number | null;
   week_end: number | null;
+  week_parity: "ALL" | "ODD" | "EVEN";
   classroom: string;
   instructor_name: string;
 }
@@ -648,3 +664,22 @@ export const PUBLICATION_ACTION = {
   CLOSE: "close",
   PRECHECK: "precheck",
 } as const;
+
+export interface GradeSummary {
+  expected: number;
+  completed: number;
+  completion_rate: number | null;
+  score: number;
+  max_score: number;
+  percent: number | null;
+}
+
+export interface ReleasedGradeReport {
+  summary: GradeSummary & { failure_rate: number | null };
+  experiments: Array<GradeSummary & { publication_id: string; title: string; deadline: Iso8601; released_at: Iso8601 }>;
+  students: Array<GradeSummary & { student_id: string; student_name: string; rank: number | null; failed: boolean | null }>;
+  parts: Array<{ kind: string; label: string; percent: number | null; suggestion: string }>;
+  results: Array<{ publication_id: string; task_id: string | null; student_id: string; student_name: string;
+    score: number; max_score: number; status: "NOT_SUBMITTED" | "PARTIAL" | "SUBMITTED" }>;
+  awaiting_confirmation: Array<{ task_id: string; reason: string }>;
+}

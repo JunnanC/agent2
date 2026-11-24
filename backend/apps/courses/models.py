@@ -84,6 +84,7 @@ class Course(VersionedModel):
     public_id = public_id_field()
     code = models.CharField(max_length=64, unique=True)
     title = models.CharField(max_length=160)
+    timetable_code = models.CharField(max_length=64, null=True, blank=True)
     summary = models.CharField(max_length=500, blank=True, default="")
     description = models.TextField(blank=True, default="")
     owner = models.ForeignKey(User, on_delete=models.PROTECT, related_name="owned_courses")
@@ -119,6 +120,9 @@ class Course(VersionedModel):
     class Meta:
         db_table = "courses_course"
         constraints = [
+            models.UniqueConstraint(
+                fields=("owner", "term", "timetable_code"), name="courses_term_timetable_code_uniq"
+            ),
             models.CheckConstraint(
                 condition=models.Q(status__in=("DRAFT", "PUBLISHED", "CLOSED", "ARCHIVED")),
                 name="courses_course_status_ck",
@@ -521,12 +525,17 @@ class CourseSchedule(VersionedModel):
     end_period = models.PositiveSmallIntegerField()
     week_start = models.PositiveSmallIntegerField(default=0)
     week_end = models.PositiveSmallIntegerField(default=0)
+    week_parity = models.CharField(max_length=4, default="ALL")
     classroom = models.CharField(max_length=128, blank=True, default="")
     instructor_name = models.CharField(max_length=128, blank=True, default="")
 
     class Meta:
         db_table = "courses_course_schedule"
         constraints = [
+            models.CheckConstraint(
+                condition=models.Q(week_parity__in=("ALL", "ODD", "EVEN")),
+                name="courses_schedule_week_parity_ck",
+            ),
             models.CheckConstraint(
                 condition=models.Q(weekday__gte=1) & models.Q(weekday__lte=7),
                 name="courses_schedule_weekday_ck",
@@ -551,6 +560,7 @@ class CourseSchedule(VersionedModel):
                     "end_period",
                     "week_start",
                     "week_end",
+                    "week_parity",
                 ),
                 name="courses_schedule_slot_uniq",
             ),

@@ -120,6 +120,9 @@ class CourseDataSerializer(serializers.Serializer):
     public_id = serializers.CharField()
     code = serializers.CharField()
     title = serializers.CharField()
+    timetable_code = serializers.CharField(allow_null=True)
+    term_id = serializers.CharField()
+    term_name = serializers.CharField()
     summary = serializers.CharField()
     description = serializers.CharField()
     owner_id = serializers.CharField()
@@ -252,6 +255,9 @@ def course_data(course: Course) -> dict[str, object]:
         "public_id": course.public_id,
         "code": course.code,
         "title": course.title,
+        "timetable_code": course.timetable_code,
+        "term_id": course.term.public_id,
+        "term_name": course.term.name,
         "summary": course.summary,
         "description": course.description,
         "owner_id": course.owner.public_id,

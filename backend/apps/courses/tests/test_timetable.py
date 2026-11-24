@@ -1,11 +1,16 @@
+from datetime import timedelta
 from io import BytesIO
+from re import sub
+from zipfile import ZipFile
 
 from django.test import TestCase
+from django.utils import timezone
 from openpyxl import Workbook
 
 from apps.accounts.tests.helpers import create_user
 
 from ..models import (
+    AcademicTerm,
     AdministrativeClass,
     AdministrativeClassMembership,
     Course,
@@ -122,7 +127,7 @@ class TimetableImportTests(TestCase):
             job_id=job.public_id, actor=self.teacher, kind=job.kind, context=context
         )
 
-        course = Course.objects.get(code="BIO-204")
+        course = Course.objects.get(timetable_code="BIO-204")
         schedule = CourseSchedule.objects.get(course=course)
         self.assertEqual(course.owner, self.teacher)
         self.assertEqual(course.term, self.term)
@@ -130,6 +135,103 @@ class TimetableImportTests(TestCase):
         self.assertEqual(completed.public_id, replay.public_id)
         self.assertEqual(CourseSchedule.objects.filter(course=course).count(), 1)
         self.assertFalse(Enrollment.objects.filter(course=course).exists())
+
+    def test_two_excel_layouts_reimport_and_cross_term_number_reuse(self) -> None:
+        now = timezone.now()
+        past = AcademicTerm.objects.create(
+            code="FIXTURE-PAST",
+            name="虚构往期",
+            status=AcademicTerm.Status.CLOSED,
+            starts_at=now - timedelta(days=180),
+            ends_at=now - timedelta(days=30),
+        )
+        context = ActorContext(self.teacher.public_id, "TEACHING", "e" * 32)
+
+        def import_workbook(term, code, *, compact=False):
+            headers = (
+                ["班号", "课程名称", "上课日", "节次", "周次", "地点"]
+                if compact
+                else [
+                    "教学班编号",
+                    "教学班名",
+                    "星期",
+                    "开始节",
+                    "结束节",
+                    "起始周",
+                    "结束周",
+                    "教室",
+                ]
+            )
+            values = (
+                [code, "数据结构", "3", "3-4", "2-16双周", "B202"]
+                if compact
+                else [
+                    code,
+                    "数据结构",
+                    "周一",
+                    "1",
+                    "2",
+                    "1",
+                    "16",
+                    "A101",
+                ]
+            )
+            fields = [
+                "course_code",
+                "course_title",
+                "weekday",
+                "start_period",
+                "end_period",
+                "week_start",
+                "week_end",
+                "classroom",
+            ]
+            columns = (
+                [*headers[:4], headers[3], headers[4], headers[4], headers[5]]
+                if compact
+                else headers
+            )
+            kind = TimetableImportJob.Kind.TEACHER
+            content = workbook_bytes(headers, values)
+            if compact:
+                # Some spreadsheet exporters omit the worksheet dimension.
+                stream = BytesIO()
+                with ZipFile(BytesIO(content)) as source, ZipFile(stream, "w") as target:
+                    for filename in source.namelist():
+                        data = source.read(filename)
+                        if filename == "xl/worksheets/sheet1.xml":
+                            data = sub(rb"<dimension [^>]*/>", b"", data)
+                        target.writestr(filename, data)
+                content = stream.getvalue()
+            job = create_timetable_import_job(
+                actor=self.teacher,
+                kind=kind,
+                filename="fixture.xlsx",
+                content=content,
+                term_id=term.public_id,
+            )
+            job = update_timetable_import_mapping(
+                job_id=job.public_id,
+                actor=self.teacher,
+                kind=kind,
+                mapping=dict(zip(fields, columns, strict=True)),
+            )
+            self.assertEqual(job.row_errors, [])
+            start_timetable_import(job_id=job.public_id, actor=self.teacher, kind=kind)
+            return execute_timetable_import(
+                job_id=job.public_id, actor=self.teacher, kind=kind, context=context
+            )
+
+        import_workbook(self.term, "DS-01")
+        import_workbook(self.term, "DS-02", compact=True)
+        import_workbook(past, "DS-01")
+        replay = import_workbook(self.term, "DS-02", compact=True)
+        self.assertEqual(replay.summary["schedules"], 0)
+        self.assertEqual(Course.objects.filter(owner=self.teacher, title="数据结构").count(), 3)
+        self.assertEqual(Course.objects.filter(timetable_code="DS-01").count(), 2)
+        even = CourseSchedule.objects.get(course__timetable_code="DS-02")
+        self.assertEqual((even.week_start, even.week_end, even.week_parity), (2, 16, "EVEN"))
+        self.assertEqual(even.course.status, Course.Status.PUBLISHED)
 
     def test_invalid_mapped_row_is_reported_and_blocks_import(self) -> None:
         job = self._job(

@@ -166,7 +166,7 @@ def active_enrollment(*, course: Course, student: User) -> Enrollment | None:
 
 
 def visible_courses(*, actor: User, portal: str) -> QuerySet[Course]:
-    queryset = Course.objects.select_related("owner")
+    queryset = Course.objects.select_related("owner", "term")
     if portal == "USER":
         return queryset.filter(
             Q(status=Course.Status.PUBLISHED, visibility=Course.Visibility.PUBLIC)

@@ -8,11 +8,11 @@ import type {
   RuntimeAdapter, StudentDashboard, Task, TeachingCourseList, Template,
   TemplateChapter, TemplateTask, ToolPolicy, TemplateVersion, UsageCost, Verification,
   AgentMessage, AgentMode, CourseResourceSummary,
-  LearningHistoryData, NotificationPreferences, TimetableData, TimetableImport, AgentProfile, AgentSession,
+  LearningHistoryData, NotificationPreferences, TimetableData, TimetableImport, TimetableSchedule, AgentProfile, AgentSession,
   AgentToolCall, ToolRequest, ToolDecision, AgentFeedback, VerificationUpdate, NotificationPreferenceUpdate,
   EnrollmentExitCheck, CourseQuestion, CourseAnswer, DownloadGrant, DownloadGrantRevoke,
   ReportAttachmentData, ReportAttachmentUpload, ReportAttachmentCreate, LearningRecommendation, LearningRiskSignal,
-  OIDCIdentity, OIDCStart,
+  OIDCIdentity, OIDCStart, ReleasedGradeReport,
 } from "./types";
 
 export * from "./types";
@@ -215,16 +215,22 @@ export const fileApi = {
 
 export const timetableApi = {
   retrieve: meApi.timetable,
-  imports: () => request<TimetableImport[]>("/me/timetable-imports").then(toList),
-  importJob: (jobId: string) => request<TimetableImport>(`/me/timetable-imports/${jobId}`).then((r) => r.data),
+  platform: (query: { term_id?: string; role?: string; person_id?: string; q?: string; page?: number }) =>
+    request<TimetableData>("/platform/term-classes", { query }).then((r) => r.data),
+  teachingCourse: (courseId: string) => request<{ schedules: TimetableSchedule[] }>(
+    `/teaching/courses/${courseId}/timetable`,
+  ).then((r) => r.data.schedules),
+  teaching: (query?: { term_id?: string }) => request<TimetableData>("/teaching/timetable", { query }).then((r) => r.data),
+  imports: () => request<TimetableImport[]>("/teaching/timetable-imports").then(toList),
+  importJob: (jobId: string) => request<TimetableImport>(`/teaching/timetable-imports/${jobId}`).then((r) => r.data),
   upload: (file: File, termId?: string) => {
     const body = new FormData();
     body.append("file", file);
     if (termId) body.append("term_id", termId);
-    return request<TimetableImport>("/me/timetable-imports", { method: "POST", body }).then((r) => r.data);
+    return request<TimetableImport>("/teaching/timetable-imports", { method: "POST", body }).then((r) => r.data);
   },
-  updateMapping: (jobId: string, mapping: Record<string, string>) => request<TimetableImport>(`/me/timetable-imports/${jobId}/mapping`, { method: "PUT", body: { mapping } }).then((r) => r.data),
-  confirm: (jobId: string) => request<TimetableImport>(`/me/timetable-imports/${jobId}/confirm`, { method: "POST", body: {} }).then((r) => r.data),
+  updateMapping: (jobId: string, mapping: Record<string, string>) => request<TimetableImport>(`/teaching/timetable-imports/${jobId}/mapping`, { method: "PUT", body: { mapping } }).then((r) => r.data),
+  confirm: (jobId: string) => request<TimetableImport>(`/teaching/timetable-imports/${jobId}/confirm`, { method: "POST", body: {} }).then((r) => r.data),
 };
 
 export const studentAnalyticsApi = {
@@ -280,6 +286,12 @@ export const reportApi = {
 /* ══════════ 教师端 ══════════ */
 
 export const teachingApi = {
+  releasedGrades: (courseId: string, publications: string[] = []) => request<ReleasedGradeReport>(
+    `/teaching/courses/${courseId}/analytics/grades`, { query: { publication_ids: publications.join(",") } },
+  ).then((r) => r.data),
+  exportReleasedGrades: (courseId: string, publications: string[] = []) => request<{ filename: string; csv: string }>(
+    `/teaching/courses/${courseId}/analytics/grades/export`, { query: { publication_ids: publications.join(",") } },
+  ).then((r) => r.data),
   courses: (query?: { page?: number; page_size?: number }) =>
     request<TeachingCourseList["courses"]>("/teaching/courses", { query }).then(toList),
 

@@ -34,15 +34,13 @@ from .timetable_views import (
     AdministrativeClassMemberEndView,
     AdministrativeClassMembersView,
     PlatformTeachingClassMembersView,
-    StudentTimetableImportConfirmView,
-    StudentTimetableImportDetailView,
-    StudentTimetableImportMappingView,
-    StudentTimetableImportView,
+    PlatformTermClassesView,
     TeachingCourseTimetableView,
     TeachingTimetableImportConfirmView,
     TeachingTimetableImportDetailView,
     TeachingTimetableImportMappingView,
     TeachingTimetableImportView,
+    TeachingTimetableView,
     UserTimetableView,
 )
 from .views import (
@@ -102,27 +100,9 @@ urlpatterns = [
         TeachingTemplateChapterImportView.as_view(),
     ),
     path("context", ContextView.as_view(), name="context"),
+    path("platform/term-classes", PlatformTermClassesView.as_view(), name="platform-term-classes"),
     path("me/timetable", UserTimetableView.as_view(), name="my-timetable"),
-    path(
-        "me/timetable-imports",
-        StudentTimetableImportView.as_view(),
-        name="student-timetable-imports",
-    ),
-    path(
-        "me/timetable-imports/<str:job_id>",
-        StudentTimetableImportDetailView.as_view(),
-        name="student-timetable-import-detail",
-    ),
-    path(
-        "me/timetable-imports/<str:job_id>/mapping",
-        StudentTimetableImportMappingView.as_view(),
-        name="student-timetable-import-mapping",
-    ),
-    path(
-        "me/timetable-imports/<str:job_id>/confirm",
-        StudentTimetableImportConfirmView.as_view(),
-        name="student-timetable-import-confirm",
-    ),
+    path("teaching/timetable", TeachingTimetableView.as_view(), name="teaching-timetable"),
     path(
         "teaching/timetable-imports",
         TeachingTimetableImportView.as_view(),

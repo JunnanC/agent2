@@ -1,11 +1,12 @@
+import { TimetableImport } from "@/components/timetable-import";
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Link } from "react-router-dom";
-import { assessmentTeachingApi, teachingApi } from "@edu/api-client";
+import { Link, useSearchParams } from "react-router-dom";
+import { assessmentTeachingApi, teachingApi, timetableApi } from "@edu/api-client";
 import type { Publication } from "@edu/api-client";
 import { keys } from "@edu/query-keys";
 import {
-  Breadcrumbs, LineChart, Metric, Panel, RequestStateView, StatusBadge,
+  Breadcrumbs, ClassTimetable, LineChart, Metric, Panel, RequestStateView, StatusBadge,
 } from "@edu/ui";
 import type { ChartSeries } from "@edu/ui";
 import { COURSE_STATUS_LABEL, PUBLICATION_STATUS_LABEL } from "@/lib/format";
@@ -43,6 +44,26 @@ interface TodoItem {
   action: "enter" | "view" | "publish";
   href: string;
   primary?: boolean;
+}
+
+function TeacherTimetable() {
+  const [params, setParams] = useSearchParams();
+  const term = params.get("term") || undefined;
+  const timetable = useQuery({
+    queryKey: keys.teachingTimetable(term),
+    queryFn: () => timetableApi.teaching(term ? { term_id: term } : undefined),
+    placeholderData: (previous) => previous,
+  });
+  return <>
+    <ClassTimetable data={timetable.data} loading={timetable.isLoading} error={timetable.error}
+      classLink={(id, title) => <Link to={`/courses/${id}`}><strong>{title}</strong></Link>}
+    retry={() => void timetable.refetch()} onTermChange={(id) => setParams({ term: id })} />
+    <div className="page-actions section">
+      <Link className="btn" to="/courses">管理教学班</Link>
+      <Link className="btn" to="/notifications">通知中心</Link>
+    </div>
+    <TimetableImport termId={timetable.isPlaceholderData ? "" : (timetable.data?.term.public_id ?? "")} />
+  </>;
 }
 
 export function Home() {
@@ -148,6 +169,7 @@ export function Home() {
   return (
     <>
       <Breadcrumbs items={[{ label: "教师门户" }]} current="教学概览" />
+      <TeacherTimetable />
       <div className="head">
         <div><h1>教学概览</h1></div>
         <div className="actions">

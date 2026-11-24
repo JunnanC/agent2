@@ -1,15 +1,8 @@
 import { useRef } from "react";
-import { Outlet, useLocation, useNavigate } from "react-router-dom";
+import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { AppShell, EmptyState, LoadingState } from "@edu/ui";
-import type { NavEntry } from "@edu/ui";
 import { useSession } from "./session";
 import { usePortalEvents } from "./providers";
-
-const STUDENT_NAV: Array<NavEntry> = [
-  { label: "概览", path: "/", icon: "layers" },
-  { label: "课程", path: "/courses", icon: "book" },
-  { label: "通知", path: "/notifications", icon: "bell" },
-];
 
 /** 全站 SSE 桥：会话就绪后连接，事件只做提示并触发 REST 失效 */
 export function PortalSSEBridge() {
@@ -63,7 +56,7 @@ export function AuthGuard({ fullscreen }: { fullscreen?: boolean }) {
       <AppShell
         brand="实验教学平台"
         domainLabel="学生门户"
-        nav={STUDENT_NAV}
+        nav={[]}
         activePath={location.pathname}
         onNavigate={navigate}
         avatar={{ name: displayName, role: "学生", badge: displayName.slice(0, 1) }}
@@ -71,10 +64,8 @@ export function AuthGuard({ fullscreen }: { fullscreen?: boolean }) {
           { label: "个人设置", icon: "settings", onClick: () => navigate("/profile") },
           { label: "退出登录", icon: "log-out", onClick: () => { void logout().then(() => navigate("/login", { replace: true })); } },
         ]}
-        navigationPosition="side"
-        collapsible
-        collapseStorageKey="edu.student.sidebar-collapsed"
       >
+        {location.pathname !== "/" && <Link className="btn sm" to="/">返回课表</Link>}
         <Outlet />
       </AppShell>
     </div>

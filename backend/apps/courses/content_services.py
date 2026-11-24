@@ -813,12 +813,7 @@ def precheck_import_job(*, job_id: str, actor: User, context: ActorContext) -> E
 
 def execute_import(*, job_id: str, actor: User, context: ActorContext) -> EnrollmentImportJob:
     try:
-        job = (
-            EnrollmentImportJob.objects
-            .select_for_update()
-            .select_related("course")
-            .get(public_id=job_id)
-        )
+        job = EnrollmentImportJob.objects.select_related("course").get(public_id=job_id)
     except EnrollmentImportJob.DoesNotExist as exc:
         raise ResourceNotFound() from exc
     require_course_capability(course=job.course, actor=actor, capability="MANAGE_ENROLLMENT")

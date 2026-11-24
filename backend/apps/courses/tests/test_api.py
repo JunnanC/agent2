@@ -9,7 +9,7 @@ from django.utils import timezone
 from apps.accounts.tests.helpers import create_user, grant_admin, grant_teacher
 
 from ..content_services import create_invitation
-from ..models import Course, Enrollment, Invitation
+from ..models import AcademicTerm, Course, CourseSchedule, Enrollment, Invitation
 from ..services import ActorContext, current_academic_term
 
 PROXY_HEADERS = {
@@ -220,6 +220,97 @@ class CourseApiTests(TestCase):
         self.assertEqual(replay["X-Idempotent-Replayed"], "true")
         self.assertEqual(Enrollment.objects.count(), 1)
 
+    def test_term_timetables_and_platform_drill_down(self) -> None:
+        from apps.courses.tests.helpers import create_draft_course, create_teacher
+
+        other = create_teacher(suffix="another-timetable-teacher")
+        current = create_draft_course(self.teacher, code="DS-01")
+        unrelated = create_draft_course(other, code="DS-02")
+        past = create_draft_course(self.teacher, code="OLD-DS-01")
+        now = timezone.now()
+        old_term = AcademicTerm.objects.create(
+            code="FIXTURE-OLD",
+            name="往期学期",
+            starts_at=now - timedelta(days=100),
+            ends_at=now - timedelta(days=10),
+            status=AcademicTerm.Status.CLOSED,
+        )
+        Course.objects.filter(pk=past.pk).update(term=old_term, status=Course.Status.ARCHIVED)
+        for course in (current, unrelated, past):
+            CourseSchedule.objects.create(course=course, weekday=1, start_period=1, end_period=2)
+        Enrollment.objects.create(
+            course=current,
+            student=self.student,
+            cycle_no=1,
+            status=Enrollment.Status.PENDING,
+            applied_at=now,
+        )
+        Enrollment.objects.create(
+            course=past,
+            student=self.student,
+            cycle_no=1,
+            status=Enrollment.Status.ACTIVE,
+            applied_at=now,
+            activated_at=now,
+        )
+        clients = {}
+        for role, actor in (
+            ("TEACHING", self.teacher),
+            ("USER", self.student),
+            ("PLATFORM", self.admin),
+        ):
+            clients[role] = Client()
+            self._login(clients[role], portal=role, identifier=actor.email)
+
+        def get(role, path, params=None):
+            return clients[role].get(
+                f"/api/v2/{path}", params or {}, HTTP_X_PORTAL=role, **PROXY_HEADERS
+            )
+
+        def ids(response):
+            self.assertEqual(response.status_code, 200, response.content)
+            return [row["course_id"] for row in response.json()["data"]["classes"]]
+
+        self.assertEqual(ids(get("TEACHING", "teaching/timetable")), [current.public_id])
+        self.assertEqual(ids(get("USER", "me/timetable")), [])
+        self.assertEqual(
+            ids(get("USER", "me/timetable", {"term_id": old_term.public_id})), [past.public_id]
+        )
+        self.assertEqual(get("USER", "me/timetable-imports").status_code, 404)
+        endpoint = "platform/term-classes"
+        self.assertEqual(get("USER", endpoint).status_code, 403)
+        self.assertEqual(get("TEACHING", endpoint).status_code, 403)
+        self.assertEqual(
+            ids(
+                get("PLATFORM", endpoint, {"role": "TEACHER", "person_id": self.teacher.public_id})
+            ),
+            [current.public_id],
+        )
+        self.assertEqual(
+            ids(
+                get(
+                    "PLATFORM",
+                    endpoint,
+                    {
+                        "role": "STUDENT",
+                        "person_id": self.student.public_id,
+                        "term_id": old_term.public_id,
+                    },
+                )
+            ),
+            [past.public_id],
+        )
+        page = get("PLATFORM", endpoint, {"page": 2, "page_size": 1})
+        self.assertEqual(ids(page), [unrelated.public_id])
+        self.assertEqual(page.json()["data"]["total"], 2)
+        self.assertEqual(
+            get("TEACHING", f"teaching/courses/{unrelated.public_id}/analytics/grades").status_code,
+            404,
+        )
+        self.assertEqual(
+            get("USER", f"teaching/courses/{current.public_id}/analytics/grades").status_code, 403
+        )
+
     def test_student_withdraw_reapply_approval_and_exit_enforce_course_access(self) -> None:
         teacher_client = Client(enforce_csrf_checks=True)
         teacher_csrf = self._login(teacher_client, portal="TEACHING", identifier=self.teacher.email)
@@ -301,11 +392,30 @@ class CourseApiTests(TestCase):
         new_pending = reapplied.json()["data"]
         self.assertEqual(new_pending["cycle_no"], 2)
         assert_access(False)
+        review_path = (
+            f"/api/v2/teaching/courses/{course_id}/enrollments/{new_pending['public_id']}/review"
+        )
+        outsider = create_user(
+            email="outsider@example.edu", username="outsider", password=self.password
+        )
+        grant_teacher(outsider)
+        outsider_client = Client(enforce_csrf_checks=True)
+        outsider_csrf = self._login(outsider_client, portal="TEACHING", identifier=outsider.email)
+        forbidden = post(
+            outsider_client,
+            "TEACHING",
+            outsider_csrf,
+            review_path,
+            {"decision": "APPROVE"},
+            "outsider-approve",
+            new_pending["row_version"],
+        )
+        self.assertIn(forbidden.status_code, (403, 404), forbidden.content)
         approved = post(
             teacher_client,
             "TEACHING",
             teacher_csrf,
-            f"/api/v2/teaching/courses/{course_id}/enrollments/{new_pending['public_id']}/review",
+            review_path,
             {"decision": "APPROVE", "note": "同意选课"},
             "lifecycle-approve",
             new_pending["row_version"],
@@ -314,6 +424,13 @@ class CourseApiTests(TestCase):
         active = approved.json()["data"]
         self.assertEqual(active["status"], "ACTIVE")
         assert_access(True)
+        timetable = student_client.get(
+            "/api/v2/me/timetable", HTTP_X_PORTAL="USER", **PROXY_HEADERS
+        )
+        self.assertEqual(timetable.status_code, 200)
+        self.assertEqual(
+            [row["course_id"] for row in timetable.json()["data"]["classes"]], [course_id]
+        )
 
         check = student_client.get(
             f"/api/v2/me/enrollments/{active['public_id']}/drop-check",

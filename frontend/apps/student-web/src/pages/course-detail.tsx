@@ -2,9 +2,9 @@ import { ChapterResources } from "@/components/chapter-resources";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
-import { studentApi, taskApi } from "@edu/api-client";
+import { studentApi, taskApi, timetableApi } from "@edu/api-client";
 import { keys } from "@edu/query-keys";
-import { Breadcrumbs, EmptyState, Markdown, PageHeader, Panel, RequestStateView, StatusBadge } from "@edu/ui";
+import { Breadcrumbs, EmptyState, Markdown, PageHeader, Panel, RequestStateView, StatusBadge, ScheduleSlots } from "@edu/ui";
 import { formatDate, formatDateTime, taskStatusLabel, taskStatusTone } from "@/lib/task-format";
 import { CourseDiscussion } from "@/components/course-discussion";
 import { CourseAgent } from "@/components/course-agent";
@@ -30,9 +30,13 @@ export function CourseDetail({ discussionPage = false }: { discussionPage?: bool
   const enrollments = useQuery({ queryKey: keys.enrollments({ status: "ACTIVE" }),
     queryFn: () => studentApi.myEnrollments({ page_size: 100, status: "ACTIVE" }), enabled: loadOverview });
   const enrollment = enrollments.data?.rows.find((row) => row.course_id === courseId && row.status === "ACTIVE");
-  const chapters = useQuery({ queryKey: keys.courseResource(courseId, "chapters"), queryFn: () => studentApi.courseChapters(courseId), enabled: canRead });
+  const chapters = useQuery({ queryKey: keys.courseResource(courseId, "chapters"), queryFn: () => studentApi.courseChapters(courseId),
+    enabled: canRead && (!detail.data?.timetable_code || Boolean(chapterId)) });
   const announcements = useQuery({ queryKey: keys.courseResource(courseId, "announcements"), queryFn: () => studentApi.courseAnnouncements(courseId), enabled: loadOverview });
   const events = useQuery({ queryKey: keys.courseResource(courseId, "calendar-events"), queryFn: () => studentApi.courseCalendarEvents(courseId), enabled: loadOverview });
+  const termId = detail.data?.term_id;
+  const timetable = useQuery({ queryKey: keys.timetable(termId), queryFn: () => timetableApi.retrieve({ term_id: termId }),
+    enabled: loadOverview && Boolean(termId) });
   const tasks = useQuery({ queryKey: keys.tasks({ course_id: courseId }), queryFn: () => taskApi.list({ course_id: courseId }), enabled: loadOverview });
   const chapterRows = chapters.data?.rows ?? [];
   const currentChapterId = chapterId ?? activeChapterId ?? chapterRows[0]?.public_id ?? null;
@@ -141,7 +145,12 @@ export function CourseDetail({ discussionPage = false }: { discussionPage?: bool
             empty={!chapters.data?.rows.length}
             emptyState={<div className="state-block"><strong>暂无章节</strong><p>教师尚未发布课程章节。</p></div>}>
             <div>
-              {chapterRows.map((chapter, index) => (
+              {termId && <Panel title={<h2>班级课表</h2>}>
+            <RequestStateView loading={timetable.isLoading} error={timetable.error} onRetry={() => void timetable.refetch()} empty={false}>
+              <ScheduleSlots slots={timetable.data?.schedules.filter((slot) => slot.course_id === courseId) ?? []} />
+            </RequestStateView>
+          </Panel>}
+          {!detail.data?.timetable_code && chapterRows.map((chapter, index) => (
                 <button type="button" key={chapter.public_id}
                   className={`course-chapter-row${!discussionPage && chapter.public_id === currentChapterId ? " active" : ""}`}
                   aria-current={!discussionPage && chapter.public_id === currentChapterId ? "location" : undefined}
@@ -167,9 +176,9 @@ export function CourseDetail({ discussionPage = false }: { discussionPage?: bool
             <div className="grid equal section" style={{ marginTop: 0 }}>
               <div>
                 <span className="eyebrow">课程代码</span>
-                <strong style={{ display: "block" }}>{detail.data?.code ?? "—"}</strong>
+                <strong style={{ display: "block" }}>{detail.data?.timetable_code ?? detail.data?.code ?? "—"}</strong>
                 <span className="eyebrow" style={{ marginTop: 10, display: "block" }}>课程负责人</span>
-                <strong style={{ display: "block" }}>{detail.data?.owner_name ?? "—"}</strong>
+                <strong style={{ display: "block" }}>{detail.data?.owner_name ?? "—"} · {detail.data?.term_name ?? "—"}</strong>
                 <span className="eyebrow" style={{ marginTop: 10, display: "block" }}>教学周期</span>
                 <strong style={{ display: "block" }}>{formatDate(detail.data?.teaching_start)} — {formatDate(detail.data?.teaching_end)}</strong>
               </div>

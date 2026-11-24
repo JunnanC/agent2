@@ -1992,107 +1992,13 @@
         "/api/v2/me/timetable": {
             "get": {
                 "operationId": "api_v2_me_timetable_retrieve",
-                "tags": [
-                    "api"
-                ],
-                "security": [
+                "parameters": [
                     {
-                        "portalSession": []
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/GenericTimetableResponse"
-                                }
-                            }
-                        },
-                        "description": ""
-                    }
-                }
-            }
-        },
-        "/api/v2/me/timetable-imports": {
-            "get": {
-                "operationId": "api_v2_me_timetable_imports_retrieve",
-                "tags": [
-                    "api"
-                ],
-                "security": [
-                    {
-                        "portalSession": []
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/GenericTimetableResponse"
-                                }
-                            }
-                        },
-                        "description": ""
-                    }
-                }
-            },
-            "post": {
-                "operationId": "api_v2_me_timetable_imports_create",
-                "tags": [
-                    "api"
-                ],
-                "requestBody": {
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "$ref": "#/components/schemas/TimetableUpload"
-                            }
-                        },
-                        "application/x-www-form-urlencoded": {
-                            "schema": {
-                                "$ref": "#/components/schemas/TimetableUpload"
-                            }
-                        },
-                        "multipart/form-data": {
-                            "schema": {
-                                "$ref": "#/components/schemas/TimetableUpload"
-                            }
+                        "in": "query",
+                        "name": "term_id",
+                        "schema": {
+                            "type": "string"
                         }
-                    },
-                    "required": true
-                },
-                "security": [
-                    {
-                        "portalSession": []
-                    }
-                ],
-                "responses": {
-                    "201": {
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/GenericTimetableResponse"
-                                }
-                            }
-                        },
-                        "description": ""
-                    }
-                }
-            }
-        },
-        "/api/v2/me/timetable-imports/{job_id}": {
-            "get": {
-                "operationId": "student_timetable_import_retrieve",
-                "parameters": [
-                    {
-                        "in": "path",
-                        "name": "job_id",
-                        "schema": {
-                            "type": "string"
-                        },
-                        "required": true
                     }
                 ],
                 "tags": [
@@ -2108,97 +2014,7 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/GenericTimetableResponse"
-                                }
-                            }
-                        },
-                        "description": ""
-                    }
-                }
-            }
-        },
-        "/api/v2/me/timetable-imports/{job_id}/confirm": {
-            "post": {
-                "operationId": "student_timetable_import_confirm",
-                "parameters": [
-                    {
-                        "in": "path",
-                        "name": "job_id",
-                        "schema": {
-                            "type": "string"
-                        },
-                        "required": true
-                    }
-                ],
-                "tags": [
-                    "api"
-                ],
-                "security": [
-                    {
-                        "portalSession": []
-                    }
-                ],
-                "responses": {
-                    "202": {
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/GenericTimetableResponse"
-                                }
-                            }
-                        },
-                        "description": ""
-                    }
-                }
-            }
-        },
-        "/api/v2/me/timetable-imports/{job_id}/mapping": {
-            "put": {
-                "operationId": "student_timetable_import_mapping_update",
-                "parameters": [
-                    {
-                        "in": "path",
-                        "name": "job_id",
-                        "schema": {
-                            "type": "string"
-                        },
-                        "required": true
-                    }
-                ],
-                "tags": [
-                    "api"
-                ],
-                "requestBody": {
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "$ref": "#/components/schemas/TimetableMapping"
-                            }
-                        },
-                        "application/x-www-form-urlencoded": {
-                            "schema": {
-                                "$ref": "#/components/schemas/TimetableMapping"
-                            }
-                        },
-                        "multipart/form-data": {
-                            "schema": {
-                                "$ref": "#/components/schemas/TimetableMapping"
-                            }
-                        }
-                    },
-                    "required": true
-                },
-                "security": [
-                    {
-                        "portalSession": []
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/GenericTimetableResponse"
+                                    "$ref": "#/components/schemas/TermTimetableResponse"
                                 }
                             }
                         },
@@ -4025,6 +3841,82 @@
                 ],
                 "responses": {
                     "202": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ImageResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                },
+                "x-portals": [
+                    "PLATFORM"
+                ]
+            }
+        },
+        "/api/v2/platform/images/{image_id}/rename": {
+            "post": {
+                "operationId": "platform_images_rename",
+                "parameters": [
+                    {
+                        "in": "header",
+                        "name": "Idempotency-Key",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "Stable key for one user intent.",
+                        "required": true
+                    },
+                    {
+                        "in": "header",
+                        "name": "If-Match",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "Quoted row version ETag.",
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "image_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "platform-governance"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ImageRename"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ImageRename"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ImageRename"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
                         "content": {
                             "application/json": {
                                 "schema": {
@@ -6274,6 +6166,75 @@
                 "x-portals": [
                     "PLATFORM"
                 ]
+            }
+        },
+        "/api/v2/platform/term-classes": {
+            "get": {
+                "operationId": "api_v2_platform_term_classes_retrieve",
+                "parameters": [
+                    {
+                        "in": "query",
+                        "name": "page",
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "in": "query",
+                        "name": "page_size",
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "in": "query",
+                        "name": "person_id",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "in": "query",
+                        "name": "q",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "in": "query",
+                        "name": "role",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "in": "query",
+                        "name": "term_id",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "tags": [
+                    "api"
+                ],
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/TermTimetableResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
             }
         },
         "/api/v2/platform/users": {
@@ -10059,6 +10020,96 @@
                             "application/json": {
                                 "schema": {
                                     "$ref": "#/components/schemas/AgentEnvelope"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                },
+                "x-portals": [
+                    "TEACHING"
+                ]
+            }
+        },
+        "/api/v2/teaching/courses/{course_id}/analytics/grades": {
+            "get": {
+                "operationId": "api_v2_teaching_courses_analytics_grades_retrieve",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "course_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "query",
+                        "name": "publication_ids",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "tags": [
+                    "teaching-analytics"
+                ],
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ReleasedGradeResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                },
+                "x-portals": [
+                    "TEACHING"
+                ]
+            }
+        },
+        "/api/v2/teaching/courses/{course_id}/analytics/grades/export": {
+            "get": {
+                "operationId": "api_v2_teaching_courses_analytics_grades_export_retrieve",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "course_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "query",
+                        "name": "publication_ids",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "tags": [
+                    "teaching-analytics"
+                ],
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/GradeExportResponse"
                                 }
                             }
                         },
@@ -16667,6 +16718,40 @@
                 ]
             }
         },
+        "/api/v2/teaching/timetable": {
+            "get": {
+                "operationId": "api_v2_teaching_timetable_retrieve",
+                "parameters": [
+                    {
+                        "in": "query",
+                        "name": "term_id",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "tags": [
+                    "api"
+                ],
+                "security": [
+                    {
+                        "portalSession": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/TermTimetableResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
         "/api/v2/teaching/timetable-imports": {
             "get": {
                 "operationId": "api_v2_teaching_timetable_imports_retrieve",
@@ -17745,6 +17830,56 @@
                     "versions"
                 ]
             },
+            "ClassGradeSummary": {
+                "type": "object",
+                "properties": {
+                    "expected": {
+                        "type": "integer"
+                    },
+                    "completed": {
+                        "type": "integer"
+                    },
+                    "completion_rate": {
+                        "type": "number",
+                        "format": "double",
+                        "nullable": true
+                    },
+                    "score": {
+                        "type": "number",
+                        "format": "double"
+                    },
+                    "max_score": {
+                        "type": "number",
+                        "format": "double"
+                    },
+                    "percent": {
+                        "type": "number",
+                        "format": "double",
+                        "nullable": true
+                    },
+                    "failure_rate": {
+                        "type": "number",
+                        "format": "double",
+                        "nullable": true
+                    }
+                },
+                "required": [
+                    "completed",
+                    "completion_rate",
+                    "expected",
+                    "failure_rate",
+                    "max_score",
+                    "percent",
+                    "score"
+                ]
+            },
+            "ClassTypeEnum": {
+                "enum": [
+                    "TEACHING"
+                ],
+                "type": "string",
+                "description": "* `TEACHING` - TEACHING"
+            },
             "CodeVersion": {
                 "type": "object",
                 "properties": {
@@ -18155,6 +18290,16 @@
                     "title": {
                         "type": "string"
                     },
+                    "timetable_code": {
+                        "type": "string",
+                        "nullable": true
+                    },
+                    "term_id": {
+                        "type": "string"
+                    },
+                    "term_name": {
+                        "type": "string"
+                    },
                     "summary": {
                         "type": "string"
                     },
@@ -18227,6 +18372,9 @@
                     "summary",
                     "teaching_end",
                     "teaching_start",
+                    "term_id",
+                    "term_name",
+                    "timetable_code",
                     "title",
                     "visibility"
                 ]
@@ -18743,6 +18891,61 @@
                     "name"
                 ]
             },
+            "ExperimentGradeSummary": {
+                "type": "object",
+                "properties": {
+                    "expected": {
+                        "type": "integer"
+                    },
+                    "completed": {
+                        "type": "integer"
+                    },
+                    "completion_rate": {
+                        "type": "number",
+                        "format": "double",
+                        "nullable": true
+                    },
+                    "score": {
+                        "type": "number",
+                        "format": "double"
+                    },
+                    "max_score": {
+                        "type": "number",
+                        "format": "double"
+                    },
+                    "percent": {
+                        "type": "number",
+                        "format": "double",
+                        "nullable": true
+                    },
+                    "publication_id": {
+                        "type": "string"
+                    },
+                    "title": {
+                        "type": "string"
+                    },
+                    "deadline": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "released_at": {
+                        "type": "string",
+                        "format": "date-time"
+                    }
+                },
+                "required": [
+                    "completed",
+                    "completion_rate",
+                    "deadline",
+                    "expected",
+                    "max_score",
+                    "percent",
+                    "publication_id",
+                    "released_at",
+                    "score",
+                    "title"
+                ]
+            },
             "ExperimentImageCreate": {
                 "type": "object",
                 "properties": {
@@ -19162,6 +19365,71 @@
                     "trace_id"
                 ]
             },
+            "GradeExportData": {
+                "type": "object",
+                "properties": {
+                    "filename": {
+                        "type": "string"
+                    },
+                    "csv": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "csv",
+                    "filename"
+                ]
+            },
+            "GradeExportResponse": {
+                "type": "object",
+                "properties": {
+                    "data": {
+                        "$ref": "#/components/schemas/GradeExportData"
+                    },
+                    "meta": {
+                        "type": "object",
+                        "additionalProperties": {}
+                    }
+                },
+                "required": [
+                    "data",
+                    "meta"
+                ]
+            },
+            "GradePartSummary": {
+                "type": "object",
+                "properties": {
+                    "kind": {
+                        "$ref": "#/components/schemas/GradePartSummaryKindEnum"
+                    },
+                    "label": {
+                        "type": "string"
+                    },
+                    "percent": {
+                        "type": "number",
+                        "format": "double",
+                        "nullable": true
+                    },
+                    "suggestion": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "kind",
+                    "label",
+                    "percent",
+                    "suggestion"
+                ]
+            },
+            "GradePartSummaryKindEnum": {
+                "enum": [
+                    "CHOICE",
+                    "PROGRAMMING",
+                    "REPORT"
+                ],
+                "type": "string",
+                "description": "* `CHOICE` - CHOICE\n* `PROGRAMMING` - PROGRAMMING\n* `REPORT` - REPORT"
+            },
             "GrantCreate": {
                 "type": "object",
                 "properties": {
@@ -19356,6 +19624,10 @@
                         "type": "string",
                         "maxLength": 255
                     },
+                    "display_name": {
+                        "type": "string",
+                        "maxLength": 120
+                    },
                     "display_tag": {
                         "type": "string",
                         "maxLength": 128
@@ -19389,6 +19661,9 @@
                         "type": "string"
                     },
                     "repository": {
+                        "type": "string"
+                    },
+                    "display_name": {
                         "type": "string"
                     },
                     "display_tag": {
@@ -19427,6 +19702,7 @@
                     "approval_status",
                     "approved_at",
                     "digest",
+                    "display_name",
                     "display_tag",
                     "public_id",
                     "registry",
@@ -19480,6 +19756,22 @@
                         "maxLength": 500
                     }
                 }
+            },
+            "ImageRename": {
+                "type": "object",
+                "properties": {
+                    "display_name": {
+                        "type": "string",
+                        "maxLength": 120
+                    },
+                    "reason": {
+                        "type": "string",
+                        "maxLength": 500
+                    }
+                },
+                "required": [
+                    "display_name"
+                ]
             },
             "ImageResolve": {
                 "type": "object",
@@ -21609,6 +21901,115 @@
                     "status"
                 ]
             },
+            "ReleasedGradeReport": {
+                "type": "object",
+                "properties": {
+                    "summary": {
+                        "$ref": "#/components/schemas/ClassGradeSummary"
+                    },
+                    "experiments": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/ExperimentGradeSummary"
+                        }
+                    },
+                    "students": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/StudentGradeSummary"
+                        }
+                    },
+                    "parts": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/GradePartSummary"
+                        }
+                    },
+                    "results": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/ReleasedResult"
+                        }
+                    },
+                    "awaiting_confirmation": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/UnconfirmedGrade"
+                        }
+                    }
+                },
+                "required": [
+                    "awaiting_confirmation",
+                    "experiments",
+                    "parts",
+                    "results",
+                    "students",
+                    "summary"
+                ]
+            },
+            "ReleasedGradeResponse": {
+                "type": "object",
+                "properties": {
+                    "data": {
+                        "$ref": "#/components/schemas/ReleasedGradeReport"
+                    },
+                    "meta": {
+                        "type": "object",
+                        "additionalProperties": {}
+                    }
+                },
+                "required": [
+                    "data",
+                    "meta"
+                ]
+            },
+            "ReleasedResult": {
+                "type": "object",
+                "properties": {
+                    "publication_id": {
+                        "type": "string"
+                    },
+                    "task_id": {
+                        "type": "string",
+                        "nullable": true
+                    },
+                    "student_id": {
+                        "type": "string"
+                    },
+                    "student_name": {
+                        "type": "string"
+                    },
+                    "status": {
+                        "$ref": "#/components/schemas/ReleasedResultStatusEnum"
+                    },
+                    "score": {
+                        "type": "number",
+                        "format": "double"
+                    },
+                    "max_score": {
+                        "type": "number",
+                        "format": "double"
+                    }
+                },
+                "required": [
+                    "max_score",
+                    "publication_id",
+                    "score",
+                    "status",
+                    "student_id",
+                    "student_name",
+                    "task_id"
+                ]
+            },
+            "ReleasedResultStatusEnum": {
+                "enum": [
+                    "SUBMITTED",
+                    "PARTIAL",
+                    "NOT_SUBMITTED"
+                ],
+                "type": "string",
+                "description": "* `SUBMITTED` - SUBMITTED\n* `PARTIAL` - PARTIAL\n* `NOT_SUBMITTED` - NOT_SUBMITTED"
+            },
             "ReorderWrite": {
                 "type": "object",
                 "properties": {
@@ -22603,6 +23004,13 @@
                     "size_bytes"
                 ]
             },
+            "SourceEnum": {
+                "enum": [
+                    "PLATFORM"
+                ],
+                "type": "string",
+                "description": "* `PLATFORM` - PLATFORM"
+            },
             "SourceVersionWrite": {
                 "type": "object",
                 "properties": {
@@ -22742,6 +23150,61 @@
                 },
                 "required": [
                     "status"
+                ]
+            },
+            "StudentGradeSummary": {
+                "type": "object",
+                "properties": {
+                    "expected": {
+                        "type": "integer"
+                    },
+                    "completed": {
+                        "type": "integer"
+                    },
+                    "completion_rate": {
+                        "type": "number",
+                        "format": "double",
+                        "nullable": true
+                    },
+                    "score": {
+                        "type": "number",
+                        "format": "double"
+                    },
+                    "max_score": {
+                        "type": "number",
+                        "format": "double"
+                    },
+                    "percent": {
+                        "type": "number",
+                        "format": "double",
+                        "nullable": true
+                    },
+                    "student_id": {
+                        "type": "string"
+                    },
+                    "student_name": {
+                        "type": "string"
+                    },
+                    "rank": {
+                        "type": "integer",
+                        "nullable": true
+                    },
+                    "failed": {
+                        "type": "boolean",
+                        "nullable": true
+                    }
+                },
+                "required": [
+                    "completed",
+                    "completion_rate",
+                    "expected",
+                    "failed",
+                    "max_score",
+                    "percent",
+                    "rank",
+                    "score",
+                    "student_id",
+                    "student_name"
                 ]
             },
             "StudentImportData": {
@@ -23904,6 +24367,79 @@
                     "name"
                 ]
             },
+            "TermTimetableData": {
+                "type": "object",
+                "properties": {
+                    "term": {
+                        "$ref": "#/components/schemas/TimetableTerm"
+                    },
+                    "terms": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/TimetableTerm"
+                        }
+                    },
+                    "classes": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/TimetableClass"
+                        }
+                    },
+                    "total": {
+                        "type": "integer"
+                    },
+                    "schedules": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/TimetableSchedule"
+                        }
+                    }
+                },
+                "required": [
+                    "classes",
+                    "schedules",
+                    "term",
+                    "terms"
+                ]
+            },
+            "TermTimetableResponse": {
+                "type": "object",
+                "properties": {
+                    "data": {
+                        "$ref": "#/components/schemas/TermTimetableData"
+                    },
+                    "meta": {
+                        "type": "object",
+                        "additionalProperties": {}
+                    }
+                },
+                "required": [
+                    "data"
+                ]
+            },
+            "TimetableClass": {
+                "type": "object",
+                "properties": {
+                    "course_id": {
+                        "type": "string"
+                    },
+                    "course_code": {
+                        "type": "string"
+                    },
+                    "course_title": {
+                        "type": "string"
+                    },
+                    "instructor_name": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "course_code",
+                    "course_id",
+                    "course_title",
+                    "instructor_name"
+                ]
+            },
             "TimetableMapping": {
                 "type": "object",
                 "properties": {
@@ -23916,6 +24452,90 @@
                 },
                 "required": [
                     "mapping"
+                ]
+            },
+            "TimetableSchedule": {
+                "type": "object",
+                "properties": {
+                    "course_id": {
+                        "type": "string"
+                    },
+                    "course_code": {
+                        "type": "string"
+                    },
+                    "course_title": {
+                        "type": "string"
+                    },
+                    "instructor_name": {
+                        "type": "string"
+                    },
+                    "source": {
+                        "$ref": "#/components/schemas/SourceEnum"
+                    },
+                    "class_type": {
+                        "$ref": "#/components/schemas/ClassTypeEnum"
+                    },
+                    "term_id": {
+                        "type": "string"
+                    },
+                    "weekday": {
+                        "type": "integer"
+                    },
+                    "start_period": {
+                        "type": "integer"
+                    },
+                    "end_period": {
+                        "type": "integer"
+                    },
+                    "week_start": {
+                        "type": "integer",
+                        "nullable": true
+                    },
+                    "week_end": {
+                        "type": "integer",
+                        "nullable": true
+                    },
+                    "week_parity": {
+                        "$ref": "#/components/schemas/WeekParityEnum"
+                    },
+                    "classroom": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "class_type",
+                    "classroom",
+                    "course_code",
+                    "course_id",
+                    "course_title",
+                    "end_period",
+                    "instructor_name",
+                    "source",
+                    "start_period",
+                    "term_id",
+                    "week_end",
+                    "week_parity",
+                    "week_start",
+                    "weekday"
+                ]
+            },
+            "TimetableTerm": {
+                "type": "object",
+                "properties": {
+                    "public_id": {
+                        "type": "string"
+                    },
+                    "code": {
+                        "type": "string"
+                    },
+                    "name": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "code",
+                    "name",
+                    "public_id"
                 ]
             },
             "TimetableUpload": {
@@ -24116,6 +24736,24 @@
                 ],
                 "type": "string",
                 "description": "* `OPEN` - OPEN\n* `TRIAGED` - TRIAGED\n* `CLOSED` - CLOSED"
+            },
+            "UnconfirmedGrade": {
+                "type": "object",
+                "properties": {
+                    "publication_id": {
+                        "type": "string"
+                    },
+                    "task_id": {
+                        "type": "string"
+                    },
+                    "reason": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "reason",
+                    "task_id"
+                ]
             },
             "UsageData": {
                 "type": "object",
@@ -24404,6 +25042,15 @@
                     "endpoint_url",
                     "name"
                 ]
+            },
+            "WeekParityEnum": {
+                "enum": [
+                    "ALL",
+                    "ODD",
+                    "EVEN"
+                ],
+                "type": "string",
+                "description": "* `ALL` - ALL\n* `ODD` - ODD\n* `EVEN` - EVEN"
             },
             "WeeklyStudyData": {
                 "type": "object",

@@ -33,6 +33,7 @@ export function TaskDetail() {
   return <>
     <div className="crumb"><Link className="crumb-link" to="/">学生门户</Link> / <Link className="crumb-link" to="/experiments">实验任务</Link> / <b>{current.title}</b></div>
     <div className="page-actions"><h1>{current.title}</h1>
+      {current.course_id && <Link className="btn" to={`/courses/${current.course_id}`}>返回教学班</Link>}
       {current.assessment_available && <Link className="btn primary" to={`/experiments/${taskId}/assessment`}>进入实验答题</Link>}
     </div>
     <Panel>

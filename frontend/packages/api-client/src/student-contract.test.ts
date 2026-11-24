@@ -79,11 +79,11 @@ describe("student API contracts", () => {
 
   it("uploads mappings with PUT and confirms through the separate POST route", async () => {
     await timetableApi.updateMapping("job-1", { course_title: "课程名" });
-    expect(String(vi.mocked(fetch).mock.calls.at(-1)?.[0])).toContain("/me/timetable-imports/job-1/mapping");
+    expect(String(vi.mocked(fetch).mock.calls.at(-1)?.[0])).toContain("/teaching/timetable-imports/job-1/mapping");
     expect(vi.mocked(fetch).mock.calls.at(-1)?.[1]?.method).toBe("PUT");
     expect(JSON.parse(String(vi.mocked(fetch).mock.calls.at(-1)?.[1]?.body))).toEqual({ mapping: { course_title: "课程名" } });
     await timetableApi.confirm("job-1");
-    expect(String(vi.mocked(fetch).mock.calls.at(-1)?.[0])).toContain("/me/timetable-imports/job-1/confirm");
+    expect(String(vi.mocked(fetch).mock.calls.at(-1)?.[0])).toContain("/teaching/timetable-imports/job-1/confirm");
     expect(vi.mocked(fetch).mock.calls.at(-1)?.[1]?.method).toBe("POST");
   });
 

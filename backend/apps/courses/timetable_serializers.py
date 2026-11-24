@@ -24,3 +24,41 @@ class AdministrativeClassMemberWriteSerializer(serializers.Serializer):
 class GenericTimetableResponseSerializer(serializers.Serializer):
     data = serializers.JSONField()
     meta = serializers.DictField(child=serializers.JSONField(), required=False)
+
+
+class TimetableTermSerializer(serializers.Serializer):
+    public_id = serializers.CharField()
+    code = serializers.CharField()
+    name = serializers.CharField()
+
+
+class TimetableClassSerializer(serializers.Serializer):
+    course_id = serializers.CharField()
+    course_code = serializers.CharField()
+    course_title = serializers.CharField()
+    instructor_name = serializers.CharField(allow_blank=True)
+
+
+class TimetableScheduleSerializer(TimetableClassSerializer):
+    source = serializers.ChoiceField(choices=["PLATFORM"])
+    class_type = serializers.ChoiceField(choices=["TEACHING"])
+    term_id = serializers.CharField()
+    weekday = serializers.IntegerField()
+    start_period = serializers.IntegerField()
+    end_period = serializers.IntegerField()
+    week_start = serializers.IntegerField(allow_null=True)
+    week_end = serializers.IntegerField(allow_null=True)
+    week_parity = serializers.ChoiceField(choices=["ALL", "ODD", "EVEN"])
+    classroom = serializers.CharField(allow_blank=True)
+
+
+class TermTimetableDataSerializer(serializers.Serializer):
+    term = TimetableTermSerializer()
+    terms = TimetableTermSerializer(many=True)
+    classes = TimetableClassSerializer(many=True)
+    total = serializers.IntegerField(required=False)
+    schedules = TimetableScheduleSerializer(many=True)
+
+
+class TermTimetableResponseSerializer(GenericTimetableResponseSerializer):
+    data = TermTimetableDataSerializer()

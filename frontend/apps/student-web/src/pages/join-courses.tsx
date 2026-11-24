@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
-import { studentApi } from "@edu/api-client";
+import { studentApi, type Course } from "@edu/api-client";
 import { ApiError } from "@edu/auth-client";
 import { keys } from "@edu/query-keys";
 import { useToast } from "@edu/ui";
@@ -19,6 +19,7 @@ export function JoinCourses() {
   const [invitationCode, setInvitationCode] = useState("");
   const [applicationMessage, setApplicationMessage] = useState("");
   const [invitationSearch, setInvitationSearch] = useState("");
+  const [resolved, setResolved] = useState<{ course: Course; code: string } | null>(null);
 
   const catalog = useQuery({ queryKey: keys.courses({}), queryFn: () => studentApi.courses({ page_size: 100 }) });
   const enrollments = useQuery({ queryKey: keys.enrollments({}), queryFn: () => studentApi.myEnrollments({ page_size: 100 }) });
@@ -30,6 +31,9 @@ export function JoinCourses() {
       toast.notify(enrollment.status === "ACTIVE" ? "已加入课程" : "申请已提交，等待教师审核");
       void catalog.refetch();
       void enrollments.refetch();
+      setResolved(null);
+      setInvitationSearch("");
+      setTab("enrollments");
       setApplyTarget(null);
       setInvitationCode("");
       setApplicationMessage("");
@@ -52,7 +56,7 @@ export function JoinCourses() {
   const resolveInvitation = useMutation({
     mutationFn: (code: string) => studentApi.resolveInvitation(code),
     onSuccess: (course, code) => {
-      joinMutation.mutate({ courseId: course.public_id, payload: { invitation_code: code } });
+      setResolved({ course, code });
     },
     onError: (error) => toast.notify(error instanceof ApiError ? error.payload?.message ?? "邀请码无效或已失效" : "邀请码无效或已失效", "error"),
   });
@@ -72,12 +76,15 @@ export function JoinCourses() {
 
   const courses = useMemo(() => {
     const query = search.trim().toLowerCase();
-    return (catalog.data?.rows ?? [])
-      .filter((course) => tab === "discover"
-        ? !joinedCourseIds.has(course.public_id)
-        : joinedCourseIds.get(course.public_id) === "PENDING")
+    const rows = tab === "discover" ? (catalog.data?.rows ?? []).filter((course) => !joinedCourseIds.has(course.public_id))
+      : (enrollments.data?.rows ?? []).filter((row) => row.status === "PENDING").map((row) => ({
+          public_id: row.course_id, title: row.course_title ?? row.course_id, code: row.course_code ?? "",
+          summary: row.decision_note, owner_name: undefined, active_enrollment_count: 0, capacity: null,
+          enrollment_end: null,
+        }));
+    return rows
       .filter((course) => !query || `${course.title} ${course.code} ${course.summary ?? ""}`.toLowerCase().includes(query));
-  }, [catalog.data, tab, search, joinedCourseIds]);
+  }, [catalog.data, enrollments.data, tab, search, joinedCourseIds]);
 
   const statusWording = (courseId: string) => {
     const status = joinedCourseIds.get(courseId);
@@ -111,12 +118,22 @@ export function JoinCourses() {
             const code = invitationSearch.trim();
             if (code && !resolveInvitation.isPending && !joinMutation.isPending) resolveInvitation.mutate(code);
           }}>
-            <label className="form-label" htmlFor="direct-invitation-code" style={{ margin: 0 }}>邀请码直达</label>
-            <input id="direct-invitation-code" className="field" value={invitationSearch} onChange={(event) => setInvitationSearch(event.target.value)} placeholder="输入邀请码申请加入关联课程" />
+            <label className="form-label" htmlFor="direct-invitation-code" style={{ margin: 0 }}>课程码</label>
+            <input id="direct-invitation-code" className="field" value={invitationSearch} onChange={(event) => { setInvitationSearch(event.target.value); setResolved(null); }} placeholder="输入任课教师提供的课程码" />
             <Button type="submit" variant="primary" disabled={!invitationSearch.trim() || resolveInvitation.isPending || joinMutation.isPending}>
-              {resolveInvitation.isPending || joinMutation.isPending ? "提交中…" : "提交邀请码申请"}
+              {resolveInvitation.isPending || joinMutation.isPending ? "查询中…" : "查找教学班"}
             </Button>
           </form>
+          {resolved && resolved.code === invitationSearch.trim() && <div className="item section">
+            <div><strong>{resolved.course.title}</strong>
+              <small>{resolved.course.term_name} · {resolved.course.timetable_code ?? resolved.course.code} · {resolved.course.owner_name}</small></div>
+            {joinedCourseIds.get(resolved.course.public_id) === "ACTIVE"
+              ? <Button onClick={() => navigate(`/courses/${resolved.course.public_id}`)}>进入教学班</Button>
+              : <Button variant="primary" disabled={joinMutation.isPending || joinedCourseIds.get(resolved.course.public_id) === "PENDING"}
+                onClick={() => joinMutation.mutate({ courseId: resolved.course.public_id, payload: { invitation_code: resolved.code } })}>
+                {joinedCourseIds.get(resolved.course.public_id) === "PENDING" ? "待教师审核" : "确认申请加入"}
+              </Button>}
+          </div>}
         <RequestStateView
           loading={catalog.isLoading || enrollments.isLoading}
           error={catalog.error ?? enrollments.error}

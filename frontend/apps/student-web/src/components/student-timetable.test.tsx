@@ -1,31 +1,30 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { afterEach, expect, it, vi } from "vitest";
-import { ToastProvider } from "@edu/ui";
+import { timetableApi, type TimetableData } from "@edu/api-client";
 import { StudentTimetable } from "./student-timetable";
 
-vi.mock("@edu/api-client", () => ({
-  timetableApi: {
-    retrieve: vi.fn(async () => ({
-      term: { name: "Legacy Current Term" },
-      schedules: [
-        { source: "PLATFORM", course_id: "course-1", course_title: "数据结构与算法", weekday: 1, start_period: 1, end_period: 2, week_start: 1, week_end: 16, classroom: "东二 305", instructor_name: "张明远" },
-        { source: "PLATFORM", course_id: "course-1", course_title: "数据结构与算法", weekday: 3, start_period: 3, end_period: 4, week_start: 1, week_end: 16, classroom: "东二 305", instructor_name: "张明远" },
-      ],
-    })),
-    imports: vi.fn(async () => ({ rows: [] })),
-  },
-}));
-afterEach(cleanup);
+vi.mock("@edu/api-client", () => ({ timetableApi: { retrieve: vi.fn() } }));
+const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
+afterEach(() => { cleanup(); client.clear(); });
 
-it("同一门课的多个上课时段合并为一行，并隐藏旧学期英文名", async () => {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  render(<QueryClientProvider client={client}><ToastProvider><StudentTimetable /></ToastProvider></QueryClientProvider>);
-  expect(await screen.findByText("数据结构与算法")).toBeInTheDocument();
-  expect(screen.getAllByText("数据结构与算法")).toHaveLength(1);
-  expect(screen.getByText(/周一 第 1—2 节/)).toBeInTheDocument();
-  expect(screen.getByText(/周三 第 3—4 节/)).toBeInTheDocument();
-  expect(screen.getByText("当前学期")).toBeInTheDocument();
-  expect(screen.queryByText("Legacy Current Term")).not.toBeInTheDocument();
-  client.clear();
+it("按学期显示同名教学班的独立链接及单双周", async () => {
+  const terms = [{ public_id: "now", code: "NOW", name: "当前学期" }, { public_id: "past", code: "PAST", name: "往期学期" }];
+  const classes = ["DS-01", "DS-02"].map((code) => ({ course_id: code, course_code: code, course_title: "数据结构", instructor_name: "周老师" }));
+  const current: TimetableData = {
+    term: terms[0]!, terms, classes,
+    schedules: [{ ...classes[0]!, source: "PLATFORM", class_type: "TEACHING", term_id: "now", weekday: 3,
+      start_period: 3, end_period: 4, week_start: 2, week_end: 16, week_parity: "EVEN", classroom: "B202" }],
+  };
+  vi.mocked(timetableApi.retrieve).mockImplementation(async (query) => query?.term_id === "past"
+    ? { ...current, term: terms[1]!, classes: [{ ...classes[0]!, course_id: "old-class" }], schedules: [] } : current);
+  render(<MemoryRouter><QueryClientProvider client={client}><StudentTimetable /></QueryClientProvider></MemoryRouter>);
+  expect((await screen.findAllByRole("link", { name: "数据结构" })).map((link) => link.getAttribute("href")))
+    .toEqual(["/courses/DS-01", "/courses/DS-02"]);
+  expect(screen.getByText(/双周.*B202/)).toBeInTheDocument();
+  expect(screen.queryByLabelText(/导入个人课表/)).not.toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText("学期"), { target: { value: "past" } });
+  await waitFor(() => expect(screen.getByRole("link", { name: "数据结构" })).toHaveAttribute("href", "/courses/old-class"));
+  expect(screen.getByText("暂无排课")).toBeInTheDocument();
 });
