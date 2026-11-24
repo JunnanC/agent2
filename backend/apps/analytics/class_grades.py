@@ -3,6 +3,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Any
 
+from django.db.models import Q
 from django.utils import timezone
 
 from apps.courses.models import Course
@@ -42,22 +43,34 @@ class ReleasedResult:
 def current_released_results(
     course: Course,
 ) -> tuple[list[ReleasedExperiment], list[ReleasedResult], list[dict[str, str]]]:
-    """Read explicit releases through the current task relations until B's snapshot lands."""
+    """Read locked experiment results and previously scheduled template releases."""
     now = timezone.now()
     publications = list(
         TaskPublication.objects.filter(
+            Q(template_version__isnull=True, grades_published_at__lte=now)
+            | Q(template_version__isnull=False, score_release_at__lte=now),
             course=course,
             retake_of__isnull=True,
-            score_release_at__lte=now,
             window_end__lte=now,
             status__in=(TaskPublication.Status.PUBLISHED, TaskPublication.Status.CLOSED),
         ).order_by("window_end", "pk")
     )
-    experiments = [
-        ReleasedExperiment(p.public_id, p.title, p.window_end, p.score_release_at)
-        for p in publications
-        if p.score_release_at is not None
-    ]
+    experiments = []
+    for publication in publications:
+        released_at = (
+            publication.grades_published_at
+            if publication.direct_assessment
+            else publication.score_release_at
+        )
+        if released_at is not None:
+            experiments.append(
+                ReleasedExperiment(
+                    publication.public_id,
+                    publication.title,
+                    publication.window_end,
+                    released_at,
+                )
+            )
     tasks = (
         ExperimentTask.objects.filter(publication__in=publications)
         .exclude(status=ExperimentTask.Status.CANCELLED)
@@ -65,6 +78,7 @@ def current_released_results(
             "publication",
             "enrollment",
             "student",
+            "publishedexperimentgrade",
         )
         .order_by("pk")
     )
@@ -82,6 +96,32 @@ def current_released_results(
                 "task_id": task.public_id,
                 "reason": "ENROLLMENT_UNCONFIRMED",
             })
+            continue
+        if task.publication.direct_assessment:
+            snapshot = getattr(task, "publishedexperimentgrade", None)
+            if snapshot is None:
+                awaiting.append({
+                    "publication_id": task.publication.public_id,
+                    "task_id": task.public_id,
+                    "reason": "RELEASED_PARTS_UNCONFIRMED",
+                })
+                continue
+            parts = snapshot.result["parts"]
+            results.append(
+                ReleasedResult(
+                    task.publication.public_id,
+                    task.student.public_id,
+                    task.student.display_name,
+                    task.public_id,
+                    task.enrollment.activated_at,
+                    snapshot.result["should_do"],
+                    snapshot.result["status"],
+                    {
+                        part["kind"]: (Decimal(part["score"]), Decimal(part["max_score"]))
+                        for part in parts
+                    },
+                )
+            )
             continue
         parts = part_scores(task)
         if not parts or any(

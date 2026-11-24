@@ -1,0 +1,929 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>教学日程 · 教学实验平台</title>
+<style>
+  :root {
+    color-scheme: light;
+    --ink: #312a25;
+    --muted: #675e55;
+    --quiet: #6c6259;
+    --line: #ded5c8;
+    --control: #cfc4b5;
+    --paper: #fffdf8;
+    --ground: #f8f5ee;
+    --accent: #793b44;
+    --accent-hover: #632c35;
+    --accent-soft: #f2e6e5;
+    --radius: 5px;
+    --display: Georgia, "Source Han Serif SC", "Noto Serif CJK SC", "Songti SC", SimSun, serif;
+    font-family: "Segoe UI", "Microsoft YaHei UI", "PingFang SC", "Noto Sans CJK SC", sans-serif;
+    font-size: 14px;
+    font-variant-numeric: tabular-nums;
+    color: var(--ink);
+    background: var(--ground);
+  }
+  * { box-sizing: border-box; }
+  body, h1, h2, h3, p, ul { margin: 0; }
+  button, select, input, textarea { font: inherit; color: inherit; }
+  button, select { cursor: pointer; }
+  a { color: inherit; text-decoration: none; }
+  button:disabled { cursor: not-allowed; color: #566358; background: #eff1ec; border-color: var(--line); }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+  [hidden] { display: none !important; }
+  .wrap { width: min(1240px, calc(100% - 64px)); margin-inline: auto; }
+  .top { background: var(--ground); border-bottom: 1px solid var(--line); }
+  .top-inner, .brand, .top-end, .profile { display: flex; align-items: center; }
+  .top-inner { min-height: 58px; justify-content: space-between; gap: 16px; }
+  .brand { gap: 10px; font-size: 15px; font-weight: 700; white-space: nowrap; }
+  .brand-mark { display: grid; place-items: center; color: var(--accent); width: 26px; height: 30px; }
+  .brand-mark .icon { width: 25px; height: 25px; }
+  .top-end { gap: 17px; }
+  .top button { background: transparent; color: var(--muted); border: 0; }
+  .bell { display: grid; place-items: center; width: 38px; height: 38px; border-radius: 6px; }
+  .top button:hover { background: var(--accent-soft); }
+  .profile { gap: 9px; font-size: 13px; white-space: nowrap; }
+  .avatar { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; color: #53483b; background: #eee9de; font-weight: 700; }
+  .icon { width: 18px; height: 18px; flex: none; vertical-align: middle; }
+  .page-heading { display: flex; justify-content: space-between; align-items: center; gap: 20px; padding-block: 32px 26px; }
+  h1 { font: 600 36px/1.22 var(--display); }
+  .page-heading p { color: var(--muted); margin-top: 10px; line-height: 1.55; }
+  .page-heading .back { color: var(--muted); display: inline-flex; align-items: center; gap: 3px; margin-bottom: 9px; font-size: 13px; }
+  .back:hover { color: var(--accent); text-decoration: underline; }
+  .heading-controls, .meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; color: var(--muted); }
+  .heading-controls { margin-top: 12px; font-size: 13px; }
+  .heading-controls select { color: var(--ink); min-height: 34px; padding-inline: 10px; }
+  .heading-actions { display: flex; align-items: center; gap: 8px; }
+  .heading-actions .btn { min-height: 40px; }
+  .class-code { display: flex; align-items: center; gap: 12px; padding: 8px 10px 8px 13px; flex: none; background: var(--paper); border: 1px solid var(--line); border-radius: 8px; }
+  .class-code span { font-size: 13px; color: var(--muted); }
+  .class-code strong { font: 600 15px/1.25 Consolas, monospace; }
+  .class-code .text-button { padding: 4px; }
+  .actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  main { padding-bottom: 36px; }
+  .rail { display: grid; gap: 12px; }
+  .panel { background: var(--paper); border: 1px solid var(--line); border-radius: var(--radius); min-width: 0; }
+  .panel-head { min-height: 68px; padding: 12px 18px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
+  .rail .panel-head { min-height: 52px; padding: 12px 15px; border-bottom: 1px solid var(--line); }
+  h2 { font-size: 17px; font-weight: 650; line-height: 1.45; }
+  .schedule h2 { font-size: 20px; }
+  h3 { font-size: 15px; line-height: 1.45; }
+  .panel-head p { margin-top: 4px; }
+  .small { font-size: 13px; color: var(--muted); }
+  .muted { color: var(--muted); }
+  .btn, select { min-height: 36px; border: 1px solid var(--control); background: #fff; padding: 0 12px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; border-radius: 7px; white-space: nowrap; }
+  .btn { font-weight: 550; }
+  .btn:hover:not(:disabled), select:hover { background: #f4eee6; border-color: #b9a99d; }
+  .btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .btn.primary:hover:not(:disabled) { background: var(--accent-hover); border-color: var(--accent-hover); }
+  .btn.primary:disabled { color: #566358; background: #eff1ec; border-color: var(--line); }
+  .btn.square { padding: 0; min-height: 34px; width: 34px; }
+  .text-button { border: 0; background: transparent; color: var(--accent); display: inline-flex; align-items: center; gap: 5px; padding: 4px 0; white-space: nowrap; }
+  .text-button:hover { text-decoration: underline; }
+  .scroll-frame { overflow-x: auto; }
+  .timetable { display: grid; grid-template-columns: 69px repeat(5, minmax(105px, 1fr)); min-width: 594px; }
+  .tt-cell { min-width: 0; min-height: 79px; padding: 8px; border: solid var(--line); border-width: 1px 0 0 1px; }
+  .tt-cell:nth-child(6n+1) { border-left: 0; }
+  .tt-label { color: var(--muted); display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 3px; font-size: 12px; }
+  .day { min-height: 51px; background: #f9f5ef; }
+  .day strong { color: var(--ink); font-weight: 600; }
+  .day.today { background: var(--accent-soft); border-top: 2px solid var(--accent); }
+  .day.today strong { color: var(--accent); }
+  .day.today .date { color: var(--accent); font-weight: 700; }
+  .tt-cell.today-column:not(.day) { background: #fbf5f3; }
+  .date { color: var(--quiet); font-size: 12px; }
+  .slot { display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 4px; width: 100%; min-height: 61px; padding: 6px 8px; border-radius: 6px; border-left: 3px solid var(--course-mark); background: var(--course-fill); color: var(--course-ink); line-height: 1.35; }
+  .slot:hover { background: var(--course-hover); }
+  [data-tone="blue"] { --course-mark: #718cab; --course-fill: #edf2f8; --course-hover: #e1eaf5; --course-ink: #2e4c68; }
+  [data-tone="teal"] { --course-mark: #77967b; --course-fill: #edf4e7; --course-hover: #e0eddc; --course-ink: #2d5238; }
+  [data-tone="slate"] { --course-mark: #ac8a55; --course-fill: #f6f0e3; --course-hover: #f1e6d1; --course-ink: #614b27; }
+  .slot strong { font-size: 13px; }
+  .slot span { font-size: 12px; }
+  .slot .slot-compact { display: none; }
+  .week { display: flex; align-items: center; gap: 8px; }
+  .week-step { display: flex; align-items: center; border: 1px solid var(--control); border-radius: 7px; overflow: hidden; }
+  .week-step .btn { border: 0; border-radius: 0; }
+  .week-step .btn:focus-visible { outline-offset: -2px; }
+  .week-step > span { min-width: 63px; text-align: center; font-weight: 600; font-size: 13px; }
+  .week-step .btn:first-child { border-right: 1px solid var(--line); }
+  .week-step .btn:last-child { border-left: 1px solid var(--line); }
+  .week .jump-week { min-height: 36px; }
+  .work-list { list-style: none; padding: 0 15px; }
+  .work-list li + li { border-top: 1px solid var(--line); }
+  .work-row { min-height: 60px; display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 9px 0; }
+  .work-row > span:first-child { display: grid; gap: 4px; min-width: 0; }
+  a.work-row:hover strong { color: var(--accent); text-decoration: underline; }
+  .count { color: #8b540a; background: #fff2da; white-space: nowrap; font-size: 12px; padding: 3px 8px; border-radius: 4px; }
+  .class-list .work-row { min-height: 74px; }
+  .class-list a { justify-content: flex-start; gap: 10px; }
+  .class-list .course-label { display: grid; gap: 4px; min-width: 0; }
+  .class-list .course-dot { align-self: flex-start; margin-top: 6px; flex: none; width: 3px; height: 34px; border-radius: 2px; background: var(--course-mark); }
+  .class-list a > .icon { margin-left: auto; color: var(--muted); }
+  .legend { min-height: 44px; border-top: 1px solid var(--line); padding: 10px 16px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { display: inline-block; width: 9px; height: 9px; border-radius: 2px; background: var(--course-mark); }
+  .class-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .class-nav { display: flex; gap: 6px; overflow-x: auto; border-bottom: 1px solid var(--line); }
+  .class-nav a { display: flex; align-items: center; gap: 7px; min-height: 45px; padding: 8px 13px; white-space: nowrap; color: var(--muted); border-bottom: 2px solid transparent; }
+  .class-nav a:hover { color: var(--accent); background: var(--accent-soft); }
+  .class-nav a:focus-visible { outline-offset: -3px; }
+  .class-nav [aria-current="page"] { color: var(--accent); border-bottom-color: var(--accent); font-weight: 650; }
+  .table { width: 100%; border-collapse: collapse; white-space: nowrap; text-align: left; }
+  .table th, .table td { padding: 13px 16px; border-top: 1px solid var(--line); text-align: left; }
+  .table th { font-size: 13px; font-weight: 500; color: var(--muted); }
+  .table td { font-size: 14px; }
+  .table tbody tr:hover { background: #f8faf6; }
+  .table .num { text-align: right; }
+  .table .row-actions { text-align: right; }
+  .pill { display: inline-block; padding: 3px 7px; border-radius: 4px; background: #eff2f6; color: #4a5a71; font-size: 12px; }
+  .pill.good { background: #eaf5ef; color: #226647; }
+  .pill.warn { background: #fff2da; color: #865209; }
+  .pill.info { background: #edf3fe; color: #2454ac; }
+  .section-note { padding: 13px 20px; border-top: 1px solid var(--line); line-height: 1.6; }
+  .empty { padding: 20px; color: var(--muted); line-height: 1.6; }
+  .metrics { display: grid; grid-template-columns: repeat(4, 1fr); border-block: 1px solid var(--line); }
+  .metrics > div { padding: 13px 20px; }
+  .metrics > div + div { border-left: 1px solid var(--line); }
+  .metrics strong { display: block; font-size: 24px; margin-top: 5px; }
+  dialog { width: min(620px, calc(100% - 32px)); max-height: 88vh; border: 1px solid var(--line); border-radius: 10px; padding: 0; color: var(--ink); box-shadow: 0 14px 48px #162a482b; }
+  dialog::backdrop { background: #17273f77; }
+  .dialog-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 20px; border-bottom: 1px solid var(--line); }
+  .dialog-body { padding: 20px; line-height: 1.65; display: grid; gap: 14px; }
+  .dialog-body .actions { justify-content: flex-end; }
+  .fields { display: grid; gap: 12px; }
+  .fields label { display: grid; gap: 5px; min-width: 0; }
+  .fields :is(input, textarea, select) { width: 100%; padding: 7px 9px; border: 1px solid var(--control); background: #fff; border-radius: 6px; }
+  .fields input[type="checkbox"] { width: auto; }
+  .fields label.check { display: flex; align-items: center; gap: 8px; }
+  .parts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .notice { background: #f4ece7; border-radius: 5px; padding: 9px 12px; color: #624742; font-size: 13px; }
+  .dialog-body .scroll-frame { border-bottom: 1px solid var(--line); }
+  .toast { position: fixed; right: 24px; bottom: 20px; z-index: 4; padding: 10px 14px; border-radius: 6px; background: var(--accent-hover); color: #fff; max-width: calc(100% - 48px); }
+  .foot { margin-top: 18px; text-align: right; }
+  @media (max-width: 1050px) {
+    .wrap { width: calc(100% - 40px); }
+  }
+  @media (max-width: 640px) {
+    .wrap { width: calc(100% - 32px); }
+    .top-inner { min-height: 54px; }
+    .top-end { gap: 8px; }
+    .brand { font-size: 14px; gap: 7px; }
+    .page-heading { padding-block: 16px 12px; align-items: stretch; flex-direction: column; gap: 10px; }
+    .page-heading p { margin-top: 6px; }
+    h1 { font-size: 24px; }
+    .heading-controls { margin-top: 7px; }
+    .heading-controls select { min-height: 44px; }
+    .heading-actions { display: grid; grid-template-columns: 1fr 1fr; }
+    .heading-actions .btn { min-height: 44px; }
+    .class-code { align-self: start; min-height: 44px; }
+    .class-code .text-button { min-height: 34px; }
+    .btn, select { min-height: 44px; }
+    .btn.square, .bell, .week .jump-week { min-height: 44px; }
+    .btn.square, .bell { width: 44px; }
+    .panel-head { padding-inline: 12px; min-height: 59px; }
+    .schedule .panel-head { gap: 6px; }
+    .schedule h2 { font-size: 17px; }
+    .schedule .panel-head .small { font-size: 12px; }
+    .week { gap: 5px; }
+    .week-step > span { min-width: 48px; }
+    .week-step .btn { width: 36px; }
+    .week .jump-week { padding-inline: 7px; }
+    .timetable { min-width: 0; grid-template-columns: 42px repeat(5, minmax(0, 1fr)); }
+    .tt-cell { min-height: 72px; padding: 3px; }
+    .tt-cell.day { min-height: 47px; }
+    .tt-label, .date { font-size: 11px; }
+    .slot { min-height: 64px; padding: 4px 3px; gap: 2px; border-left-width: 2px; }
+    .slot strong, .slot span { font-size: 11px; }
+    .slot .slot-full { display: none; }
+    .slot .slot-compact { display: block; }
+    .class-grid { gap: 12px; }
+    .class-nav a { white-space: nowrap; padding-inline: 9px; }
+    .metrics { grid-template-columns: 1fr 1fr; }
+    .metrics > div:nth-child(3) { border-left: 0; }
+    .metrics > div:nth-child(n+3) { border-top: 1px solid var(--line); }
+    .section-note { padding-inline: 14px; }
+    .work-row .text-button { min-height: 44px; }
+  }
+
+  .wrap { max-width: 1176px; }
+  h2 { font-family: var(--display); }
+  .brand { font-family: var(--display); font-size: 18px; }
+  .btn, select, .week-step { border-radius: 4px; }
+  .journal { display: grid; grid-template-columns: minmax(244px, 26%) minmax(0, 1fr); background: var(--paper); border: 1px solid var(--line); border-radius: 5px; }
+  .journal-aside { background: #f0eadf; border-right: 1px solid var(--line); border-radius: 5px 0 0 5px; padding: 25px 22px 22px; min-width: 0; }
+  .month-label, .aside-heading, .folio-top, .journal-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .month-label h2 { font-size: 18px; white-space: nowrap; }
+  .month-pager { display: flex; }
+  .month-pager button { border: 0; background: none; width: 30px; height: 32px; padding: 0; color: var(--muted); }
+  .month-pager button:enabled:hover { color: var(--accent); background: #e6ddcf; }
+  .month-pager button:disabled { opacity: .35; }
+  .month-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); text-align: center; gap: 3px 0; margin-top: 10px; }
+  .month-grid .weekday { font-size: 11px; color: var(--muted); padding-block: 6px; }
+  .month-grid button { justify-self: center; border: none; background: none; width: 31px; height: 31px; padding: 0; font-size: 13px; border-radius: 50%; }
+  .month-grid button:enabled:hover { background: #e5d9ce; }
+  .month-grid button[aria-pressed="true"] { color: #fff; background: var(--accent); }
+  .month-grid button[aria-pressed="true"]:hover { background: var(--accent-hover); }
+  .month-grid button:disabled { color: #786e62; text-decoration: line-through; }
+  .term-classes { margin-top: 24px; border-top: 1px solid #cfc2b1; padding-top: 19px; }
+  .aside-heading { margin-bottom: 9px; }
+  .aside-heading h2 { font-size: 18px; }
+  .class-index { list-style: none; padding: 0; }
+  .class-index li + li { border-top: 1px solid #d9cebf; }
+  .class-index a { display: flex; align-items: center; justify-content: space-between; gap: 6px; min-height: 65px; padding-block: 9px; }
+  .class-index a > span { display: grid; gap: 4px; }
+  .class-index a:hover strong { color: var(--accent); text-decoration: underline; }
+  .class-index svg { width: 15px; color: var(--muted); }
+  .folio { min-width: 0; padding: 22px clamp(22px, 3.2vw, 48px) 27px; }
+  .folio-top { gap: 15px; align-items: end; border-bottom: 2px solid #a6917b; padding-bottom: 15px; }
+  .folio-date { display: flex; align-items: center; gap: 16px; }
+  .day-number { color: var(--accent); font: 400 87px/.98 var(--display); letter-spacing: -.065em; }
+  .date-detail { display: grid; gap: 6px; }
+  .date-detail strong { font: 600 23px/1.2 var(--display); }
+  .date-detail span { font-size: 13px; color: var(--muted); }
+  .view-switch { display: inline-flex; flex: none; border: 1px solid var(--control); border-radius: 4px; background: var(--paper); padding: 2px; }
+  .view-switch button { border: 0; background: none; color: var(--muted); font-size: 13px; padding: 6px 12px; border-radius: 2px; }
+  .view-switch [aria-pressed="true"] { background: #eee4df; color: var(--accent); font-weight: 650; }
+  .journal-heading { min-height: 64px; }
+  .journal-heading h2 { font-size: 21px; }
+  .journal-heading .week-step { background: var(--paper); }
+  .journal-heading .week-step .btn { background: none; }
+  .day-lessons { list-style: none; margin: 0; padding: 0; }
+  .day-lessons li + li { border-top: 1px solid var(--line); }
+  .lesson { display: grid; grid-template-columns: 80px minmax(0,1fr) auto; align-items: center; background: #f7f1e8; gap: 16px; padding: 19px 18px; }
+  .lesson:hover { background: #f1e7db; }
+  .lesson-clock, .lesson-details { display: grid; gap: 5px; }
+  .lesson-clock strong { font: 400 24px/1.15 var(--display); }
+  .lesson-clock small, .lesson-details span { color: var(--muted); font-size: 13px; }
+  .lesson-details { padding: 2px 0 2px 19px; border-left: 2px solid #b58c85; }
+  .lesson-details strong { font: 600 23px/1.25 var(--display); }
+  .lesson > svg { color: var(--accent); }
+  .pending { margin-top: 24px; border-top: 1px solid var(--line); }
+  .pending .journal-heading { min-height: 53px; }
+  .pending .work-list { padding: 0; }
+  .pending .work-row { padding: 12px 0; }
+  .pending .count { background: #f2e7da; color: #744b28; }
+  .mobile-days { display: none; }
+  .journal :focus-visible { outline-offset: -2px; }
+  .folio .schedule { border: 0; }
+  .folio .schedule .panel-head { padding-inline: 0; }
+  .folio .schedule .timetable { min-width: 0; grid-template-columns: 58px repeat(5, minmax(0,1fr)); }
+  .folio .schedule .tt-cell { padding: 5px; }
+  @media (max-width: 870px) {
+    .journal { grid-template-columns: 222px minmax(0, 1fr); }
+    .journal-aside { padding: 18px 13px; }
+    .month-grid button { width: 27px; height: 29px; }
+    .folio { padding: 18px; }
+    .day-number { font-size: 68px; }
+    .lesson { grid-template-columns: 66px minmax(0, 1fr) auto; gap: 9px; padding: 14px 12px; }
+    .folio .schedule .timetable { min-width: 498px; }
+  }
+  @media (max-width: 680px) {
+    .wrap { width: calc(100% - 28px); }
+    .page-heading { padding-block: 16px 14px; align-items: stretch; flex-direction: column; gap: 10px; }
+    .heading-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+    .heading-actions select { min-width: 0; flex: 1 1 154px; padding-inline: 5px; font-size: 12px; }
+    .heading-actions .btn { flex: 1 1 auto; padding-inline: 7px; font-size: 13px; }
+    .heading-actions .icon { width: 15px; }
+    .journal { display: flex; flex-direction: column; }
+    .journal-aside { display: contents; }
+    .mini-month { display: none; }
+    .term-classes { order: 2; margin: 0; padding: 18px; background: #f0eadf; border-radius: 0 0 5px 5px; }
+    .folio { padding: 14px 12px 18px; }
+    .day-number { font-size: 62px; }
+    .folio-date { gap: 11px; }
+    .date-detail strong { font-size: 19px; }
+    .date-detail span { font-size: 12px; }
+    .folio-top { padding-bottom: 12px; align-items: center; gap: 4px; }
+    .view-switch button { min-height: 40px; padding-inline: 7px; }
+    .mobile-days { display: grid; grid-template-columns: repeat(7, 1fr); padding: 10px 0; border-bottom: 1px solid var(--line); }
+    .mobile-days button { display: grid; place-content: center; gap: 2px; min-height: 44px; padding: 0; border: 0; background: transparent; color: var(--muted); font-size: 11px; }
+    .mobile-days strong { font-size: 14px; }
+    .mobile-days [aria-pressed="true"] { color: #fff; background: var(--accent); border-radius: 3px; }
+    .journal-heading h2 { font-size: 18px; }
+    .journal-heading { min-height: 58px; }
+    .lesson { grid-template-columns: 56px minmax(0, 1fr) 16px; padding: 14px 10px; }
+    .lesson-clock strong, .lesson-details strong { font-size: 21px; }
+    .lesson-details { padding-left: 12px; }
+    .folio .schedule .timetable { min-width: 0; grid-template-columns: 36px repeat(5, minmax(0,1fr)); }
+    .folio .schedule .tt-cell { padding: 2px; }
+  }
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="wrap top-inner">
+    <a href="#home" class="brand"><span class="brand-mark" id="brand-mark"></span>教学实验平台</a>
+    <div class="top-end">
+      <button class="bell" id="notifications" type="button" aria-label="通知中心" title="通知中心"></button>
+      <span class="profile"><span class="avatar" aria-hidden="true">陈</span>陈老师</span>
+    </div>
+  </div>
+</header>
+<main class="wrap">
+  <header class="page-heading" id="page-heading"></header>
+  <div id="main"></div>
+</main>
+<dialog id="dialog" aria-labelledby="dialog-title">
+  <div class="dialog-head">
+    <h2 id="dialog-title"></h2>
+    <form method="dialog"><button class="btn square" id="close-dialog" aria-label="关闭"></button></form>
+  </div>
+  <div id="dialog-body" class="dialog-body"></div>
+</dialog>
+<div class="toast" id="toast" role="status" hidden></div>
+<script>
+  const shapes = {
+    brand: '<path d="M12 6c-3-2-6-2.5-10-2v14c4-.5 7 0 10 2 3-2 6-2.5 10-2V4c-4-.5-7 0-10 2Zm0 0v14M5.5 8l3 .8m7 .1 3-.8"/>',
+    bell: '<path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9m-8 12a2 2 0 0 0 4 0"/>',
+    left: '<path d="m15 18-6-6 6-6"/>',
+    right: '<path d="m9 18 6-6-6-6"/>',
+    close: '<path d="m6 6 12 12M18 6 6 18"/>',
+    plus: '<path d="M12 5v14M5 12h14"/>',
+    upload: '<path d="M12 16V4m-4 4 4-4 4 4M4 16v4h16v-4"/>',
+    calendar: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4m10-4v4M3 10h18m-13 4h2m4 0h2"/>',
+    flask: '<path d="M9 3h6m-5 0v7l-6 8a2 2 0 0 0 2 3h12a2 2 0 0 0 2-3l-6-8V3M7 15h10"/>',
+    users: '<circle cx="10" cy="8" r="3"/><path d="M4 20v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2m1-15a3 3 0 0 1 0 6m1 3a4 4 0 0 1 3 4v2"/>',
+    chart: '<path d="M4 4v16h16M9 15v-3m5 3V8m5 7V5"/>',
+    terminal: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="m7 9 3 3-3 3m6 0h4"/>',
+    copy: '<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/>'
+  };
+  const icon = (key) => `<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${shapes[key]}</svg>`;
+  const escape = (value) => String(value).replace(/[&<>"']/g, (char) => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' })[char]);
+  const terms = [
+    { id: 'autumn', label: '2026–2027 学年第一学期', start: '2026-09-07', week: 12 },
+    { id: 'spring', label: '2025–2026 学年第二学期', start: '2026-03-02', week: 16 }
+  ];
+  const makeStudents = (offset, names) => names.split(' ').map((name, index) => ({
+    id: String(20260001 + offset + index), name, joined: 1
+  }));
+  const classes = [
+    { id:'ds01', title:'数据结构', group:'01 班', code:'DS26-A1', term:'autumn', tone:'blue',
+      students: makeStudents(0, '林书妍 周明远 许嘉树 陈若溪 沈知行 何以宁 梁思齐 蒋予安'),
+      requests: makeStudents(90, '罗语桐 苏景和'),
+      slots: [{ day:0, row:0, room:'理科楼 A101' }, { day:3, row:2, room:'实验楼 B307' }] },
+    { id:'ds02', title:'数据结构', group:'02 班', code:'DS26-A2', term:'autumn', tone:'teal',
+      students: makeStudents(10, '孟晓禾 郑亦舟 唐语林 顾嘉宁 韩雨晗 宋思远 丁书宜 江宇航'), requests: [],
+      slots: [{ day:1, row:1, room:'理科楼 A103' }, { day:4, row:1, room:'实验楼 B307' }] },
+    { id:'cs01', title:'计算机系统基础', group:'01 班', code:'CS26-B1', term:'autumn', tone:'slate',
+      students: makeStudents(20, '方嘉文 魏然 程雨晴 罗一川 袁星野 刘亦可 沈沐阳 叶晓彤'), requests: [],
+      slots: [{ day:2, row:0, room:'信息楼 C205' }, { day:4, row:3, room:'信息楼 C205' }] },
+    { id:'ds-old', title:'数据结构', group:'01 班', code:'DS26-S1', term:'spring', tone:'blue',
+      students: makeStudents(30, '邵之恒 林明月 刘冬青 冯思羽'), requests: [],
+      slots: [{ day:1, row:0, room:'理科楼 A101' }] }
+  ];
+  const environments = [
+    { name:'Python 3.12 · 1 核 / 256 MB', runtime:'Python 3.12' },
+    { name:'Java 21 · 1 核 / 512 MB', runtime:'Java 21' }
+  ];
+  const labs = new Map([
+    ['ds01', [
+      { id:'lab3', name:'二叉树的遍历与应用', deadline:'2026-11-29T23:59', status:'open', submitted:5, marks:[20,50,30] },
+      { id:'lab2', name:'栈与队列', deadline:'2026-11-22T23:59', status:'review', submitted:7, marks:[20,50,30], reviewStart:4 },
+      { id:'lab1', name:'线性表与链表', deadline:'2026-11-15T23:59', status:'released', submitted:8, marks:[20,40,30] }
+    ]],
+    ['ds02', [{ id:'lab4', name:'线性表与链表', deadline:'2026-11-28T23:59', status:'open', submitted:4, marks:[20,50,30] }]],
+    ['cs01', [{ id:'lab5', name:'程序的机器级表示', deadline:'2026-11-20T23:59', status:'released', submitted:7, marks:[20,50,30] }]],
+    ['ds-old', [{ id:'lab6', name:'二叉树基础实验', deadline:'2026-06-07T23:59', status:'released', submitted:4, marks:[20,50,30] }]]
+  ]);
+  const state = { term: 'autumn', weeks: {}, tab: 'experiments', agendaDay: 1, monthOffset: 0, view: 'day' };
+  const main = document.querySelector('#main');
+  const heading = document.querySelector('#page-heading');
+  const dialog = document.querySelector('#dialog');
+  const dialogBody = document.querySelector('#dialog-body');
+  const dates = new Intl.DateTimeFormat('zh-CN', { month:'numeric', day:'numeric', timeZone:'UTC' });
+  const demoToday = '2026-11-24';
+  const rows = [['1–2','08:00'], ['3–4','10:10'], ['5–6','14:00'], ['7–8','16:10'], ['9–10','19:00']];
+  const days = ['周一','周二','周三','周四','周五'];
+  const labList = (course) => labs.get(course.id) || [];
+  const className = (course) => `${course.title} · ${course.group}`;
+  const link = (course, tab = 'experiments') => `#class/${course.id}/${tab}`;
+  const dateTime = (value) => value ? value.replace('T',' ') : '—';
+  const total = (values) => values.reduce((sum, value) => sum + value, 0);
+  const button = (label, action, options = {}) => `<button type="button" class="btn${options.primary ? ' primary' : ''}" data-action="${action}" ${options.disabled ? 'disabled' : ''}>${options.icon ? icon(options.icon) : ''}${label}</button>`;
+  const quiet = (label, action) => `<button type="button" class="text-button" data-action="${action}">${label}</button>`;
+  const pill = (label, status = '') => `<span class="pill ${status}">${label}</span>`;
+  const cardHead = (label, right = '', subtitle = '') => `<div class="panel-head"><div><h2>${label}</h2>${subtitle ? `<p class="small">${subtitle}</p>` : ''}</div>${right}</div>`;
+  const empty = (message) => `<p class="empty">${message}</p>`;
+  function table(head, body) {
+    const cells = head.map((label) => {
+      const align = label === '操作' ? 'row-actions' : /^(得分|报告|总评|人数|成绩|完成度)/.test(label) ? 'num' : '';
+      return `<th scope="col" class="${align}">${label}</th>`;
+    }).join('');
+    return `<div class="scroll-frame" tabindex="0"><table class="table"><thead><tr>${cells}</tr></thead><tbody>${body}</tbody></table></div>`;
+  }
+  const notify = (message) => {
+    const toast = document.querySelector('#toast');
+    toast.textContent = message;
+    toast.hidden = false;
+    clearTimeout(notify.timer);
+    notify.timer = setTimeout(() => { toast.hidden = true; }, 2900);
+  };
+
+  function weekDay(term, index) {
+    const date = new Date(term.start + 'T00:00:00Z');
+    date.setUTCDate(date.getUTCDate() + (state.weeks[term.id] - 1) * 7 + index);
+    return date;
+  }
+
+  function weekControls(term) {
+    const week = state.weeks[term.id] ??= term.week;
+    return `<div class="week">
+      <div class="week-step" role="group" aria-label="切换教学周"><button type="button" data-action="previous-week" class="btn square" aria-label="上一周" ${week === 1 ? 'disabled' : ''}>${icon('left')}</button><span>第 ${week} 周</span><button type="button" data-action="next-week" class="btn square" aria-label="下一周" ${week === 16 ? 'disabled' : ''}>${icon('right')}</button></div>
+      ${term.id === terms[0].id ? `<button class="btn jump-week" type="button" data-action="current-week" ${week === term.week ? 'disabled' : ''}>本周</button>` : ''}
+    </div>`;
+  }
+
+  function timetable(term, courses, title = '教学课表') {
+    const switcher = weekControls(term);
+    const sessions = courses.flatMap((course) => course.slots.map((slot) => ({ ...slot, course })));
+    const displayedDays = days.map((label, index) => {
+      const date = weekDay(term, index);
+      return { label, date, today:date.toISOString().slice(0, 10) === demoToday };
+    });
+    const columns = displayedDays.map(({ label, date, today }) =>
+      `<div class="tt-cell tt-label day ${today ? 'today' : ''}" ${today ? 'aria-current="date"' : ''}><strong>${label}</strong><span class="date">${dates.format(date)}</span></div>`
+    ).join('');
+    const periods = rows.map(([period, time], row) => {
+      const cells = displayedDays.map(({ label, today }, index) => `<div class="tt-cell${today ? ' today-column' : ''}">${sessions.filter((slot) => slot.day === index && slot.row === row).map(({ course, room }) =>
+        `<a class="slot" href="${link(course)}" data-tone="${course.tone}" aria-label="${className(course)}，${label}，第 ${period} 节，${room}"><strong>${course.title}</strong><span class="slot-full">${course.group} · ${room}</span><span class="slot-compact">${course.group}<br>${room.split(' ').at(-1)}</span></a>`).join('')}</div>`).join('');
+      return `<div class="tt-cell tt-label">${period} 节<span class="date">${time}</span></div>${cells}`;
+    }).join('');
+    const legend = courses.map((course) => `<span><i class="swatch" data-tone="${course.tone}"></i>${className(course)}</span>`).join('');
+    return `<section class="panel schedule">${cardHead(title, switcher, `${dates.format(weekDay(term, 0))} – ${dates.format(weekDay(term, 6))} · 共 ${sessions.length} 次课`)}
+      ${sessions.length ? `<div class="scroll-frame" tabindex="0" aria-label="周课表"><div class="timetable"><div class="tt-cell tt-label day">节次</div>${columns}${periods}</div></div><div class="legend small">${legend}</div>` : empty('本学期还没有排课。')}`
+      + '</section>';
+  }
+
+  const weekdayNames = ['一','二','三','四','五','六','日'];
+  const dayMs = 86400000;
+
+  function monthCalendar(term, selected) {
+    const start = new Date(term.start + 'T00:00:00Z');
+    const end = new Date(start.getTime() + 111 * dayMs);
+    const first = new Date(Date.UTC(selected.getUTCFullYear(), selected.getUTCMonth() + state.monthOffset, 1));
+    const last = new Date(Date.UTC(first.getUTCFullYear(), first.getUTCMonth() + 1, 0));
+    const header = weekdayNames.map((day) => `<span class="weekday">${day}</span>`).join('');
+    const offset = (first.getUTCDay() + 6) % 7;
+    const buttons = [];
+    for (let day = 1; day <= last.getUTCDate(); day++) {
+      const date = new Date(Date.UTC(first.getUTCFullYear(), first.getUTCMonth(), day));
+      const stamp = date.toISOString().slice(0, 10);
+      const selectedDay = date.getTime() === selected.getTime();
+      buttons.push(`<button type="button" aria-label="${stamp}" aria-pressed="${selectedDay}" ${day === 1 ? `style="grid-column:${offset + 1}"` : ''} data-action="journal-date-${stamp}" ${date < start || date > end ? 'disabled' : ''}>${day}</button>`);
+    }
+    return `<section class="mini-month" aria-label="按日期查看授课">
+      <div class="month-label"><h2>${first.getUTCFullYear()} 年 ${first.getUTCMonth() + 1} 月</h2>
+      <div class="month-pager"><button type="button" data-action="month-before" aria-label="上月" ${first <= start ? 'disabled' : ''}>${icon('left')}</button>
+      <button type="button" data-action="month-after" aria-label="下月" ${last >= end ? 'disabled' : ''}>${icon('right')}</button></div></div>
+      <div class="month-grid">${header}${buttons.join('')}</div></section>`;
+  }
+
+  function mobileDays(term) {
+    return `<div class="mobile-days" role="group" aria-label="选择授课日期">${weekdayNames.map((label, index) => {
+      const date = weekDay(term, index);
+      const stamp = date.toISOString().slice(0, 10);
+      return `<button type="button" aria-label="${stamp}" aria-pressed="${index === state.agendaDay}" data-action="journal-date-${stamp}"><span>周${label}</span><strong>${date.getUTCDate()}</strong></button>`;
+    }).join('')}</div>`;
+  }
+
+  function dayLessons(term, courses) {
+    const sessions = courses.flatMap((course) => course.slots.filter((slot) => slot.day === state.agendaDay)
+      .map((slot) => ({ ...slot, course }))).sort((a, b) => a.row - b.row);
+    const lessons = sessions.map(({ course, row, room }) => `<li>
+      <a class="lesson" href="${link(course)}"><span class="lesson-clock"><strong>${rows[row][1]}</strong><small>第 ${rows[row][0]} 节</small></span>
+      <span class="lesson-details"><strong>${course.title}</strong><span>${course.group} · ${room}</span></span>${icon('right')}</a></li>`).join('');
+    return `<section><div class="journal-heading"><h2>当日课程</h2>${weekControls(term)}</div>
+      ${sessions.length ? `<ol class="day-lessons">${lessons}</ol>` : empty('这一天没有排课。')}</section>`;
+  }
+
+  function home() {
+    const term = terms.find((item) => item.id === state.term);
+    const courses = classes.filter((course) => course.term === term.id);
+    const pending = courses.flatMap((course) => [
+      ...labList(course).filter((lab) => lab.status === 'review').map((lab) => {
+        const remaining = pendingReports(course, lab).length;
+        return {
+          href:link(course, `review-${lab.id}`), label:remaining ? '批阅实验报告' : '发布实验成绩',
+          meta:`${className(course)} · ${lab.name}`, count:remaining ? `${remaining} 份` : '可发布'
+        };
+      }),
+      ...requestsForCourse(course)
+    ]);
+    const pendingRows = pending.map((item) => `<li><a class="work-row" href="${item.href}"><span><strong>${item.label}</strong><span class="small">${item.meta}</span></span><span class="count">${item.count}</span></a></li>`).join('');
+    const classRows = courses.map((course) => `<li><a href="${link(course)}"><span><strong>${className(course)}</strong><small class="small">${course.students.length} 名学生 · ${labList(course).length} 个实验</small></span>${icon('right')}</a></li>`).join('');
+    state.weeks[term.id] ??= term.week;
+    const selected = weekDay(term, state.agendaDay);
+    const dayView = state.view === 'day';
+    heading.innerHTML = `<h1>教学日程</h1><div class="heading-actions"><select id="term" aria-label="学期">${terms.map((item) => `<option value="${item.id}" ${term.id === item.id ? 'selected' : ''}>${item.label}</option>`).join('')}</select>
+      ${button('实验环境', 'environments', { icon:'terminal' })}${button('导入课表', 'import-timetable', { icon:'upload', primary:true })}</div>`;
+    main.innerHTML = `<div class="journal"><aside class="journal-aside">
+        ${monthCalendar(term, selected)}
+        <section class="term-classes"><div class="aside-heading"><h2>我的教学班</h2><span class="small">${courses.length} 个班</span></div>
+        ${classRows ? `<ul class="class-index">${classRows}</ul>` : empty('本学期暂无教学班。')}</section></aside>
+      <div class="folio">
+        <div class="folio-top"><time class="folio-date" datetime="${selected.toISOString().slice(0,10)}"><strong class="day-number">${selected.getUTCDate()}</strong>
+        <span class="date-detail"><strong>星期${weekdayNames[state.agendaDay]}</strong><span>${selected.getUTCFullYear()} 年 ${selected.getUTCMonth() + 1} 月</span></span></time>
+        <div role="group" aria-label="课表视图" class="view-switch"><button type="button" aria-pressed="${dayView}" data-action="view-day">日程</button><button type="button" aria-pressed="${!dayView}" data-action="view-week">周课表</button></div></div>
+        ${dayView ? mobileDays(term) + dayLessons(term, courses) : timetable(term, courses)}
+        <section class="pending"><div class="journal-heading"><h2>教学待办</h2></div>${pendingRows ? `<ul class="work-list">${pendingRows}</ul>` : empty('本学期暂无待处理事项。')}</section>
+      </div></div><p class="foot small">静态预览 · 示例数据</p>`;
+  }
+
+  function requestsForCourse(course) {
+    if (!course.requests.length) return [];
+    return [{ href:link(course, 'roster'), label:'审核入班申请', meta:className(course), count:`${course.requests.length} 人` }];
+  }
+
+  const tabs = [
+    ['experiments', '实验列表', 'flask'], ['roster', '学生名单', 'users'],
+    ['schedule', '班级课表', 'calendar'], ['grades', '成绩分析', 'chart']
+  ];
+
+  function classPage(course, tab) {
+    const term = terms.find((item) => item.id === course.term);
+    heading.innerHTML = `<div><a class="back" href="#home">${icon('left')}返回教师工作台</a><h1>${className(course)}</h1>
+      <p class="meta"><span>${term.label}</span><span>${course.students.length} 名学生</span><span>${labList(course).length} 个实验</span></p></div>
+      <div class="class-code"><span>课程码</span><strong>${course.code}</strong>${quiet(icon('copy') + '复制', 'copy-code')}</div>`;
+    const nav = tabs.map(([key, label, glyph]) => `<a href="${link(course, key)}" ${tab === key || (key === 'experiments' && tab.startsWith('review-')) ? 'aria-current="page"' : ''}>${icon(glyph)}${label}</a>`).join('');
+    let content;
+    if (tab === 'roster') content = roster(course);
+    else if (tab === 'schedule') content = timetable(term, [course], '班级课表');
+    else if (tab === 'grades') content = grades(course);
+    else if (tab.startsWith('review-')) content = review(course, labList(course).find((lab) => lab.id === tab.slice(7)));
+    else content = experiments(course);
+    main.innerHTML = `<div class="class-grid"><nav class="class-nav" aria-label="教学班功能">${nav}</nav><div>${content}</div></div><p class="foot small">静态预览 · 示例数据</p>`;
+  }
+
+  function experiments(course) {
+    const statuses = { open:['进行中','info'], review:['待审阅','warn'], released:['成绩已发布','good'] };
+    const body = labList(course).map((lab) => `<tr><td><strong>${lab.name}</strong></td><td>${dateTime(lab.deadline)}</td><td>${pill(...statuses[lab.status])}</td><td class="num">${lab.submitted} / ${eligible(course, lab).length}</td><td class="row-actions"><a class="text-button" href="${link(course, `review-${lab.id}`)}">${lab.status === 'released' ? '查看结果' : '查看实验'}</a></td></tr>`).join('');
+    return `<section class="panel">${cardHead('实验列表', button('新建实验', 'new-lab', { icon:'plus', primary:true }))}
+      ${body ? table(['实验名称','提交截止','状态','报告提交','操作'], body) : empty('这个教学班还没有实验。')}</section>`;
+  }
+
+  function roster(course) {
+    const requests = course.requests.map((student) => `<li class="work-row"><span><strong>${student.name}</strong><span class="small">学号 ${student.id}</span></span>${button('批准入班', `approve-${student.id}`)}</li>`).join('');
+    const students = course.students.map((student) => `<tr><td><strong>${student.name}</strong></td><td>${student.id}</td><td>第 ${student.joined} 周</td></tr>`).join('');
+    return `<div class="rail"><section class="panel">${cardHead('入班申请', `<span class="small">${course.requests.length} 人待审</span>`)}
+      ${requests ? `<ul class="work-list">${requests}</ul>` : empty('暂无待审核的入班申请。')}</section>
+      <section class="panel">${cardHead('学生名单', button('导入名单', 'import-roster', { icon:'upload', primary:true }), `${course.students.length} 名学生`)}
+      ${students ? table(['姓名','学号','入班时间'], students) : empty('暂无已入班学生。')}</section></div>`;
+  }
+
+  function eligible(course, lab) {
+    const term = terms.find((item) => item.id === course.term);
+    const start = new Date(term.start + 'T00:00:00+08:00');
+    const finish = new Date(lab.deadline + '+08:00');
+    return course.students.filter((student) => start.valueOf() + (student.joined - 1) * 604800000 <= finish.valueOf());
+  }
+
+  function scores(course, lab, student) {
+    const index = eligible(course, lab).indexOf(student);
+    if (index < 0) return null;
+    if (index >= lab.submitted) return [0,0,0];
+    const sample = lab.marks.map((mark, part) => Math.round(mark * (95 - (index * 5 + part * 7) % 44) / 100));
+    sample[2] = lab.reviews?.[student.id]?.score ?? sample[2];
+    return sample;
+  }
+
+  function pendingReports(course, lab) {
+    return eligible(course, lab).slice(lab.reviewStart ?? lab.submitted, lab.submitted)
+      .filter((student) => !lab.reviews?.[student.id]);
+  }
+
+  function gradeRows(course, released) {
+    return course.students.map((student) => {
+      const tasks = released.filter((lab) => eligible(course, lab).includes(student));
+      const points = tasks.map((lab) => total(scores(course, lab, student)));
+      const maximum = total(tasks.map((lab) => total(lab.marks)));
+      const submitted = tasks.filter((lab) => eligible(course, lab).indexOf(student) < lab.submitted).length;
+      return { student, maximum, points:total(points), percent:maximum ? total(points) / maximum * 100 : null, submitted, tasks };
+    }).sort((a, b) => (b.percent ?? -1) - (a.percent ?? -1));
+  }
+
+  function grades(course) {
+    const released = labList(course).filter((lab) => lab.status === 'released');
+    const gradeData = gradeRows(course, released);
+    const graded = gradeData.filter((entry) => entry.percent !== null);
+    const fail = graded.filter(({ percent }) => percent < 60).length;
+    const mean = (values) => values.length ? (total(values) / values.length).toFixed(1) : '—';
+    const body = gradeData.map(({ student, percent, maximum, points, submitted, tasks }) => `<tr><td>${percent === null ? '—' : gradeData.findIndex((row) => row.percent === percent) + 1}</td><td><strong>${student.name}</strong></td><td>${student.id}</td><td class="num">${maximum ? `${points} / ${maximum}` : '—'}</td><td class="num">${percent === null ? '—' : percent.toFixed(1)}</td><td class="num">${tasks.length ? `${submitted} / ${tasks.length}` : '—'}</td><td>${percent === null ? '—' : percent < 60 ? pill('挂科','warn') : pill('通过','good')}</td></tr>`).join('');
+    const parts = ['选择题', '编程题', '报告'].map((label, index) => {
+      const attempts = released.flatMap((lab) => eligible(course, lab).map((student) => ({ score:scores(course, lab, student)[index], max:lab.marks[index] })));
+      const max = total(attempts.map((row) => row.max));
+      return { label, percent:max ? total(attempts.map((row) => row.score)) / max * 100 : null };
+    });
+    const weakest = parts.filter((part) => part.percent !== null).sort((a, b) => a.percent - b.percent)[0];
+    const hint = weakest ? `分项得分率 ${parts.map((part) => `${part.label} ${part.percent === null ? '—' : part.percent.toFixed(1) + '%'}`).join(' · ')}。${weakest.label}得分率最低，可结合错题或批注安排讲评。` : '';
+    return `<section class="panel">${cardHead('成绩分析', button('导出成绩', 'export-grades', { disabled:!released.length }), '总评按已发布的应做实验折算为百分制')}
+      <div class="metrics"><div><span class="small">已发布实验</span><strong>${released.length}</strong></div><div><span class="small">参与总评</span><strong>${graded.length}</strong></div><div><span class="small">平均分</span><strong>${mean(graded.map((row) => row.percent))}</strong></div><div><span class="small">挂科率</span><strong>${graded.length ? (fail / graded.length * 100).toFixed(1) + '%' : '—'}</strong></div></div>
+      ${released.length ? table(['名次','学生','学号','得分 / 满分','总评','完成度','结果'], body) : empty('发布实验成绩后可查看课程总评。')}
+      ${hint ? `<p class="section-note small">${hint}</p>` : ''}</section>`;
+  }
+
+  function review(course, lab) {
+    if (!lab) return experiments(course);
+    const cohort = eligible(course, lab);
+    const released = lab.status === 'released';
+    const pendingStudents = pendingReports(course, lab);
+    const pending = pendingStudents.length;
+    const body = cohort.map((student, index) => {
+      const hasReport = index < lab.submitted;
+      const isPending = pendingStudents.includes(student);
+      const values = scores(course, lab, student);
+      const status = !hasReport ? pill('未提交') : released ? pill('已发布','good') : isPending ? pill('待批阅','warn') : pill('已评分','info');
+      return `<tr><td><strong>${student.name}</strong></td><td>${status}</td><td class="num">${isPending ? '—' : values[2]} / ${lab.marks[2]}</td><td class="row-actions">${hasReport ? quiet(released ? '查看批注' : '查看 / 修改', `report-${student.id}`) : '—'}</td></tr>`;
+    }).join('');
+    const actions = released ? '' : `<div class="actions">${button('批量 AI 批阅', 'ai-review', { disabled:!pending })}${button('一键同意并发布', 'release', { primary:true, disabled:lab.status !== 'review' || pending > 0 })}</div>`;
+    const hint = released ? '成绩已发布，评分和批注已锁定。' : lab.status === 'open' ? '提交截止后可确认并发布成绩。' : pending ? `还有 ${pending} 份报告待批阅，评分完成后可以发布。` : '评分已就绪，可以发布本次实验成绩。';
+    const instructions = lab.guide ? `<div class="section-note"><details><summary>实验指导与题目</summary><p>${lab.guide}</p><p>${lab.question}</p><p>运行环境 ${lab.environment}</p></details></div>` : '';
+    return `<section class="panel">${cardHead(lab.name, actions, `截止 ${dateTime(lab.deadline)} · 选择题 ${lab.marks[0]} 分 / 编程题 ${lab.marks[1]} 分 / 报告 ${lab.marks[2]} 分`)}
+      <p class="section-note muted"><a class="text-button" href="${link(course)}">${icon('left')}实验列表</a>　${hint}</p>
+      ${instructions}${body ? table(['学生','状态','报告评分','操作'], body) : empty('暂无应做学生。')}</section>`;
+  }
+
+  function render() {
+    const [scope, id, tab] = location.hash.slice(1).split('/');
+    const course = scope === 'class' ? classes.find((item) => item.id === id) : null;
+    state.course = course || null;
+    state.tab = tab || 'experiments';
+    if (course) {
+      state.term = course.term;
+      classPage(course, state.tab);
+    } else home();
+  }
+
+  function showDialog(title, body) {
+    document.querySelector('#dialog-title').textContent = title;
+    dialogBody.innerHTML = body;
+    if (!dialog.open) dialog.showModal();
+  }
+
+  function sampleImport(kind) {
+    const rosterImport = kind === 'roster';
+    const title = rosterImport ? '导入学生名单' : '导入教学课表';
+    const instruction = rosterImport ? '从名单表格匹配已有账号的学号。' : '从 Excel 导入教学班和排课，先匹配字段，再确认校验结果。';
+    showDialog(title, `<p>${instruction}</p><p class="notice">预览使用内置样例。</p>
+      <div class="actions">${button('载入示例表格', `import-map-${kind}`, { primary:true })}</div>`);
+  }
+
+  function importMapping(kind) {
+    const rosterImport = kind === 'roster';
+    const fields = rosterImport ? [['学生学号','student_number']] : [['教学班编号','班号'],['课程名称','课程名称'],['上课日','上课日'],['节次','节次'],['周次','周次'],['教室','地点']];
+    const labels = fields.map(([label, field]) => `<tr><td>${label}</td><td>${field}</td></tr>`).join('');
+    showDialog('核对表头映射', table(['导入字段','示例表头'], labels) + `<div class="actions">${button('预检示例数据', `import-check-${kind}`, { primary:true })}</div>`);
+  }
+
+  function importCheck(kind) {
+    const rosterImport = kind === 'roster';
+    const values = rosterImport ? [
+      ['2', state.course.students[0].id, '已在班内，跳过'],
+      ['3', '20269999', '找不到已有账号']
+    ] : [
+      ['2', 'DS-03 · 数据结构 03 班', '周三 3–4 节 · 2–16 双周 · B202']
+    ];
+    showDialog('导入预检', table(['行号', rosterImport ? '学号' : '教学班', '预检结果'], values.map((row) =>
+      `<tr>${row.map((cell) => `<td>${cell}</td>`).join('')}</tr>`).join(''))
+      + `<p class="notice">${rosterImport ? '正式导入使用已有账号的学号，重复入班将跳过。' : '正式导入时，确认后建立教学班及排课。'}</p>
+      <div class="actions">${button('完成预览', 'close')}</div>`);
+  }
+
+  function environmentList() {
+    const body = environments.map(({ name, runtime }, index) => `<tr><td>${escape(name)}</td><td>${escape(runtime)}</td><td class="row-actions">${quiet('复制配置', `environment-copy-${index}`)}　${quiet('测试', `environment-test-${index}`)}</td></tr>`).join('');
+    showDialog('实验环境', table(['环境配置','运行时','操作'], body) + `<div class="actions">${button('新建环境', 'environment-new', { icon:'plus', primary:true })}</div>`);
+  }
+
+  function environmentForm(source = null) {
+    const runtime = source?.runtime || 'Python 3.12';
+    const config = source?.name.match(/(\d+) 核 \/ (\d+) MB/);
+    showDialog(source ? '复制环境配置' : '新建实验环境', `<form class="fields" id="environment-form">
+      <label>运行时 <select name="runtime">${['Python 3.12','Java 21'].map((item) => `<option ${runtime === item ? 'selected' : ''}>${item}</option>`).join('')}</select></label>
+      <div class="parts"><label>CPU（核）<input name="cpu" type="number" min="1" max="8" value="${config?.[1] || 1}" required></label>
+      <label>内存（MB）<input name="memory" type="number" min="128" max="4096" value="${config?.[2] || 256}" required></label></div>
+      <div class="actions"><button class="btn primary">保存示例配置</button></div></form>`);
+  }
+
+  function labForm() {
+    showDialog('新建实验', `<form id="lab-form" class="fields">
+      <label>实验名称<input name="name" placeholder="例如：图的深度优先遍历" maxlength="60" required></label>
+      <label>实验环境<select name="environment">${environments.map(({ name }) => `<option>${escape(name)}</option>`).join('')}</select></label>
+      <label>实验目的<input name="purpose" placeholder="输入实验目的可预览出题草稿"></label>
+      <div>${quiet('生成示例出题草稿', 'ai-draft')}</div>
+      <label>题目<textarea name="question" rows="2" required></textarea></label>
+      <label>实验指导与报告要求<textarea name="guide" rows="2" placeholder="填写 Word 报告需包含的代码、截图和格式" required></textarea></label>
+      <div class="parts">${[['选择题','choice',20], ['编程题','code',50], ['报告','report',30]].map(([label, name, marks]) => `<label>${label}满分<input name="${name}" type="number" min="1" max="100" value="${marks}" required></label>`).join('')}</div>
+      <label>提交截止<input name="deadline" type="datetime-local" min="2026-11-24T00:00" value="2026-11-29T23:59" required></label>
+      <div class="actions"><button class="btn primary">发布示例实验</button></div>
+    </form>`);
+  }
+
+  function reportForm(course, lab, student) {
+    const released = lab.status === 'released';
+    const pending = pendingReports(course, lab).includes(student);
+    const current = lab.reviews?.[student.id] || {
+      score:pending ? '' : scores(course, lab, student)[2],
+      annotation:pending ? '' : '第 2 段 · 建议在代码截图旁标明测试输入和输出。',
+      comment:pending ? '' : '报告结构完整，可以补充边界条件的测试结果。'
+    };
+    const fields = `<label>报告评分（满分 ${lab.marks[2]}）<input name="score" type="number" min="0" max="${lab.marks[2]}" value="${current.score}" required ${released ? 'readonly' : ''}></label>
+      <label>正文定位批注<textarea name="annotation" rows="2" ${released ? 'readonly' : ''}>${escape(current.annotation)}</textarea></label>
+      <label>总评语<textarea name="comment" rows="2" ${released ? 'readonly' : ''}>${escape(current.comment)}</textarea></label>`;
+    showDialog(`${student.name}的实验报告`, `<div class="notice">Word 正文片段 · 第 2 段　测试结果与分析</div>
+      <form id="report-form" class="fields" data-student="${student.id}">${fields}
+      <p class="small">教师签名　陈老师　·　日期　2026-11-24</p>
+      ${released ? '' : '<div class="actions"><button class="btn primary">保存评分</button></div>'}</form>`);
+  }
+
+  function exportDialog(course) {
+    const choices = labList(course).filter((lab) => lab.status === 'released').map((lab) =>
+      `<label class="check"><input type="checkbox" name="labs" value="${lab.id}" checked> ${lab.name}</label>`).join('');
+    showDialog('导出成绩', `<form id="export-form" class="fields"><p>选择一个、多个或全部已发布实验。</p>${choices}
+      <p class="notice" id="export-error" hidden>请至少选择一个实验。</p>
+      <div class="actions"><button class="btn primary">下载 CSV</button></div></form>`);
+  }
+
+  function exportGrades(course, ids) {
+    const selected = labList(course).filter((lab) => lab.status === 'released' && ids.includes(lab.id));
+    const header = ['学号','姓名', ...selected.map(({ name }) => name), '总评','完成度'];
+    const records = gradeRows(course, selected).map(({ student, percent, submitted, tasks }) => [
+      student.id, student.name, ...selected.map((lab) => {
+        const position = eligible(course, lab).indexOf(student);
+        if (position < 0) return '免做';
+        if (position >= lab.submitted) return '未提交（0 分）';
+        return `${total(scores(course, lab, student))} / ${total(lab.marks)}`;
+      }), percent === null ? '' : percent.toFixed(1), `${submitted} / ${tasks.length}`
+    ]);
+    const weak = ['选择题','编程题','报告'].map((label, index) => {
+      const attempts = selected.flatMap((lab) => eligible(course, lab).map((student) => [scores(course, lab, student)[index], lab.marks[index]]));
+      const maximum = total(attempts.map((row) => row[1]));
+      return { label, rate:maximum ? total(attempts.map((row) => row[0])) / maximum : Infinity };
+    }).sort((a, b) => a.rate - b.rate)[0];
+    const advice = Number.isFinite(weak.rate) ? [['教学建议', `${weak.label}得分率最低，可结合错题或批注安排讲评。`]] : [];
+    const csv = [header, ...records, ...advice].map((row) => row.map((field) => {
+      const plain = String(field).replaceAll('"', '""');
+      return '"' + (/^[=+@\-\t\r]/.test(plain) ? "'" : '') + plain + '"';
+    }).join(',')).join('\r\n');
+    const url = URL.createObjectURL(new Blob(['\uFEFF' + csv], {type:'text/csv;charset=utf-8'}));
+    const download = document.createElement('a');
+    download.href = url;
+    download.download = `${course.title}${course.group}-成绩示例.csv`;
+    download.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  const activeLab = () => state.course && labList(state.course).find((lab) => `review-${lab.id}` === state.tab);
+  const reportValue = (course, lab, student) => ({
+    score:scores(course, lab, student)[2],
+    annotation:'第 2 段 · 请补充导致扩容的测试输入及对应结果截图。',
+    comment:'基本步骤完整。建议增加空队列和队列满时的边界测试。'
+  });
+
+  async function handleAction(action) {
+    const course = state.course;
+    const lab = activeLab();
+    if (action.startsWith('journal-date-')) {
+      const selected = new Date(action.slice('journal-date-'.length) + 'T00:00:00Z');
+      const term = terms.find((item) => item.id === state.term);
+      const day = Math.round((selected.getTime() - Date.parse(term.start + 'T00:00:00Z')) / dayMs);
+      if (!Number.isInteger(day) || day < 0 || day >= 112) return;
+      state.weeks[term.id] = Math.floor(day / 7) + 1;
+      state.agendaDay = day % 7;
+      state.monthOffset = 0;
+      state.view = 'day';
+      render();
+      Array.from(main.querySelectorAll(`[data-action="${action}"]`)).find((item) => item.offsetParent)?.focus();
+    } else if (action === 'month-before' || action === 'month-after') {
+      state.monthOffset += action === 'month-before' ? -1 : 1;
+      render();
+      const control = main.querySelector(`[data-action="${action}"]:not(:disabled)`);
+      (control || main.querySelector('.month-pager button:not(:disabled)'))?.focus();
+    } else if (action === 'view-day' || action === 'view-week') {
+      state.view = action === 'view-day' ? 'day' : 'week';
+      render();
+      main.querySelector(`[data-action="${action}"]`)?.focus();
+    } else if (action === 'current-week' || action === 'previous-week' || action === 'next-week') {
+      const next = action === 'next-week';
+      const baseWeek = terms.find((term) => term.id === state.term).week;
+      state.weeks[state.term] = action === 'current-week' ? baseWeek : state.weeks[state.term] + (next ? 1 : -1);
+      state.monthOffset = 0;
+      render();
+      const same = main.querySelector(`[data-action="${action}"]:not(:disabled)`);
+      (same || main.querySelector(`[data-action="${next ? 'previous' : 'next'}-week"]`))?.focus();
+    } else if (action === 'close') dialog.close();
+    else if (action === 'import-timetable') sampleImport('timetable');
+    else if (action === 'import-roster') sampleImport('roster');
+    else if (action.startsWith('import-map-')) importMapping(action.slice(11));
+    else if (action.startsWith('import-check-')) importCheck(action.slice(13));
+    else if (action === 'environments') environmentList();
+    else if (action === 'environment-new') environmentForm();
+    else if (action.startsWith('environment-copy-')) environmentForm(environments[Number(action.slice(17))]);
+    else if (action.startsWith('environment-test-')) {
+      const env = environments[Number(action.slice(17))];
+      showDialog('环境测试', `<p>${escape(env.name)}</p><p class="notice">预览状态 · 正式测试会显示运行结果、退出码和资源占用。</p><div class="actions">${button('返回环境列表', 'environments')}</div>`);
+    } else if (action === 'copy-code') {
+      try {
+        await navigator.clipboard.writeText(course.code);
+        notify('已复制课程码');
+      } catch {
+        showDialog('课程码', `<label class="fields">请选择并复制<input readonly value="${course.code}" onfocus="this.select()"></label>`);
+      }
+    } else if (action.startsWith('approve-')) {
+      const index = course.requests.findIndex((student) => student.id === action.slice(8));
+      if (index < 0) return;
+      const [student] = course.requests.splice(index, 1);
+      course.students.push({ ...student, joined:terms.find((item) => item.id === course.term).week });
+      render();
+      notify(`已批准${student.name}入班`);
+    } else if (action === 'new-lab') labForm();
+    else if (action === 'ai-draft') {
+      const form = document.querySelector('#lab-form');
+      const purpose = form.elements.purpose;
+      if (!purpose.value.trim()) { purpose.focus(); notify('请先填写实验目的'); return; }
+      const question = form.elements.question;
+      const starter = `实验目的：${purpose.value.trim()}\n编程题：实现核心操作，并说明时间复杂度。\n选择题：辨析一种边界情况及其正确处理方式。`;
+      question.value = question.value ? `${question.value}\n\n${starter}` : starter;
+      question.focus();
+    } else if (action === 'ai-review') {
+      lab.reviews ??= {};
+      pendingReports(course, lab).forEach((student) => {
+        lab.reviews[student.id] = reportValue(course, lab, student);
+      });
+      render();
+      notify('已载入示例批阅结果，可逐份修订');
+    } else if (action.startsWith('report-')) {
+      const student = eligible(course, lab).find((item) => item.id === action.slice(7));
+      if (student) reportForm(course, lab, student);
+    } else if (action === 'release') {
+      showDialog('确认发布实验成绩', `<p>本次报告评分及实验成绩将一起发布。发布后分数、批注和总评语锁定，学生可查看成绩与评语。</p>
+        <div class="actions">${button('取消','close')}${button('确认发布示例成绩', 'confirm-release', { primary:true })}</div>`);
+    } else if (action === 'confirm-release') {
+      if (lab.status !== 'review' || pendingReports(course, lab).length) return;
+      lab.status = 'released';
+      dialog.close();
+      render();
+      notify('本次实验成绩已发布并锁定');
+    } else if (action === 'export-grades') exportDialog(course);
+  }
+
+  document.querySelector('#brand-mark').innerHTML = icon('brand');
+  document.querySelector('#close-dialog').innerHTML = icon('close');
+  const notifications = document.querySelector('#notifications');
+  notifications.innerHTML = icon('bell');
+  notifications.addEventListener('click', () => showDialog('通知中心',
+    '<p class="notice">入班申请 · 数据结构 01 班</p><a class="text-button" href="#class/ds01/roster">查看入班申请</a>'));
+  document.addEventListener('change', (event) => {
+    if (event.target.id !== 'term') return;
+    state.term = event.target.value;
+    state.monthOffset = 0;
+    render();
+    document.querySelector('#term').focus();
+  });
+  document.addEventListener('click', (event) => {
+    const control = event.target.closest('button[data-action]');
+    if (control && !control.disabled) handleAction(control.dataset.action);
+    if (dialog.open && event.target.closest('a[href^="#"]')) dialog.close();
+  });
+  dialog.addEventListener('submit', (event) => {
+    const form = event.target;
+    if (!form.id) return;
+    event.preventDefault();
+    const fields = new FormData(form);
+    const course = state.course;
+    if (form.id === 'environment-form') {
+      const runtime = fields.get('runtime');
+      environments.push({ runtime, name:`${runtime} · ${fields.get('cpu')} 核 / ${fields.get('memory')} MB` });
+      environmentList();
+      return;
+    }
+    if (form.id === 'export-form') {
+      const ids = fields.getAll('labs');
+      if (!ids.length) { document.querySelector('#export-error').hidden = false; return; }
+      exportGrades(course, ids);
+    }
+    if (form.id === 'lab-form') {
+      const name = fields.get('name').trim();
+      if (!name) { form.elements.name.focus(); notify('请填写实验名称'); return; }
+      labs.get(course.id).unshift({
+        id:`demo-${Date.now()}`, name:escape(name), deadline:fields.get('deadline'), status:'open', submitted:0,
+        marks:['choice','code','report'].map((part) => Number(fields.get(part))),
+        guide:escape(fields.get('guide')), question:escape(fields.get('question')), environment:escape(fields.get('environment'))
+      });
+      notify('已添加示例实验');
+    }
+    if (form.id === 'report-form') {
+      const lab = activeLab();
+      if (!lab || lab.status === 'released') return;
+      lab.reviews ??= {};
+      lab.reviews[form.dataset.student] = { score:Number(fields.get('score')), annotation:fields.get('annotation'), comment:fields.get('comment') };
+      notify('已保存示例评分及批注');
+    }
+    dialog.close();
+    render();
+  });
+  window.addEventListener('hashchange', () => { render(); window.scrollTo(0, 0); });
+  render();
+</script>
+</body>
+</html>

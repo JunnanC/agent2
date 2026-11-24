@@ -282,6 +282,21 @@ class TestDirectExperiment(TestCase):
         assert grade["parts"][0]["status"] == "NOT_SUBMITTED"
         assert b"Release explanation" in client.get(path + "/assessment", **headers).content
         assert b"Check the font" in client.get(path + "/report", **headers).content
+        analytics = self.teacher.get(
+            self.course_url + "/analytics/grades",
+            **self.teacher_headers,
+        )
+        assert analytics.status_code == 200, analytics.content
+        summary = analytics.json()["data"]
+        assert [row["publication_id"] for row in summary["experiments"]] == [publication.public_id]
+        assert [(row["score"], row["max_score"]) for row in summary["students"]] == [(65, 100)]
+        exported = self.teacher.get(
+            self.course_url + "/analytics/grades/export",
+            {"publication_ids": publication.public_id},
+            **self.teacher_headers,
+        )
+        assert exported.status_code == 200, exported.content
+        assert self.student.display_name in exported.json()["data"]["csv"]
 
         with patch("apps.reports.assessment_views.asset_bytes", return_value=content):
             response = client.get(path + "/report/reviewed", **headers)

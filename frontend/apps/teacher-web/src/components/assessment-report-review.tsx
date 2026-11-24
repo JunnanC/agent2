@@ -101,6 +101,7 @@ function ReportDetail({ courseId, taskId, direct }: { courseId: string; taskId: 
         parts.refetch(),
         client.invalidateQueries({ queryKey: ["assessment-report-review", courseId, taskId] }),
         client.invalidateQueries({ queryKey: ["assessment-report-queue", courseId] }),
+        client.invalidateQueries({ queryKey: ["lab-grade-release", courseId] }),
         client.invalidateQueries({ queryKey: ["course-grade-analysis", courseId] }),
       ]);
       toast.notify(action === "grade" ? "报告评分已保存" : "补做已开放");

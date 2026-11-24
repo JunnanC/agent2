@@ -41,7 +41,7 @@
 .teacher-portal .calendar-focus-task .calendar-focus-course{color:var(--muted);font-size:12px;font-weight:400}
 .teacher-portal .profile-trigger-text strong{font-size:14px;font-weight:500}
 .teacher-portal .profile-trigger-text small{font-size:12px}
-.teacher-portal .btn{gap:8px;padding:8px 14px;min-height:40px}
+.teacher-portal .btn:where(:not(.teacher-b *)){gap:8px;padding:8px 14px;min-height:40px}
 @media(min-width:1051px){
 .teacher-portal .side-nav-shell.nav-collapsed{grid-template-columns:80px minmax(0,1fr)}
 .teacher-portal .nav-collapsed>.topbar{width:80px;min-width:0;padding:32px 16px;align-items:center}
@@ -118,7 +118,7 @@
 .teacher-portal .course-context-invitation-details{display:flex;align-items:baseline;justify-content:flex-end;gap:4px 8px;flex-wrap:wrap;margin-top:8px}
 .teacher-portal .course-context-invitation-details code{color:var(--teal);overflow-wrap:anywhere;user-select:all}
 
-@media(max-width:760px){.teacher-portal .btn:not(.sm){min-height:44px}.teacher-portal .course-context h1{font-size:20px}}
+@media(max-width:760px){.teacher-portal .btn:not(.sm):where(:not(.teacher-b *)){min-height:44px}.teacher-portal .course-context h1{font-size:20px}}
 
 @media(max-width:760px){.teacher-portal .side-nav-shell .nav-item{min-height:44px}}
 
