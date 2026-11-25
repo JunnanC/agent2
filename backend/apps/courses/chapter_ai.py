@@ -7,9 +7,9 @@ from rest_framework.exceptions import ValidationError
 def generate_chapter_content(*, course_title: str, title: str) -> str:
     from langchain_openai import ChatOpenAI
 
-    key = getattr(settings, "CHAPTER_AI_API_KEY", settings.RUBRIC_AI_API_KEY)
-    endpoint = getattr(settings, "CHAPTER_AI_BASE_URL", settings.RUBRIC_AI_BASE_URL)
-    model = getattr(settings, "CHAPTER_AI_MODEL_NAME", settings.RUBRIC_AI_MODEL_NAME)
+    key = getattr(settings, "CHAPTER_AI_API_KEY", settings.AI_API_KEY)
+    endpoint = getattr(settings, "CHAPTER_AI_BASE_URL", settings.AI_BASE_URL)
+    model = getattr(settings, "CHAPTER_AI_MODEL_NAME", settings.AI_MODEL_NAME)
     if not all((key, endpoint, model)):
         raise ValidationError({"ai": "请先配置章节 AI 服务或平台已有的 AI 服务"})
     try:
@@ -18,7 +18,7 @@ def generate_chapter_content(*, course_title: str, title: str) -> str:
             api_key=key,
             base_url=endpoint,
             temperature=0.3,
-            timeout=60,
+            timeout=settings.AI_TIMEOUT_SECONDS,
             max_retries=1,
             max_tokens=4096,
         ).invoke([

@@ -422,7 +422,10 @@ class ExperimentDraftSuggestionView(APIView):
                     for item in draft.programming_questions
                 )
         except Exception as exc:
-            raise StateConflict(detail={"ai": "suggestion_unavailable"}) from exc
+            raise StateConflict(detail={
+                "ai": "suggestion_unavailable",
+                "hint": "AI 草稿生成失败，请保留当前内容后重试。",
+            }) from exc
         return _response(
             request,
             {

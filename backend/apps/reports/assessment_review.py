@@ -43,7 +43,10 @@ def request_reviews(publication: TaskPublication) -> dict[str, int]:
     ):
         raise StateConflict(detail={"publication": "review_unavailable"})
     if not publication.report_required:
-        raise StateConflict(detail={"report": "not_required"})
+        raise StateConflict(detail={
+            "report": "not_required",
+            "hint": "本实验无需提交 Word 报告。",
+        })
     reports = list(
         ReportSubmission.objects.select_for_update()
         .filter(task__publication=publication, status="SUBMITTED")
@@ -51,7 +54,7 @@ def request_reviews(publication: TaskPublication) -> dict[str, int]:
     )
     queued = 0
     stale_at = timezone.now() - timedelta(
-        seconds=max(900, 3 * settings.RUBRIC_AI_TIMEOUT_SECONDS),
+        seconds=max(900, 3 * settings.AI_TIMEOUT_SECONDS),
     )
     for report in reports:
         if (

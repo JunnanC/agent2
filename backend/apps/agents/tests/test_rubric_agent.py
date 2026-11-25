@@ -10,14 +10,15 @@ from apps.agents.rubric_agent import (
     RubricAgentConfigurationError,
     RubricAssessment,
     assess_submission,
+    structured_chat_model,
 )
 
 
 class RubricAgentTests(TestCase):
     @override_settings(
-        RUBRIC_AI_API_KEY="test-key",
-        RUBRIC_AI_BASE_URL="https://llm.example.test/v1",
-        RUBRIC_AI_MODEL_NAME="test-model",
+        AI_API_KEY="test-key",
+        AI_BASE_URL="https://llm.example.test/v1",
+        AI_MODEL_NAME="test-model",
     )
     def test_builds_langchain_agent_and_returns_structured_assessment(self) -> None:
         assessment = RubricAssessment(
@@ -49,6 +50,7 @@ class RubricAgentTests(TestCase):
             temperature=0,
             timeout=60,
             max_retries=1,
+            extra_body=None,
         )
         create_agent.assert_called_once()
         message = create_agent.return_value.invoke.call_args.args[0]["messages"][0]
@@ -57,9 +59,22 @@ class RubricAgentTests(TestCase):
         self.assertEqual(payload["rubric"][0]["criterion_id"], "criterion-1")
 
     @override_settings(
-        RUBRIC_AI_API_KEY="",
-        RUBRIC_AI_BASE_URL="",
-        RUBRIC_AI_MODEL_NAME="",
+        AI_API_KEY="test-key",
+        AI_BASE_URL="https://api.deepseek.com/v1",
+        AI_MODEL_NAME="test-model",
+    )
+    def test_deepseek_disables_thinking_for_structured_output(self) -> None:
+        with patch("langchain_openai.ChatOpenAI") as chat_model:
+            structured_chat_model()
+
+        self.assertEqual(chat_model.call_args.kwargs["extra_body"], {
+            "thinking": {"type": "disabled"},
+        })
+
+    @override_settings(
+        AI_API_KEY="",
+        AI_BASE_URL="",
+        AI_MODEL_NAME="",
     )
     def test_requires_provider_configuration(self) -> None:
         with self.assertRaises(RubricAgentConfigurationError):

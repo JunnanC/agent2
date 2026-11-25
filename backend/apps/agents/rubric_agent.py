@@ -1,9 +1,15 @@
+from __future__ import annotations
+
 import json
 from decimal import Decimal
-from typing import Any
+from typing import TYPE_CHECKING, Any
+from urllib.parse import urlsplit
 
 from django.conf import settings
 from pydantic import BaseModel, ConfigDict, Field
+
+if TYPE_CHECKING:
+    from langchain_openai import ChatOpenAI
 
 
 class CriterionAssessment(BaseModel):
@@ -25,25 +31,33 @@ class RubricAgentConfigurationError(RuntimeError):
     pass
 
 
-def assess_submission(*, report: str, rubric: list[dict[str, Any]]) -> RubricAssessment:
-    if not all(
-        (settings.RUBRIC_AI_API_KEY, settings.RUBRIC_AI_BASE_URL, settings.RUBRIC_AI_MODEL_NAME)
-    ):
-        raise RubricAgentConfigurationError("rubric AI provider is not configured")
+def structured_chat_model() -> ChatOpenAI:
+    if not all((settings.AI_API_KEY, settings.AI_BASE_URL, settings.AI_MODEL_NAME)):
+        raise RubricAgentConfigurationError("AI provider is not configured")
 
-    from langchain.agents import create_agent
-    from langchain.agents.structured_output import ToolStrategy
     from langchain_openai import ChatOpenAI
 
+    extra_body = None
+    if urlsplit(settings.AI_BASE_URL).hostname == "api.deepseek.com":
+        # DeepSeek thinking mode rejects the tool choice used for structured output.
+        extra_body = {"thinking": {"type": "disabled"}}
+    return ChatOpenAI(
+        model=settings.AI_MODEL_NAME,
+        api_key=settings.AI_API_KEY,
+        base_url=settings.AI_BASE_URL,
+        temperature=0,
+        timeout=settings.AI_TIMEOUT_SECONDS,
+        max_retries=1,
+        extra_body=extra_body,
+    )
+
+
+def assess_submission(*, report: str, rubric: list[dict[str, Any]]) -> RubricAssessment:
+    from langchain.agents import create_agent
+    from langchain.agents.structured_output import ToolStrategy
+
     agent = create_agent(
-        model=ChatOpenAI(
-            model=settings.RUBRIC_AI_MODEL_NAME,
-            api_key=settings.RUBRIC_AI_API_KEY,
-            base_url=settings.RUBRIC_AI_BASE_URL,
-            temperature=0,
-            timeout=settings.RUBRIC_AI_TIMEOUT_SECONDS,
-            max_retries=1,
-        ),
+        model=structured_chat_model(),
         tools=[],
         system_prompt=(
             "你是课程实验报告评分助手。仅依据给出的评分标准和学生提交内容给出逐项建议。"

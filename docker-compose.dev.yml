@@ -8,10 +8,10 @@ x-app-environment: &app-environment
   SIMILARITY_THRESHOLD: ${SIMILARITY_THRESHOLD:-0.30}
   SIMILARITY_RETENTION_DAYS: ${SIMILARITY_RETENTION_DAYS:-180}
   AUTO_CHECK_MAX_ATTEMPTS: ${AUTO_CHECK_MAX_ATTEMPTS:-${P10_AUTO_CHECK_MAX_ATTEMPTS:-3}}
-  RUBRIC_AI_MODEL_NAME: ${RUBRIC_AI_MODEL_NAME:-}
-  RUBRIC_AI_BASE_URL: ${RUBRIC_AI_BASE_URL:-}
-  RUBRIC_AI_API_KEY: ${RUBRIC_AI_API_KEY:-}
-  RUBRIC_AI_TIMEOUT_SECONDS: ${RUBRIC_AI_TIMEOUT_SECONDS:-60}
+  AI_MODEL_NAME: ${AI_MODEL_NAME:-${RUBRIC_AI_MODEL_NAME:-}}
+  AI_BASE_URL: ${AI_BASE_URL:-${RUBRIC_AI_BASE_URL:-}}
+  AI_API_KEY: ${AI_API_KEY:-${RUBRIC_AI_API_KEY:-}}
+  AI_TIMEOUT_SECONDS: ${AI_TIMEOUT_SECONDS:-${RUBRIC_AI_TIMEOUT_SECONDS:-60}}
   CHAPTER_AI_MODEL_NAME: ${CHAPTER_AI_MODEL_NAME:-}
   CHAPTER_AI_BASE_URL: ${CHAPTER_AI_BASE_URL:-}
   CHAPTER_AI_API_KEY: ${CHAPTER_AI_API_KEY:-}
@@ -325,7 +325,7 @@ services:
       PROJECT_ROOT: /workspace
     volumes:
       - .:/workspace:ro
-    networks: [app, data]
+    networks: [app, data, default]
     depends_on:
       mysql-grants: { condition: service_completed_successfully }
       redis: { condition: service_healthy }

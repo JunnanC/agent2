@@ -4,10 +4,9 @@ import json
 from decimal import Decimal
 from typing import Any
 
-from django.conf import settings
 from pydantic import BaseModel, ConfigDict, Field
 
-from .rubric_agent import RubricAgentConfigurationError
+from .rubric_agent import structured_chat_model
 
 
 class DraftChoice(BaseModel):
@@ -62,26 +61,11 @@ def structured_lab_response[T: BaseModel](
     system: str,
     data: dict[str, Any],
 ) -> T:
-    if not all((
-        settings.RUBRIC_AI_API_KEY,
-        settings.RUBRIC_AI_BASE_URL,
-        settings.RUBRIC_AI_MODEL_NAME,
-    )):
-        raise RubricAgentConfigurationError("AI provider is not configured")
-
     from langchain.agents import create_agent
     from langchain.agents.structured_output import ToolStrategy
-    from langchain_openai import ChatOpenAI
 
     agent = create_agent(
-        model=ChatOpenAI(
-            model=settings.RUBRIC_AI_MODEL_NAME,
-            api_key=settings.RUBRIC_AI_API_KEY,
-            base_url=settings.RUBRIC_AI_BASE_URL,
-            temperature=0,
-            timeout=settings.RUBRIC_AI_TIMEOUT_SECONDS,
-            max_retries=1,
-        ),
+        model=structured_chat_model(),
         tools=[],
         system_prompt=system,
         response_format=ToolStrategy(schema),
