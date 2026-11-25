@@ -1,24 +1,35 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Link, useNavigate } from "react-router-dom";
-import { assessmentApi, studentApi, taskApi } from "@edu/api-client";
+import { useNavigate } from "react-router-dom";
+import { assessmentApi, studentApi, type Task } from "@edu/api-client";
 import { keys } from "@edu/query-keys";
-import { Breadcrumbs, Button, DateCalendar, Metric, Panel, RequestStateView, StatusBadge } from "@edu/ui";
+import { Button, Metric, Panel, RequestStateView, StatusBadge } from "@edu/ui";
 import type { CalendarItem } from "@edu/ui";
 import { isTaskActionable, taskStatusLabel, taskStatusTone, formatDate } from "@/lib/task-format";
-import { StudentTimetable } from "@/components/student-timetable";
+import { StudentJournal } from "@/components/student-journal";
+import { listStudentTasks } from "@/lib/student-tasks";
+import { useStudentTimetable } from "@/lib/use-student-timetable";
 
 const TERMINAL_STATUSES = new Set(["COMPLETED", "WITHDRAWN"]);
-const UNFINISHED_STATUSES = new Set(["ASSIGNED", "IN_PROGRESS", "REPORT_DRAFT", "REJECTED", "FAILED"]);
+const UNFINISHED_STATUSES = new Set(["ASSIGNED", "PROVISIONING", "READY", "IN_PROGRESS", "REPORT_DRAFT", "REJECTED", "FAILED"]);
+const ASSESSMENT_CLOSED_STATUSES = new Set(["CANCELLED", "EXPIRED", "FAILED", "ARCHIVING"]);
 const FOCUSED_TASKS_PAGE_SIZE = 3;
+
+function canOpenAssessment(task: Task, deadline: string) {
+  const now = Date.now();
+  return task.assessment_available && !ASSESSMENT_CLOSED_STATUSES.has(task.status)
+    && !task.blockers.length && (!task.window_start || new Date(task.window_start).getTime() <= now)
+    && now < new Date(deadline).getTime();
+}
 
 export function Home() {
   const navigate = useNavigate();
-  const [selectedDate, setSelectedDate] = useState<string | null>(null);
-  const [taskPagination, setTaskPagination] = useState({ date: selectedDate, page: 1 });
-  const [manualDate, setManualDate] = useState(false);
+  const schedule = useStudentTimetable();
+  const [selection, setSelection] = useState<{ term?: string; date: string | null; page: number }>({ term: schedule.term, date: null, page: 1 });
+  const currentSelection = selection.term === schedule.term ? selection : { term: schedule.term, date: null, page: 1 };
+  if (currentSelection !== selection) setSelection(currentSelection);
 
-  const tasksQuery = useQuery({ queryKey: keys.tasks({ scope: "my" }), queryFn: () => taskApi.list({ page_size: 50 }) });
+  const tasksQuery = useQuery({ queryKey: keys.tasks({ scope: "my" }), queryFn: () => listStudentTasks() });
   const enrollmentsQuery = useQuery({ queryKey: keys.enrollments({ status: "ACTIVE" }), queryFn: () => studentApi.myEnrollments({ status: "ACTIVE", page_size: 100 }) });
 
   const tasks = useMemo(() => tasksQuery.data?.rows ?? [], [tasksQuery.data]);
@@ -26,7 +37,6 @@ export function Home() {
     enrollment.course_id,
     enrollment.course_title || enrollment.course_code || enrollment.course_id,
   ])), [enrollmentsQuery.data]);
-  const courseNamesLoaded = enrollmentsQuery.isSuccess;
   const activeTasks = useMemo(() => tasks.filter((task) => !TERMINAL_STATUSES.has(task.status)), [tasks]);
   const draftCount = tasks.filter((task) => task.status === "REPORT_DRAFT").length;
   const inProgressCount = tasks.filter((task) => ["IN_PROGRESS", "REPORT_DRAFT"].includes(task.status)).length;
@@ -59,7 +69,7 @@ export function Home() {
   const totalMinutes = weeklyStudy?.total_minutes ?? 0;
   const lastWeekMinutes = weeklyStudy?.last_week_minutes ?? 0;
   const weeklySub = dashboard.data == null
-    ? "统计加载中"
+    ? dashboard.isError ? "暂时无法读取学习时长" : "统计加载中"
     : (!weeklyStudy?.has_records
       ? "本周还没有学习记录"
       : lastWeekMinutes > 0
@@ -75,9 +85,14 @@ export function Home() {
       ? `最近一次评分 ${latestScore} 分`
       : `共 ${completedTasks.length} 个任务已完成评审`;
 
-  const calendarItems = useMemo<CalendarItem[]>(() => {
-    const rows: CalendarItem[] = [];
+  const calendarItems = useMemo<(CalendarItem & { taskId: string })[]>(() => {
+    const rows: (CalendarItem & { taskId: string })[] = [];
+    const classes = schedule.timetable.data?.classes;
+    if (!classes) return rows;
+    const classesById = new Map(classes.map(course => [course.course_id, course]));
     for (const task of tasks) {
+      const course = classesById.get(task.course_id);
+      if (!course) continue;
       const deadline = task.effective_deadline || task.window_end;
       if (!isTaskActionable(task) || !deadline) continue;
       const dateKey = (value: string) => {
@@ -92,14 +107,15 @@ export function Home() {
       for (let guard = 0; cursor <= last && guard < 366; guard += 1) {
         const date = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, "0")}-${String(cursor.getDate()).padStart(2, "0")}`;
         rows.push({
+          taskId: task.public_id,
           date,
           title: task.title,
-          context: courseNames.get(task.course_id),
+          context: courseNames.get(task.course_id) || course.course_title || course.course_code,
           subtitle: `完成度 ${task.progress}% · 截止 ${formatDate(deadline)}`,
           statusLabel: taskStatusLabel(task.status),
           statusTone: taskStatusTone(task.status),
           done: !UNFINISHED_STATUSES.has(task.status),
-          onClick: () => navigate(task.assessment_available
+          onClick: () => navigate(canOpenAssessment(task, deadline)
             ? `/experiments/${task.public_id}/assessment`
             : `/experiments/${task.public_id}`),
         });
@@ -107,7 +123,7 @@ export function Home() {
       }
     }
     return rows;
-  }, [tasks, courseNames, navigate]);
+  }, [tasks, courseNames, navigate, schedule.timetable.data]);
 
   const todayKey = useMemo(() => {
     const now = new Date();
@@ -119,34 +135,47 @@ export function Home() {
     return dates.find((date) => date >= todayKey) ?? dates[0] ?? null;
   }, [calendarItems, todayKey]);
 
-  useEffect(() => {
-    if (!manualDate) setSelectedDate(focusDate);
-  }, [focusDate, manualDate]);
-
-  const focusedItems = selectedDate ? calendarItems.filter((item) => item.date === selectedDate) : [];
+  const selectedDate = currentSelection.date ?? focusDate ?? todayKey;
+  const selectDate = (date: string) => setSelection({ term: schedule.term, date, page: 1 });
+  const focusedItems = calendarItems.filter((item) => item.date === selectedDate);
   const taskPageCount = Math.max(1, Math.ceil(focusedItems.length / FOCUSED_TASKS_PAGE_SIZE));
-  const taskPage = taskPagination.date === selectedDate ? Math.min(taskPagination.page, taskPageCount) : 1;
+  const taskPage = Math.min(currentSelection.page, taskPageCount);
+  if (currentSelection === selection && taskPage !== selection.page && tasksQuery.isSuccess && schedule.timetable.isSuccess) {
+    setSelection({ ...selection, page: taskPage });
+  }
+  const selectPage = (page: number) => setSelection({ ...currentSelection, date: selectedDate, page });
   const visibleItems = focusedItems.slice((taskPage - 1) * FOCUSED_TASKS_PAGE_SIZE, taskPage * FOCUSED_TASKS_PAGE_SIZE);
 
   const formatHours = (minutes: number) => (minutes >= 60 ? `${(minutes / 60).toFixed(1)} h` : `${minutes} min`);
 
   return (
     <>
-      <Breadcrumbs items={[{ label: "学生门户" }]} current="概览" />
-      <StudentTimetable />
-      <div className="page-actions section">
-        <Link className="btn primary" to="/courses/join">凭课程码加入教学班</Link>
-        <Link className="btn" to="/courses">我的教学班</Link>
-        <Link className="btn" to="/experiments">我的实验</Link>
-        <Link className="btn" to="/notifications">通知中心</Link>
-      </div>
-
-      <div className="head">
-        <div><h1>学习概览</h1></div>
-        <div className="actions"><time dateTime={new Date().toLocaleDateString("sv-SE")}>{new Date().toLocaleDateString("zh-CN", { year: "numeric", month: "long", day: "numeric", weekday: "long" })}</time></div>
-      </div>
-      {/* 四个数据卡片：条带式单块，列间分隔线，内容等距 */}
-      <Panel className="section">
+      <StudentJournal schedule={schedule} date={selectedDate} items={calendarItems} onSelect={selectDate}>
+        <RequestStateView loading={tasksQuery.isLoading || schedule.timetable.isPending} error={tasksQuery.error || schedule.timetable.error}
+          onRetry={() => { void tasksQuery.refetch(); void schedule.timetable.refetch(); }}
+          empty={!focusedItems.length}
+          emptyState={<p className="agenda-empty">{calendarItems.length ? "当天没有待办" : "暂无待办任务"}</p>}>
+          <div className="calendar-focus-list" aria-live="polite">
+            <div className="eyebrow">{formatDate(selectedDate)} · {focusedItems.length} 项待办</div>
+            {visibleItems.map((item) => (
+              <button key={item.taskId} type="button" className="calendar-focus-task" onClick={item.onClick}>
+                <span><small className="calendar-focus-course">{item.context}</small><strong>{item.title}</strong><small>{item.subtitle}</small></span>
+                <StatusBadge tone={item.statusTone ?? "neutral"}>{item.statusLabel}</StatusBadge>
+              </button>
+            ))}
+            {taskPageCount > 1 && (
+              <nav aria-label="待完成任务分页" style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", flexWrap: "wrap", gap: 8 }}>
+                <Button size="sm" disabled={taskPage === 1}
+                  onClick={() => selectPage(taskPage - 1)}>上一页</Button>
+                <span className="subtle">第 {taskPage} / {taskPageCount} 页</span>
+                <Button size="sm" disabled={taskPage === taskPageCount}
+                  onClick={() => selectPage(taskPage + 1)}>下一页</Button>
+              </nav>
+            )}
+          </div>
+        </RequestStateView>
+      </StudentJournal>
+      <Panel className="section agenda-metrics" title={<><h2>学习概览</h2><span className="subtle">全部课程</span></>}>
         <RequestStateView loading={tasksQuery.isLoading && !tasks.length}
           error={tasksQuery.error}
           onRetry={() => { void tasksQuery.refetch(); }}
@@ -161,44 +190,6 @@ export function Home() {
           </div>
         </RequestStateView>
       </Panel>
-
-      <div className="grid two section student-overview-grid">
-        <Panel title={<><h2>任务日历</h2><span className="subtle">按天查看待办</span></>}>
-          <RequestStateView loading={tasksQuery.isLoading} error={tasksQuery.error}
-            onRetry={() => void tasksQuery.refetch()} empty={!calendarItems.length}
-            emptyState={<div className="state-block"><strong>暂无待办任务</strong><p>实验发布后会显示在这里。</p></div>}>
-            <DateCalendar items={calendarItems} selectedDate={selectedDate} onDateSelect={(date) => {
-              setManualDate(true);
-              setSelectedDate(date);
-              setTaskPagination({ date, page: 1 });
-            }} showPopover={false} />
-          </RequestStateView>
-        </Panel>
-        <Panel title={<><h2>待完成任务</h2><span className="subtle">选择日期查看待办</span></>}>
-          {selectedDate ? (
-            focusedItems.length ? (
-              <div className="calendar-focus-list" aria-live="polite">
-                <div className="eyebrow">{formatDate(selectedDate)} · {focusedItems.length} 项待办</div>
-                {visibleItems.map((item, index) => (
-                  <button key={`${item.title}-${index}`} type="button" className="calendar-focus-task" onClick={item.onClick}>
-                    <span><small className="calendar-focus-course">{item.context ?? (courseNamesLoaded ? "未归属课程" : "")}</small><strong>{item.title}</strong><small>{item.subtitle}</small></span>
-                    <StatusBadge tone={item.statusTone ?? "neutral"}>{item.statusLabel}</StatusBadge>
-                  </button>
-                ))}
-                {taskPageCount > 1 && (
-                  <nav aria-label="待完成任务分页" style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", flexWrap: "wrap", gap: 8 }}>
-                    <Button size="sm" disabled={taskPage === 1}
-                      onClick={() => setTaskPagination({ date: selectedDate, page: taskPage - 1 })}>上一页</Button>
-                    <span className="subtle">第 {taskPage} / {taskPageCount} 页</span>
-                    <Button size="sm" disabled={taskPage === taskPageCount}
-                      onClick={() => setTaskPagination({ date: selectedDate, page: taskPage + 1 })}>下一页</Button>
-                  </nav>
-                )}
-              </div>
-            ) : <div className="state-block"><strong>当天没有待办</strong><p>请选择日历中的其他日期。</p></div>
-          ) : <div className="state-block"><strong>选择一个日期</strong><p>日期内的任务会在这里放大显示。</p></div>}
-        </Panel>
-      </div>
     </>
   );
 }

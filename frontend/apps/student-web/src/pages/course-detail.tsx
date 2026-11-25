@@ -2,7 +2,7 @@ import { ChapterResources } from "@/components/chapter-resources";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
-import { studentApi, taskApi, timetableApi } from "@edu/api-client";
+import { studentApi, timetableApi } from "@edu/api-client";
 import { keys } from "@edu/query-keys";
 import { Breadcrumbs, EmptyState, Markdown, PageHeader, Panel, RequestStateView, StatusBadge, ScheduleSlots } from "@edu/ui";
 import { formatDate, formatDateTime, taskStatusLabel, taskStatusTone } from "@/lib/task-format";
@@ -10,6 +10,7 @@ import { CourseDiscussion } from "@/components/course-discussion";
 import { CourseAgent } from "@/components/course-agent";
 import { EnrollmentExit } from "@/components/enrollment-exit";
 import { ApiError } from "@edu/auth-client";
+import { listStudentTasks } from "@/lib/student-tasks";
 
 function hasIndependentScroll(content: HTMLElement) {
   return ["auto", "scroll"].includes(window.getComputedStyle(content).overflowY);
@@ -31,13 +32,13 @@ export function CourseDetail({ discussionPage = false }: { discussionPage?: bool
     queryFn: () => studentApi.myEnrollments({ page_size: 100, status: "ACTIVE" }), enabled: loadOverview });
   const enrollment = enrollments.data?.rows.find((row) => row.course_id === courseId && row.status === "ACTIVE");
   const chapters = useQuery({ queryKey: keys.courseResource(courseId, "chapters"), queryFn: () => studentApi.courseChapters(courseId),
-    enabled: canRead && (!detail.data?.timetable_code || Boolean(chapterId)) });
+    enabled: canRead });
   const announcements = useQuery({ queryKey: keys.courseResource(courseId, "announcements"), queryFn: () => studentApi.courseAnnouncements(courseId), enabled: loadOverview });
   const events = useQuery({ queryKey: keys.courseResource(courseId, "calendar-events"), queryFn: () => studentApi.courseCalendarEvents(courseId), enabled: loadOverview });
   const termId = detail.data?.term_id;
   const timetable = useQuery({ queryKey: keys.timetable(termId), queryFn: () => timetableApi.retrieve({ term_id: termId }),
     enabled: loadOverview && Boolean(termId) });
-  const tasks = useQuery({ queryKey: keys.tasks({ course_id: courseId }), queryFn: () => taskApi.list({ course_id: courseId }), enabled: loadOverview });
+  const tasks = useQuery({ queryKey: keys.tasks({ course_id: courseId }), queryFn: () => listStudentTasks({ course_id: courseId }), enabled: loadOverview });
   const chapterRows = chapters.data?.rows ?? [];
   const currentChapterId = chapterId ?? activeChapterId ?? chapterRows[0]?.public_id ?? null;
 
@@ -96,7 +97,7 @@ export function CourseDetail({ discussionPage = false }: { discussionPage?: bool
   }, [canRead, chapters.data, courseId, discussionPage]);
 
   useEffect(() => {
-    if (!canRead || discussionPage || !chapters.isSuccess || !location.hash) return;
+    if (!canRead || discussionPage || !location.hash) return;
     const id = decodeURIComponent(location.hash.slice(1));
     const frame = window.requestAnimationFrame(() => {
       document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -136,6 +137,16 @@ export function CourseDetail({ discussionPage = false }: { discussionPage?: bool
       <PageHeader title={discussionPage ? `${detail.data.title} · 课程问答` : detail.data.title} />
       <div className="course-learning-shell">
         <aside ref={chapterNavRef} className="panel course-chapter-nav">
+          <nav className="student-course-nav" aria-label="教学班模块">
+            {[
+              ["course-info", "课程介绍"], ["course-tasks", "实验任务"],
+              ...(termId ? [["course-schedule", "班级课表"]] : []),
+              ["course-updates", "公告与日历"], ["course-agent", "课程助手"],
+            ].map(([id, label]) => <Link key={id} to={`/courses/${courseId}#${id}`}
+              aria-current={!chapterId && !discussionPage && (location.hash || "#course-info") === `#${id}` ? "location" : undefined}>
+              {label}
+            </Link>)}
+          </nav>
           <div className="panel-title">
             <h2 style={{ fontSize: 15 }}>课程章节</h2>
             <StatusBadge tone="good">已加入</StatusBadge>
@@ -145,12 +156,7 @@ export function CourseDetail({ discussionPage = false }: { discussionPage?: bool
             empty={!chapters.data?.rows.length}
             emptyState={<div className="state-block"><strong>暂无章节</strong><p>教师尚未发布课程章节。</p></div>}>
             <div>
-              {termId && <Panel title={<h2>班级课表</h2>}>
-            <RequestStateView loading={timetable.isLoading} error={timetable.error} onRetry={() => void timetable.refetch()} empty={false}>
-              <ScheduleSlots slots={timetable.data?.schedules.filter((slot) => slot.course_id === courseId) ?? []} />
-            </RequestStateView>
-          </Panel>}
-          {!detail.data?.timetable_code && chapterRows.map((chapter, index) => (
+              {chapterRows.map((chapter, index) => (
                 <button type="button" key={chapter.public_id}
                   className={`course-chapter-row${!discussionPage && chapter.public_id === currentChapterId ? " active" : ""}`}
                   aria-current={!discussionPage && chapter.public_id === currentChapterId ? "location" : undefined}
@@ -162,17 +168,19 @@ export function CourseDetail({ discussionPage = false }: { discussionPage?: bool
               ))}
             </div>
           </RequestStateView>
-          {chapters.isSuccess ? <Link to={`/courses/${courseId}/questions`}
+          <Link to={`/courses/${courseId}/questions`}
             className={`course-chapter-row${discussionPage ? " active" : ""}`}
             aria-current={discussionPage ? "page" : undefined}>
             <span>{chapterRows.length + 1}</span><strong>课程问答</strong>
-          </Link> : null}
+          </Link>
         </aside>
 
         <section ref={contentRef} className="course-learning-main" aria-label="课程内容">
           {chapterId || discussionPage ? <Link className="btn" to={`/courses/${courseId}`}>返回课程介绍</Link> : null}
           {chapterId ? <><RequestStateView loading={chapters.isLoading} error={chapters.error} onRetry={() => void chapters.refetch()} empty={!chapterRows.some((chapter) => chapter.public_id === chapterId)} emptyState={<EmptyState title="章节不存在或尚未发布" />} >{chapterRows.filter((chapter) => chapter.public_id === chapterId).map((chapter) => <Panel key={chapter.public_id} title={<h2>{chapter.title}</h2>}><p className="course-chapter-description">{chapter.description || "本章节暂未提供说明。"}</p>{chapter.content ? <Markdown source={chapter.content} /> : null}</Panel>)}</RequestStateView>{chapterRows.some(chapter => chapter.public_id === chapterId) && <ChapterResources key={chapterId} courseId={courseId} chapterId={chapterId} />}</> : discussionPage ? <CourseDiscussion key={courseId} courseId={courseId} /> : <>
-          <Panel title={<><h2>课程信息</h2></>} actions={enrollment ? <EnrollmentExit enrollment={enrollment} onExited={() => navigate("/courses", { replace: true })} /> : undefined}>
+          <Panel id="course-info" title={<h2>课程介绍</h2>} actions={enrollment ? <EnrollmentExit enrollment={enrollment} onExited={() => navigate("/courses", { replace: true })} /> : undefined}>
+            {detail.data.summary && <p className="course-chapter-description">{detail.data.summary}</p>}
+            {detail.data.description && detail.data.description !== detail.data.summary && <Markdown source={detail.data.description} />}
             <div className="grid equal section" style={{ marginTop: 0 }}>
               <div>
                 <span className="eyebrow">课程代码</span>
@@ -227,7 +235,13 @@ export function CourseDetail({ discussionPage = false }: { discussionPage?: bool
             </RequestStateView>
           </Panel>
 
-          <div className="grid equal">
+          {termId && <Panel id="course-schedule" title={<h2>班级课表</h2>}>
+            <RequestStateView loading={timetable.isLoading} error={timetable.error} onRetry={() => void timetable.refetch()} empty={false}>
+              <ScheduleSlots slots={timetable.data?.schedules.filter((slot) => slot.course_id === courseId) ?? []} />
+            </RequestStateView>
+          </Panel>}
+
+          <div id="course-updates" className="grid equal">
             <Panel title={<h2>课程公告</h2>}>
               <RequestStateView loading={announcements.isLoading} error={announcements.error}
                 onRetry={() => void announcements.refetch()}
@@ -259,7 +273,7 @@ export function CourseDetail({ discussionPage = false }: { discussionPage?: bool
               </RequestStateView>
             </Panel>
           </div>
-          <CourseAgent key={courseId} courseId={courseId} />
+          <div id="course-agent"><CourseAgent key={courseId} courseId={courseId} /></div>
           </>}
         </section>
       </div>

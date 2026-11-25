@@ -1,13 +1,47 @@
 /* unslop by Damir Sokolovsky (@heydamir), CC BY 4.0; https://heydamir.design/unslop */
 
+/* Admin entry point: reuse the shared component color roles with the Agenda B palette. */
+html:root {
+  --paper: #f8f5ee;
+  --surface: #fffdf8;
+  --surface-soft: #f4eee6;
+  --ink: #312a25;
+  --muted: #675e55;
+  --hint: #6c6259;
+  --line: #ded5c8;
+  --control: #cfc4b5;
+  --accent: #793b44;
+  --accent-hover: #632c35;
+  --teal: var(--accent);
+  --teal-soft: #f2e6e5;
+  --green: #226647;
+  --green-soft: #eaf5ef;
+  --amber: #865209;
+  --amber-soft: #fff2da;
+  --blue: #2454ac;
+  --blue-soft: #edf3fe;
+  --red: #a44037;
+  --red-soft: #f7e9e6;
+}
+
+.auth-card .btn.primary:enabled:hover,
+.modal .btn.primary:enabled:hover,
+.admin-console button.primary:enabled:hover {
+  background-color: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+.auth-card .field { background-color: #fff; border-color: var(--control); }
+.auth-card .field:focus { border-color: var(--accent); }
+.auth-card .field::placeholder { color: var(--hint); }
+.profile-trigger .avatar { background-color: #eee9de; color: #53483b; }
+.toast:not(.error) { background-color: var(--accent-hover); }
+.modal-backdrop.open { background-color: #17273f77; }
+
 .admin-console {
   font-family: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
-  color: #252b2a;
-  background: #f1f3f2;
+  color: var(--ink);
+  background: var(--paper);
   font-size: 14px;
-  --muted: #69716e;
-  --line: #e7eae8;
-  --accent: #246657;
 }
 .admin-console * {
   box-sizing: border-box;
@@ -35,7 +69,7 @@
 .admin-console button {
   cursor: pointer;
   background: white;
-  border: 1px solid #dce1de;
+  border: 1px solid var(--control);
   border-radius: 8px;
   min-height: 40px;
   padding: 8px 12px;
@@ -43,15 +77,15 @@
   transition: background 0.15s;
 }
 .admin-console button:hover {
-  background: #f2f5f3;
+  background: var(--surface-soft);
 }
 .admin-console button.primary {
-  background: #246657;
+  background: var(--accent);
   color: white;
-  border-color: #246657;
+  border-color: var(--accent);
 }
 .admin-console button.danger {
-  color: #a44037;
+  color: var(--red);
 }
 .admin-console button.link {
   border: 0;
@@ -130,7 +164,7 @@
   grid-template-columns: repeat(4, minmax(0, 1fr));
   border: 1px solid var(--line);
   border-radius: 12px;
-  background: #fff;
+  background: var(--surface);
   padding: 24px;
   margin-bottom: 24px;
   gap: 0;
@@ -210,8 +244,9 @@
   gap: 12px;
 }
 .admin-console .notice {
-  border: 1px solid #eadfc8;
-  background: #fcfaf5;
+  border: 1px solid var(--line);
+  background: var(--amber-soft);
+  color: var(--amber);
   border-radius: 8px;
   padding: 16px;
   display: flex;
@@ -235,20 +270,20 @@
   border-radius: 999px;
   white-space: nowrap;
   line-height: 1.4;
-  background: var(--green-soft, #e8f1eb);
-  color: var(--green, #4d7d63);
+  background: var(--green-soft);
+  color: var(--green);
 }
 .admin-console .status.bad {
-  background: var(--red-soft, #f7e9e6);
-  color: var(--red, #a6534d);
+  background: var(--red-soft);
+  color: var(--red);
 }
 .admin-console .status.off {
-  background: var(--surface-soft, #f4f6f4);
-  color: var(--muted, #69716e);
+  background: var(--surface-soft);
+  color: var(--muted);
 }
 .admin-console .status.warn {
-  background: var(--amber-soft, #fbf1df);
-  color: var(--amber, #a76d21);
+  background: var(--amber-soft);
+  color: var(--amber);
 }
 .admin-console .toolbar {
   display: flex;
@@ -268,13 +303,13 @@
 .admin-console input,
 .admin-console select,
 .admin-console textarea {
-  border: 1px solid #dce1de;
+  border: 1px solid var(--control);
   background: white;
   border-radius: 8px;
   min-height: 40px;
   padding: 9px 12px;
   min-width: 0;
-  color: #333c37;
+  color: var(--ink);
 }
 .admin-console textarea {
   resize: vertical;
@@ -290,7 +325,7 @@
   white-space: nowrap;
 }
 .admin-console .console-list {
-  background: #fff;
+  background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 12px;
   padding: 20px 24px 16px;
@@ -381,7 +416,7 @@
   color: var(--muted);
 }
 .admin-console .student-import-error {
-  color: #a6534d;
+  color: var(--red);
 }
 .admin-console .student-import-result {
   display: grid;
@@ -432,7 +467,7 @@
   padding-right: 10px;
 }
 .admin-console tbody tr:hover {
-  background: #fbfcfb;
+  background: var(--surface-soft);
 }
 .admin-console .reserve-row td {
   height: 62px;
@@ -571,23 +606,23 @@
 }
 .admin-console .tabs button.active {
   border-bottom-color: var(--accent);
-  color: #244d3d;
+  color: var(--accent);
 }
 .admin-console .bar {
   height: 6px;
-  background: #ecefec;
+  background: #eee9de;
   border-radius: 4px;
   overflow: hidden;
   margin: 8px 0;
 }
 .admin-console .bar i {
   display: block;
-  background: #457966;
+  background: var(--accent);
   height: 100%;
   border-radius: 4px;
 }
 .admin-console .bar.warning i {
-  background: #b08845;
+  background: var(--amber);
 }
 .admin-console .resource-line {
   margin-bottom: 24px;
@@ -634,22 +669,22 @@
 }
 .admin-console .pill {
   font-size: 11px;
-  border: 1px solid #dfe5e0;
+  border: 1px solid var(--line);
   border-radius: 4px;
   padding: 3px 6px;
   color: var(--muted);
 }
 .admin-console dialog {
-  border: 1px solid #dce1de;
+  border: 1px solid var(--control);
   border-radius: 16px;
   padding: 0;
   width: 520px;
   max-width: calc(100% - 32px);
   max-height: 90vh;
-  color: #252b2a;
+  color: var(--ink);
 }
 .admin-console dialog::backdrop {
-  background: #17251e55;
+  background: #17273f77;
 }
 .admin-console .dialog-body {
   padding: 28px;
@@ -680,7 +715,7 @@
   margin-bottom: 20px;
 }
 .admin-console .form-error {
-  color: #aa463a;
+  color: var(--red);
   font-size: 12px;
 }
 .admin-console .detail {
@@ -702,10 +737,10 @@
   overflow-wrap: anywhere;
 }
 .admin-console .reason {
-  background: #faf5f3;
+  background: var(--red-soft);
   padding: 16px;
   border-radius: 8px;
-  color: #914c3b;
+  color: var(--red);
   margin-bottom: 20px;
 }
 .admin-console .toast {
@@ -713,7 +748,7 @@
   bottom: 28px;
   left: 50%;
   transform: translateX(-50%);
-  background: #283d32;
+  background: var(--accent-hover);
   color: white;
   padding: 12px 24px;
   border-radius: 8px;
@@ -725,7 +760,7 @@
 }
 .admin-console .footer-note {
   margin-top: 28px;
-  color: #69716e;
+  color: var(--muted);
   font-size: 12px;
 }
 .admin-console .break {
@@ -818,18 +853,14 @@
 }
 .admin-console {
   min-height: 0;
-  background: #f1f3f2;
-  --ink: #252b2a;
-  --muted: #69716e;
-  --line: #e7eae8;
-  --accent: #246657;
+  background: var(--paper);
   font-size: 14px;
   line-height: 1.5;
 }
 .admin-console .console-feedback {
   padding: 12px 16px;
-  background: #eef5f0;
-  border: 1px solid #d8e6dc;
+  background: var(--green-soft);
+  border: 1px solid #b9d7c7;
   border-radius: 8px;
   margin-bottom: 20px;
   display: flex;
@@ -863,7 +894,7 @@
   z-index: 50;
 }
 .admin-console dialog {
-  background: #fff;
+  background: var(--surface);
   box-shadow: none;
 }
 .admin-console td strong {
@@ -896,7 +927,7 @@
   justify-self: end;
 }
 .admin-console .footer-note {
-  color: #69716e;
+  color: var(--muted);
 }
 .admin-console .detail-grid dd {
   white-space: normal;
@@ -906,7 +937,7 @@
 }
 .admin-console .panel {
   box-shadow: none;
-  background: white;
+  background: var(--surface);
 }
 .admin-console .form-row textarea {
   width: 100%;
@@ -916,7 +947,7 @@
   border: 0;
 }
 .admin-console .dialog-body h2 {
-  color: #252b2a;
+  color: var(--ink);
 }
 .admin-console .link {
   min-width: 0;
@@ -995,7 +1026,7 @@
   height: 6px;
 }
 .admin-console input::placeholder {
-  color: #69716e;
+  color: var(--hint);
 }
 @media (max-width: 720px) {
   .admin-console .metric:nth-child(2) {
@@ -1010,8 +1041,8 @@
 
 
 
-.admin-console .status.bad{background:var(--red-soft, #f7e9e6);color:var(--red, #a6534d)}
-.admin-console .status.bad:before{background:#c83b38;flex-shrink:0}
+.admin-console .status.bad{background:var(--red-soft);color:var(--red)}
+.admin-console .status.bad:before{background:var(--red);flex-shrink:0}
 
 /* Tables become labeled cards on narrow screens. */
 @media (max-width: 760px) {
@@ -1025,7 +1056,7 @@
     border: 1px solid var(--line);
     border-radius: 12px;
     padding: 12px 14px;
-    background: #fff;
+    background: var(--surface);
   }
   .admin-console td {
     display: flex;
@@ -1046,7 +1077,7 @@
   .admin-console td.mono,
   .admin-console td.break { overflow-wrap: anywhere; }
   .admin-console td.actions { justify-content: flex-start; }
-  .admin-console tbody tr:hover { background: #fff; }
+  .admin-console tbody tr:hover { background: var(--surface); }
 }
 
 

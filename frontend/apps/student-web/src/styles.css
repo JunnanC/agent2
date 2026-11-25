@@ -1,90 +1,7 @@
-/* Student portal refinement. Method: unslop by @heydamir, CC BY 4.0. */
-.student-portal{--radius:12px;--radius-input:8px;--panel-gap:24px;--panel-pad:24px;--content-pad:32px}
-.student-portal body{font-family:'Segoe UI','Microsoft YaHei','PingFang SC',sans-serif;line-height:1.6}
-.student-portal h1,.student-portal h2,.student-portal h3{font-weight:500}
-.student-portal .brand-name{font-weight:600}
-.student-portal .side-nav-shell>.topbar{padding:32px 20px;gap:24px}
-.student-portal .side-nav-shell .brand-lockup{padding:0;gap:12px}
-.student-portal .brand-mark{border-radius:8px;width:32px;height:32px}
-.student-portal .side-nav-shell .nav-item{display:flex;align-items:center;gap:12px;min-height:40px;padding:8px 16px;border:0}
-.student-portal .side-nav-shell .nav-item svg{flex:none}
-.student-portal .side-nav-shell .nav-item.active{background:var(--teal-soft)}
-.student-portal .sidebar-toggle{display:flex;align-items:center;gap:12px;height:36px;padding:8px 16px;border:1px solid var(--line);border-radius:8px;background:white;color:var(--muted);font:inherit;font-size:12px;cursor:pointer}
-.student-portal .sidebar-toggle:hover{background:var(--surface-soft);color:var(--ink)}
-.student-portal .crumb{padding:24px 0 0;margin-bottom:0}
-.student-portal .student-overview-heading{display:flex;justify-content:space-between;align-items:center;gap:24px;padding:32px 0}
-.student-portal .student-overview-heading h1{font-size:24px;line-height:1.3;margin-bottom:8px}
-.student-portal .student-overview-heading p{margin:0;color:#536168}
-.student-portal .student-overview-heading time{color:var(--muted);font-size:12px;font-variant-numeric:tabular-nums}
-.student-portal .student-overview-heading+.section{margin-top:0}
-.student-portal .metric-strip .metric{padding:0 20px}
-.student-portal .metric .value{font-size:32px;font-weight:500;font-variant-numeric:tabular-nums}
-.student-portal .eyebrow{text-transform:none;letter-spacing:0;font-size:12px;font-weight:500}
-.student-portal .panel-title h2{font-size:18px}
-.student-portal .student-overview-grid{grid-template-columns:repeat(2,minmax(0,1fr));margin-top:24px}
-.student-portal .student-overview-grid .panel-title{display:block;margin-bottom:24px}
-.student-portal .student-overview-grid .panel-title .subtle{display:block;margin-top:4px}
-.student-portal .calendar-weekdays{font-size:12px;padding-bottom:12px}
-.student-portal .calendar-grid{grid-auto-rows:48px}
-.student-portal .calendar-day{background:transparent;align-items:center;justify-content:center;padding:0}
-.student-portal .calendar-day:hover{background:var(--teal-soft)}
-.student-portal .calendar-day.selected{background:var(--teal)}
-.student-portal .calendar-day.selected .calendar-day-number{color:white}
-.student-portal .calendar-day-number{font-size:14px;font-variant-numeric:tabular-nums}
-.student-portal .calendar-count{font-size:11px;font-weight:500;bottom:2px;right:2px}
-.student-portal .calendar-focus-list{gap:0}
-.student-portal .calendar-focus-list>.eyebrow{color:var(--teal);border-left:2px solid var(--teal);padding-left:12px;margin-bottom:16px}
-.student-portal .calendar-focus-task{padding:20px 0;border:0;border-top:1px solid var(--line);border-radius:0;background:transparent;gap:16px}
-.student-portal .calendar-focus-task:hover{background:var(--surface-soft)}
-.student-portal .calendar-focus-task>span:first-child{gap:8px}
-.student-portal .calendar-focus-task strong{font-size:16px;font-weight:500;overflow-wrap:anywhere}
-.student-portal .calendar-focus-task .calendar-focus-course{color:var(--muted);font-size:12px;font-weight:400}
-.student-portal .profile-trigger-text strong{font-size:14px;font-weight:500}
-.student-portal .profile-trigger-text small{font-size:12px}
-.student-portal .btn{gap:8px;padding:8px 14px;min-height:40px}
-@media(min-width:1051px){
-.student-portal .side-nav-shell>.topbar{display:flex;flex-direction:column;height:100dvh;min-height:100dvh}
-.student-portal .side-nav-shell .primary-nav{flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden}
-.student-portal .side-nav-shell .topbar-actions{margin-top:auto;flex-shrink:0;width:100%}
-.student-portal .nav-collapsed{grid-template-columns:80px minmax(0,1fr)}
-.student-portal .nav-collapsed>.topbar{padding:32px 16px;align-items:center}
-.student-portal .nav-collapsed .brand-name,.student-portal .nav-collapsed .nav-label,.student-portal .nav-collapsed .profile-trigger-text,.student-portal .nav-collapsed .profile-trigger>svg{display:none}
-.student-portal .nav-collapsed .primary-nav,.student-portal .nav-collapsed .topbar-actions{width:100%}
-.student-portal .nav-collapsed .nav-item,.student-portal .nav-collapsed .sidebar-toggle,.student-portal .nav-collapsed .profile-trigger{width:48px;justify-content:center;padding:8px}
-.student-portal .nav-collapsed .profile-popover{left:calc(100% + 12px);bottom:0}
-}
-@media(max-width:1050px){
-.student-portal{--content-pad:24px}
-.student-portal .sidebar-toggle{display:none}
-.student-portal .side-nav-shell>.topbar{padding:0 24px;gap:16px}
-.student-portal .side-nav-shell .nav-item{padding:8px 12px}
-.student-portal .brand-lockup .context-label,.student-portal .brand-lockup .context-dot{display:none}
-.student-portal .student-overview-grid{grid-template-columns:minmax(0,1fr)}
-}
-@media(max-width:760px){
-.student-portal{--content-pad:16px;--panel-pad:16px}
-.student-portal .side-nav-shell>.topbar{height:auto;flex-wrap:wrap;padding:16px 20px;gap:12px;position:relative}
-.student-portal .side-nav-shell .brand-name{display:inline;font-size:14px}
-.student-portal .side-nav-shell .primary-nav{order:3;flex-basis:100%;justify-content:space-between}
-.student-portal .side-nav-shell .topbar-actions{margin-left:auto}
-.student-portal .side-nav-shell .nav-item{font-size:13px;gap:8px}
-.student-portal .student-overview-heading{padding:24px 0}
-.student-portal .student-overview-heading h1{font-size:20px}
-.student-portal .student-overview-heading time{display:none}
-.student-portal .metric-strip{grid-template-columns:repeat(2,minmax(0,1fr));gap:0}
-.student-portal .metric-strip .metric{padding:16px}
-.student-portal .metric-strip .metric:nth-child(2){border-right:0}
-.student-portal .metric-strip .metric:nth-child(-n+2){border-bottom:1px solid var(--line)}
-.student-portal .metric .value{font-size:32px}
-.student-portal .calendar-focus-task{align-items:flex-start}
-.student-portal .calendar-focus-task strong{font-size:14px}
-}
-.student-portal .metric strong{font-size:32px;font-weight:500;letter-spacing:0;font-variant-numeric:tabular-nums}
-@media(max-width:760px){.student-portal .metric-strip .metric{border-top:0;border-bottom:0}.student-portal .metric-strip .metric:nth-child(-n+2){border-bottom:1px solid var(--line)}.student-portal .metric strong{font-size:32px}}
 /* Courses and notifications retain their existing API flows and content order. */
 .student-portal .courses-browser{padding:0;border:0;background:transparent;min-height:0}
 .student-portal .course-card-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:20px}
-.student-portal .student-course-entry{display:flex;flex-direction:column;border:1px solid var(--line);border-radius:12px;background:white;overflow:hidden;min-width:0}
+.student-portal .student-course-entry{display:flex;flex-direction:column;border:1px solid var(--line);border-radius:12px;background:var(--surface);overflow:hidden;min-width:0}
 .student-portal .course-card{min-height:264px;border:0;border-radius:0;box-shadow:none;transition:background 160ms ease-out;flex:1}
 .student-portal .course-card[href]:hover{transform:none;box-shadow:none;background:var(--surface-soft)}
 .student-portal .course-card-head{padding:24px 24px 0;gap:12px}
@@ -136,7 +53,7 @@
 .student-portal .history-year>summary small,
 .student-portal .history-term>summary small{color:var(--muted);font-size:12px}
 .student-portal .history-terms{display:grid;gap:10px;margin:10px 0 0 20px;padding-left:14px;border-left:2px solid var(--line)}
-.student-portal .history-term{background:#fff;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.student-portal .history-term{background:var(--surface);border:1px solid var(--line);border-radius:10px;overflow:hidden}
 .student-portal .history-course{padding:14px 16px;border-top:1px solid var(--line)}
 .student-portal .history-course-head{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin-bottom:6px}
 .student-portal .history-course .item{padding:8px 0}
@@ -152,11 +69,11 @@
 .student-portal .notification-card{padding:24px 0;border:0;border-bottom:1px solid var(--line);border-radius:0;gap:20px}
 .student-portal .notification-card:last-child{border-bottom:0}
 .student-portal .notification-card.read{opacity:1}
-.student-portal .notification-card.read .notification-card-head strong{color:#536168}
+.student-portal .notification-card.read .notification-card-head strong{color:var(--muted)}
 .student-portal .notification-icon{width:18px;height:24px;background:transparent;color:var(--muted);border-radius:0}
 .student-portal .notification-card-head{gap:16px;flex-wrap:wrap}
 .student-portal .notification-card-head strong{font-size:16px;font-weight:500}
-.student-portal .notification-card p{line-height:1.8;color:#536168;overflow-wrap:anywhere}
+.student-portal .notification-card p{line-height:1.8;color:var(--muted);overflow-wrap:anywhere}
 .student-portal .notification-actions{margin-top:16px;gap:12px}
 .student-portal .notification-card>.status{align-self:flex-start;font-size:12px}
 
@@ -164,7 +81,7 @@
 .student-portal .course-card-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:12px}
 .student-portal .student-course-row{
   display:grid;grid-template-columns:150px minmax(0,1fr) 220px;gap:24px;align-items:stretch;
-  padding:28px;background:#fff;border:1px solid var(--line);border-radius:12px;min-height:176px;
+  padding:28px;background:var(--surface);border:1px solid var(--line);border-radius:12px;min-height:176px;
 }
 .student-portal .student-course-code{
   display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:10px;min-width:0;
@@ -193,54 +110,6 @@
 @media(max-width:1200px){.student-portal .course-card-grid{grid-template-columns:minmax(0,1fr)}}
 @media(max-width:760px){.student-portal .course-card-grid{grid-template-columns:minmax(0,1fr)}.student-portal .notification-card{gap:12px;flex-wrap:wrap}.student-portal .notification-card-head{flex-direction:column;align-items:flex-start;gap:8px}.student-portal .notification-card-head strong{font-size:14px}.student-portal .notification-card>.status{margin-left:30px}.student-portal .student-overview-heading{align-items:flex-start}.student-portal .student-overview-heading .btn{flex:none}}
 
-/* Match the admin console palette and the approved homepage prototype. */
-.student-portal{--paper:#f1f3f2;--ink:#252b2a;--muted:#69716e;--line:#e7eae8;--teal:#246657;--teal-soft:#e2e9e4;--content-pad:32px}
-.student-portal .panel{background:#fff;border:1px solid var(--line);box-shadow:none;border-radius:12px}
-.student-portal .brand-mark{background:transparent;color:var(--teal)}
-.student-portal .student-overview-heading h1{font-size:24px;margin-bottom:8px}
-.student-portal .student-overview-heading{padding:20px 0}
-.student-portal .student-overview-grid{margin-top:24px;gap:24px}
-.student-portal .panel-title h2{font-size:16px}
-@media(min-width:1051px){
-.student-portal .side-nav-shell>.topbar{position:sticky;top:0;display:grid;grid-template-columns:minmax(0,1fr) 28px;align-content:start;gap:24px 4px;padding:28px 16px;background:#f1f3f2;border-right:0}
-.student-portal .side-nav-shell .brand-lockup{grid-column:1;min-width:0;gap:8px;flex-wrap:wrap}
-.student-portal .brand-name{font-size:16px;white-space:nowrap}
-.student-portal .brand-mark{width:24px;height:24px}
-.student-portal .context-dot,.student-portal .context-label{display:none}
-.student-portal .side-nav-shell .sidebar-toggle{grid-column:2;grid-row:1;align-self:start;width:28px;height:28px;padding:4px;justify-content:center;background:transparent;border:0}
-.student-portal .sidebar-toggle .nav-label{display:none}
-.student-portal .side-nav-shell .primary-nav,.student-portal .side-nav-shell .topbar-actions{grid-column:1 / -1}
-.student-portal .side-nav-shell .nav-item{min-height:40px;padding:8px 12px}
-.student-portal .nav-collapsed>.topbar{display:flex;align-items:center;padding:28px 16px}
-.student-portal .nav-collapsed .sidebar-toggle{width:28px}
-}
-
-/* Keep the account in the last row of the current two-column sidebar header. */
-@media(min-width:1051px){
-.student-portal .side-nav-shell>.topbar{grid-template-areas:"brand toggle" "navigation navigation" "account account";grid-template-rows:auto minmax(0,1fr) auto;align-content:stretch;height:100dvh;min-height:0}
-.student-portal .side-nav-shell .brand-lockup{grid-area:brand}
-.student-portal .side-nav-shell .sidebar-toggle{grid-area:toggle}
-.student-portal .side-nav-shell .primary-nav{grid-area:navigation;min-height:0;overflow-y:auto;overflow-x:hidden}
-.student-portal .side-nav-shell .topbar-actions{grid-area:account;margin-top:0}
-.student-portal .nav-collapsed>.topbar{display:grid;grid-template-columns:minmax(0,1fr);grid-template-areas:"brand" "navigation" "account";grid-template-rows:auto minmax(0,1fr) auto;align-items:stretch}
-.student-portal .nav-collapsed .brand-lockup{justify-self:center}
-}
-
-@media(max-width:760px){.student-portal .student-overview-heading h1{font-size:20px}}
-
-@media(max-width:760px){.student-portal .btn:not(.sm){min-height:44px}}
-
-@media(max-width:760px){.student-portal .side-nav-shell .nav-item{min-height:44px}}
-
-/* Course cards are the surfaces; the browser wrapper is not a second panel. */
-.student-portal .panel.courses-browser{background:transparent;border:0;padding:0;border-radius:0;min-height:0}
-.student-portal .course-card-grid{grid-template-columns:minmax(0,1fr);justify-content:stretch;gap:12px}
-.student-portal .course-card{border:1px solid var(--line);border-radius:12px;background:#fff;overflow:hidden}
-
-@media(min-width:1051px){
-.student-portal .side-nav-shell .sidebar-toggle{grid-area:auto;grid-column:auto;grid-row:auto}
-.student-portal .student-overview-heading{padding:20px 0}
-}
 
 .asset-actions { display: inline-flex; flex-wrap: wrap; gap: 8px; margin-inline-start: 12px; }
 @media (min-width: 901px) {
@@ -254,29 +123,163 @@
   .course-learning-main { overflow: visible; min-width: 0; }
 }
 
-/* 概览在较矮的浏览器窗口中收紧纵向留白，避免内容只超出一点却出现整页滚动条 */
-@media (min-width: 1051px) {
-  .student-portal .student-overview-grid .panel { min-height: 555px; }
+/* Student portal tokens follow the approved teacher agenda. */
+.student-portal {
+  --paper: #f8f5ee;
+  --surface: #fffdf8;
+  --surface-soft: #f9f5ef;
+  --ink: #312a25;
+  --muted: #675e55;
+  --line: #ded5c8;
+  --control: #cfc4b5;
+  --teal: #793b44;
+  --teal-soft: #f2e6e5;
+  --accent-hover: #632c35;
+  --green: #226647;
+  --green-soft: #eaf5ef;
+  --amber: #865209;
+  --amber-soft: #fff2da;
+  --blue: #2454ac;
+  --blue-soft: #edf3fe;
+  --radius: 5px;
+  --radius-input: 4px;
+  --topbar-h: 58px;
+  --content-max: 1240px;
+  --content-pad: 32px;
+  --panel-gap: 16px;
+  --panel-pad: 20px;
+  --display: Georgia, "Source Han Serif SC", "Noto Serif CJK SC", "Songti SC", SimSun, serif;
+  color-scheme: light;
 }
-@media (max-height: 880px) {
-  .student-portal .student-overview-heading { padding: 6px 0 10px; }
-  .student-portal .student-overview-heading h1 { font-size: 22px; margin-bottom: 2px; }
-  .student-portal .main-content > .panel { padding: 18px; }
-  .student-portal .main-content > .panel .metric-strip .metric { min-height: 76px; padding: 4px 20px; }
-  .student-portal .main-content > .panel .metric strong { font-size: 28px; }
-  .student-portal .student-overview-grid { margin-top: 14px; gap: 16px; }
-  .student-portal .student-overview-grid .panel { padding: 18px; }
-  .student-portal .student-overview-grid .panel-title { margin-bottom: 12px; }
+.student-portal body {
+  font-family: "Segoe UI", "Microsoft YaHei UI", "PingFang SC", "Noto Sans CJK SC", sans-serif;
+  font-variant-numeric: tabular-nums;
 }
-@media (max-height: 820px) {
-  .student-portal .main-content > .panel { padding: 14px 18px; }
-  .student-portal .main-content > .panel .metric-strip .metric { min-height: 64px; }
-  .student-portal .student-overview-grid .panel { padding: 18px; min-height: 400px; }
-  .student-portal .student-overview-grid .panel-title { margin-bottom: 8px; }
-  .student-portal .calendar-focus-list { gap: 4px; }
-  .student-portal .calendar-focus-task { padding: 8px 10px; gap: 8px; }
-  .student-portal .calendar-focus-task > span:first-child { gap: 2px; }
-  .student-portal .calendar-focus-task strong { font-size: 13px; }
-  .student-portal .calendar-focus-task small { font-size: 11px; }
-  .student-portal .calendar-focus-list .btn.sm { min-height: 28px; padding: 2px 8px; }
+.student-portal h1, .student-portal h2, .student-portal .brand-name { font-family: var(--display); }
+.student-portal h1 { font-size: 36px; line-height: 1.22; font-weight: 600; }
+.student-portal .topbar {
+  position: relative;
+  padding-inline: max(var(--content-pad), calc((100% - 1176px) / 2));
+  background: var(--paper);
+}
+.student-portal .brand-name { display: inline; font-size: 18px; }
+.student-portal .brand-mark { background: transparent; color: var(--teal); }
+.student-portal .context-dot, .student-portal .context-label { display: none; }
+.student-portal .avatar { background: #eee9de; color: #53483b; }
+.student-portal .topbar-actions { gap: 12px; }
+.student-portal .topbar .icon-btn:hover, .student-portal .profile-trigger:hover { background: var(--teal-soft); }
+.student-portal .panel { background: var(--surface); box-shadow: none; }
+.student-portal .btn, .student-portal .field { border-color: var(--control); }
+.student-portal .btn.primary { border-color: var(--teal); }
+.student-portal .btn.primary:hover:enabled, .student-portal a.btn.primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+.student-portal .crumb { padding: 6px 0; }
+.student-back { display: inline-flex; align-items: center; gap: 4px; margin-top: 20px; color: var(--muted); }
+.student-overview-heading, .agenda-heading, .agenda-section-title, .agenda-folio-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+}
+.student-overview-heading, .agenda-heading { padding: 32px 0 26px; }
+.agenda-heading > div, .agenda-week-step, .agenda-switch, .agenda-pager { display: inline-flex; align-items: center; gap: 8px; }
+.agenda-heading select, .agenda-week-step, .agenda-switch {
+  border: 1px solid var(--control); border-radius: 4px; background: var(--surface); color: var(--ink); font: inherit;
+}
+.agenda-heading select { min-height: 40px; padding: 0 10px; max-width: 100%; }
+.student-journal {
+  display: grid; grid-template-columns: minmax(244px, 26%) minmax(0, 1fr);
+  grid-template-rows: auto 1fr;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+}
+.student-journal :focus-visible { outline-offset: -2px; }
+.agenda-month, .agenda-classes { min-width: 0; background: #f0eadf; border-right: 1px solid var(--line); }
+.agenda-month { grid-area: 1 / 1; padding: 25px 22px 0; border-radius: 5px 0 0 0; }
+.agenda-section-title { flex-wrap: wrap; }
+.agenda-section-title > a { font-size: 13px; }
+.agenda-section-title h2 { font-size: 18px; }
+.agenda-month-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); justify-items: center; gap: 3px 0; margin-top: 10px; }
+.agenda-month-grid small { padding: 6px 0; font-size: 11px; }
+.agenda-pager { gap: 0; }
+.agenda-month-grid button, .agenda-week-days button, .agenda-pager button, .agenda-switch button, .agenda-week-step button {
+  border: 0; background: transparent; color: inherit; font: inherit; cursor: pointer;
+}
+.agenda-pager button, .agenda-week-step button { display: grid; place-items: center; height: 32px; width: 28px; padding: 0; }
+.agenda-month-grid button { position: relative; width: 31px; height: 31px; border-radius: 50%; padding: 0; font-size: 13px; }
+.agenda-month-grid button[data-has-tasks=true]::after { content: ""; position: absolute; left: calc(50% - 1.5px); bottom: 3px; width: 3px; height: 3px; border-radius: 50%; background: currentColor; }
+.agenda-month-grid button:hover, .agenda-pager button:hover, .agenda-week-step button:hover { background: #e6ddcf; }
+.agenda-month-grid button[aria-pressed=true], .agenda-week-days button[aria-pressed=true] { color: #fff; background: var(--teal); }
+.agenda-classes { grid-area: 2 / 1; padding: 24px 22px 22px; border-radius: 0 0 0 5px; }
+.agenda-classes .agenda-section-title { margin-bottom: 9px; padding-top: 19px; border-top: 1px solid #cfc2b1; }
+.agenda-index-row { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 10px 0; min-height: 65px; color: var(--ink); }
+.agenda-index-row + .agenda-index-row { border-top: 1px solid #d9cebf; }
+.agenda-index-row > span, .agenda-period, .agenda-lesson-copy, .agenda-folio-head time span { display: grid; gap: 4px; min-width: 0; }
+.agenda-index-row strong, .agenda-lesson-copy strong { overflow-wrap: anywhere; }
+.agenda-index-row svg, .agenda-lesson svg { flex: none; color: var(--teal); }
+.agenda-folio { grid-area: 1 / 2 / 3; min-width: 0; padding: 22px clamp(22px, 3.2vw, 48px) 27px; }
+.agenda-folio-head { align-items: flex-end; border-bottom: 2px solid #a6917b; padding-bottom: 15px; }
+.agenda-folio-head time { display: flex; align-items: center; gap: 16px; }
+.agenda-folio-head time > strong { font: 400 87px/.98 var(--display); letter-spacing: -.065em; color: var(--teal); }
+.agenda-folio-head time b { font: 600 23px/1.2 var(--display); }
+.agenda-folio-head time small { font-size: 13px; }
+.agenda-switch { padding: 2px; gap: 0; flex: none; }
+.agenda-switch button { border-radius: 2px; padding: 6px 12px; color: var(--muted); font-size: 13px; }
+.agenda-switch button[aria-pressed=true] { background: #eee4df; color: var(--teal); font-weight: 650; }
+.agenda-week-days { display: none; }
+.agenda-lesson-title { min-height: 64px; }
+.agenda-folio h2 { font-size: 21px; }
+.agenda-week-step { gap: 3px; font-size: 12px; }
+.agenda-lessons { margin: 0; padding: 0; list-style: none; }
+.agenda-lessons li + li { border-top: 1px solid var(--line); }
+.agenda-lesson { display: grid; grid-template-columns: 80px minmax(0, 1fr) auto; gap: 16px; align-items: center; padding: 18px; background: #f7f1e8; color: var(--ink); }
+a.agenda-lesson:hover { background: #f1e7db; }
+.agenda-period strong { font: 400 24px/1.15 var(--display); }
+.agenda-lesson-copy { padding: 2px 0 2px 19px; border-left: 2px solid #b58c85; }
+.agenda-lesson-copy strong { font: 600 23px/1.25 var(--display); }
+.agenda-empty { margin: 0; padding: 15px 0; color: var(--muted); }
+.agenda-tasks { margin-top: 24px; border-top: 1px solid var(--line); }
+.agenda-tasks .agenda-section-title { min-height: 53px; }
+.agenda-tasks .calendar-focus-task { border: 0; border-top: 1px solid var(--line); border-radius: 0; padding: 12px 0; background: transparent; }
+.agenda-tasks .calendar-focus-task:hover { background: var(--surface-soft); }
+.agenda-tasks .calendar-focus-task strong { font-size: 15px; }
+.agenda-tasks .calendar-focus-task > span:first-child { min-width: 0; overflow-wrap: anywhere; }
+.student-portal .agenda-metrics { margin-top: 16px; }
+.student-course-nav { display: grid; gap: 4px; padding-bottom: 16px; margin-bottom: 16px; border-bottom: 1px solid var(--line); }
+.student-course-nav > a { padding: 8px 12px; border-radius: 4px; color: var(--ink); }
+.student-course-nav > a:hover, .student-course-nav > a[aria-current] { color: var(--teal); background: var(--teal-soft); }
+@media (max-width: 1050px) {
+  .student-course-nav { display: flex; flex-wrap: wrap; gap: 5px; }
+}
+@media (max-width: 870px) {
+  .student-journal { grid-template-columns: 222px minmax(0, 1fr); }
+  .agenda-month { padding: 18px 13px 0; }
+  .agenda-classes { padding: 24px 13px 18px; }
+  .agenda-month-grid button { width: 27px; height: 29px; }
+  .agenda-folio { padding: 18px; }
+  .agenda-folio-head time > strong { font-size: 68px; }
+  .agenda-lesson { grid-template-columns: 66px minmax(0, 1fr) auto; gap: 9px; }
+}
+@media (max-width: 680px) {
+  .student-portal { --content-pad: 14px; --panel-pad: 14px; }
+  .student-portal h1 { font-size: 28px; }
+  .agenda-heading { flex-direction: column; align-items: stretch; gap: 10px; padding: 18px 0 14px; }
+  .agenda-heading > div { flex-wrap: wrap; }
+  .agenda-heading select { flex: 1; min-width: 0; }
+  .student-journal { display: flex; flex-direction: column; }
+  .agenda-month { display: none; }
+  .agenda-classes { padding: 18px; border: 0; border-top: 1px solid #cfc2b1; border-radius: 0 0 5px 5px; }
+  .agenda-classes .agenda-section-title { padding-top: 0; border: 0; }
+  .agenda-folio { padding: 14px 12px 18px; }
+  .agenda-folio-head { align-items: center; gap: 4px; }
+  .agenda-folio-head time { gap: 10px; }
+  .agenda-folio-head time > strong { font-size: 62px; }
+  .agenda-folio-head time b { font-size: 19px; }
+  .agenda-folio-head time small { font-size: 12px; }
+  .agenda-switch button { min-height: 40px; padding-inline: 7px; }
+  .agenda-week-days { display: grid; grid-template-columns: repeat(7, 1fr); padding: 10px 0; border-bottom: 1px solid var(--line); }
+  .agenda-week-days button { display: grid; justify-items: center; align-content: center; gap: 2px; min-height: 44px; padding: 0; border-radius: 3px; }
+  .agenda-week-days button[aria-pressed=true] small { color: inherit; }
+  .agenda-week-step button { width: 34px; height: 40px; }
+  .agenda-folio h2 { font-size: 18px; }
+  .agenda-lesson { grid-template-columns: 54px minmax(0, 1fr) auto; padding: 12px 10px; }
+  .agenda-lesson-copy { padding-left: 12px; }
+  .agenda-lesson-copy strong, .agenda-period strong { font-size: 20px; }
+  .student-portal .metric-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .student-portal .metric-strip .metric { padding: 8px; }
 }

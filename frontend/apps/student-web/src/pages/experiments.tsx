@@ -1,10 +1,10 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { taskApi } from "@edu/api-client";
 import { keys } from "@edu/query-keys";
 import { Breadcrumbs, DataTable, FilterBar,  PageHeader, Panel, RequestStateView, StatusBadge } from "@edu/ui";
 import { formatDateTime, taskStatusLabel, taskStatusTone } from "@/lib/task-format";
+import { listStudentTasks } from "@/lib/student-tasks";
 
 const STATUS_FILTERS = [
   { value: "all", label: "全部状态" },
@@ -22,8 +22,8 @@ export function Experiments() {
   const [search, setSearch] = useState("");
 
   const tasks = useQuery({
-    queryKey: keys.tasks({ status: status === "all" ? null : status, q: search }),
-    queryFn: () => taskApi.list({ page_size: 50, status: status === "all" ? undefined : status }),
+    queryKey: keys.tasks({ status: status === "all" ? null : status }),
+    queryFn: () => listStudentTasks(status === "all" ? {} : { status }),
   });
 
   const rows = useMemo(() => {
@@ -37,6 +37,10 @@ export function Experiments() {
       <Breadcrumbs items={[{ label: "学生门户" }]} current="我的实验" />
       <PageHeader title="我的实验" />
       <Panel>
+        <FilterBar
+          search={{ value: search, onChange: setSearch, label: "搜索实验任务", placeholder: "按名称搜索" }}
+          selects={[{ label: "状态", value: status, onChange: setStatus, options: STATUS_FILTERS }]}
+        />
         <RequestStateView
           loading={tasks.isLoading}
           error={tasks.error}
@@ -44,16 +48,14 @@ export function Experiments() {
           empty={!rows.length}
           emptyState={(
             <div className="state-block">
-              <strong>暂无实验任务</strong>
-              <p>实验发布后会出现在这里。</p>
-              <Link className="btn" to="/courses">查看我的课程</Link>
+              {search.trim() || status !== "all" ? <strong>没有符合筛选条件的实验</strong> : <>
+                <strong>暂无实验任务</strong>
+                <p>实验发布后会出现在这里。</p>
+                <Link className="btn" to="/courses">查看我的课程</Link>
+              </>}
             </div>
           )}
         >
-          <FilterBar
-            search={{ value: search, onChange: setSearch, label: "搜索实验任务", placeholder: "按名称搜索" }}
-            selects={[{ label: "状态", value: status, onChange: setStatus, options: STATUS_FILTERS }]}
-          />
           <div className="section" style={{ marginTop: 4 }}>
             <DataTable
               rows={rows}

@@ -7,8 +7,8 @@ test.use({ baseURL: process.env.E2E_ADMIN_URL ?? "http://admin.localhost:8080" }
 
 test("平台管理未登录显示登录页", async ({ page }) => {
   await page.goto("/");
-  await expect(page).toHaveTitle(/平台管理/);
-  await expect(page.locator("#root")).not.toBeEmpty();
+  await expect(page.getByRole("heading", { name: "登录平台管理" })).toBeVisible();
+  await expect(page.locator("#a-identifier")).toBeVisible();
 });
 
 test("平台管理员登录后展示运维导航", async ({ page }) => {
@@ -17,6 +17,6 @@ test("平台管理员登录后展示运维导航", async ({ page }) => {
   await page.fill("#a-identifier", ADMIN_ID!);
   await page.fill("#a-password", ADMIN_PASSWORD!);
   await page.click("button[type=submit]");
-  await expect(page.getByRole("navigation", { name: "平台管理" })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "一级导航" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "运行概览" })).toBeVisible();
 });

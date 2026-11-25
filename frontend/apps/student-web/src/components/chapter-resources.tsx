@@ -1,22 +1,14 @@
 import { AssetActions } from "./asset-actions";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { studentApi, taskApi } from "@edu/api-client";
+import { studentApi } from "@edu/api-client";
 import { keys } from "@edu/query-keys";
 import { EmptyState, Panel, RequestStateView, isSafeUrl } from "@edu/ui";
+import { listStudentTasks } from "@/lib/student-tasks";
 
 export function ChapterResources({ courseId, chapterId }: { courseId: string; chapterId: string }) {
   const materials = useQuery({ queryKey: keys.courseResource(courseId, "materials"), queryFn: () => studentApi.courseMaterials(courseId) });
-  const tasks = useQuery({ queryKey: [...keys.tasks({ course_id: courseId }), "all-pages"], queryFn: async () => {
-    const first = await taskApi.list({ course_id: courseId, page_size: 100 });
-    const rows = [...first.rows];
-    for (let page = 2; rows.length < first.total; page++) {
-      const next = await taskApi.list({ course_id: courseId, page_size: 100, page });
-      if (!next.rows.length) break;
-      rows.push(...next.rows);
-    }
-    return { ...first, rows };
-  } });
+  const tasks = useQuery({ queryKey: keys.tasks({ course_id: courseId }), queryFn: () => listStudentTasks({ course_id: courseId }) });
   const files = materials.data?.rows.filter(row => row.chapter_id === chapterId) ?? [];
   const experiments = tasks.data?.rows.filter(row => row.course_chapter_id === chapterId) ?? [];
   return <>
