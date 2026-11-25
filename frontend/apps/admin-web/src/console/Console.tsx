@@ -384,6 +384,11 @@ function PageContent({
       </div>
     );
   else if (current === "students") {
+    // The imported curriculum has no lab-hour metadata, so identify computing courses by subject.
+    const computingCourseTitle = /计算机|编程|程序设计|数据结构|操作系统|数据库|数据仓库|算法|机器学习|图像处理|软件工程|软件设计|软件质量|软件建模|大数据|云计算|微服务|WebUI/i;
+    const teachingClasses = allCourses
+      .filter((course) => ["PUBLISHED", "CLOSED"].includes(course.status) && computingCourseTitle.test(course.title))
+      .map((course) => ({ public_id: course.public_id, name: course.title, code: course.code, type: "teaching" }));
     content = <>
       {!classId && <StudentImport onComplete={() => { void refresh(); }} />}
       {classId ? <div className="class-detail">
@@ -400,7 +405,7 @@ function PageContent({
             {(members.data?.members ?? []).map((member) => { const user = users.data?.find((item) => item.public_id === member.student_id); return <tr key={member.public_id}><td data-label="成员"><strong>{member.student_name}</strong><span className="mono muted">{member.student_id}</span></td><td data-label="账号状态"><Status value={user?.account_status} /></td><td data-label="操作">{user && action("详情", () => open({ kind: "person", account: user, teacher: false }))}</td></tr>; })}
           </Table>
         </div>}
-      </div> : classes.isPending ? <p role="status">正在加载班级</p> : classes.error ? <ErrorState error={classes.error} retry={() => void classes.refetch()} /> : <List rows={[...allCourses.filter((course) => ["PUBLISHED", "CLOSED"].includes(course.status)).map((course) => ({ public_id: course.public_id, name: course.title, code: course.code, type: "teaching" })), ...(classes.data ?? []).filter((item) => item.status === "ACTIVE").map((item) => ({ ...item, type: "administrative" }))]} text={(item) => `${item.name} ${item.code}`} placeholder="搜索班级名称或代码" headings={["班级", "代码", "类型", "操作"]} storageKey="admin-classes-list" tableClassName="classes-table" reserveRows render={(item) => <tr key={`${item.type}-${item.public_id}`}><td data-label="班级">{item.name}</td><td data-label="代码">{item.code}</td><td data-label="类型">{item.type === "teaching" ? "教学班" : "行政班"}</td><td data-label="操作">{action("查看学生名单", () => setParams({ class: item.public_id, type: item.type }))}</td></tr>} />}
+      </div> : classes.isPending ? <p role="status">正在加载班级</p> : classes.error ? <ErrorState error={classes.error} retry={() => void classes.refetch()} /> : <List rows={[...teachingClasses, ...(classes.data ?? []).filter((item) => item.status === "ACTIVE").map((item) => ({ ...item, type: "administrative" }))]} text={(item) => `${item.name} ${item.code}`} placeholder="搜索班级名称或代码" headings={["班级", "代码", "类型", "操作"]} storageKey="admin-classes-list" tableClassName="classes-table" reserveRows render={(item) => <tr key={`${item.type}-${item.public_id}`}><td data-label="班级">{item.name}</td><td data-label="代码">{item.code}</td><td data-label="类型">{item.type === "teaching" ? "教学班" : "行政班"}</td><td data-label="操作">{action("查看学生名单", () => setParams({ class: item.public_id, type: item.type }))}</td></tr>} />}
     </>;
   } else if (current === "teachers") {
     const isTeacher = current === "teachers",

@@ -12,7 +12,14 @@ vi.mock("@edu/auth-client", async (original) => {
   return { ...actual, request: vi.fn(async (path: string) => {
     let data: unknown = [];
     if (path === "/platform/users") data = [{ public_id: "student-1", display_name: "学生甲", account_status: "ACTIVE" }];
-    if (path === "/platform/courses") data = [{ public_id: "course-1", title: "已开设教学班", code: "TEACH-A", status: "PUBLISHED" }];
+    if (path === "/platform/courses") data = [
+      { public_id: "course-1", title: "数据结构", code: "CS-A", status: "CLOSED" },
+      { public_id: "course-2", title: "高级语言程序设计", code: "CS-B", status: "PUBLISHED" },
+      { public_id: "course-3", title: "操作系统", code: "CS-C", status: "DRAFT" },
+      ...["体育1", "大学物理实验", "高等数学1-1", "线性代数", "大学英语(一)"].map((title, index) => ({
+        public_id: `general-${index}`, title, code: `GE-${index}`, status: "CLOSED",
+      })),
+    ];
     if (path === "/platform/administrative-classes") data = [{ public_id: "class-1", name: "班级甲", code: "CLASS-A", status: "ACTIVE" }];
     if (path === "/platform/resource-profiles") data = [{ public_id: "profile-1", code: "STD-512M", name: "标准 0.5 核 / 512 MB", runtime_type: "CONTAINER", status: "ACTIVE", cpu_millicores: 500, memory_mb: 512, disk_gb: 2, network_mode: "DENY_ALL", row_version: 3 }];
     if (path.endsWith("/members")) data = { class: { name: "班级甲" }, members: [{ public_id: "m-1", student_id: "student-1", student_name: "学生甲" }] };
@@ -46,7 +53,11 @@ it("shows classes first then the selected class members", async () => {
   fireEvent.click(screen.getByText("班级甲").closest("tr")!.querySelector("button")!);
   expect(await screen.findByText("学生甲")).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "返回班级列表" }));
-  expect(await screen.findByText("已开设教学班")).toBeInTheDocument();
+  expect(await screen.findByText("数据结构")).toBeInTheDocument();
+  expect(screen.getByText("高级语言程序设计")).toBeInTheDocument();
+  for (const title of ["体育1", "大学物理实验", "高等数学1-1", "线性代数", "大学英语(一)", "操作系统"]) {
+    expect(screen.queryByText(title)).not.toBeInTheDocument();
+  }
   client.clear();
 });
 
