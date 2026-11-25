@@ -18,6 +18,7 @@ vi.mock("@/components/course-discussion", () => ({ CourseDiscussion: ({ courseId
 vi.mock("@/components/course-agent", () => ({ CourseAgent: () => null }));
 
 const course: Course = { public_id: "course-1", code: "CS101", title: "编程基础", status: "PUBLISHED",
+  summary: "课程摘要", description: "学习 **程序设计**。",
   enrollment_mode: "OPEN", capacity: 30, active_enrollment_count: 1, row_version: "1" };
 const enrollment = { public_id: "en-1", course_id: "course-1", course_title: "编程基础", status: "ACTIVE", row_version: "1" } as Enrollment;
 const empty = { rows: [], page: 1, pageSize: 100, total: 0 };
@@ -117,7 +118,9 @@ it("零章节时问答可直接返回课程介绍，进入问答不加载日历"
   const back = screen.getByRole("link", { name: "返回课程介绍" });
   expect(back).toHaveAttribute("href", "/courses/course-1");
   fireEvent.click(back);
-  expect(await screen.findByRole("heading", { name: "课程信息" })).toBeInTheDocument();
+  expect(await screen.findByRole("heading", { name: "课程介绍" })).toBeInTheDocument();
+  expect(screen.getByText("课程摘要")).toBeInTheDocument();
+  expect(screen.getByText("程序设计")).toBeInTheDocument();
   expect(screen.queryByRole("heading", { name: "课程问答内容 course-1" })).not.toBeInTheDocument();
 });
 
@@ -134,7 +137,7 @@ it("待审核或退出后手动访问课程时阻止加载内容，即使本地�
   vi.mocked(studentApi.courseDetail).mockRejectedValue(new ApiError({ status: 403, url: "/courses/course-1", method: "GET",
     kind: "forbidden", payload: { code: "ACTIVE_ENROLLMENT_REQUIRED", message: "需要有效选课" } }));
   show();
-  expect(screen.queryByRole("heading", { name: "课程信息" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("heading", { name: "课程介绍" })).not.toBeInTheDocument();
   expect(await screen.findByText("暂时无法进入课程")).toBeInTheDocument();
   expect(studentApi.courseChapters).not.toHaveBeenCalled();
   expect(studentApi.courseMaterials).not.toHaveBeenCalled();

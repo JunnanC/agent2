@@ -88,18 +88,7 @@ export function StudentJournal({ schedule, date, onSelect, items, children }: Jo
       </div>
     </header>
     <div className="student-journal">
-      <aside className="agenda-aside">
-        <MonthCalendar key={date.slice(0, 7)} date={selected} items={items} onSelect={onSelect} />
-        <section className="agenda-classes">
-          <div className="agenda-section-title"><h2>我的教学班</h2><Link to="/courses">管理课程</Link></div>
-          <RequestStateView {...requestState} empty={!data?.classes.length} emptyState={<p className="agenda-empty">本学期暂无教学班。</p>}>
-            {data?.classes.map(course => <Link className="agenda-index-row" to={`/courses/${course.course_id}`} key={course.course_id}>
-              <span><strong>{course.course_title}</strong><small>{[course.course_code, course.instructor_name].filter(Boolean).join(" · ")}</small></span>
-              <Icon name="chevron-right" size={15} />
-            </Link>)}
-          </RequestStateView>
-        </section>
-      </aside>
+      <MonthCalendar key={date.slice(0, 7)} date={selected} items={items} onSelect={onSelect} />
       <div className="agenda-folio">
         <div className="agenda-folio-head">
           <time dateTime={date}><strong>{selected.getDate()}</strong>
@@ -132,6 +121,15 @@ export function StudentJournal({ schedule, date, onSelect, items, children }: Jo
           {children}
         </section>
       </div>
+      <section className="agenda-classes">
+        <div className="agenda-section-title"><h2>我的教学班</h2><Link to="/courses">管理课程</Link></div>
+        <RequestStateView {...requestState} empty={!data?.classes.length} emptyState={<p className="agenda-empty">本学期暂无教学班。</p>}>
+          {data?.classes.map(course => <Link className="agenda-index-row" to={`/courses/${course.course_id}`} key={course.course_id}>
+            <span><strong>{course.course_title}</strong><small>{[course.course_code, course.instructor_name].filter(Boolean).join(" · ")}</small></span>
+            <Icon name="chevron-right" size={15} />
+          </Link>)}
+        </RequestStateView>
+      </section>
     </div>
   </>;
 }

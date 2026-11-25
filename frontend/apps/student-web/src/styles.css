@@ -185,10 +185,12 @@
 .agenda-heading select { min-height: 40px; padding: 0 10px; max-width: 100%; }
 .student-journal {
   display: grid; grid-template-columns: minmax(244px, 26%) minmax(0, 1fr);
+  grid-template-rows: auto 1fr;
   background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
 }
 .student-journal :focus-visible { outline-offset: -2px; }
-.agenda-aside { min-width: 0; padding: 25px 22px 22px; background: #f0eadf; border-right: 1px solid var(--line); border-radius: 5px 0 0 5px; }
+.agenda-month, .agenda-classes { min-width: 0; background: #f0eadf; border-right: 1px solid var(--line); }
+.agenda-month { grid-area: 1 / 1; padding: 25px 22px 0; border-radius: 5px 0 0 0; }
 .agenda-section-title { flex-wrap: wrap; }
 .agenda-section-title > a { font-size: 13px; }
 .agenda-section-title h2 { font-size: 18px; }
@@ -203,14 +205,14 @@
 .agenda-month-grid button[data-has-tasks=true]::after { content: ""; position: absolute; left: calc(50% - 1.5px); bottom: 3px; width: 3px; height: 3px; border-radius: 50%; background: currentColor; }
 .agenda-month-grid button:hover, .agenda-pager button:hover, .agenda-week-step button:hover { background: #e6ddcf; }
 .agenda-month-grid button[aria-pressed=true], .agenda-week-days button[aria-pressed=true] { color: #fff; background: var(--teal); }
-.agenda-classes { margin-top: 24px; border-top: 1px solid #cfc2b1; padding-top: 19px; }
-.agenda-classes .agenda-section-title { margin-bottom: 9px; }
+.agenda-classes { grid-area: 2 / 1; padding: 24px 22px 22px; border-radius: 0 0 0 5px; }
+.agenda-classes .agenda-section-title { margin-bottom: 9px; padding-top: 19px; border-top: 1px solid #cfc2b1; }
 .agenda-index-row { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 10px 0; min-height: 65px; color: var(--ink); }
 .agenda-index-row + .agenda-index-row { border-top: 1px solid #d9cebf; }
 .agenda-index-row > span, .agenda-period, .agenda-lesson-copy, .agenda-folio-head time span { display: grid; gap: 4px; min-width: 0; }
 .agenda-index-row strong, .agenda-lesson-copy strong { overflow-wrap: anywhere; }
 .agenda-index-row svg, .agenda-lesson svg { flex: none; color: var(--teal); }
-.agenda-folio { min-width: 0; padding: 22px clamp(22px, 3.2vw, 48px) 27px; }
+.agenda-folio { grid-area: 1 / 2 / 3; min-width: 0; padding: 22px clamp(22px, 3.2vw, 48px) 27px; }
 .agenda-folio-head { align-items: flex-end; border-bottom: 2px solid #a6917b; padding-bottom: 15px; }
 .agenda-folio-head time { display: flex; align-items: center; gap: 16px; }
 .agenda-folio-head time > strong { font: 400 87px/.98 var(--display); letter-spacing: -.065em; color: var(--teal); }
@@ -246,7 +248,8 @@ a.agenda-lesson:hover { background: #f1e7db; }
 }
 @media (max-width: 870px) {
   .student-journal { grid-template-columns: 222px minmax(0, 1fr); }
-  .agenda-aside { padding: 18px 13px; }
+  .agenda-month { padding: 18px 13px 0; }
+  .agenda-classes { padding: 24px 13px 18px; }
   .agenda-month-grid button { width: 27px; height: 29px; }
   .agenda-folio { padding: 18px; }
   .agenda-folio-head time > strong { font-size: 68px; }
@@ -259,9 +262,9 @@ a.agenda-lesson:hover { background: #f1e7db; }
   .agenda-heading > div { flex-wrap: wrap; }
   .agenda-heading select { flex: 1; min-width: 0; }
   .student-journal { display: flex; flex-direction: column; }
-  .agenda-aside { display: contents; }
   .agenda-month { display: none; }
-  .agenda-classes { order: 2; margin: 0; padding: 18px; background: #f0eadf; border-radius: 0 0 5px 5px; }
+  .agenda-classes { padding: 18px; border: 0; border-top: 1px solid #cfc2b1; border-radius: 0 0 5px 5px; }
+  .agenda-classes .agenda-section-title { padding-top: 0; border: 0; }
   .agenda-folio { padding: 14px 12px 18px; }
   .agenda-folio-head { align-items: center; gap: 4px; }
   .agenda-folio-head time { gap: 10px; }

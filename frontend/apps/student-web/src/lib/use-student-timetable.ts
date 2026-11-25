@@ -15,5 +15,5 @@ export function useStudentTimetable() {
     next.set("term", id);
     setParams(next);
   };
-  return { timetable, selectTerm };
+  return { term, timetable, selectTerm };
 }

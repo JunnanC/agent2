@@ -24,9 +24,9 @@ for (const kind of ["CHOICE", "PROGRAMMING", "MIXED"] as const) {
     await page.locator("#login-identifier").fill(task!.student);
     await page.locator("#login-password").fill(password!);
     await page.locator("button[type=submit]").click();
-    await expect(page.getByRole("navigation", { name: "一级导航" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "学习日程", exact: true })).toBeVisible();
     await page.goto(`/experiments/${task!.task_id}/assessment`);
-    await expect(page.getByRole("heading", { name: "实验答题", exact: true })).toBeVisible();
+    await expect(page.getByRole("link", { name: "返回实验详情", exact: true })).toHaveAttribute("href", `/experiments/${task!.task_id}`);
     await expect(page.locator("iframe")).toHaveCount(0);
 
     if (kind !== "PROGRAMMING") {
@@ -35,7 +35,7 @@ for (const kind of ["CHOICE", "PROGRAMMING", "MIXED"] as const) {
       await page.getByRole("checkbox", { name: "链表", exact: true }).check();
       await page.getByRole("button", { name: "提交选择题卷", exact: true }).click();
       await page.getByRole("button", { name: "确认交卷", exact: true }).click();
-      await expect(page.getByText("交卷成功，已固定本次提交版本", { exact: true })).toBeVisible();
+      await expect(page.getByText(/^(选择题已提交|交卷成功，已固定本次提交版本)$/)).toBeVisible();
       await expect(page.getByText(/正确选项：/)).toHaveCount(0);
     }
     if (kind !== "CHOICE") {
@@ -53,9 +53,20 @@ for (const kind of ["CHOICE", "PROGRAMMING", "MIXED"] as const) {
       await page.getByRole("button", { name: "确认交卷", exact: true }).click();
       await expect(page.getByText("交卷成功，已固定本次提交版本", { exact: true })).toBeVisible();
     }
-    await expect(page.getByText(/两部分已交齐/)).toBeVisible();
+    const submittedChoice = page.getByRole("button", { name: "已提交选择题", exact: true });
+    const submittedAll = page.getByText("本实验各部分已交齐。", { exact: true });
+    if (kind === "CHOICE") {
+      await expect(submittedChoice.or(submittedAll)).toBeVisible();
+      if (await submittedChoice.isVisible()) {
+        await page.reload();
+        await expect(submittedChoice).toBeDisabled();
+        await expect(page.getByRole("radio", { name: "后进先出", exact: true })).toBeChecked();
+        return;
+      }
+    }
+    await expect(submittedAll).toBeVisible();
     await page.reload();
-    await expect(page.getByText(/两部分已交齐/)).toBeVisible();
+    await expect(submittedAll).toBeVisible();
     await page.getByText("交卷历史", { exact: true }).click();
     await expect(page.getByText(/当前有效/).first()).toBeVisible();
   });

@@ -7,6 +7,7 @@ html:root {
   --surface-soft: #f4eee6;
   --ink: #312a25;
   --muted: #675e55;
+  --hint: #6c6259;
   --line: #ded5c8;
   --control: #cfc4b5;
   --accent: #793b44;
@@ -23,15 +24,15 @@ html:root {
   --red-soft: #f7e9e6;
 }
 
-.auth-card .btn.primary:hover,
-.modal .btn.primary:hover,
+.auth-card .btn.primary:enabled:hover,
+.modal .btn.primary:enabled:hover,
 .admin-console button.primary:enabled:hover {
   background-color: var(--accent-hover);
   border-color: var(--accent-hover);
 }
 .auth-card .field { background-color: #fff; border-color: var(--control); }
 .auth-card .field:focus { border-color: var(--accent); }
-.auth-card .field::placeholder { color: #6c6259; }
+.auth-card .field::placeholder { color: var(--hint); }
 .profile-trigger .avatar { background-color: #eee9de; color: #53483b; }
 .toast:not(.error) { background-color: var(--accent-hover); }
 .modal-backdrop.open { background-color: #17273f77; }
@@ -244,7 +245,8 @@ html:root {
 }
 .admin-console .notice {
   border: 1px solid var(--line);
-  background: #f4ece7;
+  background: var(--amber-soft);
+  color: var(--amber);
   border-radius: 8px;
   padding: 16px;
   display: flex;
@@ -465,7 +467,7 @@ html:root {
   padding-right: 10px;
 }
 .admin-console tbody tr:hover {
-  background: #f8faf6;
+  background: var(--surface-soft);
 }
 .admin-console .reserve-row td {
   height: 62px;
@@ -620,7 +622,7 @@ html:root {
   border-radius: 4px;
 }
 .admin-console .bar.warning i {
-  background: #ac8a55;
+  background: var(--amber);
 }
 .admin-console .resource-line {
   margin-bottom: 24px;
@@ -1024,7 +1026,7 @@ html:root {
   height: 6px;
 }
 .admin-console input::placeholder {
-  color: var(--muted);
+  color: var(--hint);
 }
 @media (max-width: 720px) {
   .admin-console .metric:nth-child(2) {

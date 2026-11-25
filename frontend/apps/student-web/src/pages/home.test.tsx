@@ -66,9 +66,26 @@ it("保留课表加载期间选择的日期", async () => {
 });
 
 it("新实验从日历进入轻量答题，不进入旧工作台", async () => {
-  show(tasks(1).map(task => ({ ...task, assessment_available: true, allowed_actions: ["enter"] })));
+  show(tasks(1).map(task => ({ ...task, assessment_available: true, allowed_actions: ["enter"],
+    window_start: new Date(Date.now() - 60_000).toISOString(), effective_deadline: new Date(Date.now() + 60_000).toISOString() })));
   fireEvent.click(await screen.findByRole("button", { name: /10日任务1/ }));
   expect(await screen.findByText("轻量答题页面")).toBeInTheDocument();
+});
+
+it("答题窗口结束后，日历待办进入任务详情", async () => {
+  show(tasks(1).map(task => ({ ...task, assessment_available: true,
+    window_start: new Date(Date.now() - 86_400_000).toISOString(), effective_deadline: new Date(Date.now() - 60_000).toISOString() })));
+  fireEvent.click(await screen.findByRole("button", { name: /10日任务1/ }));
+  expect(await screen.findByText("任务详情页面")).toBeInTheDocument();
+});
+
+it("待办和概览都包含接口后续页的任务", async () => {
+  const firstPage = tasks(100, "11").map(task => ({ ...task, course_id: "past-course" }));
+  vi.mocked(taskApi.list).mockResolvedValueOnce({ ...list(firstPage), pageSize: 100, total: 101 });
+  show(tasks(1));
+  expect(await screen.findByRole("button", { name: /编程基础.*10日任务1/ })).toBeInTheDocument();
+  expect(taskApi.list).toHaveBeenLastCalledWith({ page_size: 100, page: 2 });
+  expect(screen.getByText("101")).toBeInTheDocument();
 });
 
 it("7 项任务分为 3、3、1 项，保留总数并禁用首尾翻页", async () => {
@@ -135,6 +152,8 @@ it("刷新后任务减少时回落到有效末页", async () => {
   act(() => { client.setQueryData(keys.tasks({ scope: "my" }), list(tasks(3))); });
   await waitFor(() => expect(taskButtons()).toHaveLength(3));
   expect(screen.queryByRole("navigation", { name: "待完成任务分页" })).not.toBeInTheDocument();
+  act(() => { client.setQueryData(keys.tasks({ scope: "my" }), list(tasks(9))); });
+  expect(await screen.findByText("第 1 / 3 页")).toBeInTheDocument();
 });
 
 it.each([0, 1, 3])("%i 项任务不显示分页导航", async (count) => {
