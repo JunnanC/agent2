@@ -31,7 +31,12 @@ export function Home() {
     queryFn: () => allPages((page) => teachingApi.courses({ page, page_size: 100 })),
   });
   const data = timetable.isPlaceholderData ? undefined : timetable.data;
-  const term = { id: data?.term.public_id ?? termParam ?? "", label: data?.term.name ?? "学期" };
+  const selectedTerm = data?.term ?? timetable.data?.terms.find((item) => item.public_id === termParam);
+  const term = {
+    id: selectedTerm?.public_id ?? termParam ?? "",
+    label: selectedTerm?.name ?? "学期",
+    calendar: selectedTerm?.calendar,
+  };
   const courseRows = (courses.data ?? []).filter((course) =>
     data && (course.term_id === data.term.public_id || data.classes.some((entry) => entry.course_id === course.public_id)));
   const publications = useQueries({ queries: courseRows.map((course) => publicationQuery(course.public_id)) });

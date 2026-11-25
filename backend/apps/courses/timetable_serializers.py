@@ -26,10 +26,16 @@ class GenericTimetableResponseSerializer(serializers.Serializer):
     meta = serializers.DictField(child=serializers.JSONField(), required=False)
 
 
+class TimetableCalendarSerializer(serializers.Serializer):
+    starts_on = serializers.DateField()
+    ends_on = serializers.DateField()
+
+
 class TimetableTermSerializer(serializers.Serializer):
     public_id = serializers.CharField()
     code = serializers.CharField()
     name = serializers.CharField()
+    calendar = TimetableCalendarSerializer(allow_null=True)
 
 
 class TimetableClassSerializer(serializers.Serializer):
@@ -62,3 +68,14 @@ class TermTimetableDataSerializer(serializers.Serializer):
 
 class TermTimetableResponseSerializer(GenericTimetableResponseSerializer):
     data = TermTimetableDataSerializer()
+
+
+class TeachingCourseTimetableDataSerializer(serializers.Serializer):
+    course_id = serializers.CharField()
+    class_type = serializers.ChoiceField(choices=["TEACHING"])
+    term = TimetableTermSerializer()
+    schedules = TimetableScheduleSerializer(many=True)
+
+
+class TeachingCourseTimetableResponseSerializer(GenericTimetableResponseSerializer):
+    data = TeachingCourseTimetableDataSerializer()
