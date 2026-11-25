@@ -11,6 +11,7 @@ import { Enrollments } from "./enrollments";
 const writeText = vi.fn(async () => {});
 vi.mock("@edu/api-client", () => ({ teachingApi: {
   enrollments: vi.fn(async () => ({ rows: [] })), course: vi.fn(async () => ({ title: "课程" })),
+  publications: vi.fn(async () => ({ rows: [], total: 0 })),
   invitations: vi.fn(async () => ({ rows: [{ public_id: "old", code: "abc***", status: "ACTIVE" }] })),
   createInvitation: vi.fn(async () => ({ public_id: "new", code: "plain-code-123" })),
 } }));
@@ -25,10 +26,11 @@ function renderEnrollments() {
   return client;
 }
 
-it("generates and copies a new invitation from the course heading when the old code is masked", async () => {
+it("opens invitation management and copies a new code when the old code is masked", async () => {
   const client = renderEnrollments();
+  expect(await screen.findByRole("link", { name: "管理邀请码" })).toHaveAttribute("href", "/courses/c/enrollments#course-invitation");
+  fireEvent.click(screen.getByText("管理课程邀请码", { selector: "summary" }));
   const actions = screen.getByRole("group", { name: "课程邀请码" });
-  expect(actions.closest(".course-context")).toContainElement(await screen.findByRole("heading", { name: "课程" }));
   const invitation = within(actions);
   await invitation.findByText("旧邀请码已脱敏，可生成新码");
   expect(invitation.getByRole("button", { name: "复制邀请码" })).toBeDisabled();
@@ -46,6 +48,8 @@ it("copies the existing readable invitation without generating a new one", async
   const active: Invitation = { public_id: "active", course_id: "c", status: "ACTIVE", code: "existing-code", recoverable: true };
   vi.mocked(teachingApi.invitations).mockResolvedValueOnce({ rows: [active], total: 1, page: 1, pageSize: 20 });
   const client = renderEnrollments();
+  await screen.findByRole("heading", { name: "课程" });
+  fireEvent.click(await screen.findByText("管理课程邀请码", { selector: "summary" }));
   const invitation = within(screen.getByRole("group", { name: "课程邀请码" }));
   expect(await invitation.findByText("existing-code")).toBeInTheDocument();
   expect(invitation.getByRole("button", { name: "重新生成邀请码" })).toBeEnabled();

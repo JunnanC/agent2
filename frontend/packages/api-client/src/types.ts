@@ -402,6 +402,8 @@ export interface PrecheckRun {
 
 export interface Publication {
   report_required?: boolean;
+  direct_assessment?: boolean;
+  grades_published_at?: Iso8601 | null;
   report_template?: { asset_id: string; file_name: string } | null;
   course_chapter_id?: string | null;
   public_id: string;

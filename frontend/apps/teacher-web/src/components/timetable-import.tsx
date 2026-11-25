@@ -63,9 +63,10 @@ export function TimetableImport({ termId }: { termId: string }) {
   const editable = job.data?.status === "MAPPING_REQUIRED" || job.data?.status === "READY";
   const currentMapping = mapping ?? job.data?.mapping ?? {};
   const uploadDisabled = !termId || pending || job.data?.status === "RUNNING";
+  const error = upload.error ?? saveMapping.error ?? confirm.error;
 
   const uploadForm = (
-    <form className="student-timetable-upload" onSubmit={(event) => { event.preventDefault(); if (file) upload.mutate(file); }}>
+    <form className="student-timetable-upload" onSubmit={(event) => { event.preventDefault(); if (file && !uploadDisabled) upload.mutate(file); }}>
       <label className="form-label" htmlFor="timetable-file">导入教学班课表（.xlsx，最大 10 MB）</label>
       <div className="student-timetable-upload-controls">
         <input id="timetable-file" type="file" accept=".xlsx" disabled={uploadDisabled} aria-describedby="timetable-upload-hint"
@@ -84,6 +85,7 @@ export function TimetableImport({ termId }: { termId: string }) {
 
   return <Panel className="section" title={<h2>导入教学班</h2>}>
     {uploadForm}
+    {error && <p className="notice" role="alert">{error.message}</p>}
     <div ref={importResults} role="region" aria-label="课表导入结果" tabIndex={-1}>
       <RequestStateView loading={imports.isLoading} error={imports.error} onRetry={() => void imports.refetch()} empty={!imports.data?.rows.length} emptyState={<></>}>
         {(imports.data?.rows.length ?? 0) > 0 && <label className="form-label">最近的导入

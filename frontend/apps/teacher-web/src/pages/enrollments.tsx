@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams } from "react-router-dom";
 import { teachingApi } from "@edu/api-client";
 import type { Enrollment } from "@edu/api-client";
@@ -10,10 +10,12 @@ import {
 } from "@edu/ui";
 import { DirectInvite } from "@/components/direct-invite";
 import { ENROLLMENT_STATUS_LABEL, apiErrorMessage, formatDateTime } from "@/lib/format";
+import { allPages } from "@/lib/all-pages";
 
 export function Enrollments() {
   const { courseId = "" } = useParams();
   const toast = useToast();
+  const client = useQueryClient();
   const [status, setStatus] = useState("PENDING");
   const [search, setSearch] = useState("");
   const [reviewTarget, setReviewTarget] = useState<Enrollment | null>(null);
@@ -25,6 +27,10 @@ export function Enrollments() {
   const enrollments = useQuery({
     queryKey: keys.teachingEnrollments(courseId, { status: status === "ALL" ? null : status }),
     queryFn: () => teachingApi.enrollments(courseId, { status: status === "ALL" ? undefined : status, page: 1 }),
+  });
+  const roster = useQuery({
+    queryKey: keys.teachingEnrollments(courseId, { status: "ACTIVE", scope: "roster" }),
+    queryFn: () => allPages((page) => teachingApi.enrollments(courseId, { status: "ACTIVE", page })),
   });
   const course = useQuery({ queryKey: keys.teachingCourse(courseId), queryFn: () => teachingApi.course(courseId) });
   const importJob = useQuery({
@@ -55,6 +61,10 @@ export function Enrollments() {
 
   const capacity = course.data?.capacity ?? null;
   const used = course.data?.active_enrollment_count ?? approvedCount;
+  const refreshMembers = () => {
+    void client.invalidateQueries({ queryKey: keys.teachingEnrollments(courseId) });
+    void client.invalidateQueries({ queryKey: keys.teachingCourses() });
+  };
 
   const review = useMutation({
     mutationFn: (input: { target: Enrollment; decision: "approve" | "reject" }) =>
@@ -65,7 +75,7 @@ export function Enrollments() {
       toast.notify(input.decision === "approve" ? "已通过选课申请" : "已拒绝选课申请");
       setReviewTarget(null);
       setNote("");
-      void enrollments.refetch();
+      refreshMembers();
     },
     onError: (error) => toast.notify(apiErrorMessage(error), "error"),
   });
@@ -78,7 +88,7 @@ export function Enrollments() {
     onSuccess: () => {
       toast.notify("已提交移除检查");
       setRemoveTarget(null);
-      void enrollments.refetch();
+      refreshMembers();
     },
     onError: (error) => toast.notify(apiErrorMessage(error), "error"),
   });
@@ -115,38 +125,8 @@ export function Enrollments() {
   const jobRunning = ["SUBMITTED", "RUNNING", "PRECHECK_FAILED"].includes(String(jobStatus));
 
   return (
-    <>
-      <div className="tab-head">
-        <h2>成员与申请</h2>
-        <div className="page-actions">
-          <Button onClick={() => fileInputRef.current?.click()}>导入学号名单</Button>
-          <input ref={fileInputRef} type="file" accept=".csv,text/csv" hidden
-            onChange={(event) => {
-              const file = event.target.files?.[0];
-              if (file) runImportPrecheck.mutate(file);
-              event.target.value = "";
-            }} />
-        </div>
-      </div>
-      <p className="subtle">名单使用 UTF-8 CSV，学号列名为 student_number。系统会匹配已注册的学生账号。</p>
-
-      <Panel className="section">
-        <RequestStateView loading={enrollments.isLoading && course.isLoading && !rows.length}
-          error={enrollments.error ?? course.error}
-          onRetry={() => { void enrollments.refetch(); void course.refetch(); }}
-          empty={false} emptyState={null}>
-          <div className="metric-strip">
-            <Metric label="待审核" value={String(pendingCount)} icon="user" sub="需要你处理" />
-            <Metric label="已通过" value={String(approvedCount)} icon="users" sub="已加入课程" />
-            <Metric label="本月申请" value={String(monthApplications)} icon="trending-up" sub="按申请时间统计" />
-            <Metric label="课程容量" value={capacity ? `${Math.min(used, capacity)} / ${capacity}` : `${used} 人已加入`}
-              icon="gauge" sub={capacity ? `剩余 ${Math.max(0, capacity - used)} 个名额` : "未设置容量上限"} />
-          </div>
-        </RequestStateView>
-      </Panel>
-
-      <DirectInvite courseId={courseId} onAdded={() => { void enrollments.refetch(); void course.refetch(); }} />
-      <Panel title={<><h2>申请列表</h2></>}
+    <div className="rail">
+      <Panel title={<><h2>入班申请</h2><span className="small">{course.data?.pending_enrollments ?? pendingCount} 人待审</span></>}
         actions={(
           <>
             <button type="button" className={`btn sm${status === "PENDING" ? " primary" : ""}`} onClick={() => setStatus("PENDING")}>待审核</button>
@@ -171,7 +151,13 @@ export function Enrollments() {
               value={search} onChange={(event) => setSearch(event.target.value)} />
             <span className="subtle" style={{ marginLeft: "auto" }}>{rows.length} 条记录</span>
           </div>
-          <DataTable
+          {status === "PENDING" ? <ul className="work-list roster-requests">
+            {rows.map((row) => <li key={row.public_id} className="work-row">
+              <span><strong>{row.student_name}</strong>
+                <span className="small">{formatDateTime(row.applied_at)}{row.application_message ? ` · ${row.application_message}` : ""}</span></span>
+              <button type="button" className="btn" onClick={() => setReviewTarget(row)}>批准入班</button>
+            </li>)}
+          </ul> : <DataTable
             rows={rows}
             rowKey={(row: Enrollment) => row.public_id}
             columns={[
@@ -199,16 +185,36 @@ export function Enrollments() {
                 ),
               },
             ]}
-          />
+          />}
         </RequestStateView>
       </Panel>
 
-      <Panel className="section" title={<><h2>学生导入</h2>
+      <section className="panel agenda-panel">
+        <div className="panel-head"><div><h2>学生名单</h2><p className="small">{course.data?.active_enrollment_count ?? "—"} 名学生</p></div>
+          <Button disabled={runImportPrecheck.isPending} onClick={() => fileInputRef.current?.click()}>导入名单</Button>
+          <input ref={fileInputRef} type="file" accept=".csv,text/csv" hidden onChange={(event) => {
+            const file = event.target.files?.[0];
+            if (file) runImportPrecheck.mutate(file);
+            event.target.value = "";
+          }} />
+        </div>
+        <RequestStateView loading={roster.isPending} error={roster.error} onRetry={() => void roster.refetch()}
+          empty={!roster.data?.length} emptyState={<p className="empty">本班还没有学生。</p>}>
+          <DataTable rows={roster.data ?? []} rowKey={(row: Enrollment) => row.public_id} columns={[
+            { key: "name", header: "姓名", render: (row: Enrollment) => <strong>{row.student_name}</strong> },
+            { key: "joined", header: "入班时间", render: (row: Enrollment) => formatDateTime(row.activated_at) },
+            { key: "action", header: "操作", align: "right", render: (row: Enrollment) =>
+              <button type="button" className="text-button" onClick={() => setRemoveTarget(row)}>移除</button> },
+          ]} />
+        </RequestStateView>
+      </section>
+      <DirectInvite courseId={courseId} onAdded={refreshMembers} />
+      <Panel title={<><h2>学生导入</h2>
         <span className={`status ${jobRunning ? "blue" : "neutral"}`}>{jobRunning ? "进行中" : "无进行中作业"}</span>
       </>}>
         {!importJobId || !importJob.data ? (
           <>
-            <p className="subtle" style={{ margin: "4px 0 10px" }}>先预检 CSV 中的学号、邮箱和课程分组。</p>
+            <p className="subtle" style={{ margin: "4px 0 10px" }}>名单使用 UTF-8 CSV，学号列名为 student_number。系统会匹配已注册的学生账号。</p>
             <Button size="sm" onClick={() => fileInputRef.current?.click()}>选择文件</Button>
             {runImportPrecheck.isPending ? <small style={{ display: "block", marginTop: 8 }}>正在提交预检…</small> : null}
           </>
@@ -223,6 +229,14 @@ export function Enrollments() {
           />
         )}
       </Panel>
+      <details className="course-tools"><summary>入班统计</summary>
+        <Panel><div className="metric-strip">
+          <Metric label="待审核" value={String(course.data?.pending_enrollments ?? pendingCount)} icon="user" />
+          <Metric label="已通过" value={String(approvedCount)} icon="users" />
+          <Metric label="本月申请" value={String(monthApplications)} icon="trending-up" sub="按当前申请列表统计" />
+          <Metric label="课程容量" value={capacity ? `${Math.min(used, capacity)} / ${capacity}` : `${used} 人已加入`} icon="gauge" />
+        </div></Panel>
+      </details>
 
       <Modal open={reviewTarget != null} onClose={() => setReviewTarget(null)} eyebrow="选课审核"
         title={reviewTarget ? `审核 ${reviewTarget.student_name} 的申请` : "审核"}
@@ -264,6 +278,6 @@ export function Enrollments() {
           </>
         )}
       />
-    </>
+    </div>
   );
 }
