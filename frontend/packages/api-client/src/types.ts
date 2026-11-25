@@ -401,6 +401,7 @@ export interface PrecheckRun {
 }
 
 export interface Publication {
+  report_required?: boolean;
   report_template?: { asset_id: string; file_name: string } | null;
   course_chapter_id?: string | null;
   public_id: string;
