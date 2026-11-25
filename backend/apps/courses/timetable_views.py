@@ -3,6 +3,7 @@ from typing import Any
 from django.db import IntegrityError, transaction
 from django.db.models import Q, QuerySet
 from django.http import HttpRequest
+from django.utils import timezone
 from drf_spectacular.utils import OpenApiParameter, extend_schema, extend_schema_view
 from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
@@ -35,6 +36,7 @@ from .timetable_serializers import (
     AdministrativeClassMemberWriteSerializer,
     AdministrativeClassWriteSerializer,
     GenericTimetableResponseSerializer,
+    TeachingCourseTimetableResponseSerializer,
     TermTimetableResponseSerializer,
     TimetableMappingSerializer,
     TimetableUploadSerializer,
@@ -59,7 +61,20 @@ def _response(request: HttpRequest, data: Any, *, status: int = 200) -> Response
 
 
 def _term_data(term: AcademicTerm) -> dict[str, Any]:
-    return {"public_id": term.public_id, "code": term.code, "name": term.name}
+    # Legacy terms were created to migrate existing courses and have estimated dates.
+    calendar = None
+    if not term.code.startswith("LEGACY-"):
+        school_zone = timezone.get_default_timezone()
+        calendar = {
+            "starts_on": timezone.localdate(term.starts_at, school_zone).isoformat(),
+            "ends_on": timezone.localdate(term.ends_at, school_zone).isoformat(),
+        }
+    return {
+        "public_id": term.public_id,
+        "code": term.code,
+        "name": term.name,
+        "calendar": calendar,
+    }
 
 
 def _class_data(course: Course) -> dict[str, str]:
@@ -236,7 +251,7 @@ class TeachingTimetableView(APIView):
 class TeachingCourseTimetableView(APIView):
     permission_classes = [IsTeachingPortal]
 
-    @extend_schema(responses={200: GenericTimetableResponseSerializer})
+    @extend_schema(responses={200: TeachingCourseTimetableResponseSerializer})
     def get(self, request: HttpRequest, course_id: str) -> Response:
         course = visible_course(actor=request.user, portal="TEACHING", course_id=course_id)
         require_course_capability(course=course, actor=request.user, capability="VIEW_PROGRESS")
@@ -246,6 +261,7 @@ class TeachingCourseTimetableView(APIView):
             {
                 "course_id": course.public_id,
                 "class_type": "TEACHING",
+                "term": _term_data(course.term),
                 "schedules": [_schedule_data(item) for item in schedules],
             },
         )

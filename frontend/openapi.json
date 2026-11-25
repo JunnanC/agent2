@@ -16651,7 +16651,7 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/GenericTimetableResponse"
+                                    "$ref": "#/components/schemas/TeachingCourseTimetableResponse"
                                 }
                             }
                         },
@@ -23526,6 +23526,47 @@
                 "type": "string",
                 "description": "* `SUSPENDED` - SUSPENDED\n* `REVOKED` - REVOKED\n* `REJECTED` - REJECTED"
             },
+            "TeachingCourseTimetableData": {
+                "type": "object",
+                "properties": {
+                    "course_id": {
+                        "type": "string"
+                    },
+                    "class_type": {
+                        "$ref": "#/components/schemas/ClassTypeEnum"
+                    },
+                    "term": {
+                        "$ref": "#/components/schemas/TimetableTerm"
+                    },
+                    "schedules": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/TimetableSchedule"
+                        }
+                    }
+                },
+                "required": [
+                    "class_type",
+                    "course_id",
+                    "schedules",
+                    "term"
+                ]
+            },
+            "TeachingCourseTimetableResponse": {
+                "type": "object",
+                "properties": {
+                    "data": {
+                        "$ref": "#/components/schemas/TeachingCourseTimetableData"
+                    },
+                    "meta": {
+                        "type": "object",
+                        "additionalProperties": {}
+                    }
+                },
+                "required": [
+                    "data"
+                ]
+            },
             "TemplateAssetCreate": {
                 "type": "object",
                 "properties": {
@@ -24417,6 +24458,23 @@
                     "data"
                 ]
             },
+            "TimetableCalendar": {
+                "type": "object",
+                "properties": {
+                    "starts_on": {
+                        "type": "string",
+                        "format": "date"
+                    },
+                    "ends_on": {
+                        "type": "string",
+                        "format": "date"
+                    }
+                },
+                "required": [
+                    "ends_on",
+                    "starts_on"
+                ]
+            },
             "TimetableClass": {
                 "type": "object",
                 "properties": {
@@ -24530,9 +24588,18 @@
                     },
                     "name": {
                         "type": "string"
+                    },
+                    "calendar": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/TimetableCalendar"
+                            }
+                        ],
+                        "nullable": true
                     }
                 },
                 "required": [
+                    "calendar",
                     "code",
                     "name",
                     "public_id"

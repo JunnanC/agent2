@@ -97,7 +97,8 @@ function CourseSchedule({ courseId, title, termName, termId }: { courseId: strin
   const schedule = useQuery({ queryKey: keys.teachingCourseTimetable(courseId), queryFn: () => timetableApi.teachingCourse(courseId) });
   const classes = [{ id: courseId, title }];
   return <RequestStateView loading={schedule.isLoading} error={schedule.error} onRetry={() => void schedule.refetch()} empty={false}>
-    <ClassAgendaWeek term={{ id: termId, label: termName }} slots={asAgendaSlots(schedule.data ?? [], classes)} classes={classes} today={schoolToday()} />
+    <ClassAgendaWeek term={{ id: termId, label: termName, calendar: schedule.data?.term?.calendar }}
+      slots={asAgendaSlots(schedule.data?.schedules ?? [], classes)} classes={classes} today={schoolToday()} />
   </RequestStateView>;
 }
 

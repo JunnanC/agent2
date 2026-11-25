@@ -6584,6 +6584,18 @@ export interface components {
          * @enum {string}
          */
         TeacherQualificationUpdateStatusEnum: "SUSPENDED" | "REVOKED" | "REJECTED";
+        TeachingCourseTimetableData: {
+            course_id: string;
+            class_type: components["schemas"]["ClassTypeEnum"];
+            term: components["schemas"]["TimetableTerm"];
+            schedules: components["schemas"]["TimetableSchedule"][];
+        };
+        TeachingCourseTimetableResponse: {
+            data: components["schemas"]["TeachingCourseTimetableData"];
+            meta?: {
+                [key: string]: unknown;
+            };
+        };
         TemplateAssetCreate: {
             version_id: string;
             purpose: components["schemas"]["PurposeEnum"];
@@ -6878,6 +6890,12 @@ export interface components {
                 [key: string]: unknown;
             };
         };
+        TimetableCalendar: {
+            /** Format: date */
+            starts_on: string;
+            /** Format: date */
+            ends_on: string;
+        };
         TimetableClass: {
             course_id: string;
             course_code: string;
@@ -6909,6 +6927,7 @@ export interface components {
             public_id: string;
             code: string;
             name: string;
+            calendar: components["schemas"]["TimetableCalendar"] | null;
         };
         TimetableUpload: {
             /** Format: uri */
@@ -15541,7 +15560,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["GenericTimetableResponse"];
+                    "application/json": components["schemas"]["TeachingCourseTimetableResponse"];
                 };
             };
         };
