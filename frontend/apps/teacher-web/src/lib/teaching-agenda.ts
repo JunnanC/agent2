@@ -41,7 +41,9 @@ export function asAgendaSlots(schedules: TimetableSchedule[], classes: AgendaCla
   return schedules.flatMap((slot, index) => {
     const course = slot.course_id ? byId.get(slot.course_id) : undefined;
     if (!course || slot.weekday < 1 || slot.weekday > 7) return [];
-    return [{ id: `${course.id}-${index}`, course, weekday: slot.weekday - 1, start: slot.start_period, end: slot.end_period,
+    const classLabel = course.title.match(/^(.+?)\s*·\s*(.+班)$/);
+    const lesson = classLabel ? { ...course, lessonTitle: classLabel[1], group: classLabel[2] } : course;
+    return [{ id: `${course.id}-${index}`, course: lesson, weekday: slot.weekday - 1, start: slot.start_period, end: slot.end_period,
       classroom: slot.classroom, weekStart: slot.week_start, weekEnd: slot.week_end, parity: slot.week_parity }];
   });
 }

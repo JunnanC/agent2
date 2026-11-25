@@ -84,10 +84,10 @@ html:has(.teacher-b) { scrollbar-gutter: auto; }
   .teacher-b .tt-label { color: var(--muted); display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 3px; font-size: 12px; }
   .teacher-b .day { min-height: 51px; background: #f9f5ef; }
   .teacher-b .day strong { color: var(--ink); font-weight: 600; }
-  .teacher-b .day.today { background: var(--accent-soft); border-top: 2px solid var(--accent); }
-  .teacher-b .day.today strong { color: var(--accent); }
-  .teacher-b .day.today .date { color: var(--accent); font-weight: 700; }
-  .teacher-b .tt-cell.today-column:not(.day) { background: #fbf5f3; }
+  .teacher-b .day.selected { background: var(--accent-soft); border-top: 2px solid var(--accent); }
+  .teacher-b .day.selected strong { color: var(--accent); }
+  .teacher-b .day.selected .date, .teacher-b .day[aria-current="date"] .date { color: var(--accent); font-weight: 700; }
+  .teacher-b .tt-cell.selected-column:not(.day) { background: #fbf5f3; }
   .teacher-b .date { color: var(--quiet); font-size: 12px; }
   .teacher-b .slot { display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 4px; width: 100%; min-height: 61px; padding: 6px 8px; border-radius: 6px; border-left: 3px solid var(--course-mark); background: var(--course-fill); color: var(--course-ink); line-height: 1.35; }
   .teacher-b .slot:hover { background: var(--course-hover); }
@@ -259,7 +259,7 @@ html:has(.teacher-b) { scrollbar-gutter: auto; }
   .teacher-b .pending .work-list { padding: 0; }
   .teacher-b .pending .work-row { padding: 12px 0; }
   .teacher-b .pending .count { background: #f2e7da; color: #744b28; }
-  .teacher-b .mobile-days { display: none; }
+  .teacher-b .mobile-days, .teacher-b .mobile-calendar { display: none; }
   .teacher-b .journal :focus-visible { outline-offset: -2px; }
   .teacher-b .folio .schedule { border: 0; }
   .teacher-b .folio .schedule .panel-head { padding-inline: 0; }
@@ -283,7 +283,10 @@ html:has(.teacher-b) { scrollbar-gutter: auto; }
     .teacher-b .heading-actions .icon { width: 15px; }
     .teacher-b .journal { display: flex; flex-direction: column; }
     .teacher-b .journal-aside { display: contents; }
-    .teacher-b .mini-month { display: none; }
+    .teacher-b .journal-aside > .mini-month { display: none; }
+    .teacher-b .mobile-calendar { display: block; }
+    .teacher-b .mobile-calendar summary { padding: 8px 0; min-height: 36px; color: var(--accent); cursor: pointer; }
+    .teacher-b .mobile-calendar .mini-month { background: #f0eadf; padding: 10px; }
     .teacher-b .term-classes { order: 2; margin: 0; padding: 18px; background: #f0eadf; border-radius: 0 0 5px 5px; }
     .teacher-b .folio { padding: 14px 12px 18px; }
     .teacher-b .day-number { font-size: 62px; }
@@ -322,9 +325,7 @@ html:has(.teacher-b) { scrollbar-gutter: auto; }
 .teacher-b .profile-menu summary { cursor: pointer; list-style: none; }
 .teacher-b .profile-menu summary::-webkit-details-marker { display: none; }
 .teacher-b .profile-menu > button { position: absolute; z-index: 2; inset: 100% 0 auto auto; background: var(--paper); color: var(--accent); border: 1px solid var(--control); }
-.teacher-b .weekday-picker { display: grid; grid-template-columns: repeat(7, 1fr); gap: 1px; margin-top: 10px; }
-.teacher-b .weekday-picker button { background: transparent; border: 0; min-height: 34px; padding: 0; }
-.teacher-b .weekday-picker [aria-pressed="true"] { background: var(--accent); color: #fff; border-radius: 4px; }
+.teacher-b .week-step > span { padding-inline: 4px; white-space: nowrap; }
 .teacher-b .class-management { display: inline-flex; margin-top: 10px; }
 .teacher-b .subpage { padding-top: 18px; }
 .teacher-b .subpage > :first-child { margin-bottom: 12px; }

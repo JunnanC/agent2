@@ -217,9 +217,9 @@ export const timetableApi = {
   retrieve: meApi.timetable,
   platform: (query: { term_id?: string; role?: string; person_id?: string; q?: string; page?: number }) =>
     request<TimetableData>("/platform/term-classes", { query }).then((r) => r.data),
-  teachingCourse: (courseId: string) => request<{ schedules: TimetableSchedule[] }>(
+  teachingCourse: (courseId: string) => request<{ term?: TimetableData["term"]; schedules: TimetableSchedule[] }>(
     `/teaching/courses/${courseId}/timetable`,
-  ).then((r) => r.data.schedules),
+  ).then((r) => r.data),
   teaching: (query?: { term_id?: string }) => request<TimetableData>("/teaching/timetable", { query }).then((r) => r.data),
   imports: () => request<TimetableImport[]>("/teaching/timetable-imports").then(toList),
   importJob: (jobId: string) => request<TimetableImport>(`/teaching/timetable-imports/${jobId}`).then((r) => r.data),

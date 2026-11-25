@@ -81,7 +81,13 @@ export interface CourseResourceSummary {
   prewarm_active?: number;
 }
 
-export interface TimetableTerm { public_id: string; code: string; name: string }
+export interface TimetableCalendar { starts_on: string; ends_on: string }
+export interface TimetableTerm {
+  public_id: string;
+  code: string;
+  name: string;
+  calendar?: TimetableCalendar | null;
+}
 
 export interface TimetableClass {
   course_id: string;

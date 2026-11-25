@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from unittest.mock import patch
 
 import yaml
@@ -231,8 +231,8 @@ class CourseApiTests(TestCase):
         old_term = AcademicTerm.objects.create(
             code="FIXTURE-OLD",
             name="往期学期",
-            starts_at=now - timedelta(days=100),
-            ends_at=now - timedelta(days=10),
+            starts_at=datetime(2026, 3, 3, 16, tzinfo=UTC),
+            ends_at=datetime(2026, 6, 18, 15, tzinfo=UTC),
             status=AcademicTerm.Status.CLOSED,
         )
         Course.objects.filter(pk=past.pk).update(term=old_term, status=Course.Status.ARCHIVED)
@@ -271,7 +271,16 @@ class CourseApiTests(TestCase):
             self.assertEqual(response.status_code, 200, response.content)
             return [row["course_id"] for row in response.json()["data"]["classes"]]
 
-        self.assertEqual(ids(get("TEACHING", "teaching/timetable")), [current.public_id])
+        default_schedule = get("TEACHING", "teaching/timetable")
+        self.assertEqual(ids(default_schedule), [current.public_id])
+        self.assertIsNone(default_schedule.json()["data"]["term"]["calendar"])
+        past_schedule = get("TEACHING", "teaching/timetable", {"term_id": old_term.public_id})
+        self.assertEqual(ids(past_schedule), [past.public_id])
+        expected = {"starts_on": "2026-03-04", "ends_on": "2026-06-18"}
+        self.assertEqual(past_schedule.json()["data"]["term"]["calendar"], expected)
+        class_schedule = get("TEACHING", f"teaching/courses/{past.public_id}/timetable")
+        self.assertEqual(class_schedule.status_code, 200, class_schedule.content)
+        self.assertEqual(class_schedule.json()["data"]["term"]["calendar"], expected)
         self.assertEqual(ids(get("USER", "me/timetable")), [])
         self.assertEqual(
             ids(get("USER", "me/timetable", {"term_id": old_term.public_id})), [past.public_id]
