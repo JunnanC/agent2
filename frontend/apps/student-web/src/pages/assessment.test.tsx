@@ -116,8 +116,13 @@ it("shows the submitted answer sheet and per-question score after the deadline",
   client.clear();
 });
 
-it("saves answers and flushes before submitting only the choice section", async () => {
-  vi.spyOn(window, "confirm").mockReturnValue(true);
+it("tracks answers across the choice question list and flushes them before submitting", async () => {
+  const paper = await assessmentApi.get("task");
+  vi.mocked(assessmentApi.get).mockResolvedValueOnce({ ...paper, questions: [
+    ...paper.questions,
+    { id: "q2", title: "队列", description: "访问顺序", task_type: "SINGLE_CHOICE", max_score: "5",
+      options: [{ id: "a", text: "先进先出" }, { id: "b", text: "随机访问" }] } as typeof paper.questions[number],
+  ] });
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(<QueryClientProvider client={client}><ToastProvider><MemoryRouter initialEntries={["/experiments/task/assessment"]}>
     <Routes><Route path="/experiments/:taskId/assessment" element={<AssessmentWorkbench />} /></Routes>
@@ -125,10 +130,21 @@ it("saves answers and flushes before submitting only the choice section", async 
   fireEvent.click(await screen.findByRole("radio", { name: "后进先出" }));
   await waitFor(() => expect(assessmentApi.saveChoice).toHaveBeenCalledWith("task", "q", ["b"], 1));
   expect(screen.queryByText(/正确选项/)).toBeNull();
+  const first = screen.getByRole("button", { name: "1. 栈" });
+  const second = screen.getByRole("button", { name: "2. 队列" });
+  expect(first).toHaveAttribute("aria-pressed", "true");
+  fireEvent.click(second);
+  expect(second).toHaveAttribute("aria-pressed", "true");
+  expect(document.getElementById("choice-q2")).toHaveAttribute("data-current", "true");
+  fireEvent.click(screen.getByRole("radio", { name: "随机访问" }));
+  fireEvent.click(first);
+  expect(screen.getByRole("radio", { name: "后进先出" })).toBeChecked();
+  expect(screen.getByText("已作答 2 / 2 题")).toBeInTheDocument();
+  expect(screen.getByText("第 2 题 · 已作答")).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "提交选择题卷" }));
   fireEvent.click(await screen.findByRole("button", { name: "确认交卷" }));
   await waitFor(() => expect(assessmentApi.submitChoices).toHaveBeenCalled());
-  expect(assessmentApi.submitChoices).toHaveBeenCalledWith("task", { q: 1 }, expect.any(String));
+  expect(assessmentApi.submitChoices).toHaveBeenCalledWith("task", { q: 1, q2: 1 }, expect.any(String));
   client.clear();
 });
 
@@ -225,9 +241,11 @@ it("displays hidden case verdicts and advances after a passing final run", async
   });
   vi.mocked(assessmentApi.saveCode).mockImplementation(async (_taskId, _questionId, language, files, version) =>
     ({ files, row_version: version + 1, language }));
-  vi.mocked(assessmentApi.attempt).mockResolvedValueOnce({ id: 101 } as never)
+  vi.mocked(assessmentApi.attempt).mockResolvedValueOnce({ id: 100 } as never)
+    .mockResolvedValueOnce({ id: 101 } as never)
     .mockResolvedValueOnce({ id: 102 } as never);
   vi.mocked(assessmentApi.attemptResult).mockImplementation(async (_taskId, _questionId, id) => {
+    if (id === 100) return { id, status: "COMPLETED", result_status: "PASSED", stdout: "自测输出" } as never;
     completed = id === 102;
     return {
       id, status: "COMPLETED", result_status: completed ? "PASSED" : "FAILED",
@@ -245,6 +263,13 @@ it("displays hidden case verdicts and advances after a passing final run", async
   </MemoryRouter></ToastProvider></QueryClientProvider>);
   const finalRun = await screen.findByRole("button", { name: "最终运行" });
   await waitFor(() => expect(finalRun).toBeEnabled());
+  fireEvent.click(screen.getByRole("button", { name: "代码" }));
+  expect(screen.getByRole("button", { name: "代码" })).toHaveAttribute("aria-pressed", "true");
+  fireEvent.click(screen.getByRole("button", { name: "收起面板" }));
+  fireEvent.click(screen.getByRole("button", { name: "自测运行" }));
+  expect(await screen.findByText("自测输出")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "收起面板" })).toHaveAttribute("aria-expanded", "true");
+  expect(screen.getByRole("button", { name: "结果" })).toHaveAttribute("aria-pressed", "true");
   fireEvent.click(finalRun);
   expect(await screen.findByText("✗ 未通过")).toBeInTheDocument();
   expect(screen.getAllByText("· 无权查看")).toHaveLength(3);
